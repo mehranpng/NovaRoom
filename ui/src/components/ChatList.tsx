@@ -2,7 +2,7 @@ import { Search, MessageSquarePlus, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { Chat, User } from '@/types';
 import { Avatar } from './Avatar';
-import { cn } from '@/utils/cn';
+import { cx } from '@/utils/cx';
 
 interface ChatListProps {
   chats: Chat[];
@@ -55,48 +55,47 @@ export function ChatList({
   });
 
   return (
-    <div className="flex h-full flex-col bg-white">
+    <div className="chat-list">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-        <div className="flex items-center gap-3">
-          <button onClick={onOpenProfile} className="transition-transform hover:scale-105">
+      <div className="chat-list__header">
+        <div className="chat-list__header-left">
+          <button onClick={onOpenProfile}>
             <Avatar name={currentUser.name} size="sm" online={true} />
           </button>
-          <h1 className="text-xl font-bold text-gray-900">Chats</h1>
+          <h1 className="chat-list__title">Chats</h1>
         </div>
-        <div className="flex items-center gap-1">
-          <button className="rounded-xl p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700">
+        <div className="chat-list__header-actions">
+          <button className="icon-btn">
             <MessageSquarePlus size={20} />
           </button>
-          <button
-            onClick={onOpenProfile}
-            className="rounded-xl p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
-          >
+          <button className="icon-btn" onClick={onOpenProfile}>
             <Settings size={20} />
           </button>
         </div>
       </div>
 
       {/* Search */}
-      <div className="px-3 py-2">
-        <div className="relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+      <div className="chat-list__search">
+        <div className="chat-list__search-wrapper">
+          <span className="chat-list__search-icon">
+            <Search size={16} />
+          </span>
           <input
             type="text"
             placeholder="Search conversations..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-xl bg-gray-100 py-2.5 pl-9 pr-4 text-sm text-gray-900 placeholder-gray-500 outline-none transition-colors focus:bg-gray-50 focus:ring-2 focus:ring-blue-500/20"
+            className="chat-list__search-input"
           />
         </div>
       </div>
 
       {/* Chat List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="chat-list__items">
         {filteredChats.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+          <div className="chat-list__empty">
             <MessageSquarePlus size={48} strokeWidth={1} />
-            <p className="mt-3 text-sm">No conversations found</p>
+            <p>No conversations found</p>
           </div>
         ) : (
           filteredChats.map((chat) => {
@@ -109,37 +108,25 @@ export function ChatList({
               <button
                 key={chat.id}
                 onClick={() => onSelectChat(chat.id)}
-                className={cn(
-                  'flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-gray-50',
-                  isActive && 'bg-blue-50 hover:bg-blue-50'
-                )}
+                className={cx('chat-list__item', isActive && 'chat-list__item--active')}
               >
                 <Avatar name={contact.name} size="md" online={contact.online} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={cn(
-                        'truncate text-[15px] font-semibold text-gray-900',
-                        isActive && 'text-blue-600'
-                      )}
-                    >
-                      {contact.name}
-                    </span>
+                <div className="chat-list__item-content">
+                  <div className="chat-list__item-row">
+                    <span className="chat-list__item-name">{contact.name}</span>
                     {chat.lastMessage && (
-                      <span className="ml-2 shrink-0 text-xs text-gray-400">
+                      <span className="chat-list__item-time">
                         {formatTime(chat.lastMessage.timestamp)}
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center justify-between">
-                    <p className="truncate text-sm text-gray-500">
-                      {isMine && <span className="text-gray-400">You: </span>}
+                  <div className="chat-list__item-preview">
+                    <p className="chat-list__item-text">
+                      {isMine && <span className="chat-list__item-text-prefix">You: </span>}
                       {chat.lastMessage?.text || 'No messages yet'}
                     </p>
                     {chat.unreadCount > 0 && (
-                      <span className="ml-2 flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-blue-500 px-1.5 text-[11px] font-bold text-white">
-                        {chat.unreadCount}
-                      </span>
+                      <span className="chat-list__unread-badge">{chat.unreadCount}</span>
                     )}
                   </div>
                 </div>

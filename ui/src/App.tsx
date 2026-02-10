@@ -10,7 +10,8 @@ import { ChatList } from '@/components/ChatList';
 import { ChatRoom } from '@/components/ChatRoom';
 import { Profile } from '@/components/Profile';
 import { EmptyState } from '@/components/EmptyState';
-import { cn } from '@/utils/cn';
+import { cx } from '@/utils/cx';
+import './App.css';
 
 export function App() {
   const [view, setView] = useState<View>('chatList');
@@ -22,7 +23,6 @@ export function App() {
   const handleSelectChat = useCallback((chatId: string) => {
     setActiveChatId(chatId);
     setView('chatRoom');
-    // Mark as read
     setChats((prev) =>
       prev.map((c) => (c.id === chatId ? { ...c, unreadCount: 0 } : c))
     );
@@ -52,7 +52,6 @@ export function App() {
         )
       );
 
-      // Simulate a reply after 1-2 seconds
       const chat = chats.find((c) => c.id === activeChatId);
       if (chat) {
         const contactId = chat.participantIds.find((id) => id !== user.id);
@@ -118,31 +117,38 @@ export function App() {
     : null;
   const activeMessages = activeChatId ? messages[activeChatId] || [] : [];
 
+  // Determine sidebar visibility
+  const sidebarHiddenMobile = view !== 'chatList';
+  const sidebarHiddenDesktop = view === 'profile';
+
+  // Determine main area visibility
+  const mainHiddenMobile = view !== 'chatRoom' && view !== 'profile';
+
   return (
-    <div className="flex h-dvh w-full bg-white">
+    <div className="app">
       {/* Sidebar / Chat List */}
-      <div
-        className={cn(
-          'h-full w-full shrink-0 border-r border-gray-100 lg:w-[380px]',
-          // On mobile, only show when view is chatList
-          view !== 'chatList' && 'hidden lg:block',
-          // When profile is open on desktop, hide list
-          view === 'profile' && 'lg:hidden'
-        )}
-      >
-        <ChatList
-          chats={chats}
-          contacts={contacts}
-          currentUser={user}
-          activeChatId={activeChatId}
-          onSelectChat={handleSelectChat}
-          onOpenProfile={handleOpenProfile}
-        />
-      </div>
+      {!(view === 'profile') && (
+        <div
+          className={cx(
+            'app__sidebar',
+            sidebarHiddenMobile && 'app__sidebar--hidden-mobile',
+            sidebarHiddenDesktop && 'app__sidebar--hidden-desktop'
+          )}
+        >
+          <ChatList
+            chats={chats}
+            contacts={contacts}
+            currentUser={user}
+            activeChatId={activeChatId}
+            onSelectChat={handleSelectChat}
+            onOpenProfile={handleOpenProfile}
+          />
+        </div>
+      )}
 
       {/* Profile View */}
       {view === 'profile' && (
-        <div className="h-full w-full">
+        <div className="app__main">
           <Profile
             user={user}
             onBack={handleBack}
@@ -154,10 +160,9 @@ export function App() {
       {/* Chat Room / Empty State */}
       {view !== 'profile' && (
         <div
-          className={cn(
-            'h-full flex-1',
-            // On mobile, only show chat room when a chat is selected
-            view !== 'chatRoom' && 'hidden lg:block'
+          className={cx(
+            'app__main',
+            mainHiddenMobile && 'app__main--hidden-mobile'
           )}
         >
           {activeChat && activeContact ? (

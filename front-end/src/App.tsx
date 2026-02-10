@@ -1,35 +1,184 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState, useCallback } from 'react';
+import type { Message, View, User } from './types';
+import {
+    currentUser as initialUser,
+    contacts,
+    mockChats,
+    mockMessages,
+} from './data/mockData';
+import { ChatList } from './components/ChatList';
+import { ChatRoom } from './components/ChatRoom';
+import { Profile } from './components/Profile';
+import { EmptyState } from './components/EmptyState';
+import { cx } from './utils/cx';
+import './App.css';
 
-function App() {
-  const [count, setCount] = useState(0)
+export function App() {
+    const [view, setView] = useState<View>('chatList');
+    const [activeChatId, setActiveChatId] = useState<string | null>(null);
+    const [messages, setMessages] = useState<Record<string, Message[]>>(mockMessages);
+    const [chats, setChats] = useState(mockChats);
+    const [user, setUser] = useState<User>(initialUser);
 
-  return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    const handleSelectChat = useCallback((chatId: string) => {
+        setActiveChatId(chatId);
+        setView('chatRoom');
+        setChats((prev) =>
+            prev.map((c) => (c.id === chatId ? { ...c, unreadCount: 0 } : c))
+        );
+    }, []);
+
+    const handleSendMessage = useCallback(
+        (text: string) => {
+            if (!activeChatId) return;
+
+            const newMessage: Message = {
+                id: `msg-${Date.now()}`,
+                chatId: activeChatId,
+                senderId: user.id,
+                text,
+                timestamp: Date.now(),
+                seen: false,
+            };
+
+            setMessages((prev) => ({
+                ...prev,
+                [activeChatId]: [...(prev[activeChatId] || []), newMessage],
+            }));
+
+            setChats((prev) =>
+                prev.map((c) =>
+                    c.id === activeChatId ? { ...c, lastMessage: newMessage } : c
+                )
+            );
+
+            const chat = chats.find((c) => c.id === activeChatId);
+            if (chat) {
+                const contactId = chat.participantIds.find((id: string) => id !== user.id);
+                if (contactId) {
+                    const delay = 1000 + Math.random() * 2000;
+                    const replies = [
+                        'Got it! 👍',
+                        'Interesting, tell me more!',
+                        'Sure thing!',
+                        'That makes sense.',
+                        'Haha, nice one! 😄',
+                        'Let me think about that...',
+                        "I'll get back to you on that.",
+                        'Sounds great!',
+                        'Thanks for letting me know.',
+                        'Absolutely!',
+                    ];
+                    setTimeout(() => {
+                        const reply: Message = {
+                            id: `msg-${Date.now()}-reply`,
+                            chatId: activeChatId,
+                            senderId: contactId,
+                            text: replies[Math.floor(Math.random() * replies.length)],
+                            timestamp: Date.now(),
+                            seen: false,
+                        };
+                        setMessages((prev) => ({
+                            ...prev,
+                            [activeChatId]: [...(prev[activeChatId] || []), reply],
+                        }));
+                        setChats((prev) =>
+                            prev.map((c) =>
+                                c.id === activeChatId ? { ...c, lastMessage: reply } : c
+                            )
+                        );
+                    }, delay);
+                }
+            }
+        },
+        [activeChatId, chats, user.id]
+    );
+
+    const handleBack = useCallback(() => {
+        setView('chatList');
+    }, []);
+
+    const handleOpenProfile = useCallback(() => {
+        setView('profile');
+    }, []);
+
+    const handleUpdateProfile = useCallback(
+        (updates: Partial<Pick<User, 'name' | 'username' | 'bio'>>) => {
+            setUser((prev) => ({ ...prev, ...updates }));
+        },
+        []
+    );
+
+    const activeChat = activeChatId ? chats.find((c) => c.id === activeChatId) : null;
+    const activeContact = activeChat
+        ? contacts.find((c) =>
+            activeChat.participantIds.includes(c.id) && c.id !== user.id
+        )
+        : null;
+    const activeMessages = activeChatId ? messages[activeChatId] || [] : [];
+
+    // Determine sidebar visibility
+    const sidebarHiddenMobile = view !== 'chatList';
+    const sidebarHiddenDesktop = view === 'profile';
+
+    // Determine main area visibility
+    const mainHiddenMobile = view !== 'chatRoom' && view !== 'profile';
+
+    return (
+        <div className="app">
+            {/* Sidebar / Chat List */}
+            {!(view === 'profile') && (
+                <div
+                    className={cx(
+                        'app__sidebar',
+                        sidebarHiddenMobile && 'app__sidebar--hidden-mobile',
+                        sidebarHiddenDesktop && 'app__sidebar--hidden-desktop'
+                    )}
+                >
+                    <ChatList
+                        chats={chats}
+                        contacts={contacts}
+                        currentUser={user}
+                        activeChatId={activeChatId}
+                        onSelectChat={handleSelectChat}
+                        onOpenProfile={handleOpenProfile}
+                    />
+                </div>
+            )}
+
+            {/* Profile View */}
+            {view === 'profile' && (
+                <div className="app__main">
+                    <Profile
+                        user={user}
+                        onBack={handleBack}
+                        onUpdateProfile={handleUpdateProfile}
+                    />
+                </div>
+            )}
+
+            {/* Chat Room / Empty State */}
+            {view !== 'profile' && (
+                <div
+                    className={cx(
+                        'app__main',
+                        mainHiddenMobile && 'app__main--hidden-mobile'
+                    )}
+                >
+                    {activeChat && activeContact ? (
+                        <ChatRoom
+                            chatId={activeChat.id}
+                            contact={activeContact}
+                            messages={activeMessages}
+                            currentUserId={user.id}
+                            onSendMessage={handleSendMessage}
+                            onBack={handleBack}
+                        />
+                    ) : (
+                        <EmptyState />
+                    )}
+                </div>
+            )}
+        </div>
+    );
 }
-
-export default App
