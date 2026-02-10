@@ -1,176 +1,154 @@
-import { useState, useCallback } from 'react';
-import type { Message, View, User } from './types';
-import {
-    currentUser as initialUser,
-    contacts,
-    mockChats,
-    mockMessages,
-} from './data/mockData';
+import { useState, useEffect, useCallback } from 'react';
+import type { Message, View, User, Chat } from './types';
+import { apiFetch } from './config/api';
+import { useWebSocket } from './hooks/useWebSocket';
 import { ChatList } from './components/ChatList';
 import { ChatRoom } from './components/ChatRoom';
 import { Profile } from './components/Profile';
 import { EmptyState } from './components/EmptyState';
+import { Login } from './components/Login';
+import { NewChatModal } from './components/NewChatModal';
 import { cx } from './utils/cx';
 import './App.css';
 
 export function App() {
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [view, setView] = useState<View>('chatList');
     const [activeChatId, setActiveChatId] = useState<string | null>(null);
-    const [messages, setMessages] = useState<Record<string, Message[]>>(mockMessages);
-    const [chats, setChats] = useState(mockChats);
-    const [user, setUser] = useState<User>(initialUser);
+    const [chats, setChats] = useState<Chat[]>([]);
+    const [messages, setMessages] = useState<Record<string, Message[]>>({});
+    const [newChatModalOpen, setNewChatModalOpen] = useState(false);
 
-    const handleSelectChat = useCallback((chatId: string) => {
-        setActiveChatId(chatId);
-        setView('chatRoom');
-        setChats((prev) =>
-            prev.map((c) => (c.id === chatId ? { ...c, unreadCount: 0 } : c))
-        );
-    }, []);
-
-    const handleSendMessage = useCallback(
-        (text: string) => {
-            if (!activeChatId) return;
-
-            const newMessage: Message = {
-                id: `msg-${Date.now()}`,
-                chatId: activeChatId,
-                senderId: user.id,
-                text,
-                timestamp: Date.now(),
-                seen: false,
-            };
-
-            setMessages((prev) => ({
+    // WebSocket
+    const { sendMessage: sendViaWS } = useWebSocket({
+        token: localStorage.getItem('token'),
+        onNewMessage: (chatId, newMsg) => {
+            setMessages(prev => ({
                 ...prev,
-                [activeChatId]: [...(prev[activeChatId] || []), newMessage],
+                [chatId]: [...(prev[chatId] || []), newMsg]
             }));
 
-            setChats((prev) =>
-                prev.map((c) =>
-                    c.id === activeChatId ? { ...c, lastMessage: newMessage } : c
+            // Update last message in chat list
+            setChats(prev =>
+                prev.map(chat =>
+                    chat.id === chatId
+                        ? { ...chat, lastMessage: newMsg }
+                        : chat
                 )
             );
+        }
+    });
 
-            const chat = chats.find((c) => c.id === activeChatId);
-            if (chat) {
-                const contactId = chat.participantIds.find((id: string) => id !== user.id);
-                if (contactId) {
-                    const delay = 1000 + Math.random() * 2000;
-                    const replies = [
-                        'Got it! 👍',
-                        'Interesting, tell me more!',
-                        'Sure thing!',
-                        'That makes sense.',
-                        'Haha, nice one! 😄',
-                        'Let me think about that...',
-                        "I'll get back to you on that.",
-                        'Sounds great!',
-                        'Thanks for letting me know.',
-                        'Absolutely!',
-                    ];
-                    setTimeout(() => {
-                        const reply: Message = {
-                            id: `msg-${Date.now()}-reply`,
-                            chatId: activeChatId,
-                            senderId: contactId,
-                            text: replies[Math.floor(Math.random() * replies.length)],
-                            timestamp: Date.now(),
-                            seen: false,
-                        };
-                        setMessages((prev) => ({
-                            ...prev,
-                            [activeChatId]: [...(prev[activeChatId] || []), reply],
-                        }));
-                        setChats((prev) =>
-                            prev.map((c) =>
-                                c.id === activeChatId ? { ...c, lastMessage: reply } : c
-                            )
-                        );
-                    }, delay);
-                }
-            }
-        },
-        [activeChatId, chats, user.id]
-    );
-
-    const handleBack = useCallback(() => {
-        setView('chatList');
+    // Check auth
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            apiFetch('/profile/me')
+                .then(user => {
+                    setCurrentUser(user);
+                    setIsAuthenticated(true);
+                })
+                .catch(() => localStorage.removeItem('token'));
+        }
     }, []);
 
-    const handleOpenProfile = useCallback(() => {
-        setView('profile');
-    }, []);
+    const handleLoginSuccess = (user: User, token: string) => {
+        setCurrentUser(user);
+        setIsAuthenticated(true);
+        localStorage.setItem('token', token);
+    };
 
-    const handleUpdateProfile = useCallback(
-        (updates: Partial<Pick<User, 'name' | 'username' | 'bio'>>) => {
-            setUser((prev) => ({ ...prev, ...updates }));
-        },
-        []
-    );
+    const loadChats = useCallback(async () => {
+        if (!isAuthenticated) return;
+        const data = await apiFetch('/chats');
+        setChats(data);
+    }, [isAuthenticated]);
 
-    const activeChat = activeChatId ? chats.find((c) => c.id === activeChatId) : null;
-    const activeContact = activeChat
-        ? contacts.find((c) =>
-            activeChat.participantIds.includes(c.id) && c.id !== user.id
-        )
-        : null;
+    useEffect(() => {
+        if (isAuthenticated) loadChats();
+    }, [isAuthenticated, loadChats]);
+
+    const handleSelectChat = useCallback(async (chatId: string) => {
+        setActiveChatId(chatId);
+        setView('chatRoom');
+
+        try {
+            const msgs = await apiFetch(`/chats/${chatId}/messages?limit=100`);
+            setMessages(prev => ({ ...prev, [chatId]: msgs }));
+        } catch (err) {
+            console.error(err);
+        }
+
+        loadChats();
+    }, [loadChats]);
+
+    const handleSendMessage = useCallback(async (text: string) => {
+        if (!activeChatId || !currentUser) return;
+
+        const success = sendViaWS(activeChatId, text);
+        if (!success) {
+            console.warn("WebSocket not connected");
+        }
+    }, [activeChatId, currentUser, sendViaWS]);
+
+    const handleNewChatCreated = (chatId: string) => {
+        setActiveChatId(chatId);
+        setView('chatRoom');
+        setNewChatModalOpen(false);
+        loadChats();
+    };
+
+    const handleOpenProfile = () => setView('profile');
+    const handleBack = () => setView('chatList');
+
+    // Temporary contact resolver
+    const getActiveContact = (): User => {
+        const chat = chats.find(c => c.id === activeChatId);
+        if (!chat || !currentUser) return { chatId: '', name: 'Unknown', username: '', bio: '', avatar: '', online: false };
+        const otherId = chat.participantIds.find(id => id !== currentUser.chatId) || '';
+        return { chatId: otherId, name: otherId, username: otherId.toLowerCase(), bio: '', avatar: '', online: false };
+    };
+
+    if (!isAuthenticated) {
+        return <Login onLoginSuccess={handleLoginSuccess} />;
+    }
+
+    const activeChat = chats.find(c => c.id === activeChatId) || null;
     const activeMessages = activeChatId ? messages[activeChatId] || [] : [];
-
-    // Determine sidebar visibility
-    const sidebarHiddenMobile = view !== 'chatList';
-    const sidebarHiddenDesktop = view === 'profile';
-
-    // Determine main area visibility
-    const mainHiddenMobile = view !== 'chatRoom' && view !== 'profile';
 
     return (
         <div className="app">
-            {/* Sidebar / Chat List */}
-            {!(view === 'profile') && (
-                <div
-                    className={cx(
-                        'app__sidebar',
-                        sidebarHiddenMobile && 'app__sidebar--hidden-mobile',
-                        sidebarHiddenDesktop && 'app__sidebar--hidden-desktop'
-                    )}
-                >
+            {view !== 'profile' && (
+                <div className="app__sidebar">
                     <ChatList
                         chats={chats}
-                        contacts={contacts}
-                        currentUser={user}
+                        currentUser={currentUser!}
                         activeChatId={activeChatId}
                         onSelectChat={handleSelectChat}
                         onOpenProfile={handleOpenProfile}
+                        onNewChatClick={() => setNewChatModalOpen(true)}
                     />
                 </div>
             )}
 
-            {/* Profile View */}
-            {view === 'profile' && (
+            {view === 'profile' && currentUser && (
                 <div className="app__main">
-                    <Profile
-                        user={user}
-                        onBack={handleBack}
-                        onUpdateProfile={handleUpdateProfile}
-                    />
+                    <Profile user={currentUser} onBack={handleBack} onUpdateProfile={async (u) => {
+                        await apiFetch('/profile/me', { method: 'PATCH', body: JSON.stringify(u) });
+                        setCurrentUser(prev => prev ? { ...prev, ...u } : null);
+                    }} />
                 </div>
             )}
 
-            {/* Chat Room / Empty State */}
             {view !== 'profile' && (
-                <div
-                    className={cx(
-                        'app__main',
-                        mainHiddenMobile && 'app__main--hidden-mobile'
-                    )}
-                >
-                    {activeChat && activeContact ? (
+                <div className={cx('app__main')}>
+                    {activeChat ? (
                         <ChatRoom
                             chatId={activeChat.id}
-                            contact={activeContact}
+                            contact={getActiveContact()}
                             messages={activeMessages}
-                            currentUserId={user.id}
+                            currentUserId={currentUser!.chatId}
                             onSendMessage={handleSendMessage}
                             onBack={handleBack}
                         />
@@ -179,6 +157,13 @@ export function App() {
                     )}
                 </div>
             )}
+
+            <NewChatModal
+                isOpen={newChatModalOpen}
+                onClose={() => setNewChatModalOpen(false)}
+                onChatCreated={handleNewChatCreated}
+                currentUserChatId={currentUser!.chatId}
+            />
         </div>
     );
 }

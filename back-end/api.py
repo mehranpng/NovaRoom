@@ -5,6 +5,7 @@ from fastapi import (
     HTTPException,
     Query,
 )
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from datetime import datetime, timedelta
@@ -19,6 +20,14 @@ load_dotenv()
 
 # ====================== CONFIG ======================
 app = FastAPI(title="QuickChat API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-key-change-in-prod")
 ALGORITHM = "HS256"
