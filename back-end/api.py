@@ -18,7 +18,6 @@ from typing import List, Dict, Optional
 
 load_dotenv()
 
-# ====================== CONFIG ======================
 app = FastAPI(title="QuickChat API")
 
 app.add_middleware(
@@ -35,7 +34,6 @@ ACCESS_TOKEN_EXPIRE_DAYS = 7
 
 client = AsyncIOMotorClient(os.getenv("MONGO_DB"))
 db = client["Messenger"]
-
 cl_users = db["users"]
 cl_chats = db["chats"]
 cl_messages = db["messages"]
@@ -45,7 +43,6 @@ active_connections: Dict[str, WebSocket] = {}
 security = HTTPBearer()
 
 
-# ====================== MODELS ======================
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -75,7 +72,6 @@ class ChatCreateRequest(BaseModel):
     targetChatId: str
 
 
-# ====================== HELPERS ======================
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
@@ -106,7 +102,6 @@ def get_chat_id_for_two(part1: str, part2: str) -> str:
     return f"chat_{sorted_ids[0]}_{sorted_ids[1]}"
 
 
-# ====================== STARTUP ======================
 @app.on_event("startup")
 async def startup_db():
     await cl_users.create_index("chatId", unique=True)
@@ -118,7 +113,6 @@ async def startup_db():
     await cl_messages.create_index([("chatId", 1), ("timestamp", -1)])
 
 
-# ====================== AUTH ======================
 @app.post("/auth/login", response_model=TokenResponse)
 async def login(req: LoginRequest):
     user = await cl_users.find_one({"login.email": req.email})
@@ -151,7 +145,6 @@ async def login(req: LoginRequest):
     }
 
 
-# ====================== PROFILE ======================
 @app.get("/profile/me")
 async def get_profile(current_user: dict = Depends(get_current_user)):
     return {
@@ -180,11 +173,9 @@ async def update_profile(
         await cl_users.update_one(
             {"chatId": current_user["chatId"]}, {"$set": update_data}
         )
-
     return {"message": "Profile updated"}
 
 
-# ====================== USER SEARCH ======================
 @app.get("/users/search", response_model=List[UserSearchResult])
 async def search_users(
     query: str = Query(..., min_length=2),
@@ -217,9 +208,33 @@ async def search_users(
     ]
 
 
-# ====================== CHATS ======================)
+@app.post("/chats")
+async def create_or_get_chat(
+    req: ChatCreateRequest, current_user: dict = Depends(get_current_user)
+):
+    my_id = current_user["chatId"]
+    target_id = req.targetChatId
+
+    chat_id = get_chat_id_for_two(my_id, target_id)
+    chat = await cl_chats.find_one({"_id": chat_id})
+
+    if chat:
+        return {"chatId": chat_id, "participants": chat["participants"]}
+
+    new_chat = {
+        "_id": chat_id,
+        "participants": sorted([my_id, target_id]),
+        "createdAt": datetime.utcnow(),
+        "updatedAt": datetime.utcnow(),
+        "lastMessage": None,
+    }
+
+    await cl_chats.insert_one(new_chat)
+    return {"chatId": chat_id, "participants": new_chat["participants"]}
+
+
 @app.get("/chats")
-async def create_or_get_chat(current_user: dict = Depends(get_current_user)):
+async def get_chat_list(current_user: dict = Depends(get_current_user)):
     my_id = current_user["chatId"]
     chats = (
         await cl_chats.find({"participants": my_id}).sort("updatedAt", -1).to_list(50)
@@ -228,7 +243,6 @@ async def create_or_get_chat(current_user: dict = Depends(get_current_user)):
     result = []
     for chat in chats:
         other_id = next((pid for pid in chat["participants"] if pid != my_id), None)
-
         other_user = await cl_users.find_one({"chatId": other_id})
 
         unread = await cl_messages.count_documents(
@@ -258,39 +272,10 @@ async def create_or_get_chat(current_user: dict = Depends(get_current_user)):
     return result
 
 
-@app.get("/chats")
-async def get_chat_list(current_user: dict = Depends(get_current_user)):
-    my_id = current_user["chatId"]
-    chats = (
-        await cl_chats.find({"participants": my_id}).sort("updatedAt", -1).to_list(50)
-    )
-
-    result = []
-    for chat in chats:
-        unread = await cl_messages.count_documents(
-            {
-                "chatId": chat["_id"],
-                "senderId": {"$ne": my_id},
-                "seenBy": {"$ne": my_id},
-            }
-        )
-        result.append(
-            {
-                "id": chat["_id"],
-                "participantIds": chat["participants"],
-                "lastMessage": chat.get("lastMessage"),
-                "unreadCount": unread,
-            }
-        )
-    return result
-
-
-# ====================== MESSAGES ======================
 @app.get("/chats/{chat_id}/messages")
 async def get_messages(
     chat_id: str, limit: int = 50, current_user: dict = Depends(get_current_user)
 ):
-    # Mark messages as seen
     await cl_messages.update_many(
         {"chatId": chat_id, "seenBy": {"$ne": current_user["chatId"]}},
         {"$push": {"seenBy": current_user["chatId"]}},
@@ -317,7 +302,6 @@ async def get_messages(
     ]
 
 
-# ====================== WEBSOCKET ======================
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
     await websocket.accept()
@@ -336,14 +320,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
         active_connections[chat_id] = websocket
 
-        # 1. Update DB to Online
         await cl_users.update_one({"chatId": chat_id}, {"$set": {"online": True}})
 
-        # 2. Broadcast ONLINE status to contacts
-        # Find all chats this user is part of
         user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
 
-        # Collect unique participants to notify
         contacts_to_notify = set()
         for chat in user_chats:
             for p in chat["participants"]:
@@ -353,11 +333,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
         for p in contacts_to_notify:
             try:
                 await active_connections[p].send_json(
-                    {
-                        "type": "user_status",
-                        "userId": chat_id,  # The user who just came online
-                        "online": True,
-                    }
+                    {"type": "user_status", "userId": chat_id, "online": True}
                 )
             except:
                 pass
@@ -365,7 +341,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
         while True:
             data = await websocket.receive_json()
             if data.get("type") == "message":
-                # ... (بخش پیام رسانی بدون تغییر باقی بماند)
                 chat_id_target = data["chatId"]
                 text = data["text"]
 
@@ -376,6 +351,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     "timestamp": datetime.utcnow(),
                     "seenBy": [chat_id],
                 }
+
                 result = await cl_messages.insert_one(message_doc)
                 msg_id = str(result.inserted_id)
 
@@ -425,11 +401,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
             if chat_id in active_connections:
                 del active_connections[chat_id]
 
-            # 3. Update DB to Offline
             await cl_users.update_one({"chatId": chat_id}, {"$set": {"online": False}})
 
-            # 4. Broadcast OFFLINE status to contacts
             user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
+
             contacts_to_notify = set()
             for chat in user_chats:
                 for p in chat["participants"]:
