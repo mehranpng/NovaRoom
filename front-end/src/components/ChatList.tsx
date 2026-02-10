@@ -46,14 +46,21 @@ export function ChatList({
     const [searchQuery, setSearchQuery] = useState('');
 
     const getContact = (chat: Chat): User => {
+        if (chat.otherUser) {
+            return {
+                ...chat.otherUser,
+                chatId: chat.participantIds.find(id => id !== currentUser.chatId) || ''
+            };
+        }
+
         const contactId = chat.participantIds.find((id) => id !== currentUser.chatId) || 'Unknown';
         return {
             chatId: contactId,
-            name: contactId,           // temporary until we enrich chats with full user data
+            name: contactId,
             username: contactId.toLowerCase(),
             bio: '',
             avatar: '',
-            online: false,
+            online: false
         };
     };
 

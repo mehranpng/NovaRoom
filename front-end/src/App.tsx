@@ -106,9 +106,21 @@ export function App() {
     const getActiveContact = (): User => {
         const chat = chats.find(c => c.id === activeChatId);
         if (!chat || !currentUser) return { chatId: '', name: 'Unknown', username: '', bio: '', avatar: '', online: false };
+
+        if (chat.otherUser) {
+            return {
+                chatId: chat.otherUser.username,
+                name: chat.otherUser.name,
+                username: chat.otherUser.username,
+                avatar: chat.otherUser.avatar,
+                bio: chat.otherUser.bio || '',
+                online: chat.otherUser.online,
+            };
+        }
         const otherId = chat.participantIds.find(id => id !== currentUser.chatId) || '';
         return { chatId: otherId, name: otherId, username: otherId.toLowerCase(), bio: '', avatar: '', online: false };
     };
+
 
     if (!isAuthenticated) {
         return <Login onLoginSuccess={handleLoginSuccess} />;

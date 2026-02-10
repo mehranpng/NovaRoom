@@ -335,11 +335,37 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
             return
 
         active_connections[chat_id] = websocket
+
+        # 1. Update DB to Online
         await cl_users.update_one({"chatId": chat_id}, {"$set": {"online": True}})
+
+        # 2. Broadcast ONLINE status to contacts
+        # Find all chats this user is part of
+        user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
+
+        # Collect unique participants to notify
+        contacts_to_notify = set()
+        for chat in user_chats:
+            for p in chat["participants"]:
+                if p != chat_id and p in active_connections:
+                    contacts_to_notify.add(p)
+
+        for p in contacts_to_notify:
+            try:
+                await active_connections[p].send_json(
+                    {
+                        "type": "user_status",
+                        "userId": chat_id,  # The user who just came online
+                        "online": True,
+                    }
+                )
+            except:
+                pass
 
         while True:
             data = await websocket.receive_json()
             if data.get("type") == "message":
+                # ... (بخش پیام رسانی بدون تغییر باقی بماند)
                 chat_id_target = data["chatId"]
                 text = data["text"]
 
@@ -350,7 +376,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     "timestamp": datetime.utcnow(),
                     "seenBy": [chat_id],
                 }
-
                 result = await cl_messages.insert_one(message_doc)
                 msg_id = str(result.inserted_id)
 
@@ -392,13 +417,32 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                                 )
                             except:
                                 pass
-    except:
+
+    except Exception:
         pass
     finally:
         if chat_id:
             if chat_id in active_connections:
                 del active_connections[chat_id]
+
+            # 3. Update DB to Offline
             await cl_users.update_one({"chatId": chat_id}, {"$set": {"online": False}})
+
+            # 4. Broadcast OFFLINE status to contacts
+            user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
+            contacts_to_notify = set()
+            for chat in user_chats:
+                for p in chat["participants"]:
+                    if p != chat_id and p in active_connections:
+                        contacts_to_notify.add(p)
+
+            for p in contacts_to_notify:
+                try:
+                    await active_connections[p].send_json(
+                        {"type": "user_status", "userId": chat_id, "online": False}
+                    )
+                except:
+                    pass
 
 
 if __name__ == "__main__":

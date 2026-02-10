@@ -1,13 +1,20 @@
+// useWebSocket.ts
 import { useEffect, useRef, useCallback } from 'react';
 import { API_BASE_URL } from '../config/api';
 
 interface UseWebSocketProps {
     token: string | null;
     onNewMessage: (chatId: string, message: any) => void;
+    onUserStatusChange?: (userId: string, online: boolean) => void;
     onConnectionChange?: (isConnected: boolean) => void;
 }
 
-export function useWebSocket({ token, onNewMessage, onConnectionChange }: UseWebSocketProps) {
+export function useWebSocket({
+    token,
+    onNewMessage,
+    onUserStatusChange,
+    onConnectionChange
+}: UseWebSocketProps) {
     const socketRef = useRef<WebSocket | null>(null);
     const isConnectedRef = useRef(false);
 
@@ -26,6 +33,8 @@ export function useWebSocket({ token, onNewMessage, onConnectionChange }: UseWeb
                 const data = JSON.parse(event.data);
                 if (data.type === 'new_message') {
                     onNewMessage(data.chatId, data.message);
+                } else if (data.type === 'user_status') {
+                    onUserStatusChange?.(data.userId, data.online);
                 }
             } catch (err) {
                 console.error('WebSocket message parse error:', err);
@@ -33,11 +42,9 @@ export function useWebSocket({ token, onNewMessage, onConnectionChange }: UseWeb
         };
 
         ws.onclose = () => {
-            console.log('❌ WebSocket disconnected');
             isConnectedRef.current = false;
             onConnectionChange?.(false);
             socketRef.current = null;
-            // Auto reconnect after 3 seconds
             setTimeout(connect, 3000);
         };
 
@@ -46,7 +53,7 @@ export function useWebSocket({ token, onNewMessage, onConnectionChange }: UseWeb
         };
 
         socketRef.current = ws;
-    }, [token, onNewMessage, onConnectionChange]);
+    }, [token, onNewMessage, onUserStatusChange, onConnectionChange]);
 
     const sendMessage = useCallback((chatId: string, text: string) => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
@@ -73,7 +80,6 @@ export function useWebSocket({ token, onNewMessage, onConnectionChange }: UseWeb
         } else {
             disconnect();
         }
-
         return () => disconnect();
     }, [token, connect, disconnect]);
 
