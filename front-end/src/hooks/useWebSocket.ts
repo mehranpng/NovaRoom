@@ -17,7 +17,6 @@ export function useWebSocket({ token, onNewMessage, onConnectionChange }: UseWeb
         const ws = new WebSocket(`${API_BASE_URL.replace('http', 'ws')}/ws?token=${token}`);
 
         ws.onopen = () => {
-            console.log('✅ WebSocket connected');
             isConnectedRef.current = true;
             onConnectionChange?.(true);
         };
