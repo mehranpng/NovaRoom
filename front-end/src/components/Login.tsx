@@ -38,7 +38,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
             <div className="login-container">
                 <div className="login-header">
                     <LogIn size={48} strokeWidth={1.5} />
-                    <h1>QuickChat</h1>
+                    <h1>NovaRoom</h1>
                     <p>Sign in to continue</p>
                 </div>
 
@@ -71,12 +71,6 @@ export function Login({ onLoginSuccess }: LoginProps) {
                         {loading ? 'Signing in...' : 'Sign In'}
                     </button>
                 </form>
-
-                <div className="login-footer">
-                    Demo credentials:<br />
-                    Email: mehran@gmail.com<br />
-                    Password: 12345
-                </div>
             </div>
         </div>
     );
