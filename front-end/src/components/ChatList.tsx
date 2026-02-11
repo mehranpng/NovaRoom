@@ -1,5 +1,5 @@
-import { Search, MessageSquarePlus, Settings } from 'lucide-react';
-import { useState } from 'react';
+import { Search, MessageSquarePlus, Menu } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';
 import { cx } from '../utils/cx';
@@ -11,6 +11,7 @@ interface ChatListProps {
     onSelectChat: (chatId: string) => void;
     onOpenProfile: () => void;
     onNewChatClick: () => void;
+    onLogout: () => void;
 }
 
 function formatTime(timestamp: any): string {
@@ -42,8 +43,23 @@ export function ChatList({
     onSelectChat,
     onOpenProfile,
     onNewChatClick,
+    onLogout,
 }: ChatListProps) {
     const [searchQuery, setSearchQuery] = useState('');
+    const [menuOpen, setMenuOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        const onDocClick = (e: MouseEvent) => {
+            if (!menuRef.current) return;
+            if (menuRef.current.contains(e.target as Node)) return;
+            setMenuOpen(false);
+        };
+        if (menuOpen) {
+            document.addEventListener('mousedown', onDocClick);
+        }
+        return () => document.removeEventListener('mousedown', onDocClick);
+    }, [menuOpen]);
 
     const getContact = (chat: Chat): User => {
         if (chat.otherUser) {
@@ -87,9 +103,27 @@ export function ChatList({
                     <button className="icon-btn" onClick={onNewChatClick}>
                         <MessageSquarePlus size={20} />
                     </button>
-                    <button className="icon-btn" onClick={onOpenProfile}>
-                        <Settings size={20} />
-                    </button>
+
+                    <div className="chat-list__menu" ref={menuRef}>
+                        <button
+                            className="icon-btn"
+                            onClick={() => setMenuOpen(v => !v)}
+                            aria-label="Menu"
+                        >
+                            <Menu size={20} />
+                        </button>
+
+                        {menuOpen && (
+                            <div className="popover popover--right">
+                                <button className="popover__item" onClick={() => { setMenuOpen(false); onOpenProfile(); }}>
+                                    Profile
+                                </button>
+                                <button className="popover__item popover__item--danger" onClick={() => { setMenuOpen(false); onLogout(); }}>
+                                    Logout
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 

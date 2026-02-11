@@ -59,6 +59,18 @@ export function App() {
         }
     }, [isAuthenticated]);
 
+    const handleLogout = useCallback(() => {
+        localStorage.removeItem('token');
+        setIsAuthenticated(false);
+        setCurrentUser(null);
+        setView('chatList');
+        setActiveChatId(null);
+        setPendingUser(null);
+        setChats([]);
+        setMessages({});
+        setNewChatModalOpen(false);
+    }, []);
+
     // WebSocket handlers wrapped in useCallback to prevent infinite reconnection loops
     const handleNewMessage = useCallback((chatId: string, newMsg: Message) => {
         setMessages(prev => {
@@ -236,6 +248,18 @@ export function App() {
         setPendingUser(null);
     };
 
+    const handleChatDeleted = (chatId: string) => {
+        setChats(prev => prev.filter(c => c.id !== chatId));
+        setMessages(prev => {
+            const { [chatId]: _, ...rest } = prev;
+            return rest;
+        });
+        setActiveChatId(null);
+        setPendingUser(null);
+        setView('chatList');
+        loadChats();
+    };
+
     // Temporary contact resolver
     const getActiveContact = (): User => {
         if (pendingUser) return pendingUser;
@@ -285,6 +309,7 @@ export function App() {
                         onSelectChat={handleSelectChat}
                         onOpenProfile={handleOpenProfile}
                         onNewChatClick={() => setNewChatModalOpen(true)}
+                        onLogout={handleLogout}
                     />
                 </div>
             )}
@@ -312,6 +337,7 @@ export function App() {
                             currentUserId={currentUser!.chatId}
                             onSendMessage={handleSendMessage}
                             onBack={handleBack}
+                            onChatDeleted={handleChatDeleted}
                         />
                     ) : (
                         <EmptyState />

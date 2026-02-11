@@ -285,6 +285,23 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
     return result
 
 
+@app.delete("/chats/{chat_id}")
+async def delete_chat(chat_id: str, current_user: dict = Depends(get_current_user)):
+    my_id = current_user["chatId"]
+
+    chat = await cl_chats.find_one({"_id": chat_id})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    participants = chat.get("participants", [])
+    if my_id not in participants:
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    await cl_messages.delete_many({"chatId": chat_id})
+    await cl_chats.delete_one({"_id": chat_id})
+    return {"message": "Chat deleted"}
+
+
 @app.get("/chats/{chat_id}/messages")
 async def get_messages(
     chat_id: str, limit: int = 50, current_user: dict = Depends(get_current_user)
