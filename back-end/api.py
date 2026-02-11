@@ -389,8 +389,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 if not chat_id_target or not isinstance(text, str) or not text.strip():
                     continue
 
-                print(f"Received message from {chat_id} to {chat_id_target}: {text}")
-
                 message_doc = {
                     "chatId": chat_id_target,
                     "senderId": chat_id,
