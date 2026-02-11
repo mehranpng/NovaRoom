@@ -74,7 +74,7 @@ MONGO_DB=mongodb+srv://mehran_db_user:8wYwEomxmp36AFgc@cluster0.ev6alta.mongodb.
 ---
 3. **ساخت محیط مجازی پایتون و نصب کتابخانه ها**
 
-*ترمینال را در vscode باز کنید. (ctrl+`)*
+*ترمینال را در vscode باز کنید. ( ctrl+` )*
 
 *به مسیر بک اند وارد شوید:*
 ```
@@ -95,6 +95,7 @@ pip install fastapi "uvicorn[standard]" motor pyjwt bcrypt python-dotenv
 ---
 
 3. **ران کردن FastAPI**
+
 *ترمینال را باز کنید و به مسیر بک اند وارد شوید*
 ```
 cd back-end
