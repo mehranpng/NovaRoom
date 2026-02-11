@@ -53,3 +53,59 @@ mongodb+srv://mehran_db_user:8wYwEomxmp36AFgc@cluster0.ev6alta.mongodb.net/?appN
 ---
 10. **آدرس مرحله قبل را ذخیره کنید و در مرحله بعدی برای کانکنت شدن بک اند از اون آدرس استفاده میکنیم**
 
+<br><br><br><br>
+### ران کردن FastAPI (back-end)
+<br>
+
+1. **وارد فولدر back-end شوید و یک فایل با اسم زیر بسازید**
+```
+.env
+```
+*این فایل باید دقیقا کنار فایل api.py ساخته شود.*
+
+---
+2. **فایل .env را باز کنید و متن زیر را داخلش قرار دهید:**
+```
+MONGO_DB=mongodb+srv://mehran_db_user:8wYwEomxmp36AFgc@cluster0.ev6alta.mongodb.net/?appName=Cluster0
+```
+*باید جلوی MONGO_DB= آدرس خودتون رو که در مرحله 9 آموزش قبل ساختیم رو قرار دهید*
+
+---
+3. **ساخت محیط مجازی پایتون و نصب کتابخانه ها**
+*ترمینال را در vscode باز کنید. (ctrl+`)*
+*به مسیر بک اند وارد شوید:*
+```
+cd back-end
+```
+*کامند زیر را برای ساخت محیط مجازی وارد کنید:*
+```
+python -m venv venv
+```
+*محیط مجازی را فعال کنید:*
+```
+venv\Scripts\activate
+```
+*نصب کتابخانه های مورد نیاز*
+```
+pip install fastapi "uvicorn[standard]" motor pyjwt bcrypt python-dotenv
+```
+---
+
+3. **ران کردن FastAPI**
+*ترمینال را باز کنید و به مسیر بک اند وارد شوید*
+```
+cd back-end
+```
+*کامند زیر را در ترمینال وارد کنید:*
+```
+uvicorn api:app --host 0.0.0.0 --port 8000
+```
+---
+4. **پس از ران API در این آدرس قابل دسترس است:**
+```
+http://localhost:8000/
+```
+*آدرس داکیومنت API:*
+```
+http://localhost:8000/docs
+```

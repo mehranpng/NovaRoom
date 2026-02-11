@@ -18,7 +18,7 @@ from typing import List, Dict, Optional
 
 load_dotenv()
 
-app = FastAPI(title="QuickChat API")
+app = FastAPI(title="NovaRoom API")
 
 app.add_middleware(
     CORSMiddleware,
