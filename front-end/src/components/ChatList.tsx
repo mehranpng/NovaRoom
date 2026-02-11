@@ -1,4 +1,4 @@
-import { Search, MessageSquarePlus, Menu } from 'lucide-react';
+import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';
@@ -116,9 +116,11 @@ export function ChatList({
                         {menuOpen && (
                             <div className="popover popover--right">
                                 <button className="popover__item" onClick={() => { setMenuOpen(false); onOpenProfile(); }}>
+                                    <UserIcon size={16} />
                                     Profile
                                 </button>
                                 <button className="popover__item popover__item--danger" onClick={() => { setMenuOpen(false); onLogout(); }}>
+                                    <LogOut size={16} />
                                     Logout
                                 </button>
                             </div>

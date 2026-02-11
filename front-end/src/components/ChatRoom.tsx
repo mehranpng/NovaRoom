@@ -168,7 +168,11 @@ export function ChatRoom({
                                     {firstOfGroup && (
                                         <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
                                             <span className="message-time">{formatMessageTime(m.timestamp)}</span>
-                                            {isMine && <span className="message-seen">{m.seen ? 'Seen' : ''}</span>}
+                                            {isMine && (
+                                                <span className={m.seen ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
+                                                    {m.seen ? '✓✓' : '✓'}
+                                                </span>
+                                            )}
                                         </div>
                                     )}
                                 </div>

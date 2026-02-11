@@ -1379,3 +1379,50 @@
   font-size: 13px;
   color: #6b7280;
 }
+
+/* ========================================
+   UI ENHANCEMENTS (menus + seen ticks)
+   ======================================== */
+.popover {
+  padding: 6px;
+}
+
+.popover__item {
+  border-radius: 12px;
+  margin: 2px;
+}
+
+.popover__item:active {
+  transform: scale(0.98);
+}
+
+.popover__item svg {
+  flex-shrink: 0;
+}
+
+.modal-overlay {
+  backdrop-filter: blur(2px);
+}
+
+.confirm-modal {
+  animation: pop-in 0.12s ease-out;
+}
+
+@keyframes pop-in {
+  from { transform: translateY(4px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.message-seen {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-left: 2px;
+}
+
+.message-seen--single {
+  opacity: 0.75;
+}
+
+.message-seen--double {
+  opacity: 1;
+}
