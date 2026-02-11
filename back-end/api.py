@@ -15,6 +15,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from dotenv import load_dotenv
 from typing import List, Dict, Optional
+import traceback
 
 load_dotenv()
 
@@ -278,7 +279,7 @@ async def get_messages(
 ):
     await cl_messages.update_many(
         {"chatId": chat_id, "seenBy": {"$ne": current_user["chatId"]}},
-        {"$push": {"seenBy": current_user["chatId"]}},
+        {\"$push\": {"seenBy": current_user["chatId"]}},
     )
 
     msgs = (
@@ -320,7 +321,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
         active_connections[chat_id] = websocket
 
-        await cl_users.update_one({"chatId": chat_id}, {"$set": {"online": True}})
+        await cl_users.update_one({"chatId": chat_id}, {\"$set\": {"online": True}})
 
         user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
 
@@ -344,6 +345,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 chat_id_target = data["chatId"]
                 text = data["text"]
 
+                print(f"Received message from {chat_id} to {chat_id_target}: {text}")
+
                 message_doc = {
                     "chatId": chat_id_target,
                     "senderId": chat_id,
@@ -363,7 +366,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 await cl_chats.update_one(
                     {"_id": chat_id_target},
-                    {"$set": {"lastMessage": last_msg, "updatedAt": datetime.utcnow()}},
+                    {\"$set\": {"lastMessage": last_msg, "updatedAt": datetime.utcnow()}},
                 )
 
                 participants = await cl_chats.find_one(
@@ -391,14 +394,16 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                                         },
                                     }
                                 )
-                            except:
+                            except Exception as e:
+                                print(f"Error sending message to {p}: {e}")
                                 pass
+
             elif data.get("type") == "seen":
                 chat_id_target = data.get("chatId")
                 if chat_id_target:
                     await cl_messages.update_many(
                         {"chatId": chat_id_target, "seenBy": {"$ne": chat_id}},
-                        {"$push": {"seenBy": chat_id}},
+                        {\"$push\": {"seenBy": chat_id}},
                     )
                     
                     chat_doc = await cl_chats.find_one({"_id": chat_id_target})
@@ -416,14 +421,16 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                                 except:
                                     pass
 
-    except Exception:
+    except Exception as e:
+        print(f"WebSocket Error for {chat_id}: {traceback.format_exc()}")
         pass
     finally:
         if chat_id:
-            if chat_id in active_connections:
+            # Fix race condition: only remove if it's THIS connection
+            if chat_id in active_connections and active_connections[chat_id] == websocket:
                 del active_connections[chat_id]
 
-            await cl_users.update_one({"chatId": chat_id}, {"$set": {"online": False}})
+            await cl_users.update_one({"chatId": chat_id}, {\"$set\": {"online": False}})
 
             user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
 
@@ -440,7 +447,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     )
                 except:
                     pass
-
 
 if __name__ == "__main__":
     import uvicorn
