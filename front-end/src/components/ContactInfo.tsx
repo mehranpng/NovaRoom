@@ -22,7 +22,6 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
                 <div className="contact-info__avatar">
                     <Avatar name={user.name} size="xl" online={user.online} />
                     <div className="contact-info__name">{user.name}</div>
-                    <div className="contact-info__username">@{user.username}</div>
                     <div className={user.online ? 'contact-info__status contact-info__status--online' : 'contact-info__status'}>
                         {user.online ? 'Online' : 'Offline'}
                     </div>
@@ -36,8 +35,8 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
                 </div>
 
                 <div className="contact-info__card">
-                    <div className="contact-info__label">Chat ID</div>
-                    <div className="contact-info__mono">{user.chatId}</div>
+                    <div className="contact-info__label">Username</div>
+                    <div className="contact-info__mono">@{user.username}</div>
                 </div>
             </div>
         </div>
