@@ -75,6 +75,7 @@ MONGO_DB=mongodb+srv://mehran_db_user:8wYwEomxmp36AFgc@cluster0.ev6alta.mongodb.
 3. **ساخت محیط مجازی پایتون و نصب کتابخانه ها**
 
 *ترمینال را در vscode باز کنید. (ctrl+`)*
+
 *به مسیر بک اند وارد شوید:*
 ```
 cd back-end
