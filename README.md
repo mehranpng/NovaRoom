@@ -4,7 +4,7 @@
 - [ساخت دیتابیس در MongoDB](#ساخت-دیتابیس-mongodb) برای اتصال به بک اند
 - [ران کردن FastAPI (back-end)](#ران-کردن-fastapi-back-end)
 <br><br><br><br>
-### ساخت دیتابیس MongoDB
+## ساخت دیتابیس MongoDB
 <br>
 
 1. **به این آدرس رفته cloud.mongodb.com و یک اکانت ایجاد کنید.**
@@ -54,7 +54,7 @@ mongodb+srv://mehran_db_user:8wYwEomxmp36AFgc@cluster0.ev6alta.mongodb.net/?appN
 10. **آدرس مرحله قبل را ذخیره کنید و در مرحله بعدی برای کانکنت شدن بک اند از اون آدرس استفاده میکنیم**
 
 <br><br><br><br>
-### ران کردن FastAPI (back-end)
+## ران کردن FastAPI (back-end)
 <br>
 
 1. **وارد فولدر back-end شوید و یک فایل با اسم زیر بسازید**
