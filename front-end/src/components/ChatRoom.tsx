@@ -122,14 +122,15 @@ export function ChatRoom({
     return (
         <div className="chat-room">
             <div className="chat-room__header">
-                <button className="chat-room__back-btn" onClick={onBack} aria-label="Back">
+                <button className="chat-room__back-btn" onClick={onBack} aria-label="Back" type="button">
                     <ArrowLeft size={20} />
                 </button>
 
                 <button
-                    className="chat-room__header-clickable"
+                    className="chat-room__header-clickable chat-room__header-clickable--full"
                     onClick={() => setShowContactInfo(true)}
                     aria-label="Open contact info"
+                    type="button"
                 >
                     <Avatar name={contact.name} size="sm" online={contact.online} />
                     <div className="chat-room__header-info">
@@ -147,13 +148,18 @@ export function ChatRoom({
                         aria-label="More"
                         disabled={!canDelete}
                         style={!canDelete ? { opacity: 0.4, cursor: 'default' } : undefined}
+                        type="button"
                     >
                         <MoreVertical size={20} />
                     </button>
 
                     {menuOpen && canDelete && (
-                        <div className="popover popover--right">
-                            <button className="popover__item popover__item--danger" onClick={() => { setConfirmOpen(true); setMenuOpen(false); }}>
+                        <div className="popover popover--mini popover--right">
+                            <button
+                                className="popover__item popover__item--danger"
+                                onClick={() => { setConfirmOpen(true); setMenuOpen(false); }}
+                                type="button"
+                            >
                                 <Trash2 size={16} />
                                 Delete chat
                             </button>
@@ -211,6 +217,7 @@ export function ChatRoom({
                         onClick={submit}
                         disabled={!text.trim()}
                         aria-label="Send"
+                        type="button"
                     >
                         ➤
                     </button>
@@ -223,8 +230,8 @@ export function ChatRoom({
                         <h3 className="confirm-modal__title">Delete chat?</h3>
                         <p className="confirm-modal__text">This will delete the chat and all messages for both users.</p>
                         <div className="confirm-modal__actions">
-                            <button className="confirm-modal__btn" onClick={() => setConfirmOpen(false)}>Cancel</button>
-                            <button className="confirm-modal__btn confirm-modal__btn--danger" onClick={doDelete}>Delete</button>
+                            <button className="confirm-modal__btn" onClick={() => setConfirmOpen(false)} type="button">Cancel</button>
+                            <button className="confirm-modal__btn confirm-modal__btn--danger" onClick={doDelete} type="button">Delete</button>
                         </div>
                     </div>
                 </div>

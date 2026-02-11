@@ -109,17 +109,18 @@ export function ChatList({
                             className="icon-btn"
                             onClick={() => setMenuOpen(v => !v)}
                             aria-label="Menu"
+                            type="button"
                         >
                             <Menu size={20} />
                         </button>
 
                         {menuOpen && (
-                            <div className="popover popover--right">
-                                <button className="popover__item" onClick={() => { setMenuOpen(false); onOpenProfile(); }}>
+                            <div className="popover popover--mini popover--right">
+                                <button className="popover__item" onClick={() => { setMenuOpen(false); onOpenProfile(); }} type="button">
                                     <UserIcon size={16} />
                                     Profile
                                 </button>
-                                <button className="popover__item popover__item--danger" onClick={() => { setMenuOpen(false); onLogout(); }}>
+                                <button className="popover__item popover__item--danger" onClick={() => { setMenuOpen(false); onLogout(); }} type="button">
                                     <LogOut size={16} />
                                     Logout
                                 </button>
