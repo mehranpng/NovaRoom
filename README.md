@@ -29,7 +29,7 @@
 7. **گزینه Compass رو انتخاب کنید.**
 ---
 
-8. **در صفخه باز شده یک آدرس به این شکل میبینید:**
+8. **در صفحه باز شده یک آدرس به این شکل میبینید:**
 ```
 mongodb+srv://mehran_db_user:8wYwEomxmp36AFgc@cluster0.ev6alta.mongodb.net/
 ```
@@ -69,10 +69,11 @@ mongodb+srv://mehran_db_user:8wYwEomxmp36AFgc@cluster0.ev6alta.mongodb.net/?appN
 ```
 MONGO_DB=mongodb+srv://mehran_db_user:8wYwEomxmp36AFgc@cluster0.ev6alta.mongodb.net/?appName=Cluster0
 ```
-*باید جلوی MONGO_DB= آدرس خودتون رو که در مرحله 9 آموزش قبل ساختیم رو قرار دهید*
+*باید جلوی MONGO_DB= آدرس خودتون رو که در مرحله 9 آموزش قبل ساختید رو قرار دهید*
 
 ---
 3. **ساخت محیط مجازی پایتون و نصب کتابخانه ها**
+
 *ترمینال را در vscode باز کنید. (ctrl+`)*
 *به مسیر بک اند وارد شوید:*
 ```
