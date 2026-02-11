@@ -305,6 +305,26 @@ async def get_messages(
         for m in msgs
     ]
 
+# Helper to remove dead connections safely
+async def safe_send(user_id: str, message: dict):
+    if user_id not in active_connections:
+        return
+    
+    dead_connections = []
+    for ws in active_connections[user_id]:
+        try:
+            await ws.send_json(message)
+        except Exception:
+            dead_connections.append(ws)
+    
+    # Clean up dead connections
+    for dead_ws in dead_connections:
+        if dead_ws in active_connections[user_id]:
+            active_connections[user_id].remove(dead_ws)
+            
+    if not active_connections[user_id]:
+        del active_connections[user_id]
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
@@ -338,17 +358,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
         contacts_to_notify = set()
         for chat in user_chats:
             for p in chat["participants"]:
-                if p != chat_id and p in active_connections:
+                if p != chat_id:
                     contacts_to_notify.add(p)
 
         for p in contacts_to_notify:
-            for ws in active_connections[p]:
-                try:
-                    await ws.send_json(
-                        {"type": "user_status", "userId": chat_id, "online": True}
-                    )
-                except:
-                    pass
+            await safe_send(p, {"type": "user_status", "userId": chat_id, "online": True})
 
         while True:
             data = await websocket.receive_json()
@@ -386,29 +400,21 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 )
 
                 if participants:
+                    msg_payload = {
+                        "type": "new_message",
+                        "chatId": chat_id_target,
+                        "message": {
+                            "id": msg_id,
+                            "chatId": chat_id_target,
+                            "senderId": chat_id,
+                            "text": text,
+                            "timestamp": int(message_doc["timestamp"].timestamp() * 1000),
+                            "seen": False,
+                        },
+                    }
+                    
                     for p in participants["participants"]:
-                        if p in active_connections:
-                            for ws in active_connections[p]:
-                                try:
-                                    await ws.send_json(
-                                        {
-                                            "type": "new_message",
-                                            "chatId": chat_id_target,
-                                            "message": {
-                                                "id": msg_id,
-                                                "chatId": chat_id_target,
-                                                "senderId": chat_id,
-                                                "text": text,
-                                                "timestamp": int(
-                                                    message_doc["timestamp"].timestamp()
-                                                    * 1000
-                                                ),
-                                                "seen": False,
-                                            },
-                                        }
-                                    )
-                                except Exception as e:
-                                    print(f"Error sending message to {p}: {e}")
+                        await safe_send(p, msg_payload)
 
             elif data.get("type") == "seen":
                 chat_id_target = data.get("chatId")
@@ -421,18 +427,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     chat_doc = await cl_chats.find_one({"_id": chat_id_target})
                     if chat_doc:
                         for p in chat_doc["participants"]:
-                            if p != chat_id and p in active_connections:
-                                for ws in active_connections[p]:
-                                    try:
-                                        await ws.send_json(
-                                            {
-                                                "type": "messages_seen",
-                                                "chatId": chat_id_target,
-                                                "byUserId": chat_id,
-                                            }
-                                        )
-                                    except:
-                                        pass
+                            if p != chat_id:
+                                await safe_send(p, {
+                                    "type": "messages_seen",
+                                    "chatId": chat_id_target,
+                                    "byUserId": chat_id,
+                                })
 
     except WebSocketDisconnect:
         pass
@@ -452,17 +452,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 contacts_to_notify = set()
                 for chat in user_chats:
                     for p in chat["participants"]:
-                        if p != chat_id and p in active_connections:
+                        if p != chat_id:
                             contacts_to_notify.add(p)
 
                 for p in contacts_to_notify:
-                    for ws in active_connections[p]:
-                        try:
-                            await ws.send_json(
-                                {"type": "user_status", "userId": chat_id, "online": False}
-                            )
-                        except:
-                            pass
+                    await safe_send(p, {"type": "user_status", "userId": chat_id, "online": False})
 
 if __name__ == "__main__":
     import uvicorn
