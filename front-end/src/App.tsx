@@ -44,22 +44,30 @@ export function App() {
             };
         });
 
-        // Update last message in chat list
-        setChats(prev =>
-            prev.map(chat =>
-                chat.id === chatId
-                    ? {
-                        ...chat,
-                        lastMessage: {
-                            text: newMsg.text,
-                            senderId: newMsg.senderId,
-                            timestamp: newMsg.timestamp,
-                        },
-                    }
-                    : chat
-            )
-        );
-    }, []);
+        // Update last message + unread counter in chat list
+        setChats(prev => {
+            const myId = currentUser?.chatId;
+            const isIncoming = Boolean(myId) && newMsg.senderId !== myId;
+            const shouldIncrementUnread = isIncoming && (view !== 'chatRoom' || activeChatId !== chatId);
+
+            let found = false;
+            const updated = prev.map(chat => {
+                if (chat.id !== chatId) return chat;
+                found = true;
+                return {
+                    ...chat,
+                    lastMessage: {
+                        text: newMsg.text,
+                        senderId: newMsg.senderId,
+                        timestamp: newMsg.timestamp,
+                    },
+                    unreadCount: shouldIncrementUnread ? (chat.unreadCount || 0) + 1 : chat.unreadCount,
+                };
+            });
+
+            return found ? updated : prev;
+        });
+    }, [currentUser?.chatId, view, activeChatId]);
 
     const handleUserStatusChange = useCallback((userId: string, online: boolean) => {
         setChats(prev => prev.map(chat => {
@@ -134,6 +142,9 @@ export function App() {
     const handleSelectChat = useCallback(async (chatId: string) => {
         setActiveChatId(chatId);
         setView('chatRoom');
+
+        // Optimistic: remove unread badge immediately
+        setChats(prev => prev.map(c => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
 
         try {
             const msgs = await apiFetch(`/chats/${chatId}/messages?limit=100`);
