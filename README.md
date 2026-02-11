@@ -52,6 +52,7 @@ mongodb+srv://mehran_db_user:8wYwEomxmp36AFgc@cluster0.ev6alta.mongodb.net/?appN
 
 ---
 10. **آدرس مرحله قبل را ذخیره کنید و در مرحله بعدی برای کانکنت شدن بک اند از اون آدرس استفاده میکنیم**
+---
 
 <br><br><br><br>
 ## ران کردن FastAPI (back-end)
@@ -109,3 +110,4 @@ http://localhost:8000/
 ```
 http://localhost:8000/docs
 ```
+---
