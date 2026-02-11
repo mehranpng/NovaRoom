@@ -16,15 +16,18 @@ export interface Message {
     seen: boolean;
 }
 
+export interface ChatLastMessage {
+    text: string;
+    senderId: string;
+    /** epoch ms */
+    timestamp: number;
+}
+
 export interface Chat {
     otherUser: any;
     id: string;
     participantIds: string[];
-    lastMessage?: {
-        text: string;
-        senderId: string;
-        timestamp: Date;
-    };
+    lastMessage?: ChatLastMessage;
     unreadCount: number;
 }
 

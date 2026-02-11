@@ -11,6 +11,16 @@ import { NewChatModal } from './components/NewChatModal';
 import { cx } from './utils/cx';
 import './App.css';
 
+const normalizeTimestamp = (ts: unknown): number => {
+    if (typeof ts === 'number' && Number.isFinite(ts)) return ts;
+    if (typeof ts === 'string') {
+        const parsed = Date.parse(ts);
+        return Number.isFinite(parsed) ? parsed : Date.now();
+    }
+    if (ts instanceof Date) return ts.getTime();
+    return Date.now();
+};
+
 export function App() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -38,7 +48,14 @@ export function App() {
         setChats(prev =>
             prev.map(chat =>
                 chat.id === chatId
-                    ? { ...chat, lastMessage: newMsg }
+                    ? {
+                        ...chat,
+                        lastMessage: {
+                            text: newMsg.text,
+                            senderId: newMsg.senderId,
+                            timestamp: newMsg.timestamp,
+                        },
+                    }
                     : chat
             )
         );
@@ -94,9 +111,19 @@ export function App() {
         if (!isAuthenticated) return;
         try {
             const data = await apiFetch('/chats');
-            setChats(data);
+            const normalized: Chat[] = (data as any[]).map((c) => {
+                if (!c?.lastMessage) return c as Chat;
+                return {
+                    ...c,
+                    lastMessage: {
+                        ...c.lastMessage,
+                        timestamp: normalizeTimestamp(c.lastMessage.timestamp),
+                    }
+                } as Chat;
+            });
+            setChats(normalized);
         } catch (error) {
-            console.error("Failed to load chats", error);
+            console.error('Failed to load chats', error);
         }
     }, [isAuthenticated]);
 
@@ -124,7 +151,7 @@ export function App() {
 
         const success = sendViaWS(activeChatId, text);
         if (!success) {
-            console.warn("WebSocket not connected");
+            console.warn('WebSocket not connected');
         }
     }, [activeChatId, currentUser, sendViaWS]);
 
@@ -141,12 +168,90 @@ export function App() {
     // Temporary contact resolver
     const getActiveContact = (): User => {
         const chat = chats.find(c => c.id === activeChatId);
-        if (!chat || !currentUser) return { chatId: '', name: 'Unknown', username: '', bio: '', avatar: '', online: false };
+        if (!chat || !currentUser) {
+            return { chatId: '', name: 'Unknown', username: '', bio: '', avatar: '', online: false };
+        }
 
         if (chat.otherUser) {
             return {
-                chatId: chat.otherUser.username,
-                name: chat.otherUser.name,
-                username: chat.otherUser.username,
-                avatar: chat.otherUser.avatar,
-                bio: chat.otherUser.bio || '',\n                online: chat.otherUser.online,\n            };\n        }\n        const otherId = chat.participantIds.find(id => id !== currentUser.chatId) || '';\n        return { chatId: otherId, name: otherId, username: otherId.toLowerCase(), bio: '', avatar: '', online: false };\n    };\n\n\n    if (!isAuthenticated) {\n        return <Login onLoginSuccess={handleLoginSuccess} />;\n    }\n\n    const activeChat = chats.find(c => c.id === activeChatId) || null;\n    const activeMessages = activeChatId ? messages[activeChatId] || [] : [];\n\n    return (\n        <div className=\"app\">\n            {view !== 'profile' && (\n                <div className=\"app__sidebar\">\n                    <ChatList\n                        chats={chats}\n                        currentUser={currentUser!}\n                        activeChatId={activeChatId}\n                        onSelectChat={handleSelectChat}\n                        onOpenProfile={handleOpenProfile}\n                        onNewChatClick={() => setNewChatModalOpen(true)}\n                    />\n                </div>\n            )}\n\n            {view === 'profile' && currentUser && (\n                <div className=\"app__main\">\n                    <Profile user={currentUser} onBack={handleBack} onUpdateProfile={async (u) => {\n                        await apiFetch('/profile/me', { method: 'PATCH', body: JSON.stringify(u) });\n                        setCurrentUser(prev => prev ? { ...prev, ...u } : null);\n                    }} />\n                </div>\n            )}\n\n            {view !== 'profile' && (\n                <div className={cx('app__main')}>\n                    {activeChat ? (\n                        <ChatRoom\n                            chatId={activeChat.id}\n                            contact={getActiveContact()}\n                            messages={activeMessages}\n                            currentUserId={currentUser!.chatId}\n                            onSendMessage={handleSendMessage}\n                            onBack={handleBack}\n                        />\n                    ) : (\n                        <EmptyState />\n                    )}\n                </div>\n            )}\n\n            <NewChatModal\n                isOpen={newChatModalOpen}\n                onClose={() => setNewChatModalOpen(false)}\n                onChatCreated={handleNewChatCreated}\n                currentUserChatId={currentUser!.chatId}\n            />\n        </div>\n    );\n}\n
+                chatId: chat.otherUser.chatId ?? chat.otherUser.username ?? '',
+                name: chat.otherUser.name ?? 'Unknown',
+                username: chat.otherUser.username ?? '',
+                avatar: chat.otherUser.avatar ?? '',
+                bio: chat.otherUser.bio ?? '',
+                online: Boolean(chat.otherUser.online),
+            };
+        }
+
+        const otherId = chat.participantIds.find(id => id !== currentUser.chatId) || '';
+        return {
+            chatId: otherId,
+            name: otherId || 'Unknown',
+            username: otherId ? otherId.toLowerCase() : '',
+            bio: '',
+            avatar: '',
+            online: false,
+        };
+    };
+
+    if (!isAuthenticated) {
+        return <Login onLoginSuccess={handleLoginSuccess} />;
+    }
+
+    const activeChat = chats.find(c => c.id === activeChatId) || null;
+    const activeMessages = activeChatId ? messages[activeChatId] || [] : [];
+
+    return (
+        <div className="app">
+            {view !== 'profile' && (
+                <div className="app__sidebar">
+                    <ChatList
+                        chats={chats}
+                        currentUser={currentUser!}
+                        activeChatId={activeChatId}
+                        onSelectChat={handleSelectChat}
+                        onOpenProfile={handleOpenProfile}
+                        onNewChatClick={() => setNewChatModalOpen(true)}
+                    />
+                </div>
+            )}
+
+            {view === 'profile' && currentUser && (
+                <div className="app__main">
+                    <Profile
+                        user={currentUser}
+                        onBack={handleBack}
+                        onUpdateProfile={async (u) => {
+                            await apiFetch('/profile/me', { method: 'PATCH', body: JSON.stringify(u) });
+                            setCurrentUser(prev => (prev ? { ...prev, ...u } : null));
+                        }}
+                    />
+                </div>
+            )}
+
+            {view !== 'profile' && (
+                <div className={cx('app__main')}>
+                    {activeChat ? (
+                        <ChatRoom
+                            chatId={activeChat.id}
+                            contact={getActiveContact()}
+                            messages={activeMessages}
+                            currentUserId={currentUser!.chatId}
+                            onSendMessage={handleSendMessage}
+                            onBack={handleBack}
+                        />
+                    ) : (
+                        <EmptyState />
+                    )}
+                </div>
+            )}
+
+            <NewChatModal
+                isOpen={newChatModalOpen}
+                onClose={() => setNewChatModalOpen(false)}
+                onChatCreated={handleNewChatCreated}
+                currentUserChatId={currentUser!.chatId}
+            />
+        </div>
+    );
+}
