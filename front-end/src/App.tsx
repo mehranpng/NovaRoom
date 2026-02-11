@@ -21,7 +21,7 @@ export function App() {
     const [newChatModalOpen, setNewChatModalOpen] = useState(false);
 
     // WebSocket
-    const { sendMessage: sendViaWS } = useWebSocket({
+    const { sendMessage: sendViaWS, sendSeen } = useWebSocket({
         token: localStorage.getItem('token'),
         onNewMessage: (chatId, newMsg) => {
             setMessages(prev => ({
@@ -37,6 +37,23 @@ export function App() {
                         : chat
                 )
             );
+        },
+        onUserStatusChange: (userId, online) => {
+            setChats(prev => prev.map(chat => {
+                if (chat.otherUser && (chat.otherUser.username === userId || chat.participantIds.includes(userId))) {
+                    return { ...chat, otherUser: { ...chat.otherUser, online } };
+                }
+                return chat;
+            }));
+        },
+        onMessagesSeen: (chatId) => {
+            setMessages(prev => {
+                if (!prev[chatId]) return prev;
+                return {
+                    ...prev,
+                    [chatId]: prev[chatId].map(m => ({ ...m, seen: true }))
+                };
+            });
         }
     });
 
@@ -76,12 +93,13 @@ export function App() {
         try {
             const msgs = await apiFetch(`/chats/${chatId}/messages?limit=100`);
             setMessages(prev => ({ ...prev, [chatId]: msgs }));
+            sendSeen(chatId);
         } catch (err) {
             console.error(err);
         }
 
         loadChats();
-    }, [loadChats]);
+    }, [loadChats, sendSeen]);
 
     const handleSendMessage = useCallback(async (text: string) => {
         if (!activeChatId || !currentUser) return;
@@ -123,8 +141,7 @@ export function App() {
 
 
     if (!isAuthenticated) {
-        return <Login onLoginSuccess={handleLoginSuccess} />;
-    }
+        return <Login onLoginSuccess={handleLoginSuccess} />;\n    }
 
     const activeChat = chats.find(c => c.id === activeChatId) || null;
     const activeMessages = activeChatId ? messages[activeChatId] || [] : [];
