@@ -41,7 +41,7 @@ cl_users = db["users"]
 cl_chats = db["chats"]
 cl_messages = db["messages"]
 
-# Changed to store a set of websockets per user to handle multiple tabs/reconnects
+# Store active connections
 active_connections: Dict[str, List[WebSocket]] = {}
 
 security = HTTPBearer()
@@ -327,19 +327,18 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
             await websocket.close(code=1008)
             return
 
-        # Add connection to list (supporting multiple tabs/devices)
         if chat_id not in active_connections:
             active_connections[chat_id] = []
         active_connections[chat_id].append(websocket)
 
         await cl_users.update_one({"chatId": chat_id}, {"$set": {"online": True}})
 
-        # Notify others
+        # Notify contacts
         user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
         contacts_to_notify = set()
         for chat in user_chats:
             for p in chat["participants"]:
-                if p != chat_id and p in active_connections and active_connections[p]:
+                if p != chat_id and p in active_connections:
                     contacts_to_notify.add(p)
 
         for p in contacts_to_notify:
@@ -410,7 +409,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                                     )
                                 except Exception as e:
                                     print(f"Error sending message to {p}: {e}")
-                                    pass
 
             elif data.get("type") == "seen":
                 chat_id_target = data.get("chatId")
@@ -437,28 +435,24 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                                         pass
 
     except WebSocketDisconnect:
-        # Handle normal disconnect (tab closed, etc.)
         pass
     except Exception as e:
         print(f"WebSocket Error for {chat_id}: {traceback.format_exc()}")
     finally:
         if chat_id and chat_id in active_connections:
-            # Safely remove only this specific websocket instance
             if websocket in active_connections[chat_id]:
                 active_connections[chat_id].remove(websocket)
             
-            # If no more connections for this user, mark as offline
             if not active_connections[chat_id]:
                 del active_connections[chat_id]
-                
                 await cl_users.update_one({"chatId": chat_id}, {"$set": {"online": False}})
 
+                # Notify contacts of offline status
                 user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
-
                 contacts_to_notify = set()
                 for chat in user_chats:
                     for p in chat["participants"]:
-                        if p != chat_id and p in active_connections and active_connections[p]:
+                        if p != chat_id and p in active_connections:
                             contacts_to_notify.add(p)
 
                 for p in contacts_to_notify:
