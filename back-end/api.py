@@ -393,6 +393,28 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                                 )
                             except:
                                 pass
+            elif data.get("type") == "seen":
+                chat_id_target = data.get("chatId")
+                if chat_id_target:
+                    await cl_messages.update_many(
+                        {"chatId": chat_id_target, "seenBy": {"$ne": chat_id}},
+                        {"$push": {"seenBy": chat_id}},
+                    )
+                    
+                    chat_doc = await cl_chats.find_one({"_id": chat_id_target})
+                    if chat_doc:
+                        for p in chat_doc["participants"]:
+                            if p != chat_id and p in active_connections:
+                                try:
+                                    await active_connections[p].send_json(
+                                        {
+                                            "type": "messages_seen",
+                                            "chatId": chat_id_target,
+                                            "byUserId": chat_id,
+                                        }
+                                    )
+                                except:
+                                    pass
 
     except Exception:
         pass
