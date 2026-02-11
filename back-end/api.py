@@ -50,8 +50,8 @@ cl_users = db["users"]
 cl_chats = db["chats"]
 cl_messages = db["messages"]
 
-# Store one active connection per user (chatId)
-active_connections: Dict[str, WebSocket] = {}
+# Store active connections (multiple tabs/devices per user)
+active_connections: Dict[str, List[WebSocket]] = {}
 
 security = HTTPBearer()
 
@@ -316,16 +316,23 @@ async def get_messages(
 
 
 async def safe_send(user_id: str, message: dict):
-    ws = active_connections.get(user_id)
-    if not ws:
+    if user_id not in active_connections:
         return
 
-    try:
-        await ws.send_json(message)
-    except Exception:
-        # Drop dead connection
-        if active_connections.get(user_id) is ws:
-            del active_connections[user_id]
+    dead_connections: List[WebSocket] = []
+    for ws in active_connections[user_id]:
+        try:
+            await ws.send_json(message)
+        except Exception:
+            dead_connections.append(ws)
+
+    if dead_connections:
+        for dead_ws in dead_connections:
+            if dead_ws in active_connections.get(user_id, []):
+                active_connections[user_id].remove(dead_ws)
+
+        if not active_connections.get(user_id):
+            active_connections.pop(user_id, None)
 
 
 @app.websocket("/ws")
@@ -350,23 +357,13 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
             await websocket.close(code=1008)
             return
 
-        # Enforce single websocket per user: if a previous connection exists, close it.
-        prev_ws = active_connections.get(chat_id)
-        is_first_connection = prev_ws is None
-        if prev_ws and prev_ws is not websocket:
-            try:
-                await prev_ws.close(code=1000)
-            except Exception:
-                pass
-
-        active_connections[chat_id] = websocket
+        is_first_connection = not active_connections.get(chat_id)
+        active_connections.setdefault(chat_id, []).append(websocket)
 
         if is_first_connection:
-            await cl_users.update_one(
-                {"chatId": chat_id}, {"$set": {"online": True}}
-            )
+            await cl_users.update_one({"chatId": chat_id}, {"$set": {"online": True}})
 
-            # Notify contacts (only on first connect, not on replacement/reconnect)
+            # Notify contacts (only on first active connection)
             user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
             contacts_to_notify = set()
             for chat in user_chats:
@@ -383,7 +380,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
             try:
                 data = await websocket.receive_json()
             except ValueError:
-                # Ignore invalid JSON payloads
                 continue
 
             if data.get("type") == "message":
@@ -467,24 +463,29 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
     except Exception:
         print(f"WebSocket Error for {chat_id}: {traceback.format_exc()}")
     finally:
-        # Only mark offline if THIS websocket is still the active one.
-        if chat_id and active_connections.get(chat_id) is websocket:
-            del active_connections[chat_id]
+        if chat_id and chat_id in active_connections:
+            if websocket in active_connections[chat_id]:
+                active_connections[chat_id].remove(websocket)
 
-            await cl_users.update_one({"chatId": chat_id}, {"$set": {"online": False}})
+            if not active_connections[chat_id]:
+                del active_connections[chat_id]
 
-            # Notify contacts of offline status
-            user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
-            contacts_to_notify = set()
-            for chat in user_chats:
-                for p in chat["participants"]:
-                    if p != chat_id:
-                        contacts_to_notify.add(p)
-
-            for p in contacts_to_notify:
-                await safe_send(
-                    p, {"type": "user_status", "userId": chat_id, "online": False}
+                await cl_users.update_one(
+                    {"chatId": chat_id}, {"$set": {"online": False}}
                 )
+
+                # Notify contacts of offline status (only when last connection is gone)
+                user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
+                contacts_to_notify = set()
+                for chat in user_chats:
+                    for p in chat["participants"]:
+                        if p != chat_id:
+                            contacts_to_notify.add(p)
+
+                for p in contacts_to_notify:
+                    await safe_send(
+                        p, {"type": "user_status", "userId": chat_id, "online": False}
+                    )
 
 
 if __name__ == "__main__":
