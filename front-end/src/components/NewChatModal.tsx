@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, X, UserPlus } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { apiFetch } from '../config/api';
 import { type User } from '../types';
 import { Avatar } from './Avatar';
@@ -7,14 +7,20 @@ import { Avatar } from './Avatar';
 interface NewChatModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onChatCreated: (chatId: string) => void;
-    currentUserChatId: string;
+    onUserSelected: (user: User) => void;
 }
 
-export function NewChatModal({ isOpen, onClose, onChatCreated, currentUserChatId }: NewChatModalProps) {
+export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalProps) {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        setQuery('');
+        setResults([]);
+        setLoading(false);
+    }, [isOpen]);
 
     useEffect(() => {
         if (!query || query.length < 2) {
@@ -38,28 +44,20 @@ export function NewChatModal({ isOpen, onClose, onChatCreated, currentUserChatId
         return () => clearTimeout(timeout);
     }, [query]);
 
-    const handleSelectUser = async (targetChatId: string) => {
-        try {
-            const res = await apiFetch('/chats', {
-                method: 'POST',
-                body: JSON.stringify({ targetChatId }),
-            });
-            onChatCreated(res.chatId);
-            onClose();
-        } catch (err) {
-            alert('Failed to create chat');
-        }
+    const handleSelectUser = (user: User) => {
+        onUserSelected(user);
+        onClose();
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="modal-overlay">
+        <div className="modal-overlay" role="dialog" aria-modal="true">
             <div className="new-chat-modal">
                 <div className="modal-header">
                     <h2>New Chat</h2>
-                    <button onClick={onClose} className="close-btn">
-                        <X size={24} />
+                    <button onClick={onClose} className="icon-btn" aria-label="Close">
+                        <X size={20} />
                     </button>
                 </div>
 
@@ -84,7 +82,7 @@ export function NewChatModal({ isOpen, onClose, onChatCreated, currentUserChatId
                             <button
                                 key={user.chatId}
                                 className="user-item"
-                                onClick={() => handleSelectUser(user.chatId)}
+                                onClick={() => handleSelectUser(user)}
                             >
                                 <Avatar name={user.name} size="md" online={user.online} />
                                 <div>

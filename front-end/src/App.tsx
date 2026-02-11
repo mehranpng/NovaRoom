@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Message, View, User, Chat } from './types';
 import { apiFetch } from './config/api';
 import { useWebSocket } from './hooks/useWebSocket';
@@ -30,6 +30,35 @@ export function App() {
     const [messages, setMessages] = useState<Record<string, Message[]>>({});
     const [newChatModalOpen, setNewChatModalOpen] = useState(false);
 
+    // When user is selected from search, we open the room but do NOT create the chat
+    // until the first message is sent.
+    const [pendingUser, setPendingUser] = useState<User | null>(null);
+
+    const chatsRef = useRef<Chat[]>([]);
+    useEffect(() => {
+        chatsRef.current = chats;
+    }, [chats]);
+
+    const loadChats = useCallback(async () => {
+        if (!isAuthenticated) return;
+        try {
+            const data = await apiFetch('/chats');
+            const normalized: Chat[] = (data as any[]).map((c) => {
+                if (!c?.lastMessage) return c as Chat;
+                return {
+                    ...c,
+                    lastMessage: {
+                        ...c.lastMessage,
+                        timestamp: normalizeTimestamp(c.lastMessage.timestamp),
+                    }
+                } as Chat;
+            });
+            setChats(normalized);
+        } catch (error) {
+            console.error('Failed to load chats', error);
+        }
+    }, [isAuthenticated]);
+
     // WebSocket handlers wrapped in useCallback to prevent infinite reconnection loops
     const handleNewMessage = useCallback((chatId: string, newMsg: Message) => {
         setMessages(prev => {
@@ -44,16 +73,22 @@ export function App() {
             };
         });
 
+        // If this message belongs to a chat that doesn't exist in our list yet
+        // (first message of a brand-new conversation), fetch chats so it appears
+        // in the sidebar without a refresh.
+        const hasChat = chatsRef.current.some(c => c.id === chatId);
+        if (!hasChat) {
+            loadChats();
+        }
+
         // Update last message + unread counter in chat list
         setChats(prev => {
             const myId = currentUser?.chatId;
             const isIncoming = Boolean(myId) && newMsg.senderId !== myId;
             const shouldIncrementUnread = isIncoming && (view !== 'chatRoom' || activeChatId !== chatId);
 
-            let found = false;
-            const updated = prev.map(chat => {
+            return prev.map(chat => {
                 if (chat.id !== chatId) return chat;
-                found = true;
                 return {
                     ...chat,
                     lastMessage: {
@@ -64,10 +99,8 @@ export function App() {
                     unreadCount: shouldIncrementUnread ? (chat.unreadCount || 0) + 1 : chat.unreadCount,
                 };
             });
-
-            return found ? updated : prev;
         });
-    }, [currentUser?.chatId, view, activeChatId]);
+    }, [currentUser?.chatId, view, activeChatId, loadChats]);
 
     const handleUserStatusChange = useCallback((userId: string, online: boolean) => {
         setChats(prev => prev.map(chat => {
@@ -115,31 +148,12 @@ export function App() {
         localStorage.setItem('token', token);
     };
 
-    const loadChats = useCallback(async () => {
-        if (!isAuthenticated) return;
-        try {
-            const data = await apiFetch('/chats');
-            const normalized: Chat[] = (data as any[]).map((c) => {
-                if (!c?.lastMessage) return c as Chat;
-                return {
-                    ...c,
-                    lastMessage: {
-                        ...c.lastMessage,
-                        timestamp: normalizeTimestamp(c.lastMessage.timestamp),
-                    }
-                } as Chat;
-            });
-            setChats(normalized);
-        } catch (error) {
-            console.error('Failed to load chats', error);
-        }
-    }, [isAuthenticated]);
-
     useEffect(() => {
         if (isAuthenticated) loadChats();
     }, [isAuthenticated, loadChats]);
 
     const handleSelectChat = useCallback(async (chatId: string) => {
+        setPendingUser(null);
         setActiveChatId(chatId);
         setView('chatRoom');
 
@@ -158,26 +172,74 @@ export function App() {
     }, [loadChats, sendSeen]);
 
     const handleSendMessage = useCallback(async (text: string) => {
-        if (!activeChatId || !currentUser) return;
+        if (!currentUser) return;
+
+        // If we are in a "pending" chat (selected from search), create the chat now
+        // (only on first message) then send.
+        if (!activeChatId && pendingUser) {
+            try {
+                const res = await apiFetch('/chats', {
+                    method: 'POST',
+                    body: JSON.stringify({ targetChatId: pendingUser.chatId }),
+                });
+
+                const createdChatId = res.chatId as string;
+
+                setChats(prev => {
+                    if (prev.some(c => c.id === createdChatId)) return prev;
+                    const newChat: Chat = {
+                        id: createdChatId,
+                        participantIds: [currentUser.chatId, pendingUser.chatId],
+                        otherUser: pendingUser,
+                        unreadCount: 0,
+                    };
+                    return [newChat, ...prev];
+                });
+
+                setActiveChatId(createdChatId);
+                setPendingUser(null);
+                setView('chatRoom');
+
+                const success = sendViaWS(createdChatId, text);
+                if (!success) {
+                    console.warn('WebSocket not connected');
+                }
+
+                // Sync chat list (server has the authoritative otherUser/lastMessage/unreadCount)
+                loadChats();
+                return;
+            } catch (err) {
+                console.error(err);
+                alert('Failed to create chat');
+                return;
+            }
+        }
+
+        if (!activeChatId) return;
 
         const success = sendViaWS(activeChatId, text);
         if (!success) {
             console.warn('WebSocket not connected');
         }
-    }, [activeChatId, currentUser, sendViaWS]);
+    }, [activeChatId, currentUser, pendingUser, sendViaWS, loadChats]);
 
-    const handleNewChatCreated = (chatId: string) => {
-        setActiveChatId(chatId);
+    const handleUserSelectedFromModal = (user: User) => {
+        setPendingUser(user);
+        setActiveChatId(null);
         setView('chatRoom');
         setNewChatModalOpen(false);
-        loadChats();
     };
 
     const handleOpenProfile = () => setView('profile');
-    const handleBack = () => setView('chatList');
+    const handleBack = () => {
+        setView('chatList');
+        setPendingUser(null);
+    };
 
     // Temporary contact resolver
     const getActiveContact = (): User => {
+        if (pendingUser) return pendingUser;
+
         const chat = chats.find(c => c.id === activeChatId);
         if (!chat || !currentUser) {
             return { chatId: '', name: 'Unknown', username: '', bio: '', avatar: '', online: false };
@@ -242,11 +304,11 @@ export function App() {
 
             {view !== 'profile' && (
                 <div className={cx('app__main')}>
-                    {activeChat ? (
+                    {view === 'chatRoom' && (activeChat || pendingUser) ? (
                         <ChatRoom
-                            chatId={activeChat.id}
+                            chatId={activeChat?.id || 'pending'}
                             contact={getActiveContact()}
-                            messages={activeMessages}
+                            messages={activeChat ? activeMessages : []}
                             currentUserId={currentUser!.chatId}
                             onSendMessage={handleSendMessage}
                             onBack={handleBack}
@@ -260,8 +322,7 @@ export function App() {
             <NewChatModal
                 isOpen={newChatModalOpen}
                 onClose={() => setNewChatModalOpen(false)}
-                onChatCreated={handleNewChatCreated}
-                currentUserChatId={currentUser!.chatId}
+                onUserSelected={handleUserSelectedFromModal}
             />
         </div>
     );
