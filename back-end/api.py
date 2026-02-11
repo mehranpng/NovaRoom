@@ -289,10 +289,16 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
 async def get_messages(
     chat_id: str, limit: int = 50, current_user: dict = Depends(get_current_user)
 ):
+    current_user_id = current_user["chatId"]
+
+    # Mark messages as seen by the current user.
     await cl_messages.update_many(
-        {"chatId": chat_id, "seenBy": {"$ne": current_user["chatId"]}},
-        {"$push": {"seenBy": current_user["chatId"]}},
+        {"chatId": chat_id, "seenBy": {"$ne": current_user_id}},
+        {"$push": {"seenBy": current_user_id}},
     )
+
+    chat_doc = await cl_chats.find_one({"_id": chat_id}, {"participants": 1})
+    participants: List[str] = chat_doc.get("participants", []) if chat_doc else []
 
     msgs = (
         await cl_messages.find({"chatId": chat_id})
@@ -302,6 +308,20 @@ async def get_messages(
     )
     msgs.reverse()
 
+    def compute_seen(m: dict) -> bool:
+        seen_by = m.get("seenBy", []) or []
+        sender_id = m.get("senderId")
+
+        # For my outgoing messages, "seen" should mean the other participant(s) saw it,
+        # not that I (the sender) saw my own message.
+        if sender_id == current_user_id:
+            if not participants:
+                return False
+            return all(p in seen_by for p in participants)
+
+        # For incoming messages (only used by UI as theirs), keep it consistent.
+        return current_user_id in seen_by
+
     return [
         {
             "id": str(m["_id"]),
@@ -309,7 +329,7 @@ async def get_messages(
             "senderId": m["senderId"],
             "text": m["text"],
             "timestamp": int(m["timestamp"].timestamp() * 1000),
-            "seen": current_user["chatId"] in m.get("seenBy", []),
+            "seen": compute_seen(m),
         }
         for m in msgs
     ]
