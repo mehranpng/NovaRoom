@@ -20,41 +20,55 @@ export function App() {
     const [messages, setMessages] = useState<Record<string, Message[]>>({});
     const [newChatModalOpen, setNewChatModalOpen] = useState(false);
 
-    // WebSocket
+    // WebSocket handlers wrapped in useCallback to prevent infinite reconnection loops
+    const handleNewMessage = useCallback((chatId: string, newMsg: Message) => {
+        setMessages(prev => {
+            const currentMessages = prev[chatId] || [];
+            // Prevent duplicate messages
+            if (currentMessages.some(m => m.id === newMsg.id)) {
+                return prev;
+            }
+            return {
+                ...prev,
+                [chatId]: [...currentMessages, newMsg]
+            };
+        });
+
+        // Update last message in chat list
+        setChats(prev =>
+            prev.map(chat =>
+                chat.id === chatId
+                    ? { ...chat, lastMessage: newMsg }
+                    : chat
+            )
+        );
+    }, []);
+
+    const handleUserStatusChange = useCallback((userId: string, online: boolean) => {
+        setChats(prev => prev.map(chat => {
+            if (chat.otherUser && (chat.otherUser.username === userId || chat.participantIds.includes(userId))) {
+                return { ...chat, otherUser: { ...chat.otherUser, online } };
+            }
+            return chat;
+        }));
+    }, []);
+
+    const handleMessagesSeen = useCallback((chatId: string) => {
+        setMessages(prev => {
+            if (!prev[chatId]) return prev;
+            return {
+                ...prev,
+                [chatId]: prev[chatId].map(m => ({ ...m, seen: true }))
+            };
+        });
+    }, []);
+
+    // WebSocket initialization
     const { sendMessage: sendViaWS, sendSeen } = useWebSocket({
         token: localStorage.getItem('token'),
-        onNewMessage: (chatId, newMsg) => {
-            setMessages(prev => ({
-                ...prev,
-                [chatId]: [...(prev[chatId] || []), newMsg]
-            }));
-
-            // Update last message in chat list
-            setChats(prev =>
-                prev.map(chat =>
-                    chat.id === chatId
-                        ? { ...chat, lastMessage: newMsg }
-                        : chat
-                )
-            );
-        },
-        onUserStatusChange: (userId, online) => {
-            setChats(prev => prev.map(chat => {
-                if (chat.otherUser && (chat.otherUser.username === userId || chat.participantIds.includes(userId))) {
-                    return { ...chat, otherUser: { ...chat.otherUser, online } };
-                }
-                return chat;
-            }));
-        },
-        onMessagesSeen: (chatId) => {
-            setMessages(prev => {
-                if (!prev[chatId]) return prev;
-                return {
-                    ...prev,
-                    [chatId]: prev[chatId].map(m => ({ ...m, seen: true }))
-                };
-            });
-        }
+        onNewMessage: handleNewMessage,
+        onUserStatusChange: handleUserStatusChange,
+        onMessagesSeen: handleMessagesSeen
     });
 
     // Check auth
@@ -78,8 +92,12 @@ export function App() {
 
     const loadChats = useCallback(async () => {
         if (!isAuthenticated) return;
-        const data = await apiFetch('/chats');
-        setChats(data);
+        try {
+            const data = await apiFetch('/chats');
+            setChats(data);
+        } catch (error) {
+            console.error("Failed to load chats", error);
+        }
     }, [isAuthenticated]);
 
     useEffect(() => {
@@ -131,68 +149,4 @@ export function App() {
                 name: chat.otherUser.name,
                 username: chat.otherUser.username,
                 avatar: chat.otherUser.avatar,
-                bio: chat.otherUser.bio || '',
-                online: chat.otherUser.online,
-            };
-        }
-        const otherId = chat.participantIds.find(id => id !== currentUser.chatId) || '';
-        return { chatId: otherId, name: otherId, username: otherId.toLowerCase(), bio: '', avatar: '', online: false };
-    };
-
-
-    if (!isAuthenticated) {
-        return <Login onLoginSuccess={handleLoginSuccess} />;\n    }
-
-    const activeChat = chats.find(c => c.id === activeChatId) || null;
-    const activeMessages = activeChatId ? messages[activeChatId] || [] : [];
-
-    return (
-        <div className="app">
-            {view !== 'profile' && (
-                <div className="app__sidebar">
-                    <ChatList
-                        chats={chats}
-                        currentUser={currentUser!}
-                        activeChatId={activeChatId}
-                        onSelectChat={handleSelectChat}
-                        onOpenProfile={handleOpenProfile}
-                        onNewChatClick={() => setNewChatModalOpen(true)}
-                    />
-                </div>
-            )}
-
-            {view === 'profile' && currentUser && (
-                <div className="app__main">
-                    <Profile user={currentUser} onBack={handleBack} onUpdateProfile={async (u) => {
-                        await apiFetch('/profile/me', { method: 'PATCH', body: JSON.stringify(u) });
-                        setCurrentUser(prev => prev ? { ...prev, ...u } : null);
-                    }} />
-                </div>
-            )}
-
-            {view !== 'profile' && (
-                <div className={cx('app__main')}>
-                    {activeChat ? (
-                        <ChatRoom
-                            chatId={activeChat.id}
-                            contact={getActiveContact()}
-                            messages={activeMessages}
-                            currentUserId={currentUser!.chatId}
-                            onSendMessage={handleSendMessage}
-                            onBack={handleBack}
-                        />
-                    ) : (
-                        <EmptyState />
-                    )}
-                </div>
-            )}
-
-            <NewChatModal
-                isOpen={newChatModalOpen}
-                onClose={() => setNewChatModalOpen(false)}
-                onChatCreated={handleNewChatCreated}
-                currentUserChatId={currentUser!.chatId}
-            />
-        </div>
-    );
-}
+                bio: chat.otherUser.bio || '',\n                online: chat.otherUser.online,\n            };\n        }\n        const otherId = chat.participantIds.find(id => id !== currentUser.chatId) || '';\n        return { chatId: otherId, name: otherId, username: otherId.toLowerCase(), bio: '', avatar: '', online: false };\n    };\n\n\n    if (!isAuthenticated) {\n        return <Login onLoginSuccess={handleLoginSuccess} />;\n    }\n\n    const activeChat = chats.find(c => c.id === activeChatId) || null;\n    const activeMessages = activeChatId ? messages[activeChatId] || [] : [];\n\n    return (\n        <div className=\"app\">\n            {view !== 'profile' && (\n                <div className=\"app__sidebar\">\n                    <ChatList\n                        chats={chats}\n                        currentUser={currentUser!}\n                        activeChatId={activeChatId}\n                        onSelectChat={handleSelectChat}\n                        onOpenProfile={handleOpenProfile}\n                        onNewChatClick={() => setNewChatModalOpen(true)}\n                    />\n                </div>\n            )}\n\n            {view === 'profile' && currentUser && (\n                <div className=\"app__main\">\n                    <Profile user={currentUser} onBack={handleBack} onUpdateProfile={async (u) => {\n                        await apiFetch('/profile/me', { method: 'PATCH', body: JSON.stringify(u) });\n                        setCurrentUser(prev => prev ? { ...prev, ...u } : null);\n                    }} />\n                </div>\n            )}\n\n            {view !== 'profile' && (\n                <div className={cx('app__main')}>\n                    {activeChat ? (\n                        <ChatRoom\n                            chatId={activeChat.id}\n                            contact={getActiveContact()}\n                            messages={activeMessages}\n                            currentUserId={currentUser!.chatId}\n                            onSendMessage={handleSendMessage}\n                            onBack={handleBack}\n                        />\n                    ) : (\n                        <EmptyState />\n                    )}\n                </div>\n            )}\n\n            <NewChatModal\n                isOpen={newChatModalOpen}\n                onClose={() => setNewChatModalOpen(false)}\n                onChatCreated={handleNewChatCreated}\n                currentUserChatId={currentUser!.chatId}\n            />\n        </div>\n    );\n}\n
