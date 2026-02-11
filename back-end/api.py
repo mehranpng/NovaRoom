@@ -217,7 +217,7 @@ async def create_or_get_chat(
     target_id = req.targetChatId
 
     chat_id = get_chat_id_for_two(my_id, target_id)
-    chat = await cl_chats.find_one({"_id": chat_id})
+    chat = await cl_chats.find_one({\"_id\": chat_id})
 
     if chat:
         return {"chatId": chat_id, "participants": chat["participants"]}
@@ -279,7 +279,7 @@ async def get_messages(
 ):
     await cl_messages.update_many(
         {"chatId": chat_id, "seenBy": {"$ne": current_user["chatId"]}},
-        {\"$push\": {"seenBy": current_user["chatId"]}},
+        {"$push": {"seenBy": current_user["chatId"]}},
     )
 
     msgs = (
@@ -321,7 +321,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
         active_connections[chat_id] = websocket
 
-        await cl_users.update_one({"chatId": chat_id}, {\"$set\": {"online": True}})
+        await cl_users.update_one({"chatId": chat_id}, {"$set": {"online": True}})
 
         user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
 
@@ -366,7 +366,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 await cl_chats.update_one(
                     {"_id": chat_id_target},
-                    {\"$set\": {"lastMessage": last_msg, "updatedAt": datetime.utcnow()}},
+                    {"$set": {"lastMessage": last_msg, "updatedAt": datetime.utcnow()}},
                 )
 
                 participants = await cl_chats.find_one(
@@ -403,10 +403,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 if chat_id_target:
                     await cl_messages.update_many(
                         {"chatId": chat_id_target, "seenBy": {"$ne": chat_id}},
-                        {\"$push\": {"seenBy": chat_id}},
+                        {"$push": {"seenBy": chat_id}},
                     )
                     
-                    chat_doc = await cl_chats.find_one({"_id": chat_id_target})
+                    chat_doc = await cl_chats.find_one({\"_id\": chat_id_target})
                     if chat_doc:
                         for p in chat_doc["participants"]:
                             if p != chat_id and p in active_connections:
@@ -430,7 +430,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
             if chat_id in active_connections and active_connections[chat_id] == websocket:
                 del active_connections[chat_id]
 
-            await cl_users.update_one({"chatId": chat_id}, {\"$set\": {"online": False}})
+            await cl_users.update_one({"chatId": chat_id}, {"$set": {"online": False}})
 
             user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
 
