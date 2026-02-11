@@ -6,6 +6,7 @@ interface UseWebSocketProps {
     token: string | null;
     onNewMessage: (chatId: string, message: any) => void;
     onUserStatusChange?: (userId: string, online: boolean) => void;
+    onMessagesSeen?: (chatId: string) => void;
     onConnectionChange?: (isConnected: boolean) => void;
 }
 
@@ -13,6 +14,7 @@ export function useWebSocket({
     token,
     onNewMessage,
     onUserStatusChange,
+    onMessagesSeen,
     onConnectionChange
 }: UseWebSocketProps) {
     const socketRef = useRef<WebSocket | null>(null);
@@ -35,6 +37,8 @@ export function useWebSocket({
                     onNewMessage(data.chatId, data.message);
                 } else if (data.type === 'user_status') {
                     onUserStatusChange?.(data.userId, data.online);
+                } else if (data.type === 'messages_seen') {
+                    onMessagesSeen?.(data.chatId);
                 }
             } catch (err) {
                 console.error('WebSocket message parse error:', err);
@@ -53,7 +57,7 @@ export function useWebSocket({
         };
 
         socketRef.current = ws;
-    }, [token, onNewMessage, onUserStatusChange, onConnectionChange]);
+    }, [token, onNewMessage, onUserStatusChange, onMessagesSeen, onConnectionChange]);
 
     const sendMessage = useCallback((chatId: string, text: string) => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
@@ -67,6 +71,17 @@ export function useWebSocket({
             return true;
         }
         return false;
+    }, []);
+
+    const sendSeen = useCallback((chatId: string) => {
+        if (socketRef.current?.readyState === WebSocket.OPEN) {
+            socketRef.current.send(
+                JSON.stringify({
+                    type: 'seen',
+                    chatId,
+                })
+            );
+        }
     }, []);
 
     const disconnect = useCallback(() => {
@@ -83,5 +98,5 @@ export function useWebSocket({
         return () => disconnect();
     }, [token, connect, disconnect]);
 
-    return { sendMessage, isConnected: isConnectedRef.current };
+    return { sendMessage, sendSeen, isConnected: isConnectedRef.current };
 }
