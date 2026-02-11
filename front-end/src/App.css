@@ -111,6 +111,10 @@
   color: #374151;
 }
 
+.icon-btn:active {
+  transform: scale(0.98);
+}
+
 /* ========================================
    POPOVER (shared)
    ======================================== */
@@ -1381,15 +1385,17 @@
 }
 
 /* ========================================
-   UI ENHANCEMENTS (menus + seen ticks)
+   UI ENHANCEMENTS
    ======================================== */
 .popover {
   padding: 6px;
+  overflow: visible;
 }
 
 .popover__item {
   border-radius: 12px;
   margin: 2px;
+  transition: background 0.15s, transform 0.12s;
 }
 
 .popover__item:active {
@@ -1413,6 +1419,26 @@
   to { transform: translateY(0) scale(1); opacity: 1; }
 }
 
+.chat-room__header-clickable {
+  padding: 6px 8px;
+  border-radius: 14px;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.chat-room__header-clickable:hover {
+  background: #f3f4f6;
+  opacity: 1;
+}
+
+.chat-room__header-clickable:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.35);
+  outline-offset: 2px;
+}
+
+.message-meta {
+  user-select: none;
+}
+
 .message-seen {
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -1425,4 +1451,18 @@
 
 .message-seen--double {
   opacity: 1;
+}
+
+.contact-info {
+  background: #f9fafb;
+}
+
+.contact-info__header {
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.contact-info__card {
+  background: #ffffff;
+  border: 1px solid #f3f4f6;
 }

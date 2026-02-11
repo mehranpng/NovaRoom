@@ -15,18 +15,33 @@ interface ChatRoomProps {
     onChatDeleted?: (chatId: string) => void;
 }
 
-function formatMessageTime(ts: number) {
-    return new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+function normalizeTs(ts: any): number {
+    if (ts == null) return Date.now();
+    if (typeof ts === 'string') {
+        const n = Date.parse(ts);
+        return Number.isFinite(n) ? n : Date.now();
+    }
+    if (typeof ts === 'number') {
+        // Support seconds timestamps too
+        return ts < 1_000_000_000_000 ? ts * 1000 : ts;
+    }
+    if (ts instanceof Date) return ts.getTime();
+    return Date.now();
 }
 
-function sameDay(a: number, b: number) {
-    const da = new Date(a);
-    const db = new Date(b);
+function formatMessageTime(ts: any) {
+    const t = normalizeTs(ts);
+    return new Date(t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function sameDay(a: any, b: any) {
+    const da = new Date(normalizeTs(a));
+    const db = new Date(normalizeTs(b));
     return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
 }
 
-function formatDayLabel(ts: number) {
-    const d = new Date(ts);
+function formatDayLabel(ts: any) {
+    const d = new Date(normalizeTs(ts));
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const thatDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -77,7 +92,6 @@ export function ChatRoom({
                 isMine,
                 dayBreak,
                 shape: bubbleShape(prevSameSender, nextSameSender),
-                firstOfGroup: !prevSameSender,
             };
         });
     }, [messages, currentUserId]);
@@ -150,7 +164,7 @@ export function ChatRoom({
 
             <div className="chat-room__messages">
                 <div className="chat-room__messages-inner">
-                    {items.map(({ m, isMine, dayBreak, shape, firstOfGroup }) => (
+                    {items.map(({ m, isMine, dayBreak, shape }) => (
                         <div key={m.id}>
                             {dayBreak && (
                                 <div className="chat-room__date-separator">
@@ -165,16 +179,15 @@ export function ChatRoom({
                                         : `message-bubble message-bubble--theirs ${shape}`
                                 }>
                                     <div className="message-text">{m.text}</div>
-                                    {firstOfGroup && (
-                                        <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
-                                            <span className="message-time">{formatMessageTime(m.timestamp)}</span>
-                                            {isMine && (
-                                                <span className={m.seen ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
-                                                    {m.seen ? '✓✓' : '✓'}
-                                                </span>
-                                            )}
-                                        </div>
-                                    )}
+
+                                    <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
+                                        <span className="message-time">{formatMessageTime(m.timestamp)}</span>
+                                        {isMine && (
+                                            <span className={m.seen ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
+                                                {m.seen ? '✓✓' : '✓'}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
