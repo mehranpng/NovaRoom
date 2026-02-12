@@ -24,6 +24,17 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
   const [usernameHint, setUsernameHint] = useState<string>('');
   const checkTimerRef = useRef<number | null>(null);
 
+  const nameRef = useRef<HTMLInputElement | null>(null);
+  const usernameRef = useRef<HTMLInputElement | null>(null);
+  const bioRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const scrollIntoViewOnMobile = (el: HTMLElement | null) => {
+    if (!el) return;
+    setTimeout(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+  };
+
   const handleCopy = (text: string, field: string) => {
     navigator.clipboard.writeText(text).catch(() => {});
     setCopiedField(field);
@@ -70,7 +81,9 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
     if (checkTimerRef.current) window.clearTimeout(checkTimerRef.current);
     checkTimerRef.current = window.setTimeout(async () => {
       try {
-        const res = await apiFetch(`/users/username-available?username=${encodeURIComponent(trimmed)}`);
+        const res = await apiFetch(
+          `/users/username-available?username=${encodeURIComponent(trimmed)}`
+        );
         if (res?.available) {
           setUsernameStatus('available');
           setUsernameHint('Username is available.');
@@ -112,7 +125,8 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
     setUsernameHint('');
   };
 
-  const canSave = isEditing && !!name.trim() && !!username.trim() && usernameStatus === 'available';
+  const canSave =
+    isEditing && !!name.trim() && !!username.trim() && usernameStatus === 'available';
 
   return (
     <div className="profile">
@@ -180,9 +194,11 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
             <label className="profile__field-label">Name</label>
             {isEditing ? (
               <input
+                ref={nameRef}
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                onFocus={() => scrollIntoViewOnMobile(nameRef.current)}
                 className="profile__field-input"
                 placeholder="Your name"
                 maxLength={50}
@@ -202,9 +218,11 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                 <div className="profile__username-wrapper">
                   <span className="profile__username-at">@</span>
                   <input
+                    ref={usernameRef}
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                    onFocus={() => scrollIntoViewOnMobile(usernameRef.current)}
                     className="profile__field-input profile__field-input--username"
                     placeholder="username"
                     maxLength={32}
@@ -249,8 +267,10 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
             {isEditing ? (
               <div>
                 <textarea
+                  ref={bioRef}
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
+                  onFocus={() => scrollIntoViewOnMobile(bioRef.current)}
                   className="profile__textarea"
                   placeholder="Tell something about yourself..."
                   rows={3}

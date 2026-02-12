@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, X } from 'lucide-react';
+import { Search, X, Copy, Check } from 'lucide-react';
 import { apiFetch } from '../config/api';
 import { type User } from '../types';
 import { Avatar } from './Avatar';
@@ -14,6 +14,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
+    const [copiedUsername, setCopiedUsername] = useState<string | null>(null);
 
     const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -22,10 +23,13 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
         setQuery('');
         setResults([]);
         setLoading(false);
+        setCopiedUsername(null);
     }, [isOpen]);
 
     useEffect(() => {
-        if (!query || query.length < 2) {
+        const q = query.trim().replace(/^@+/, '');
+
+        if (!q || q.length < 2) {
             setResults([]);
             return;
         }
@@ -33,7 +37,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
         const search = async () => {
             setLoading(true);
             try {
-                const users = await apiFetch(`/users/search?query=${encodeURIComponent(query)}`);
+                const users = await apiFetch(`/users/search?query=${encodeURIComponent(q)}`);
                 setResults(users);
             } catch (err) {
                 console.error(err);
@@ -49,6 +53,12 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
     const handleSelectUser = (user: User) => {
         onUserSelected(user);
         onClose();
+    };
+
+    const handleCopyUsername = (username: string) => {
+        navigator.clipboard.writeText(`@${username}`).catch(() => {});
+        setCopiedUsername(username);
+        setTimeout(() => setCopiedUsername(null), 1500);
     };
 
     if (!isOpen) return null;
@@ -77,7 +87,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
                     <input
                         ref={inputRef}
                         type="text"
-                        placeholder="Search by username or Chat ID..."
+                        placeholder="Search by username..."
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onFocus={() => {
@@ -92,21 +102,45 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
                 <div className="results">
                     {loading ? (
                         <p className="loading">Searching...</p>
-                    ) : results.length === 0 && query.length >= 2 ? (
+                    ) : results.length === 0 && query.trim().replace(/^@+/, '').length >= 2 ? (
                         <p className="no-results">No users found</p>
                     ) : (
                         results.map((user) => (
-                            <button
+                            <div
                                 key={user.chatId}
                                 className="user-item"
+                                role="button"
+                                tabIndex={0}
                                 onClick={() => handleSelectUser(user)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        handleSelectUser(user);
+                                    }
+                                }}
                             >
                                 <Avatar name={user.name} size="md" online={user.online} />
-                                <div>
+                                <div style={{ flex: 1 }}>
                                     <div className="user-name">{user.name}</div>
                                     <div className="user-username">@{user.username}</div>
                                 </div>
-                            </button>
+
+                                <button
+                                    type="button"
+                                    className="icon-btn"
+                                    aria-label="Copy username"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleCopyUsername(user.username);
+                                    }}
+                                >
+                                    {copiedUsername === user.username ? (
+                                        <Check size={18} />
+                                    ) : (
+                                        <Copy size={18} />
+                                    )}
+                                </button>
+                            </div>
                         ))
                     )}
                 </div>

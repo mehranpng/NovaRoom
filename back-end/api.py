@@ -296,13 +296,14 @@ async def search_users(
     query: str = Query(..., min_length=2),
     current_user: dict = Depends(get_current_user),
 ):
+    q = (query or "").strip()
+    if q.startswith("@"):  # support telegram-like input
+        q = q.lstrip("@")
+
     users = (
         await cl_users.find(
             {
-                "$or": [
-                    {"profile.username": {"$regex": query, "$options": "i"}},
-                    {"chatId": {"$regex": query, "$options": "i"}},
-                ],
+                "profile.username": {"$regex": re.escape(q), "$options": "i"},
                 "chatId": {"$ne": current_user["chatId"]},
             }
         )
