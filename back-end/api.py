@@ -19,6 +19,7 @@ from typing import List, Dict, Optional, Any, Iterable
 import traceback
 import asyncio
 import hashlib
+from bson import ObjectId
 
 load_dotenv()
 
@@ -418,9 +419,11 @@ async def get_messages(
             "id": str(m["_id"]),
             "chatId": m["chatId"],
             "senderId": m["senderId"],
-            "text": m["text"],
+            "text": m.get("text", ""),
             "timestamp": dt_to_epoch_ms(m.get("timestamp")),
             "seen": compute_seen(m),
+            "replyTo": m.get("replyTo"),
+            "edited": bool(m.get("editedAt")),
         }
         for m in msgs
     ]
@@ -454,6 +457,29 @@ async def broadcast(user_ids: Iterable[str], payload: dict):
     await asyncio.gather(
         *(safe_send(uid, payload) for uid in set(user_ids)), return_exceptions=True
     )
+
+
+async def try_object_id(value: Any) -> Optional[ObjectId]:
+    try:
+        if not value or not isinstance(value, str):
+            return None
+        return ObjectId(value)
+    except Exception:
+        return None
+
+
+async def build_last_message(chat_id: str) -> Optional[dict]:
+    m = await cl_messages.find({"chatId": chat_id}).sort("timestamp", -1).limit(1).to_list(1)
+    if not m:
+        return None
+
+    doc = m[0]
+    return {
+        "id": str(doc["_id"]),
+        "text": doc.get("text", ""),
+        "senderId": doc.get("senderId"),
+        "timestamp": doc.get("timestamp"),
+    }
 
 
 @app.websocket("/ws")
@@ -506,9 +532,22 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
             if data.get("type") == "message":
                 chat_id_target = data.get("chatId")
                 text = data.get("text")
+                reply_to_id = data.get("replyToId")
 
                 if not chat_id_target or not isinstance(text, str) or not text.strip():
                     continue
+
+                reply_to = None
+                if reply_to_id:
+                    oid = await try_object_id(reply_to_id)
+                    if oid:
+                        base = await cl_messages.find_one({"_id": oid, "chatId": chat_id_target})
+                        if base:
+                            reply_to = {
+                                "id": str(base["_id"]),
+                                "senderId": base.get("senderId"),
+                                "text": base.get("text", ""),
+                            }
 
                 message_doc = {
                     "chatId": chat_id_target,
@@ -516,12 +555,14 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     "text": text,
                     "timestamp": utc_now(),
                     "seenBy": [chat_id],
+                    "replyTo": reply_to,
                 }
 
                 result = await cl_messages.insert_one(message_doc)
                 msg_id = str(result.inserted_id)
 
                 last_msg = {
+                    "id": msg_id,
                     "text": text,
                     "senderId": chat_id,
                     "timestamp": message_doc["timestamp"],
@@ -551,10 +592,109 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "text": text,
                             "timestamp": dt_to_epoch_ms(message_doc.get("timestamp")),
                             "seen": False,
+                            "replyTo": reply_to,
+                            "edited": False,
                         },
                     }
 
                     await broadcast(participants, msg_payload)
+
+            elif data.get("type") == "edit_message":
+                chat_id_target = data.get("chatId")
+                message_id = data.get("messageId")
+                new_text = data.get("text")
+
+                if not chat_id_target or not message_id or not isinstance(new_text, str) or not new_text.strip():
+                    continue
+
+                oid = await try_object_id(message_id)
+                if not oid:
+                    continue
+
+                msg = await cl_messages.find_one({"_id": oid, "chatId": chat_id_target})
+                if not msg or msg.get("senderId") != chat_id:
+                    continue
+
+                await cl_messages.update_one(
+                    {"_id": oid},
+                    {"$set": {"text": new_text, "editedAt": utc_now()}},
+                )
+
+                # Update lastMessage text if it points to this message.
+                await cl_chats.update_one(
+                    {"_id": chat_id_target, "lastMessage.id": message_id},
+                    {"$set": {"lastMessage.text": new_text, "updatedAt": utc_now()}},
+                )
+
+                participants_doc = await cl_chats.find_one(
+                    {"_id": chat_id_target}, {"participants": 1}
+                )
+                participants = (
+                    participants_doc.get("participants", []) if participants_doc else []
+                )
+
+                payload = {
+                    "type": "message_edited",
+                    "chatId": chat_id_target,
+                    "message": {
+                        "id": message_id,
+                        "chatId": chat_id_target,
+                        "senderId": chat_id,
+                        "text": new_text,
+                        "timestamp": dt_to_epoch_ms(msg.get("timestamp")),
+                        "seen": False,
+                        "replyTo": msg.get("replyTo"),
+                        "edited": True,
+                    },
+                }
+
+                if participants:
+                    await broadcast(participants, payload)
+
+            elif data.get("type") == "delete_message":
+                chat_id_target = data.get("chatId")
+                message_id = data.get("messageId")
+
+                if not chat_id_target or not message_id:
+                    continue
+
+                oid = await try_object_id(message_id)
+                if not oid:
+                    continue
+
+                msg = await cl_messages.find_one({"_id": oid, "chatId": chat_id_target})
+                if not msg or msg.get("senderId") != chat_id:
+                    continue
+
+                await cl_messages.delete_one({"_id": oid})
+
+                # Rebuild lastMessage if needed.
+                last_msg = await build_last_message(chat_id_target)
+                await cl_chats.update_one(
+                    {"_id": chat_id_target},
+                    {"$set": {"lastMessage": last_msg, "updatedAt": utc_now()}},
+                )
+
+                participants_doc = await cl_chats.find_one(
+                    {"_id": chat_id_target}, {"participants": 1}
+                )
+                participants = (
+                    participants_doc.get("participants", []) if participants_doc else []
+                )
+
+                out_last = None
+                if last_msg:
+                    out_last = {**last_msg, "timestamp": dt_to_epoch_ms(last_msg.get("timestamp"))}
+
+                payload = {
+                    "type": "message_deleted",
+                    "chatId": chat_id_target,
+                    "messageId": message_id,
+                    "lastMessage": out_last,
+                }
+
+                if participants:
+                    await broadcast(participants, payload)
 
             elif data.get("type") == "seen":
                 chat_id_target = data.get("chatId")

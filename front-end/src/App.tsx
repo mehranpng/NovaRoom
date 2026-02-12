@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { Message, View, User, Chat } from './types';
+import type { Message, View, User, Chat, ChatLastMessage } from './types';
 import { apiFetch } from './config/api';
 import { useWebSocket } from './hooks/useWebSocket';
 import { ChatList } from './components/ChatList';
@@ -38,6 +38,30 @@ export function App() {
     useEffect(() => {
         chatsRef.current = chats;
     }, [chats]);
+
+    // Mobile keyboard/viewport fix: keep app sized to VisualViewport when available.
+    useEffect(() => {
+        const apply = () => {
+            const vv = window.visualViewport;
+            const height = Math.round(vv?.height ?? window.innerHeight);
+            const kb = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
+
+            document.documentElement.style.setProperty('--app-height', `${height}px`);
+            document.documentElement.style.setProperty('--keyboard-offset', `${kb}px`);
+        };
+
+        apply();
+
+        window.addEventListener('resize', apply);
+        window.visualViewport?.addEventListener('resize', apply);
+        window.visualViewport?.addEventListener('scroll', apply);
+
+        return () => {
+            window.removeEventListener('resize', apply);
+            window.visualViewport?.removeEventListener('resize', apply);
+            window.visualViewport?.removeEventListener('scroll', apply);
+        };
+    }, []);
 
     const loadChats = useCallback(async () => {
         if (!isAuthenticated) return;
@@ -113,6 +137,7 @@ export function App() {
                 return {
                     ...chat,
                     lastMessage: {
+                        id: newMsg.id,
                         text: newMsg.text,
                         senderId: newMsg.senderId,
                         timestamp: newMsg.timestamp,
@@ -122,6 +147,58 @@ export function App() {
             });
         });
     }, [currentUser?.chatId, view, activeChatId, loadChats]);
+
+    const handleMessageEdited = useCallback((chatId: string, updated: Message) => {
+        setMessages(prev => {
+            const arr = prev[chatId];
+            if (!arr) return prev;
+            return {
+                ...prev,
+                [chatId]: arr.map(m => (m.id === updated.id ? { ...m, ...updated } : m))
+            };
+        });
+
+        setChats(prev => prev.map(c => {
+            if (c.id !== chatId) return c;
+            if (!c.lastMessage || (c.lastMessage as ChatLastMessage).id !== updated.id) return c;
+            return {
+                ...c,
+                lastMessage: {
+                    ...(c.lastMessage as ChatLastMessage),
+                    text: updated.text,
+                }
+            };
+        }));
+    }, []);
+
+    const handleMessageDeleted = useCallback((chatId: string, messageId: string, lastMessage?: any) => {
+        setMessages(prev => {
+            const arr = prev[chatId];
+            if (!arr) return prev;
+            return {
+                ...prev,
+                [chatId]: arr.filter(m => m.id !== messageId)
+            };
+        });
+
+        if (lastMessage) {
+            setChats(prev => prev.map(c => {
+                if (c.id !== chatId) return c;
+                return {
+                    ...c,
+                    lastMessage: {
+                        ...lastMessage,
+                        timestamp: normalizeTimestamp(lastMessage.timestamp),
+                    }
+                };
+            }));
+        } else {
+            setChats(prev => prev.map(c => {
+                if (c.id !== chatId) return c;
+                return { ...c, lastMessage: null };
+            }));
+        }
+    }, []);
 
     const handleUserStatusChange = useCallback((userId: string, online: boolean) => {
         setChats(prev => prev.map(chat => {
@@ -146,9 +223,11 @@ export function App() {
     }, []);
 
     // WebSocket initialization
-    const { sendMessage: sendViaWS, sendSeen } = useWebSocket({
+    const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen } = useWebSocket({
         token: localStorage.getItem('token'),
         onNewMessage: handleNewMessage,
+        onMessageEdited: handleMessageEdited,
+        onMessageDeleted: handleMessageDeleted,
         onUserStatusChange: handleUserStatusChange,
         onMessagesSeen: handleMessagesSeen
     });
@@ -195,12 +274,15 @@ export function App() {
         loadChats();
     }, [loadChats, sendSeen]);
 
-    const handleSendMessage = useCallback(async (text: string) => {
+    const handleSendMessage = useCallback(async (payload: { text: string; replyToId?: string; editMessageId?: string }) => {
         if (!currentUser) return;
+        const text = payload.text;
 
         // If we are in a "pending" chat (selected from search), create the chat now
         // (only on first message) then send.
         if (!activeChatId && pendingUser) {
+            if (payload.editMessageId) return;
+
             try {
                 const res = await apiFetch('/chats', {
                     method: 'POST',
@@ -224,7 +306,7 @@ export function App() {
                 setPendingUser(null);
                 setView('chatRoom');
 
-                const success = sendViaWS(createdChatId, text);
+                const success = sendViaWS(createdChatId, text, payload.replyToId);
                 if (!success) {
                     console.warn('WebSocket not connected');
                 }
@@ -241,11 +323,22 @@ export function App() {
 
         if (!activeChatId) return;
 
-        const success = sendViaWS(activeChatId, text);
+        if (payload.editMessageId) {
+            const success = editViaWS(activeChatId, payload.editMessageId, text);
+            if (!success) console.warn('WebSocket not connected');
+            return;
+        }
+
+        const success = sendViaWS(activeChatId, text, payload.replyToId);
         if (!success) {
             console.warn('WebSocket not connected');
         }
-    }, [activeChatId, currentUser, pendingUser, sendViaWS, loadChats]);
+    }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats]);
+
+    const handleDeleteMessage = useCallback((messageId: string) => {
+        if (!activeChatId) return;
+        deleteViaWS(activeChatId, messageId);
+    }, [activeChatId, deleteViaWS]);
 
     const handleUserSelectedFromModal = (user: User) => {
         setPendingUser(user);
@@ -354,6 +447,7 @@ export function App() {
                             messages={activeChat ? activeMessages : []}
                             currentUserId={currentUser!.chatId}
                             onSendMessage={handleSendMessage}
+                            onDeleteMessage={handleDeleteMessage}
                             onBack={handleBack}
                             onCloseChat={handleCloseChat}
                             onChatDeleted={handleChatDeleted}

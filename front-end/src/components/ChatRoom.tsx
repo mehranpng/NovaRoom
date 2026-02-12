@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, MoreVertical, Trash2 } from 'lucide-react';
-import type { Message, User } from '../types';
+import { ArrowDown, ArrowLeft, MoreVertical, Pencil, Reply, SendHorizontal, Trash2, X } from 'lucide-react';
+import type { Message, MessageReply as MessageReplyType, User } from '../types';
 import { Avatar } from './Avatar';
 import { apiFetch } from '../config/api';
 import { ContactInfo } from './ContactInfo';
@@ -10,7 +10,8 @@ interface ChatRoomProps {
     contact: User;
     messages: Message[];
     currentUserId: string;
-    onSendMessage: (text: string) => void;
+    onSendMessage: (payload: { text: string; replyToId?: string; editMessageId?: string }) => void;
+    onDeleteMessage: (messageId: string) => void;
     onBack: () => void;
     onCloseChat: () => void;
     onChatDeleted?: (chatId: string) => void;
@@ -83,18 +84,26 @@ export function ChatRoom({
     messages,
     currentUserId,
     onSendMessage,
+    onDeleteMessage,
     onBack,
     onCloseChat,
     onChatDeleted,
 }: ChatRoomProps) {
     const [text, setText] = useState('');
-    const [menuOpen, setMenuOpen] = useState(false);
+    const [chatMenuOpen, setChatMenuOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [showContactInfo, setShowContactInfo] = useState(false);
+
+    const [replyTo, setReplyTo] = useState<MessageReplyType | null>(null);
+    const [editingId, setEditingId] = useState<string | null>(null);
+
+    const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number }>(null);
 
     const menuRef = useRef<HTMLDivElement | null>(null);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+    const roomRef = useRef<HTMLDivElement | null>(null);
+    const inputRef = useRef<HTMLInputElement | null>(null);
 
     const [newMsgCount, setNewMsgCount] = useState(0);
     const isAtBottomRef = useRef(true);
@@ -103,7 +112,14 @@ export function ChatRoom({
     const initialScrollDoneRef = useRef(false);
     const lastChatIdRef = useRef<string | null>(null);
 
-    const canDelete = chatId !== 'pending';
+    const swipeRef = useRef<{ id: string | null; startX: number; startY: number; active: boolean }>({
+        id: null,
+        startX: 0,
+        startY: 0,
+        active: false,
+    });
+
+    const canDeleteChat = chatId !== 'pending';
 
     const scrollToBottom = (smooth = false) => {
         const el = messagesEndRef.current;
@@ -118,20 +134,17 @@ export function ChatRoom({
         return distanceFromBottom < 120;
     };
 
-    // Close the More menu when clicking outside
+    // Close menus when clicking outside
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
-            if (!menuRef.current) return;
-            if (menuRef.current.contains(e.target as Node)) return;
-            setMenuOpen(false);
+            if (menuRef.current && menuRef.current.contains(e.target as Node)) return;
+            setChatMenuOpen(false);
+            setMsgMenu(null);
         };
 
-        if (menuOpen) {
-            document.addEventListener('mousedown', onDocClick);
-        }
-
+        document.addEventListener('mousedown', onDocClick);
         return () => document.removeEventListener('mousedown', onDocClick);
-    }, [menuOpen]);
+    }, []);
 
     // Reset per-chat scroll state
     useEffect(() => {
@@ -141,6 +154,10 @@ export function ChatRoom({
         prevLenRef.current = messages.length;
         setNewMsgCount(0);
         isAtBottomRef.current = true;
+        setReplyTo(null);
+        setEditingId(null);
+        setMsgMenu(null);
+        setText('');
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
 
@@ -218,21 +235,64 @@ export function ChatRoom({
     const submit = () => {
         const t = text.trim();
         if (!t) return;
-        onSendMessage(t);
+
+        onSendMessage({
+            text: t,
+            replyToId: replyTo?.id,
+            editMessageId: editingId ?? undefined,
+        });
+
         setText('');
+        setReplyTo(null);
+        setEditingId(null);
         requestAnimationFrame(() => scrollToBottom(true));
     };
 
-    const doDelete = async () => {
+    const doDeleteChat = async () => {
         try {
             await apiFetch(`/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
             setConfirmOpen(false);
-            setMenuOpen(false);
+            setChatMenuOpen(false);
             if (onChatDeleted) onChatDeleted(chatId);
             else onBack();
         } catch (e) {
             alert('Failed to delete chat');
         }
+    };
+
+    const openMessageMenu = (messageId: string, targetEl: HTMLElement) => {
+        const room = roomRef.current;
+        if (!room) return;
+
+        const roomRect = room.getBoundingClientRect();
+        const r = targetEl.getBoundingClientRect();
+
+        const top = Math.max(56, r.top - roomRect.top);
+        const left = Math.max(12, Math.min(roomRect.width - 200, r.left - roomRect.left));
+
+        setMsgMenu({ id: messageId, top, left });
+    };
+
+    const beginReply = (m: Message) => {
+        const rt: MessageReplyType = m.replyTo ? m.replyTo : { id: m.id, senderId: m.senderId, text: m.text };
+        setReplyTo({ id: rt.id, senderId: rt.senderId, text: rt.text });
+        setEditingId(null);
+        setMsgMenu(null);
+        setTimeout(() => inputRef.current?.focus(), 0);
+    };
+
+    const beginEdit = (m: Message) => {
+        setEditingId(m.id);
+        setReplyTo(null);
+        setText(m.text);
+        setMsgMenu(null);
+        setTimeout(() => inputRef.current?.focus(), 0);
+    };
+
+    const doDeleteMessage = (m: Message) => {
+        setMsgMenu(null);
+        if (!window.confirm('Delete this message?')) return;
+        onDeleteMessage(m.id);
     };
 
     if (showContactInfo) {
@@ -247,8 +307,11 @@ export function ChatRoom({
         );
     }
 
+    const activeMsg = msgMenu ? messages.find(mm => mm.id === msgMenu.id) : null;
+    const activeMsgIsMine = activeMsg ? activeMsg.senderId === currentUserId : false;
+
     return (
-        <div className="chat-room" style={{ position: 'relative' }}>
+        <div className="chat-room" style={{ position: 'relative' }} ref={roomRef}>
             <div className="chat-room__header">
                 <button className="chat-room__back-btn" onClick={onBack} aria-label="Back" type="button">
                     <ArrowLeft size={20} />
@@ -282,22 +345,22 @@ export function ChatRoom({
                 <div className="chat-room__header-actions" ref={menuRef}>
                     <button
                         className="icon-btn"
-                        onClick={() => setMenuOpen(v => !v)}
+                        onClick={() => setChatMenuOpen(v => !v)}
                         aria-label="More"
-                        disabled={!canDelete}
-                        style={!canDelete ? { opacity: 0.4, cursor: 'default' } : undefined}
+                        disabled={!canDeleteChat}
+                        style={!canDeleteChat ? { opacity: 0.4, cursor: 'default' } : undefined}
                         type="button"
                     >
                         <MoreVertical size={20} />
                     </button>
 
-                    {menuOpen && canDelete && (
+                    {chatMenuOpen && canDeleteChat && (
                         <div className="popover popover--mini popover--right">
                             <button
                                 className="popover__item popover__item--danger"
                                 onClick={() => {
                                     setConfirmOpen(true);
-                                    setMenuOpen(false);
+                                    setChatMenuOpen(false);
                                 }}
                                 type="button"
                             >
@@ -319,18 +382,79 @@ export function ChatRoom({
                                 </div>
                             )}
 
-                            <div className={isMine ? 'message-row message-row--mine' : 'message-row message-row--theirs'}>
+                            <div
+                                className={isMine ? 'message-row message-row--mine' : 'message-row message-row--theirs'}
+                                onTouchStart={(e) => {
+                                    const t = e.touches[0];
+                                    swipeRef.current = { id: m.id, startX: t.clientX, startY: t.clientY, active: true };
+                                }}
+                                onTouchMove={(e) => {
+                                    if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                    const t = e.touches[0];
+                                    const dx = t.clientX - swipeRef.current.startX;
+                                    const dy = t.clientY - swipeRef.current.startY;
+
+                                    // Right-to-left swipe => dx negative. Avoid triggering on vertical scroll.
+                                    if (Math.abs(dx) < 25 || Math.abs(dx) < Math.abs(dy)) return;
+                                    // prevent page scroll when swipe is clear
+                                    e.preventDefault();
+                                }}
+                                onTouchEnd={(e) => {
+                                    if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                    swipeRef.current.active = false;
+                                    const changed = e.changedTouches[0];
+                                    const dx = changed.clientX - swipeRef.current.startX;
+                                    const dy = changed.clientY - swipeRef.current.startY;
+
+                                    if (dx < -60 && Math.abs(dx) > Math.abs(dy)) {
+                                        beginReply(m);
+                                    }
+                                }}
+                            >
                                 <div
                                     className={
                                         isMine
                                             ? `message-bubble message-bubble--mine ${shape}`
                                             : `message-bubble message-bubble--theirs ${shape}`
                                     }
+                                    onClick={(e) => {
+                                        openMessageMenu(m.id, e.currentTarget);
+                                    }}
+                                    role="button"
+                                    tabIndex={0}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') openMessageMenu(m.id, e.currentTarget as any);
+                                    }}
+                                    style={{ cursor: 'pointer' }}
                                 >
+                                    {m.replyTo && (
+                                        <div
+                                            style={{
+                                                marginBottom: 6,
+                                                padding: '6px 10px',
+                                                borderRadius: 12,
+                                                background: isMine ? 'rgba(255,255,255,0.12)' : '#f3f4f6',
+                                                borderLeft: isMine ? '3px solid rgba(255,255,255,0.55)' : '3px solid #3b82f6',
+                                            }}
+                                        >
+                                            <div style={{ fontSize: 12, opacity: isMine ? 0.9 : 0.7, fontWeight: 600 }}>
+                                                Reply
+                                            </div>
+                                            <div style={{ fontSize: 13, opacity: isMine ? 0.95 : 0.85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {m.replyTo.text}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <div className="message-text">{m.text}</div>
 
                                     <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
                                         <span className="message-time">{formatMessageTime(m.timestamp)}</span>
+                                        {m.edited && (
+                                            <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>
+                                                edited
+                                            </span>
+                                        )}
                                         {isMine && (
                                             <span className={m.seen ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
                                                 {m.seen ? '✓✓' : '✓'}
@@ -345,6 +469,31 @@ export function ChatRoom({
                 </div>
             </div>
 
+            {msgMenu && activeMsg && (
+                <div
+                    className="popover popover--mini"
+                    style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button">
+                        <Reply size={16} />
+                        Reply
+                    </button>
+                    {activeMsgIsMine && (
+                        <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button">
+                            <Pencil size={16} />
+                            Edit
+                        </button>
+                    )}
+                    {activeMsgIsMine && (
+                        <button className="popover__item popover__item--danger" onClick={() => doDeleteMessage(activeMsg)} type="button">
+                            <Trash2 size={16} />
+                            Delete
+                        </button>
+                    )}
+                </div>
+            )}
+
             {newMsgCount > 0 && (
                 <button
                     type="button"
@@ -356,7 +505,7 @@ export function ChatRoom({
                     style={{
                         position: 'absolute',
                         right: 16,
-                        bottom: 84,
+                        bottom: 96,
                         display: 'flex',
                         alignItems: 'center',
                         gap: 10,
@@ -387,12 +536,57 @@ export function ChatRoom({
             )}
 
             <div className="chat-room__input-area">
+                {(replyTo || editingId) && (
+                    <div
+                        style={{
+                            maxWidth: 672,
+                            margin: '0 auto 8px',
+                            padding: '8px 10px',
+                            borderRadius: 14,
+                            background: '#f9fafb',
+                            border: '1px solid #f3f4f6',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 10,
+                        }}
+                    >
+                        <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>
+                                {editingId ? 'Editing message' : 'Replying'}
+                            </div>
+                            {!editingId && replyTo && (
+                                <div style={{ fontSize: 13, color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 520 }}>
+                                    {replyTo.text}
+                                </div>
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            className="icon-btn"
+                            aria-label="Cancel"
+                            onClick={() => {
+                                setReplyTo(null);
+                                setEditingId(null);
+                                setText('');
+                            }}
+                        >
+                            <X size={18} />
+                        </button>
+                    </div>
+                )}
+
                 <div className="chat-room__input-wrapper">
                     <input
+                        ref={inputRef}
                         className="chat-room__text-input"
                         placeholder="Message..."
                         value={text}
                         onChange={(e) => setText(e.target.value)}
+                        onFocus={() => {
+                            // Helps on mobile browsers where keyboard doesn't resize layout reliably.
+                            setTimeout(() => scrollToBottom(true), 120);
+                        }}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') submit();
                         }}
@@ -406,7 +600,7 @@ export function ChatRoom({
                         aria-label="Send"
                         type="button"
                     >
-                        ➤
+                        <SendHorizontal size={18} />
                     </button>
                 </div>
             </div>
@@ -420,7 +614,7 @@ export function ChatRoom({
                             <button className="confirm-modal__btn" onClick={() => setConfirmOpen(false)} type="button">
                                 Cancel
                             </button>
-                            <button className="confirm-modal__btn confirm-modal__btn--danger" onClick={doDelete} type="button">
+                            <button className="confirm-modal__btn confirm-modal__btn--danger" onClick={doDeleteChat} type="button">
                                 Delete
                             </button>
                         </div>

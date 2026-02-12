@@ -5,13 +5,17 @@ import { API_BASE_URL } from '../config/api';
 interface UseWebSocketProps {
     token: string | null;
     onNewMessage: (chatId: string, message: any) => void;
+    onMessageEdited?: (chatId: string, message: any) => void;
+    onMessageDeleted?: (chatId: string, messageId: string, lastMessage?: any) => void;
     onUserStatusChange?: (userId: string, online: boolean) => void;
     onMessagesSeen?: (chatId: string) => void;
     onConnectionChange?: (isConnected: boolean) => void;
 }
 
 type OutgoingEvent =
-    | { type: 'message'; chatId: string; text: string }
+    | { type: 'message'; chatId: string; text: string; replyToId?: string }
+    | { type: 'edit_message'; chatId: string; messageId: string; text: string }
+    | { type: 'delete_message'; chatId: string; messageId: string }
     | { type: 'seen'; chatId: string }
     | { type: 'ping' };
 
@@ -20,6 +24,8 @@ const WS_RECONNECT_DELAY_MS = 1500;
 export function useWebSocket({
     token,
     onNewMessage,
+    onMessageEdited,
+    onMessageDeleted,
     onUserStatusChange,
     onMessagesSeen,
     onConnectionChange,
@@ -90,6 +96,10 @@ export function useWebSocket({
                 const data = JSON.parse(event.data);
                 if (data.type === 'new_message') {
                     onNewMessage(data.chatId, data.message);
+                } else if (data.type === 'message_edited') {
+                    onMessageEdited?.(data.chatId, data.message);
+                } else if (data.type === 'message_deleted') {
+                    onMessageDeleted?.(data.chatId, data.messageId, data.lastMessage);
                 } else if (data.type === 'user_status') {
                     onUserStatusChange?.(data.userId, data.online);
                 } else if (data.type === 'messages_seen') {
@@ -116,7 +126,7 @@ export function useWebSocket({
         };
 
         socketRef.current = ws;
-    }, [token, onNewMessage, onUserStatusChange, onMessagesSeen, onConnectionChange, scheduleReconnect]);
+    }, [token, onNewMessage, onMessageEdited, onMessageDeleted, onUserStatusChange, onMessagesSeen, onConnectionChange, scheduleReconnect]);
 
     const send = useCallback(
         (event: OutgoingEvent): boolean => {
@@ -144,9 +154,25 @@ export function useWebSocket({
     );
 
     const sendMessage = useCallback(
-        (chatId: string, text: string) => {
+        (chatId: string, text: string, replyToId?: string) => {
             if (!chatId || !text.trim()) return false;
-            return send({ type: 'message', chatId, text });
+            return send({ type: 'message', chatId, text, replyToId });
+        },
+        [send]
+    );
+
+    const editMessage = useCallback(
+        (chatId: string, messageId: string, text: string) => {
+            if (!chatId || !messageId || !text.trim()) return false;
+            return send({ type: 'edit_message', chatId, messageId, text });
+        },
+        [send]
+    );
+
+    const deleteMessage = useCallback(
+        (chatId: string, messageId: string) => {
+            if (!chatId || !messageId) return false;
+            return send({ type: 'delete_message', chatId, messageId });
         },
         [send]
     );
@@ -199,5 +225,5 @@ export function useWebSocket({
         return () => window.clearInterval(interval);
     }, [token, send]);
 
-    return { sendMessage, sendSeen, isConnected: isConnectedRef.current };
+    return { sendMessage, editMessage, deleteMessage, sendSeen, isConnected: isConnectedRef.current };
 }

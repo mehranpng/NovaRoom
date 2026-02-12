@@ -7,6 +7,12 @@ export interface User {
     online: boolean;
 }
 
+export interface MessageReply {
+    id: string;
+    senderId: string;
+    text: string;
+}
+
 export interface Message {
     id: string;
     chatId: string;
@@ -14,9 +20,12 @@ export interface Message {
     text: string;
     timestamp: number;
     seen: boolean;
+    replyTo?: MessageReply;
+    edited?: boolean;
 }
 
 export interface ChatLastMessage {
+    id?: string;
     text: string;
     senderId: string;
     /** epoch ms */
@@ -27,7 +36,7 @@ export interface Chat {
     otherUser: any;
     id: string;
     participantIds: string[];
-    lastMessage?: ChatLastMessage;
+    lastMessage?: ChatLastMessage | null;
     unreadCount: number;
 }
 
