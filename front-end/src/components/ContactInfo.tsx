@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
 import { apiFetch } from '../config/api';
+import { VerifiedBadge } from './VerifiedBadge';
 
 interface ContactInfoProps {
     user: User;
@@ -81,7 +82,10 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
             <div className="contact-info__content">
                 <div className="contact-info__avatar">
                     <Avatar name={resolvedUser.name} size="xl" online={resolvedUser.online} />
-                    <div className="contact-info__name">{resolvedUser.name}</div>
+                    <div className="contact-info__name-wrap">
+                        <div className="contact-info__name">{resolvedUser.name}</div>
+                        <VerifiedBadge verified={resolvedUser.verified} className="verified-badge--lg" />
+                    </div>
                     <div className={resolvedUser.online ? 'contact-info__status contact-info__status--online' : 'contact-info__status'}>
                         {resolvedUser.online ? 'Online' : 'Offline'}
                     </div>

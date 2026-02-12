@@ -3,6 +3,7 @@ import { Search, X } from 'lucide-react';
 import { apiFetch } from '../config/api';
 import { type User } from '../types';
 import { Avatar } from './Avatar';
+import { VerifiedBadge } from './VerifiedBadge';
 
 interface NewChatModalProps {
     isOpen: boolean;
@@ -113,7 +114,10 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
                             >
                                 <Avatar name={user.name} size="md" online={user.online} />
                                 <div style={{ flex: 1 }}>
-                                    <div className="user-name">{user.name}</div>
+                                    <div className="user-name-wrap">
+                                        <div className="user-name">{user.name}</div>
+                                        <VerifiedBadge verified={user.verified} />
+                                    </div>
                                     <div className="user-username">@{user.username}</div>
                                 </div>
                             </div>

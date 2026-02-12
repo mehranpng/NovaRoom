@@ -8,6 +8,7 @@ export const currentUser: User = {
   bio: 'Full-stack developer. Coffee enthusiast ☕',
   avatar: '',
   online: true,
+  verified: true,
 };
 
 export const contacts: User[] = [
@@ -19,6 +20,7 @@ export const contacts: User[] = [
     bio: 'Designer & illustrator',
     avatar: '',
     online: true,
+    verified: false,
   },
   {
     id: 'user-2',
@@ -28,6 +30,7 @@ export const contacts: User[] = [
     bio: 'Backend engineer at TechCorp',
     avatar: '',
     online: false,
+    verified: false,
   },
   {
     id: 'user-3',
@@ -37,6 +40,7 @@ export const contacts: User[] = [
     bio: 'Product manager & yoga lover 🧘‍♀️',
     avatar: '',
     online: true,
+    verified: false,
   },
   {
     id: 'user-4',
@@ -46,6 +50,7 @@ export const contacts: User[] = [
     bio: 'Mobile developer | React Native',
     avatar: '',
     online: false,
+    verified: false,
   },
   {
     id: 'user-5',
@@ -55,6 +60,7 @@ export const contacts: User[] = [
     bio: 'Data scientist 📊',
     avatar: '',
     online: true,
+    verified: false,
   },
   {
     id: 'user-6',
@@ -64,6 +70,7 @@ export const contacts: User[] = [
     bio: 'DevOps & Cloud',
     avatar: '',
     online: false,
+    verified: false,
   },
 ];
 

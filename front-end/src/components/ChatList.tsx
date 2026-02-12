@@ -4,6 +4,7 @@ import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';
 import { cx } from '../utils/cx';
 import { EmptyState } from './EmptyState';
+import { VerifiedBadge } from './VerifiedBadge';
 
 interface ChatListProps {
     chats: Chat[];
@@ -156,7 +157,8 @@ export function ChatList({
             username: contactId.toLowerCase(),
             bio: '',
             avatar: '',
-            online: false
+            online: false,
+            verified: false,
         };
     };
 
@@ -254,7 +256,10 @@ export function ChatList({
                                 <Avatar name={contact.name} size="md" online={contact.online} />
                                 <div className="chat-list__item-content">
                                     <div className="chat-list__item-row">
-                                        <span className="chat-list__item-name">{contact.name}</span>
+                                        <span className="chat-list__item-name-wrap">
+                                            <span className="chat-list__item-name">{contact.name}</span>
+                                            <VerifiedBadge verified={contact.verified} />
+                                        </span>
                                         {chat.lastMessage && (
                                             <span className="chat-list__item-time">
                                                 {formatTime(chat.lastMessage.timestamp)}

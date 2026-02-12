@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
 import { cx } from '../utils/cx';
+import { VerifiedBadge } from './VerifiedBadge';
 import { apiFetch } from '../config/api';
 
 interface ProfileProps {
@@ -160,7 +161,10 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                 {/* Avatar & Name Section */}
                 <div className="profile__avatar-section">
                     <Avatar name={user.name} size="xl" online={true} />
-                    <h2 className="profile__name">{user.name}</h2>
+                    <div className="profile__name-wrap">
+                        <h2 className="profile__name">{user.name}</h2>
+                        <VerifiedBadge verified={user.verified} className="verified-badge--lg" />
+                    </div>
                     <p className="profile__username-display">@{user.username}</p>
                     <span className="profile__online-badge">
                         <span className="profile__online-dot" />

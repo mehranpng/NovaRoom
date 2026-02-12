@@ -4,6 +4,7 @@ import type { Message, MessageReply as MessageReplyType, User } from '../types';
 import { Avatar } from './Avatar';
 import { apiFetch } from '../config/api';
 import { ContactInfo } from './ContactInfo';
+import { VerifiedBadge } from './VerifiedBadge';
 
 interface ChatRoomProps {
     chatId: string;
@@ -485,7 +486,10 @@ export function ChatRoom({
                 >
                     <Avatar name={contact.name} size="sm" online={contact.online} />
                     <div className="chat-room__header-info">
-                        <div className="chat-room__contact-name">{contact.name}</div>
+                        <div className="chat-room__contact-name-wrap">
+                            <div className="chat-room__contact-name">{contact.name}</div>
+                            <VerifiedBadge verified={contact.verified} />
+                        </div>
                         <div
                             className={
                                 contact.online
