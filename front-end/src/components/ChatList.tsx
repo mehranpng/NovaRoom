@@ -179,7 +179,7 @@ export function ChatList({
                     <button onClick={onOpenProfile}>
                         <Avatar name={currentUser.name} size="sm" online={true} />
                     </button>
-                    <h1 className="chat-list__title">Chats</h1>
+                    <h1 className="chat-list__title">NovaRoom</h1>
                 </div>
                 <div className="chat-list__header-actions">
                     <button className="icon-btn" onClick={onNewChatClick}>
