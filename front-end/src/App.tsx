@@ -248,6 +248,12 @@ export function App() {
         setPendingUser(null);
     };
 
+    const handleCloseChat = () => {
+        setActiveChatId(null);
+        setPendingUser(null);
+        setView('chatRoom');
+    };
+
     const handleChatDeleted = (chatId: string) => {
         setChats(prev => prev.filter(c => c.id !== chatId));
         setMessages(prev => {
@@ -337,6 +343,7 @@ export function App() {
                             currentUserId={currentUser!.chatId}
                             onSendMessage={handleSendMessage}
                             onBack={handleBack}
+                            onCloseChat={handleCloseChat}
                             onChatDeleted={handleChatDeleted}
                         />
                     ) : (

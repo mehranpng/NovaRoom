@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, MoreVertical, Trash2 } from 'lucide-react';
 import type { Message, User } from '../types';
 import { Avatar } from './Avatar';
@@ -12,6 +12,7 @@ interface ChatRoomProps {
     currentUserId: string;
     onSendMessage: (text: string) => void;
     onBack: () => void;
+    onCloseChat: () => void;
     onChatDeleted?: (chatId: string) => void;
 }
 
@@ -66,6 +67,7 @@ export function ChatRoom({
     currentUserId,
     onSendMessage,
     onBack,
+    onCloseChat,
     onChatDeleted,
 }: ChatRoomProps) {
     const [text, setText] = useState('');
@@ -73,7 +75,45 @@ export function ChatRoom({
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [showContactInfo, setShowContactInfo] = useState(false);
 
+    const menuRef = useRef<HTMLDivElement | null>(null);
+    const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
     const canDelete = chatId !== 'pending';
+
+    const scrollToBottom = (smooth = false) => {
+        const el = messagesEndRef.current;
+        if (!el) return;
+        el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
+    };
+
+    // Close the More menu when clicking outside
+    useEffect(() => {
+        const onDocClick = (e: MouseEvent) => {
+            if (!menuRef.current) return;
+            if (menuRef.current.contains(e.target as Node)) return;
+            setMenuOpen(false);
+        };
+
+        if (menuOpen) {
+            document.addEventListener('mousedown', onDocClick);
+        }
+
+        return () => document.removeEventListener('mousedown', onDocClick);
+    }, [menuOpen]);
+
+    // When a chat opens / changes, scroll to bottom
+    useEffect(() => {
+        const raf = requestAnimationFrame(() => scrollToBottom(false));
+        return () => cancelAnimationFrame(raf);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [chatId]);
+
+    // When messages change, keep it pinned to bottom
+    useEffect(() => {
+        const raf = requestAnimationFrame(() => scrollToBottom(true));
+        return () => cancelAnimationFrame(raf);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [messages.length]);
 
     const items = useMemo(() => {
         return messages.map((m, idx) => {
@@ -101,6 +141,7 @@ export function ChatRoom({
         if (!t) return;
         onSendMessage(t);
         setText('');
+        requestAnimationFrame(() => scrollToBottom(true));
     };
 
     const doDelete = async () => {
@@ -126,6 +167,10 @@ export function ChatRoom({
                     <ArrowLeft size={20} />
                 </button>
 
+                <button className="icon-btn chat-room__close-btn" onClick={onCloseChat} aria-label="Back to empty" type="button">
+                    <ArrowLeft size={20} />
+                </button>
+
                 <button
                     className="chat-room__header-clickable chat-room__header-clickable--full"
                     onClick={() => setShowContactInfo(true)}
@@ -141,7 +186,7 @@ export function ChatRoom({
                     </div>
                 </button>
 
-                <div className="chat-room__header-actions">
+                <div className="chat-room__header-actions" ref={menuRef}>
                     <button
                         className="icon-btn"
                         onClick={() => setMenuOpen(v => !v)}
@@ -198,6 +243,7 @@ export function ChatRoom({
                             </div>
                         </div>
                     ))}
+                    <div ref={messagesEndRef} />
                 </div>
             </div>
 
