@@ -16,6 +16,8 @@ interface ChatRoomProps {
     onChatDeleted?: (chatId: string) => void;
 }
 
+const TEHRAN_TZ = 'Asia/Tehran';
+
 function normalizeTs(ts: any): number {
     if (ts == null) return Date.now();
     if (typeof ts === 'string') {
@@ -30,34 +32,54 @@ function normalizeTs(ts: any): number {
     return Date.now();
 }
 
-function toIranDate(ts: any): Date {
-    // Force a Date instance whose clock time matches Tehran for formatting purposes.
-    const t = normalizeTs(ts);
-    const tzDateStr = new Date(t).toLocaleString('en-US', { timeZone: 'Asia/Tehran' });
-    return new Date(tzDateStr);
+const tehranTimeFmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: TEHRAN_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+});
+
+// en-CA gives YYYY-MM-DD reliably.
+const tehranYmdFmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TEHRAN_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+});
+
+const tehranDayLabelFmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: TEHRAN_TZ,
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+});
+
+function tehranYMD(ts: any): string {
+    return tehranYmdFmt.format(new Date(normalizeTs(ts)));
+}
+
+function tehranMidnightEpoch(ts: any): number {
+    // Iran has a fixed UTC+03:30 offset since DST removal; keep calculations stable.
+    const ymd = tehranYMD(ts);
+    return new Date(`${ymd}T00:00:00+03:30`).getTime();
 }
 
 function formatMessageTime(ts: any) {
-    const d = toIranDate(ts);
-    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return tehranTimeFmt.format(new Date(normalizeTs(ts)));
 }
 
 function sameDay(a: any, b: any) {
-    const da = toIranDate(a);
-    const db = toIranDate(b);
-    return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
+    return tehranYMD(a) === tehranYMD(b);
 }
 
 function formatDayLabel(ts: any) {
-    const d = toIranDate(ts);
-    const now = toIranDate(Date.now());
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const thatDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const today = tehranMidnightEpoch(Date.now());
+    const thatDay = tehranMidnightEpoch(ts);
     const diffDays = Math.round((today - thatDay) / (1000 * 60 * 60 * 24));
 
     if (diffDays === 0) return 'Today';
     if (diffDays === 1) return 'Yesterday';
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return tehranDayLabelFmt.format(new Date(normalizeTs(ts)));
 }
 
 function bubbleShape(prevSameSender: boolean, nextSameSender: boolean) {
@@ -85,9 +107,6 @@ export function ChatRoom({
     const menuRef = useRef<HTMLDivElement | null>(null);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const messagesContainerRef = useRef<HTMLDivElement | null>(null);
-
-    // Remember scroll position per chat (so going to ContactInfo and back doesn't jump)
-    const scrollPositionsRef = useRef<Record<string, number>>({});
 
     const canDelete = chatId !== 'pending';
 
@@ -175,26 +194,16 @@ export function ChatRoom({
         }
     };
 
-    const rememberScroll = () => {
-        const container = messagesContainerRef.current;
-        if (!container) return;
-        scrollPositionsRef.current[chatId] = container.scrollTop;
-    };
-
-    const restoreScroll = () => {
-        const container = messagesContainerRef.current;
-        if (!container) return;
-        const saved = scrollPositionsRef.current[chatId];
-        if (typeof saved === 'number') {
-            container.scrollTop = saved;
-        } else {
-            // first time: default to bottom
-            scrollToBottom(false);
-        }
-    };
-
     if (showContactInfo) {
-        return <ContactInfo user={contact} onBack={() => { setShowContactInfo(false); requestAnimationFrame(() => restoreScroll()); }} />;
+        return (
+            <ContactInfo
+                user={contact}
+                onBack={() => {
+                    setShowContactInfo(false);
+                    requestAnimationFrame(() => scrollToBottom(false));
+                }}
+            />
+        );
     }
 
     return (
@@ -210,14 +219,20 @@ export function ChatRoom({
 
                 <button
                     className="chat-room__header-clickable chat-room__header-clickable--full"
-                    onClick={() => { rememberScroll(); setShowContactInfo(true); }}
+                    onClick={() => setShowContactInfo(true)}
                     aria-label="Open contact info"
                     type="button"
                 >
                     <Avatar name={contact.name} size="sm" online={contact.online} />
                     <div className="chat-room__header-info">
                         <div className="chat-room__contact-name">{contact.name}</div>
-                        <div className={contact.online ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
+                        <div
+                            className={
+                                contact.online
+                                    ? 'chat-room__contact-status chat-room__contact-status--online'
+                                    : 'chat-room__contact-status'
+                            }
+                        >
                             {contact.online ? 'Online' : 'Offline'}
                         </div>
                     </div>
@@ -239,7 +254,10 @@ export function ChatRoom({
                         <div className="popover popover--mini popover--right">
                             <button
                                 className="popover__item popover__item--danger"
-                                onClick={() => { setConfirmOpen(true); setMenuOpen(false); }}
+                                onClick={() => {
+                                    setConfirmOpen(true);
+                                    setMenuOpen(false);
+                                }}
                                 type="button"
                             >
                                 <Trash2 size={16} />
@@ -250,7 +268,7 @@ export function ChatRoom({
                 </div>
             </div>
 
-            <div className="chat-room__messages" ref={messagesContainerRef} onScroll={rememberScroll}>
+            <div className="chat-room__messages" ref={messagesContainerRef}>
                 <div className="chat-room__messages-inner">
                     {items.map(({ m, isMine, dayBreak, shape }) => (
                         <div key={m.id}>
@@ -261,11 +279,13 @@ export function ChatRoom({
                             )}
 
                             <div className={isMine ? 'message-row message-row--mine' : 'message-row message-row--theirs'}>
-                                <div className={
-                                    isMine
-                                        ? `message-bubble message-bubble--mine ${shape}`
-                                        : `message-bubble message-bubble--theirs ${shape}`
-                                }>
+                                <div
+                                    className={
+                                        isMine
+                                            ? `message-bubble message-bubble--mine ${shape}`
+                                            : `message-bubble message-bubble--theirs ${shape}`
+                                    }
+                                >
                                     <div className="message-text">{m.text}</div>
 
                                     <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
@@ -296,7 +316,9 @@ export function ChatRoom({
                         }}
                     />
                     <button
-                        className={text.trim() ? 'chat-room__send-btn chat-room__send-btn--active' : 'chat-room__send-btn chat-room__send-btn--disabled'}
+                        className={
+                            text.trim() ? 'chat-room__send-btn chat-room__send-btn--active' : 'chat-room__send-btn chat-room__send-btn--disabled'
+                        }
                         onClick={submit}
                         disabled={!text.trim()}
                         aria-label="Send"
@@ -313,8 +335,12 @@ export function ChatRoom({
                         <h3 className="confirm-modal__title">Delete chat?</h3>
                         <p className="confirm-modal__text">This will delete the chat and all messages for both users.</p>
                         <div className="confirm-modal__actions">
-                            <button className="confirm-modal__btn" onClick={() => setConfirmOpen(false)} type="button">Cancel</button>
-                            <button className="confirm-modal__btn confirm-modal__btn--danger" onClick={doDelete} type="button">Delete</button>
+                            <button className="confirm-modal__btn" onClick={() => setConfirmOpen(false)} type="button">
+                                Cancel
+                            </button>
+                            <button className="confirm-modal__btn confirm-modal__btn--danger" onClick={doDelete} type="button">
+                                Delete
+                            </button>
                         </div>
                     </div>
                 </div>
