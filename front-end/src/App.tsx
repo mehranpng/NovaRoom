@@ -340,12 +340,40 @@ export function App() {
         deleteViaWS(activeChatId, messageId);
     }, [activeChatId, deleteViaWS]);
 
-    const handleUserSelectedFromModal = (user: User) => {
+    const handleUserSelectedFromModal = useCallback((user: User) => {
+        setNewChatModalOpen(false);
+
+        // If the chat already exists, open it immediately so previous messages show.
+        const myId = currentUser?.chatId;
+        if (myId) {
+            const existing = chatsRef.current.find((c) => {
+                const hasParticipants = Array.isArray(c.participantIds) && c.participantIds.includes(myId) && c.participantIds.includes(user.chatId);
+                if (hasParticipants) return true;
+
+                const ou: any = (c as any).otherUser;
+                if (!ou) return false;
+
+                const ouChatId = ou.chatId ?? ou.username ?? '';
+                if (ouChatId && user.chatId && ouChatId === user.chatId) return true;
+
+                if (ou.username && user.username) {
+                    return String(ou.username).toLowerCase() === String(user.username).toLowerCase();
+                }
+
+                return false;
+            });
+
+            if (existing?.id) {
+                handleSelectChat(existing.id);
+                return;
+            }
+        }
+
+        // Otherwise stay in "pending" mode (chat is created on first message).
         setPendingUser(user);
         setActiveChatId(null);
         setView('chatRoom');
-        setNewChatModalOpen(false);
-    };
+    }, [currentUser?.chatId, handleSelectChat]);
 
     const handleOpenProfile = () => setView('profile');
     const handleBack = () => {
