@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, MoreVertical, Pencil, Reply, SendHorizontal, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Trash2, X } from 'lucide-react';
 import type { Message, MessageReply as MessageReplyType, User } from '../types';
 import { Avatar } from './Avatar';
 import { apiFetch } from '../config/api';
@@ -110,6 +110,7 @@ export function ChatRoom({
     const messageElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
     const [highlightId, setHighlightId] = useState<string | null>(null);
     const highlightTimeoutRef = useRef<number | null>(null);
+    const highlightRafRef = useRef<number | null>(null);
 
     const [dragState, setDragState] = useState<{ id: string | null; x: number; active: boolean }>({
         id: null,
@@ -157,15 +158,77 @@ export function ChatRoom({
         return distanceFromBottom < 120;
     };
 
-    const scrollToMessage = (messageId: string) => {
-        const el = messageElsRef.current.get(messageId);
-        if (!el) return;
+    const resetDrag = (messageId: string) => {
+        setDragState({ id: messageId, x: 0, active: false });
+        window.setTimeout(() => {
+            setDragState((s) => (s.id === messageId ? { id: null, x: 0, active: false } : s));
+        }, 140);
+    };
 
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const startHighlight = (messageId: string) => {
         setHighlightId(messageId);
-
         if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
         highlightTimeoutRef.current = window.setTimeout(() => setHighlightId(null), 1000);
+    };
+
+    const scrollToMessage = (messageId: string) => {
+        const el = messageElsRef.current.get(messageId);
+        const container = messagesContainerRef.current;
+        if (!el || !container) return;
+
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Start highlight timer only when the target has actually reached the viewport.
+        if (highlightRafRef.current) cancelAnimationFrame(highlightRafRef.current);
+        const startedAt = performance.now();
+
+        const check = () => {
+            const target = messageElsRef.current.get(messageId);
+            const cont = messagesContainerRef.current;
+            if (!target || !cont) return;
+
+            const cr = cont.getBoundingClientRect();
+            const tr = target.getBoundingClientRect();
+
+            const targetCenter = (tr.top + tr.bottom) / 2;
+            const containerCenter = (cr.top + cr.bottom) / 2;
+
+            const isVisible = tr.bottom > cr.top + 24 && tr.top < cr.bottom - 24;
+            const nearCenter = Math.abs(targetCenter - containerCenter) < 120;
+
+            if ((isVisible && nearCenter) || performance.now() - startedAt > 3000) {
+                startHighlight(messageId);
+                highlightRafRef.current = null;
+                return;
+            }
+
+            highlightRafRef.current = requestAnimationFrame(check);
+        };
+
+        highlightRafRef.current = requestAnimationFrame(check);
+    };
+
+    const doCopyMessage = async (m: Message) => {
+        const value = m.text ?? '';
+        try {
+            if (navigator.clipboard && (window as any).isSecureContext) {
+                await navigator.clipboard.writeText(value);
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = value;
+                ta.style.position = 'fixed';
+                ta.style.left = '-9999px';
+                ta.style.top = '0';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
+        } catch {
+            // ignore
+        }
+        setMsgMenu(null);
     };
 
     // Close menus when clicking outside
@@ -185,6 +248,7 @@ export function ChatRoom({
     useEffect(() => {
         return () => {
             if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
+            if (highlightRafRef.current) cancelAnimationFrame(highlightRafRef.current);
         };
     }, []);
 
@@ -431,7 +495,9 @@ export function ChatRoom({
                                 <div
                                     className={isMine ? 'message-row message-row--mine' : 'message-row message-row--theirs'}
                                     onPointerDown={(e) => {
-                                        if (e.pointerType === 'mouse' && e.button !== 0) return;
+                                        // Mouse-only here; mobile uses touch handlers below for compatibility.
+                                        if (e.pointerType !== 'mouse') return;
+                                        if (e.button !== 0) return;
                                         swipeRef.current = {
                                             id: m.id,
                                             startX: e.clientX,
@@ -443,6 +509,7 @@ export function ChatRoom({
                                         };
                                     }}
                                     onPointerMove={(e) => {
+                                        if (e.pointerType !== 'mouse') return;
                                         if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
 
                                         const dx = e.clientX - swipeRef.current.startX;
@@ -467,6 +534,7 @@ export function ChatRoom({
                                         setDragState({ id: m.id, x, active: true });
                                     }}
                                     onPointerUp={(e) => {
+                                        if (e.pointerType !== 'mouse') return;
                                         if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
 
                                         const dx = e.clientX - swipeRef.current.startX;
@@ -480,21 +548,73 @@ export function ChatRoom({
                                             beginReply(m);
                                         }
 
-                                        setDragState({ id: m.id, x: 0, active: false });
-                                        window.setTimeout(() => {
-                                            setDragState((s) => (s.id === m.id ? { id: null, x: 0, active: false } : s));
-                                        }, 140);
+                                        resetDrag(m.id);
 
                                         swipeRef.current.active = false;
                                         swipeRef.current.captured = false;
                                         swipeRef.current.pointerId = null;
                                     }}
-                                    onPointerCancel={() => {
+                                    onPointerCancel={(e) => {
+                                        if (e.pointerType !== 'mouse') return;
                                         if (swipeRef.current.id !== m.id) return;
-                                        setDragState({ id: m.id, x: 0, active: false });
-                                        window.setTimeout(() => {
-                                            setDragState((s) => (s.id === m.id ? { id: null, x: 0, active: false } : s));
-                                        }, 140);
+                                        resetDrag(m.id);
+                                        swipeRef.current.active = false;
+                                        swipeRef.current.captured = false;
+                                        swipeRef.current.pointerId = null;
+                                    }}
+                                    onTouchStart={(e) => {
+                                        const t = e.touches[0];
+                                        swipeRef.current = {
+                                            id: m.id,
+                                            startX: t.clientX,
+                                            startY: t.clientY,
+                                            active: true,
+                                            captured: false,
+                                            pointerId: null,
+                                            blockClickUntil: swipeRef.current.blockClickUntil,
+                                        };
+                                    }}
+                                    onTouchMove={(e) => {
+                                        if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                        const t = e.touches[0];
+                                        const dx = t.clientX - swipeRef.current.startX;
+                                        const dy = t.clientY - swipeRef.current.startY;
+
+                                        if (!swipeRef.current.captured) {
+                                            if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy)) return;
+                                            if (dx <= 0) return; // left-to-right only
+                                            swipeRef.current.captured = true;
+                                        }
+
+                                        if (!swipeRef.current.captured) return;
+                                        // Try to prevent vertical scrolling while swiping.
+                                        e.preventDefault();
+                                        const x = Math.max(0, Math.min(72, dx));
+                                        setDragState({ id: m.id, x, active: true });
+                                    }}
+                                    onTouchEnd={(e) => {
+                                        if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                        const t = e.changedTouches[0];
+                                        const dx = t.clientX - swipeRef.current.startX;
+                                        const dy = t.clientY - swipeRef.current.startY;
+
+                                        if (swipeRef.current.captured) {
+                                            swipeRef.current.blockClickUntil = Date.now() + 280;
+                                        }
+
+                                        if (dx > 60 && Math.abs(dx) > Math.abs(dy)) {
+                                            beginReply(m);
+                                        }
+
+                                        resetDrag(m.id);
+
+                                        swipeRef.current.active = false;
+                                        swipeRef.current.captured = false;
+                                        swipeRef.current.pointerId = null;
+                                    }}
+                                    onTouchCancel={() => {
+                                        if (swipeRef.current.id !== m.id) return;
+                                        resetDrag(m.id);
                                         swipeRef.current.active = false;
                                         swipeRef.current.captured = false;
                                         swipeRef.current.pointerId = null;
@@ -611,6 +731,10 @@ export function ChatRoom({
                             Edit
                         </button>
                     )}
+                    <button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button">
+                        <Copy size={16} />
+                        Copy
+                    </button>
                     {activeMsgIsMine && (
                         <button
                             className="popover__item popover__item--danger"
