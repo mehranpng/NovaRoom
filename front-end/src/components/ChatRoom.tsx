@@ -379,7 +379,7 @@ export function ChatRoom({
     };
 
     const beginReply = (m: Message) => {
-        const rt: MessageReplyType = m.replyTo ? m.replyTo : { id: m.id, senderId: m.senderId, text: m.text };
+        const rt: MessageReplyType = { id: m.id, senderId: m.senderId, text: m.text };
         setReplyTo({ id: rt.id, senderId: rt.senderId, text: rt.text });
         setEditingId(null);
         setMsgMenu(null);
@@ -646,11 +646,7 @@ export function ChatRoom({
                                             cursor: 'pointer',
                                             transform: `translateX(${dragX}px)`,
                                             transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 180ms ease-out',
-                                            boxShadow: isHighlighted
-                                                ? isMine
-                                                    ? '0 0 0 3px rgba(191, 219, 254, 0.35)'
-                                                    : '0 0 0 3px rgba(59, 130, 246, 0.25)'
-                                                : undefined,
+                                            boxShadow: isHighlighted ? '0 0 0 3px rgba(245, 158, 11, 0.4)' : undefined,
                                         }}
                                     >
                                         {m.replyTo && (

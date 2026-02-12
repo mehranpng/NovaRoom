@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { apiFetch } from '../config/api';
 import { type User } from '../types';
 import { LogIn } from 'lucide-react';
@@ -12,6 +12,9 @@ export function Login({ onLoginSuccess }: LoginProps) {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
+    const emailRef = useRef<HTMLInputElement | null>(null);
+    const passwordRef = useRef<HTMLInputElement | null>(null);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -46,9 +49,15 @@ export function Login({ onLoginSuccess }: LoginProps) {
                     <div className="form-group">
                         <label>Email</label>
                         <input
+                            ref={emailRef}
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
+                            onFocus={() => {
+                                setTimeout(() => {
+                                    emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }, 150);
+                            }}
                             placeholder="mehran@gmail.com"
                             required
                         />
@@ -57,9 +66,15 @@ export function Login({ onLoginSuccess }: LoginProps) {
                     <div className="form-group">
                         <label>Password</label>
                         <input
+                            ref={passwordRef}
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
+                            onFocus={() => {
+                                setTimeout(() => {
+                                    passwordRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }, 150);
+                            }}
                             placeholder="••••••••"
                             required
                         />

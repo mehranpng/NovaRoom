@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
 import { apiFetch } from '../config/api';
 import { type User } from '../types';
@@ -14,6 +14,8 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
+
+    const inputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -64,10 +66,16 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
                 <div className="search-box">
                     <Search size={20} />
                     <input
+                        ref={inputRef}
                         type="text"
                         placeholder="Search by username or name..."
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
+                        onFocus={() => {
+                            setTimeout(() => {
+                                inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 150);
+                        }}
                         autoFocus
                     />
                 </div>
