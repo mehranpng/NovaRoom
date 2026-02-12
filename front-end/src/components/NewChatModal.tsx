@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, X, Copy, Check } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { apiFetch } from '../config/api';
 import { type User } from '../types';
 import { Avatar } from './Avatar';
@@ -14,7 +14,6 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
-    const [copiedUsername, setCopiedUsername] = useState<string | null>(null);
 
     const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -23,7 +22,6 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
         setQuery('');
         setResults([]);
         setLoading(false);
-        setCopiedUsername(null);
     }, [isOpen]);
 
     useEffect(() => {
@@ -53,12 +51,6 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
     const handleSelectUser = (user: User) => {
         onUserSelected(user);
         onClose();
-    };
-
-    const handleCopyUsername = (username: string) => {
-        navigator.clipboard.writeText(`@${username}`).catch(() => {});
-        setCopiedUsername(username);
-        setTimeout(() => setCopiedUsername(null), 1500);
     };
 
     if (!isOpen) return null;
@@ -124,22 +116,6 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
                                     <div className="user-name">{user.name}</div>
                                     <div className="user-username">@{user.username}</div>
                                 </div>
-
-                                <button
-                                    type="button"
-                                    className="icon-btn"
-                                    aria-label="Copy username"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleCopyUsername(user.username);
-                                    }}
-                                >
-                                    {copiedUsername === user.username ? (
-                                        <Check size={18} />
-                                    ) : (
-                                        <Copy size={18} />
-                                    )}
-                                </button>
                             </div>
                         ))
                     )}
