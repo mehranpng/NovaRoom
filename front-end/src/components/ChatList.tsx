@@ -143,7 +143,9 @@ export function ChatList({
         if (chat.otherUser) {
             return {
                 ...chat.otherUser,
-                chatId: chat.participantIds.find(id => id !== currentUser.chatId) || ''
+                chatId: chat.participantIds.find(id => id !== currentUser.chatId) || '',
+                // Make sure online is always boolean so Avatar renders the status dot.
+                online: typeof chat.otherUser.online === 'boolean' ? chat.otherUser.online : false,
             };
         }
 

@@ -146,6 +146,14 @@ export function ChatRoom({
     const canDeleteChat = chatId !== 'pending';
 
     const scrollToBottom = (smooth = false) => {
+        const container = messagesContainerRef.current;
+        if (container) {
+            const top = Math.max(0, container.scrollHeight - container.clientHeight);
+            container.scrollTo({ top, behavior: smooth ? 'smooth' : 'auto' });
+            return;
+        }
+
+        // Fallback (should be rare): if container is not available, scroll the end marker.
         const el = messagesEndRef.current;
         if (!el) return;
         el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
