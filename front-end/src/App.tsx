@@ -53,11 +53,20 @@ export function App() {
                     }
                 } as Chat;
             });
-            setChats(normalized);
+
+            // Keep active chat unread badge cleared even if server data is briefly stale.
+            const merged = normalized.map((c) => {
+                if (view === 'chatRoom' && activeChatId && c.id === activeChatId) {
+                    return { ...c, unreadCount: 0 };
+                }
+                return c;
+            });
+
+            setChats(merged);
         } catch (error) {
             console.error('Failed to load chats', error);
         }
-    }, [isAuthenticated]);
+    }, [isAuthenticated, activeChatId, view]);
 
     const handleLogout = useCallback(() => {
         localStorage.removeItem('token');
@@ -131,6 +140,9 @@ export function App() {
                 [chatId]: prev[chatId].map(m => ({ ...m, seen: true }))
             };
         });
+
+        // If messages are seen, clear unread badge immediately.
+        setChats(prev => prev.map(c => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
     }, []);
 
     // WebSocket initialization

@@ -15,7 +15,7 @@ interface ChatListProps {
     onLogout: () => void;
 }
 
-const IRAN_OFFSET_MS = 210 * 60 * 1000; // +03:30
+const TEHRAN_TZ = 'Asia/Tehran';
 
 function normalizeTs(ts: any): number {
     if (ts == null) return Date.now();
@@ -30,32 +30,58 @@ function normalizeTs(ts: any): number {
     return Date.now();
 }
 
-function iranShiftedDate(ts: any): Date {
-    return new Date(normalizeTs(ts) + IRAN_OFFSET_MS);
+const tehranTimeFmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: TEHRAN_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+});
+
+const tehranYmdFmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TEHRAN_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+});
+
+const tehranWeekdayFmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: TEHRAN_TZ,
+    weekday: 'short',
+});
+
+const tehranMonthDayFmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: TEHRAN_TZ,
+    month: 'short',
+    day: 'numeric',
+});
+
+function tehranYMD(ts: any): string {
+    return tehranYmdFmt.format(new Date(normalizeTs(ts)));
 }
 
-function iranDayNumber(ts: any): number {
-    const d = iranShiftedDate(ts);
-    return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 86400000);
+function tehranMidnightEpoch(ts: any): number {
+    const ymd = tehranYMD(ts);
+    // Iran has fixed UTC+03:30 offset.
+    return new Date(`${ymd}T00:00:00+03:30`).getTime();
 }
 
 function formatTime(timestamp: any): string {
-    const nowDay = iranDayNumber(Date.now());
-    const day = iranDayNumber(timestamp);
-    const diffDays = nowDay - day;
+    const today = tehranMidnightEpoch(Date.now());
+    const thatDay = tehranMidnightEpoch(timestamp);
+    const diffDays = Math.round((today - thatDay) / 86400000);
 
-    const d = iranShiftedDate(timestamp);
+    const d = new Date(normalizeTs(timestamp));
 
     if (diffDays === 0) {
-        return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
+        return tehranTimeFmt.format(d);
     }
     if (diffDays === 1) {
         return 'Yesterday';
     }
     if (diffDays < 7) {
-        return d.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+        return tehranWeekdayFmt.format(d);
     }
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    return tehranMonthDayFmt.format(d);
 }
 
 function useIsMobile(breakpointPx = 768) {

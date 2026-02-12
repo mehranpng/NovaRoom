@@ -359,7 +359,7 @@ export function ChatRoom({
                         bottom: 84,
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 8,
+                        gap: 10,
                         padding: '8px 10px',
                         borderRadius: 999,
                         border: '1px solid rgba(0,0,0,0.12)',
@@ -371,7 +371,18 @@ export function ChatRoom({
                     }}
                 >
                     <ArrowDown size={16} />
-                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{newMsgCount}</span>
+                    <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{newMsgCount}</span>
+                        <span
+                            style={{
+                                width: 6,
+                                height: 6,
+                                borderRadius: 999,
+                                background: '#2F80ED',
+                                marginTop: 4,
+                            }}
+                        />
+                    </span>
                 </button>
             )}
 
