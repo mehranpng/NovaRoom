@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, MoreVertical, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowLeft, MoreVertical, Trash2 } from 'lucide-react';
 import type { Message, User } from '../types';
 import { Avatar } from './Avatar';
 import { apiFetch } from '../config/api';
@@ -16,7 +16,7 @@ interface ChatRoomProps {
     onChatDeleted?: (chatId: string) => void;
 }
 
-const TEHRAN_TZ = 'Asia/Tehran';
+const IRAN_OFFSET_MS = 210 * 60 * 1000; // +03:30
 
 function normalizeTs(ts: any): number {
     if (ts == null) return Date.now();
@@ -32,54 +32,42 @@ function normalizeTs(ts: any): number {
     return Date.now();
 }
 
-const tehranTimeFmt = new Intl.DateTimeFormat('en-GB', {
-    timeZone: TEHRAN_TZ,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-});
-
-// en-CA gives YYYY-MM-DD reliably.
-const tehranYmdFmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TEHRAN_TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-});
-
-const tehranDayLabelFmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: TEHRAN_TZ,
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-});
-
-function tehranYMD(ts: any): string {
-    return tehranYmdFmt.format(new Date(normalizeTs(ts)));
+function iranShiftedDate(ts: any): Date {
+    return new Date(normalizeTs(ts) + IRAN_OFFSET_MS);
 }
 
-function tehranMidnightEpoch(ts: any): number {
-    // Iran has a fixed UTC+03:30 offset since DST removal; keep calculations stable.
-    const ymd = tehranYMD(ts);
-    return new Date(`${ymd}T00:00:00+03:30`).getTime();
+function iranYMD(ts: any): string {
+    const d = iranShiftedDate(ts);
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function iranDayNumber(ts: any): number {
+    const d = iranShiftedDate(ts);
+    return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 86400000);
 }
 
 function formatMessageTime(ts: any) {
-    return tehranTimeFmt.format(new Date(normalizeTs(ts)));
+    const d = iranShiftedDate(ts);
+    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
 }
 
 function sameDay(a: any, b: any) {
-    return tehranYMD(a) === tehranYMD(b);
+    return iranYMD(a) === iranYMD(b);
 }
 
 function formatDayLabel(ts: any) {
-    const today = tehranMidnightEpoch(Date.now());
-    const thatDay = tehranMidnightEpoch(ts);
-    const diffDays = Math.round((today - thatDay) / (1000 * 60 * 60 * 24));
+    const today = iranDayNumber(Date.now());
+    const thatDay = iranDayNumber(ts);
+    const diffDays = today - thatDay;
 
     if (diffDays === 0) return 'Today';
     if (diffDays === 1) return 'Yesterday';
-    return tehranDayLabelFmt.format(new Date(normalizeTs(ts)));
+
+    const d = iranShiftedDate(ts);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
 
 function bubbleShape(prevSameSender: boolean, nextSameSender: boolean) {
@@ -108,12 +96,26 @@ export function ChatRoom({
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const messagesContainerRef = useRef<HTMLDivElement | null>(null);
 
+    const [newMsgCount, setNewMsgCount] = useState(0);
+    const isAtBottomRef = useRef(true);
+
+    const prevLenRef = useRef(0);
+    const initialScrollDoneRef = useRef(false);
+    const lastChatIdRef = useRef<string | null>(null);
+
     const canDelete = chatId !== 'pending';
 
     const scrollToBottom = (smooth = false) => {
         const el = messagesEndRef.current;
         if (!el) return;
         el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
+    };
+
+    const computeNearBottom = () => {
+        const container = messagesContainerRef.current;
+        if (!container) return true;
+        const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+        return distanceFromBottom < 120;
     };
 
     // Close the More menu when clicking outside
@@ -131,27 +133,66 @@ export function ChatRoom({
         return () => document.removeEventListener('mousedown', onDocClick);
     }, [menuOpen]);
 
-    // When a chat opens / changes, scroll to bottom
+    // Reset per-chat scroll state
+    useEffect(() => {
+        if (lastChatIdRef.current === chatId) return;
+        lastChatIdRef.current = chatId;
+        initialScrollDoneRef.current = false;
+        prevLenRef.current = messages.length;
+        setNewMsgCount(0);
+        isAtBottomRef.current = true;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [chatId]);
+
+    // When a chat opens / changes, attempt to scroll to bottom
     useEffect(() => {
         const raf = requestAnimationFrame(() => scrollToBottom(false));
         return () => cancelAnimationFrame(raf);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
 
-    // When messages change, keep it pinned to bottom, unless user has scrolled up.
+    // When messages change, scroll to bottom on first load of this chat.
+    // After that, keep pinned only if user is near bottom; otherwise show a "jump" button with count.
     useEffect(() => {
         const container = messagesContainerRef.current;
-        if (!container) return;
+        if (!container) {
+            prevLenRef.current = messages.length;
+            return;
+        }
 
-        const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-        const nearBottom = distanceFromBottom < 120;
+        const nearBottom = computeNearBottom();
+        isAtBottomRef.current = nearBottom;
 
-        if (!nearBottom) return;
+        if (!initialScrollDoneRef.current) {
+            if (messages.length > 0) {
+                const raf = requestAnimationFrame(() => scrollToBottom(false));
+                initialScrollDoneRef.current = true;
+                prevLenRef.current = messages.length;
+                return () => cancelAnimationFrame(raf);
+            }
+            prevLenRef.current = messages.length;
+            return;
+        }
 
-        const raf = requestAnimationFrame(() => scrollToBottom(true));
-        return () => cancelAnimationFrame(raf);
+        const added = messages.length - prevLenRef.current;
+        if (added > 0) {
+            if (nearBottom) {
+                const raf = requestAnimationFrame(() => scrollToBottom(true));
+                prevLenRef.current = messages.length;
+                return () => cancelAnimationFrame(raf);
+            }
+            setNewMsgCount((c) => c + added);
+        }
+
+        prevLenRef.current = messages.length;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [messages.length]);
+    }, [messages.length, chatId]);
+
+    const onMessagesScroll = () => {
+        const nearBottom = computeNearBottom();
+        isAtBottomRef.current = nearBottom;
+        if (nearBottom) setNewMsgCount(0);
+    };
 
     const items = useMemo(() => {
         return messages.map((m, idx) => {
@@ -207,7 +248,7 @@ export function ChatRoom({
     }
 
     return (
-        <div className="chat-room">
+        <div className="chat-room" style={{ position: 'relative' }}>
             <div className="chat-room__header">
                 <button className="chat-room__back-btn" onClick={onBack} aria-label="Back" type="button">
                     <ArrowLeft size={20} />
@@ -268,7 +309,7 @@ export function ChatRoom({
                 </div>
             </div>
 
-            <div className="chat-room__messages" ref={messagesContainerRef}>
+            <div className="chat-room__messages" ref={messagesContainerRef} onScroll={onMessagesScroll}>
                 <div className="chat-room__messages-inner">
                     {items.map(({ m, isMine, dayBreak, shape }) => (
                         <div key={m.id}>
@@ -303,6 +344,36 @@ export function ChatRoom({
                     <div ref={messagesEndRef} />
                 </div>
             </div>
+
+            {newMsgCount > 0 && (
+                <button
+                    type="button"
+                    aria-label="Jump to latest messages"
+                    onClick={() => {
+                        scrollToBottom(true);
+                        setNewMsgCount(0);
+                    }}
+                    style={{
+                        position: 'absolute',
+                        right: 16,
+                        bottom: 84,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '8px 10px',
+                        borderRadius: 999,
+                        border: '1px solid rgba(0,0,0,0.12)',
+                        background: '#fff',
+                        boxShadow: '0 6px 20px rgba(0,0,0,0.10)',
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        lineHeight: '12px',
+                    }}
+                >
+                    <ArrowDown size={16} />
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{newMsgCount}</span>
+                </button>
+            )}
 
             <div className="chat-room__input-area">
                 <div className="chat-room__input-wrapper">

@@ -15,6 +15,8 @@ interface ChatListProps {
     onLogout: () => void;
 }
 
+const IRAN_OFFSET_MS = 210 * 60 * 1000; // +03:30
+
 function normalizeTs(ts: any): number {
     if (ts == null) return Date.now();
     if (typeof ts === 'string') {
@@ -28,27 +30,60 @@ function normalizeTs(ts: any): number {
     return Date.now();
 }
 
-function toIranDate(ts: any): Date {
-    // Force a Date instance whose clock time matches Tehran for formatting purposes.
-    const t = normalizeTs(ts);
-    const tzDateStr = new Date(t).toLocaleString('en-US', { timeZone: 'Asia/Tehran' });
-    return new Date(tzDateStr);
+function iranShiftedDate(ts: any): Date {
+    return new Date(normalizeTs(ts) + IRAN_OFFSET_MS);
+}
+
+function iranDayNumber(ts: any): number {
+    const d = iranShiftedDate(ts);
+    return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 86400000);
 }
 
 function formatTime(timestamp: any): string {
-    const now = toIranDate(Date.now());
-    const date = toIranDate(timestamp);
-    const diff = now.getTime() - date.getTime();
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const nowDay = iranDayNumber(Date.now());
+    const day = iranDayNumber(timestamp);
+    const diffDays = nowDay - day;
 
-    if (days === 0) {
-        return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-    } else if (days === 1) {
-        return 'Yesterday';
-    } else if (days < 7) {
-        return date.toLocaleDateString('en-US', { weekday: 'short' });
+    const d = iranShiftedDate(timestamp);
+
+    if (diffDays === 0) {
+        return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
     }
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    if (diffDays === 1) {
+        return 'Yesterday';
+    }
+    if (diffDays < 7) {
+        return d.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+    }
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+function useIsMobile(breakpointPx = 768) {
+    const [isMobile, setIsMobile] = useState(false);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || !window.matchMedia) return;
+
+        const mq = window.matchMedia(`(max-width: ${breakpointPx}px)`);
+        const onChange = () => setIsMobile(mq.matches);
+
+        onChange();
+
+        // Safari < 14
+        // eslint-disable-next-line deprecation/deprecation
+        if (mq.addEventListener) mq.addEventListener('change', onChange);
+        // eslint-disable-next-line deprecation/deprecation
+        else mq.addListener(onChange);
+
+        return () => {
+            // eslint-disable-next-line deprecation/deprecation
+            if (mq.removeEventListener) mq.removeEventListener('change', onChange);
+            // eslint-disable-next-line deprecation/deprecation
+            else mq.removeListener(onChange);
+        };
+    }, [breakpointPx]);
+
+    return isMobile;
 }
 
 export function ChatList({
@@ -63,6 +98,8 @@ export function ChatList({
     const [searchQuery, setSearchQuery] = useState('');
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement | null>(null);
+
+    const isMobile = useIsMobile(768);
 
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
@@ -168,9 +205,7 @@ export function ChatList({
                 {chats.length === 0 ? (
                     // Desktop: right pane (EmptyState) is enough; show this inside list only on mobile.
                     // We also hide it when a chat is active to avoid visual duplication.
-                    <div className="chat-list__empty-mobile-only" style={{ display: hasActiveChat ? 'none' : undefined }}>
-                        <EmptyState />
-                    </div>
+                    isMobile && !hasActiveChat ? <EmptyState /> : null
                 ) : filteredChats.length === 0 ? (
                     <div className="chat-list__empty">
                         <MessageSquarePlus size={48} strokeWidth={1} />

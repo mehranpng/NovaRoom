@@ -9,7 +9,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import jwt
 import bcrypt
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -56,6 +56,33 @@ active_connections: Dict[str, List[WebSocket]] = {}
 security = HTTPBearer()
 
 
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def dt_to_epoch_ms(dt: any) -> int:
+    if dt is None:
+        return int(utc_now().timestamp() * 1000)
+
+    if isinstance(dt, (int, float)):
+        # support ms/seconds
+        v = float(dt)
+        if v < 1_000_000_000_000:
+            v *= 1000
+        return int(v)
+
+    if isinstance(dt, datetime):
+        if dt.tzinfo is None:
+            # Mongo returns naive datetimes; we store them as UTC.
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp() * 1000)
+
+    try:
+        return int(float(dt))
+    except Exception:
+        return int(utc_now().timestamp() * 1000)
+
+
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -87,7 +114,7 @@ class ChatCreateRequest(BaseModel):
 
 def create_access_token(data: dict):
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+    expire = utc_now() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -234,11 +261,12 @@ async def create_or_get_chat(
     if chat:
         return {"chatId": chat_id, "participants": chat["participants"]}
 
+    now = utc_now()
     new_chat = {
         "_id": chat_id,
         "participants": sorted([my_id, target_id]),
-        "createdAt": datetime.utcnow(),
-        "updatedAt": datetime.utcnow(),
+        "createdAt": now,
+        "updatedAt": now,
         "lastMessage": None,
     }
 
@@ -345,7 +373,7 @@ async def get_messages(
             "chatId": m["chatId"],
             "senderId": m["senderId"],
             "text": m["text"],
-            "timestamp": int(m["timestamp"].timestamp() * 1000),
+            "timestamp": dt_to_epoch_ms(m.get("timestamp")),
             "seen": compute_seen(m),
         }
         for m in msgs
@@ -430,7 +458,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     "chatId": chat_id_target,
                     "senderId": chat_id,
                     "text": text,
-                    "timestamp": datetime.utcnow(),
+                    "timestamp": utc_now(),
                     "seenBy": [chat_id],
                 }
 
@@ -445,7 +473,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 await cl_chats.update_one(
                     {"_id": chat_id_target},
-                    {"$set": {"lastMessage": last_msg, "updatedAt": datetime.utcnow()}},
+                    {"$set": {"lastMessage": last_msg, "updatedAt": utc_now()}},
                 )
 
                 participants = await cl_chats.find_one(
@@ -461,7 +489,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "chatId": chat_id_target,
                             "senderId": chat_id,
                             "text": text,
-                            "timestamp": int(message_doc["timestamp"].timestamp() * 1000),
+                            "timestamp": dt_to_epoch_ms(message_doc.get("timestamp")),
                             "seen": False,
                         },
                     }
