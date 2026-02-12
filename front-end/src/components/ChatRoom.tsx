@@ -166,6 +166,49 @@ export function ChatRoom({
         return distanceFromBottom < 120;
     };
 
+    // Keep input just above mobile keyboard (iOS/Android browsers) by using VisualViewport.
+    useEffect(() => {
+        const room = roomRef.current;
+        if (!room) return;
+
+        const vv = (window as any).visualViewport as VisualViewport | undefined;
+        if (!vv) {
+            room.style.setProperty('--keyboard-offset', '0px');
+            return;
+        }
+
+        let raf: number | null = null;
+
+        const update = () => {
+            const el = roomRef.current;
+            if (!el) return;
+
+            const offsetTop = typeof vv.offsetTop === 'number' ? vv.offsetTop : 0;
+            const keyboard = Math.max(0, window.innerHeight - vv.height - offsetTop);
+            el.style.setProperty('--keyboard-offset', `${Math.round(keyboard)}px`);
+
+            // If the user is already at the bottom, keep it pinned when keyboard shows/hides.
+            if (isAtBottomRef.current) {
+                if (raf) cancelAnimationFrame(raf);
+                raf = requestAnimationFrame(() => scrollToBottom(false));
+            }
+        };
+
+        update();
+        vv.addEventListener('resize', update);
+        vv.addEventListener('scroll', update);
+        window.addEventListener('orientationchange', update);
+
+        return () => {
+            vv.removeEventListener('resize', update);
+            vv.removeEventListener('scroll', update);
+            window.removeEventListener('orientationchange', update);
+            if (raf) cancelAnimationFrame(raf);
+            room.style.removeProperty('--keyboard-offset');
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [chatId]);
+
     const resetDrag = (messageId: string) => {
         setDragState({ id: messageId, x: 0, active: false });
         window.setTimeout(() => {
@@ -851,8 +894,10 @@ export function ChatRoom({
                         value={text}
                         onChange={(e) => setText(e.target.value)}
                         onFocus={() => {
-                            // Helps on mobile browsers where keyboard doesn't resize layout reliably.
-                            setTimeout(() => scrollToBottom(true), 120);
+                            // On mobile, do NOT force-scroll the whole view; just keep the bottom pinned if needed.
+                            setTimeout(() => {
+                                if (computeNearBottom()) scrollToBottom(false);
+                            }, 80);
                         }}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') submit();
