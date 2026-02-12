@@ -408,11 +408,13 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                 "id": chat["_id"],
                 "participantIds": chat.get("participants", []),
                 "otherUser": {
+                    "chatId": other_user.get("chatId") if other_user else (other_id or ""),
                     "name": other_user["profile"]["name"] if other_user else "Unknown",
                     "avatar": other_user["profile"]["avatar"] if other_user else "",
                     "username": (
                         other_user["profile"]["username"] if other_user else (other_id or "")
                     ),
+                    "bio": other_user["profile"]["bio"] if other_user else "",
                     "online": other_user.get("online", False) if other_user else False,
                     "verified": bool(other_user.get("verified", False)) if other_user else False,
                 },

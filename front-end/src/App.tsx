@@ -377,7 +377,7 @@ export function App() {
 
         const chat = chats.find(c => c.id === activeChatId);
         if (!chat || !currentUser) {
-            return { chatId: '', name: 'Unknown', username: '', bio: '', avatar: '', online: false };
+            return { chatId: '', name: 'Unknown', username: '', bio: '', avatar: '', online: false, verified: false };
         }
 
         if (chat.otherUser) {
@@ -388,6 +388,7 @@ export function App() {
                 avatar: chat.otherUser.avatar ?? '',
                 bio: chat.otherUser.bio ?? '',
                 online: Boolean(chat.otherUser.online),
+                verified: Boolean((chat.otherUser as any)?.verified),
             };
         }
 
@@ -399,6 +400,7 @@ export function App() {
             bio: '',
             avatar: '',
             online: false,
+            verified: false,
         };
     };
 
