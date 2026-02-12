@@ -54,7 +54,16 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
     if (!isOpen) return null;
 
     return (
-        <div className="modal-overlay" role="dialog" aria-modal="true">
+        <div
+            className="modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                    onClose();
+                }
+            }}
+        >
             <div className="new-chat-modal">
                 <div className="modal-header">
                     <h2>New Chat</h2>
