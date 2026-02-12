@@ -15,7 +15,7 @@ import bcrypt
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from dotenv import load_dotenv
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Iterable
 import traceback
 import asyncio
 import hashlib
@@ -83,6 +83,16 @@ def dt_to_epoch_ms(dt: Any) -> int:
         return int(utc_now().timestamp() * 1000)
 
 
+async def jwt_encode_async(payload: dict) -> str:
+    # Offload JWT crypto to a worker thread.
+    return await asyncio.to_thread(jwt.encode, payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+async def jwt_decode_async(token: str) -> dict:
+    # Offload JWT crypto to a worker thread.
+    return await asyncio.to_thread(jwt.decode, token, SECRET_KEY, algorithms=[ALGORITHM])
+
+
 async def bcrypt_checkpw_async(password: str, stored_hash: str) -> bool:
     # bcrypt is CPU-bound; run it off the event loop.
     pw = password.encode("utf-8")
@@ -119,20 +129,18 @@ class ChatCreateRequest(BaseModel):
     targetChatId: str
 
 
-def create_access_token(data: dict):
+async def create_access_token(data: dict) -> str:
     to_encode = data.copy()
     expire = utc_now() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return await jwt_encode_async(to_encode)
 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
     try:
-        payload = jwt.decode(
-            credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM]
-        )
+        payload = await jwt_decode_async(credentials.credentials)
         chat_id: Optional[str] = payload.get("chatId")
         if not chat_id:
             raise HTTPException(status_code=401, detail="Invalid token")
@@ -174,7 +182,7 @@ async def login(req: LoginRequest):
     if not ok:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    token = create_access_token({"chatId": user["chatId"]})
+    token = await create_access_token({"chatId": user["chatId"]})
 
     await cl_users.update_one(
         {"chatId": user["chatId"]}, {"$set": {"login.token": token}}
@@ -289,35 +297,65 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
         await cl_chats.find({"participants": my_id}).sort("updatedAt", -1).to_list(50)
     )
 
+    if not chats:
+        return []
+
+    chat_ids = [c["_id"] for c in chats]
+
+    # Resolve other users in one query (avoid N+1 queries)
+    other_ids: List[str] = []
+    for c in chats:
+        other_id = next((pid for pid in c.get("participants", []) if pid != my_id), None)
+        if other_id:
+            other_ids.append(other_id)
+
+    other_users = await cl_users.find({"chatId": {"$in": other_ids}}).to_list(len(other_ids) or 1)
+    user_by_id = {u["chatId"]: u for u in other_users}
+
+    # Compute unread counts in one aggregation (avoid N count_documents)
+    unread_map: Dict[str, int] = {}
+    unread_rows = await cl_messages.aggregate(
+        [
+            {
+                "$match": {
+                    "chatId": {"$in": chat_ids},
+                    "senderId": {"$ne": my_id},
+                    "seenBy": {"$ne": my_id},
+                }
+            },
+            {"$group": {"_id": "$chatId", "count": {"$sum": 1}}},
+        ]
+    ).to_list(len(chat_ids))
+
+    for r in unread_rows:
+        unread_map[str(r.get("_id"))] = int(r.get("count", 0))
+
     result = []
     for chat in chats:
-        other_id = next((pid for pid in chat["participants"] if pid != my_id), None)
-        other_user = await cl_users.find_one({"chatId": other_id})
+        other_id = next((pid for pid in chat.get("participants", []) if pid != my_id), None)
+        other_user = user_by_id.get(other_id) if other_id else None
 
-        unread = await cl_messages.count_documents(
-            {
-                "chatId": chat["_id"],
-                "senderId": {"$ne": my_id},
-                "seenBy": {"$ne": my_id},
-            }
-        )
+        last_msg = chat.get("lastMessage")
+        if isinstance(last_msg, dict) and last_msg.get("timestamp") is not None:
+            last_msg = {**last_msg, "timestamp": dt_to_epoch_ms(last_msg.get("timestamp"))}
 
         result.append(
             {
                 "id": chat["_id"],
-                "participantIds": chat["participants"],
+                "participantIds": chat.get("participants", []),
                 "otherUser": {
                     "name": other_user["profile"]["name"] if other_user else "Unknown",
                     "avatar": other_user["profile"]["avatar"] if other_user else "",
                     "username": (
-                        other_user["profile"]["username"] if other_user else other_id
+                        other_user["profile"]["username"] if other_user else (other_id or "")
                     ),
                     "online": other_user.get("online", False) if other_user else False,
                 },
-                "lastMessage": chat.get("lastMessage"),
-                "unreadCount": unread,
+                "lastMessage": last_msg,
+                "unreadCount": unread_map.get(chat["_id"], 0),
             }
         )
+
     return result
 
 
@@ -347,7 +385,7 @@ async def get_messages(
     # Mark messages as seen by the current user.
     await cl_messages.update_many(
         {"chatId": chat_id, "seenBy": {"$ne": current_user_id}},
-        {"$push": {"seenBy": current_user_id}},
+        {"$addToSet": {"seenBy": current_user_id}},
     )
 
     chat_doc = await cl_chats.find_one({"_id": chat_id}, {"participants": 1})
@@ -389,14 +427,17 @@ async def get_messages(
 
 
 async def safe_send(user_id: str, message: dict):
-    if user_id not in active_connections:
+    conns = list(active_connections.get(user_id, []))
+    if not conns:
         return
 
+    results = await asyncio.gather(
+        *(ws.send_json(message) for ws in conns), return_exceptions=True
+    )
+
     dead_connections: List[WebSocket] = []
-    for ws in active_connections[user_id]:
-        try:
-            await ws.send_json(message)
-        except Exception:
+    for ws, r in zip(conns, results):
+        if isinstance(r, Exception):
             dead_connections.append(ws)
 
     if dead_connections:
@@ -408,6 +449,13 @@ async def safe_send(user_id: str, message: dict):
             active_connections.pop(user_id, None)
 
 
+async def broadcast(user_ids: Iterable[str], payload: dict):
+    # Concurrently send to many users; safe_send handles cleaning dead sockets.
+    await asyncio.gather(
+        *(safe_send(uid, payload) for uid in set(user_ids)), return_exceptions=True
+    )
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
     await websocket.accept()
@@ -415,7 +463,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
     try:
         try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            payload = await jwt_decode_async(token)
             chat_id = payload.get("chatId")
         except Exception:
             await websocket.close(code=1008)
@@ -440,14 +488,14 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
             user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
             contacts_to_notify = set()
             for chat in user_chats:
-                for p in chat["participants"]:
+                for p in chat.get("participants", []):
                     if p != chat_id:
                         contacts_to_notify.add(p)
 
-            for p in contacts_to_notify:
-                await safe_send(
-                    p, {"type": "user_status", "userId": chat_id, "online": True}
-                )
+            await broadcast(
+                contacts_to_notify,
+                {"type": "user_status", "userId": chat_id, "online": True},
+            )
 
         while True:
             try:
@@ -484,8 +532,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     {"$set": {"lastMessage": last_msg, "updatedAt": utc_now()}},
                 )
 
-                participants = await cl_chats.find_one(
+                participants_doc = await cl_chats.find_one(
                     {"_id": chat_id_target}, {"participants": 1}
+                )
+
+                participants = (
+                    participants_doc.get("participants", []) if participants_doc else []
                 )
 
                 if participants:
@@ -502,29 +554,27 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         },
                     }
 
-                    for p in participants["participants"]:
-                        await safe_send(p, msg_payload)
+                    await broadcast(participants, msg_payload)
 
             elif data.get("type") == "seen":
                 chat_id_target = data.get("chatId")
                 if chat_id_target:
                     await cl_messages.update_many(
                         {"chatId": chat_id_target, "seenBy": {"$ne": chat_id}},
-                        {"$push": {"seenBy": chat_id}},
+                        {"$addToSet": {"seenBy": chat_id}},
                     )
 
-                    chat_doc = await cl_chats.find_one({"_id": chat_id_target})
+                    chat_doc = await cl_chats.find_one({"_id": chat_id_target}, {"participants": 1})
                     if chat_doc:
-                        for p in chat_doc["participants"]:
-                            if p != chat_id:
-                                await safe_send(
-                                    p,
-                                    {
-                                        "type": "messages_seen",
-                                        "chatId": chat_id_target,
-                                        "byUserId": chat_id,
-                                    },
-                                )
+                        participants = chat_doc.get("participants", [])
+                        await broadcast(
+                            [p for p in participants if p != chat_id],
+                            {
+                                "type": "messages_seen",
+                                "chatId": chat_id_target,
+                                "byUserId": chat_id,
+                            },
+                        )
 
             elif data.get("type") == "ping":
                 await websocket.send_json({"type": "pong"})
@@ -549,14 +599,14 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
                 contacts_to_notify = set()
                 for chat in user_chats:
-                    for p in chat["participants"]:
+                    for p in chat.get("participants", []):
                         if p != chat_id:
                             contacts_to_notify.add(p)
 
-                for p in contacts_to_notify:
-                    await safe_send(
-                        p, {"type": "user_status", "userId": chat_id, "online": False}
-                    )
+                await broadcast(
+                    contacts_to_notify,
+                    {"type": "user_status", "userId": chat_id, "online": False},
+                )
 
 
 if __name__ == "__main__":
