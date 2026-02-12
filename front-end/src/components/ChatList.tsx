@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';
 import { cx } from '../utils/cx';
+import { EmptyState } from './EmptyState';
 
 interface ChatListProps {
     chats: Chat[];
@@ -148,7 +149,9 @@ export function ChatList({
 
             {/* Chat List */}
             <div className="chat-list__items">
-                {filteredChats.length === 0 ? (
+                {chats.length === 0 ? (
+                    <EmptyState />
+                ) : filteredChats.length === 0 ? (
                     <div className="chat-list__empty">
                         <MessageSquarePlus size={48} strokeWidth={1} />
                         <p>No conversations found</p>

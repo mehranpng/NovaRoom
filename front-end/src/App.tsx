@@ -307,7 +307,7 @@ export function App() {
     return (
         <div className="app">
             {view !== 'profile' && (
-                <div className="app__sidebar">
+                <div className={cx('app__sidebar', view === 'chatRoom' && 'app__sidebar--hidden-mobile')}>
                     <ChatList
                         chats={chats}
                         currentUser={currentUser!}
@@ -334,7 +334,7 @@ export function App() {
             )}
 
             {view !== 'profile' && (
-                <div className={cx('app__main')}>
+                <div className={cx('app__main', view === 'chatList' && 'app__main--hidden-mobile')}>
                     {view === 'chatRoom' && (activeChat || pendingUser) ? (
                         <ChatRoom
                             chatId={activeChat?.id || 'pending'}
