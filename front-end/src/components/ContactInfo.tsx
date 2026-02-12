@@ -2,6 +2,7 @@ import { ArrowLeft, Copy, Check } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
+import { VerifiedBadge } from './VerifiedBadge';
 import { apiFetch } from '../config/api';
 
 interface ContactInfoProps {
@@ -46,6 +47,10 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
                             typeof prev.online === 'boolean'
                                 ? prev.online
                                 : Boolean(exact?.online),
+                        verified:
+                            typeof prev.verified === 'boolean'
+                                ? prev.verified
+                                : Boolean(exact?.verified),
                     }));
                 }
             } catch {
@@ -81,7 +86,13 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
             <div className="contact-info__content">
                 <div className="contact-info__avatar">
                     <Avatar name={resolvedUser.name} size="xl" online={resolvedUser.online} />
-                    <div className="contact-info__name">{resolvedUser.name}</div>
+                    <div
+                        className="contact-info__name"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    >
+                        {resolvedUser.name}
+                        {resolvedUser.verified ? <VerifiedBadge size={16} /> : null}
+                    </div>
                     <div className={resolvedUser.online ? 'contact-info__status contact-info__status--online' : 'contact-info__status'}>
                         {resolvedUser.online ? 'Online' : 'Offline'}
                     </div>

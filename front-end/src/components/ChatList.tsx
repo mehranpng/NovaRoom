@@ -2,6 +2,7 @@ import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut } from 'lucid
 import { useEffect, useRef, useState } from 'react';
 import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';
+import { VerifiedBadge } from './VerifiedBadge';
 import { cx } from '../utils/cx';
 import { EmptyState } from './EmptyState';
 
@@ -146,6 +147,7 @@ export function ChatList({
                 chatId: chat.participantIds.find(id => id !== currentUser.chatId) || '',
                 // Make sure online is always boolean so Avatar renders the status dot.
                 online: typeof chat.otherUser.online === 'boolean' ? chat.otherUser.online : false,
+                verified: Boolean((chat.otherUser as any)?.verified),
             };
         }
 
@@ -156,7 +158,8 @@ export function ChatList({
             username: contactId.toLowerCase(),
             bio: '',
             avatar: '',
-            online: false
+            online: false,
+            verified: false,
         };
     };
 
@@ -254,7 +257,13 @@ export function ChatList({
                                 <Avatar name={contact.name} size="md" online={contact.online} />
                                 <div className="chat-list__item-content">
                                     <div className="chat-list__item-row">
-                                        <span className="chat-list__item-name">{contact.name}</span>
+                                        <span
+                                            className="chat-list__item-name"
+                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                                        >
+                                            {contact.name}
+                                            {contact.verified ? <VerifiedBadge size={14} /> : null}
+                                        </span>
                                         {chat.lastMessage && (
                                             <span className="chat-list__item-time">
                                                 {formatTime(chat.lastMessage.timestamp)}

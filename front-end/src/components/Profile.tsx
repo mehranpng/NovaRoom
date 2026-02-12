@@ -2,6 +2,7 @@ import { ArrowLeft, Copy, Check, Pencil, X, Save } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
+import { VerifiedBadge } from './VerifiedBadge';
 import { cx } from '../utils/cx';
 import { apiFetch } from '../config/api';
 
@@ -160,7 +161,13 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                 {/* Avatar & Name Section */}
                 <div className="profile__avatar-section">
                     <Avatar name={user.name} size="xl" online={true} />
-                    <h2 className="profile__name">{user.name}</h2>
+                    <h2
+                        className="profile__name"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    >
+                        {user.name}
+                        {user.verified ? <VerifiedBadge size={16} /> : null}
+                    </h2>
                     <p className="profile__username-display">@{user.username}</p>
                     <span className="profile__online-badge">
                         <span className="profile__online-dot" />
@@ -205,7 +212,10 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                             />
                         ) : (
                             <div className="profile__field-static">
-                                <p>{user.name}</p>
+                                <p style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                    {user.name}
+                                    {user.verified ? <VerifiedBadge size={14} /> : null}
+                                </p>
                             </div>
                         )}
                     </div>

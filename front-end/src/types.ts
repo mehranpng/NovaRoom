@@ -5,6 +5,7 @@ export interface User {
     bio: string;
     avatar: string;
     online: boolean;
+    verified?: boolean;
 }
 
 export interface MessageReply {

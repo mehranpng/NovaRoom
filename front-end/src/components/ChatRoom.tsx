@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Trash2, X } from 'lucide-react';
 import type { Message, MessageReply as MessageReplyType, User } from '../types';
 import { Avatar } from './Avatar';
+import { VerifiedBadge } from './VerifiedBadge';
 import { apiFetch } from '../config/api';
 import { ContactInfo } from './ContactInfo';
 
@@ -485,7 +486,13 @@ export function ChatRoom({
                 >
                     <Avatar name={contact.name} size="sm" online={contact.online} />
                     <div className="chat-room__header-info">
-                        <div className="chat-room__contact-name">{contact.name}</div>
+                        <div
+                            className="chat-room__contact-name"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        >
+                            {contact.name}
+                            {contact.verified ? <VerifiedBadge size={14} /> : null}
+                        </div>
                         <div
                             className={
                                 contact.online

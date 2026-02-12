@@ -137,6 +137,7 @@ class UserSearchResult(BaseModel):
     avatar: str
     bio: str
     online: bool
+    verified: bool = False
 
 
 class ChatCreateRequest(BaseModel):
@@ -211,6 +212,7 @@ async def login(req: LoginRequest):
             "bio": user["profile"]["bio"],
             "avatar": user["profile"]["avatar"],
             "online": user.get("online", False),
+            "verified": bool(user.get("verified", False)),
         },
     }
 
@@ -224,6 +226,7 @@ async def get_profile(current_user: dict = Depends(get_current_user)):
         "bio": current_user["profile"]["bio"],
         "avatar": current_user["profile"]["avatar"],
         "online": current_user.get("online", False),
+        "verified": bool(current_user.get("verified", False)),
     }
 
 
@@ -319,6 +322,7 @@ async def search_users(
             "avatar": u["profile"]["avatar"],
             "bio": u["profile"]["bio"],
             "online": u.get("online", False),
+            "verified": bool(u.get("verified", False)),
         }
         for u in users
     ]
@@ -410,6 +414,7 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                         other_user["profile"]["username"] if other_user else (other_id or "")
                     ),
                     "online": other_user.get("online", False) if other_user else False,
+                    "verified": bool(other_user.get("verified", False)) if other_user else False,
                 },
                 "lastMessage": last_msg,
                 "unreadCount": unread_map.get(chat["_id"], 0),
