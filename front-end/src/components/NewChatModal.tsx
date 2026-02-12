@@ -77,7 +77,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
                     <input
                         ref={inputRef}
                         type="text"
-                        placeholder="Search by username or name..."
+                        placeholder="Search by username or Chat ID..."
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onFocus={() => {

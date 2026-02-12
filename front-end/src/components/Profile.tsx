@@ -1,14 +1,17 @@
 import { ArrowLeft, Copy, Check, Pencil, X, Save } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
 import { cx } from '../utils/cx';
+import { apiFetch } from '../config/api';
 
 interface ProfileProps {
   user: User;
   onBack: () => void;
   onUpdateProfile: (updates: Partial<Pick<User, 'name' | 'username' | 'bio'>>) => void;
 }
+
+type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
 export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
   const [isEditing, setIsEditing] = useState(false);
@@ -17,16 +20,81 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
   const [bio, setBio] = useState(user.bio);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
+  const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
+  const [usernameHint, setUsernameHint] = useState<string>('');
+  const checkTimerRef = useRef<number | null>(null);
+
   const handleCopy = (text: string, field: string) => {
     navigator.clipboard.writeText(text).catch(() => {});
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 2000);
   };
 
+  useEffect(() => {
+    if (!isEditing) {
+      setUsernameStatus('idle');
+      setUsernameHint('');
+      return;
+    }
+
+    const trimmed = username.trim();
+
+    if (!trimmed) {
+      setUsernameStatus('invalid');
+      setUsernameHint('Username is required.');
+      return;
+    }
+
+    if (trimmed.length > 32) {
+      setUsernameStatus('invalid');
+      setUsernameHint('Max 32 characters.');
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
+      setUsernameStatus('invalid');
+      setUsernameHint('Only letters, numbers, and underscore.');
+      return;
+    }
+
+    // If user keeps their current username, it is always allowed.
+    if (trimmed.toLowerCase() === user.username.toLowerCase()) {
+      setUsernameStatus('available');
+      setUsernameHint('');
+      return;
+    }
+
+    setUsernameStatus('checking');
+    setUsernameHint('Checking...');
+
+    if (checkTimerRef.current) window.clearTimeout(checkTimerRef.current);
+    checkTimerRef.current = window.setTimeout(async () => {
+      try {
+        const res = await apiFetch(`/users/username-available?username=${encodeURIComponent(trimmed)}`);
+        if (res?.available) {
+          setUsernameStatus('available');
+          setUsernameHint('Username is available.');
+        } else {
+          setUsernameStatus('taken');
+          setUsernameHint('This username is already taken.');
+        }
+      } catch {
+        setUsernameStatus('invalid');
+        setUsernameHint('Could not check username.');
+      }
+    }, 350);
+
+    return () => {
+      if (checkTimerRef.current) window.clearTimeout(checkTimerRef.current);
+    };
+  }, [username, isEditing, user.username]);
+
   const handleSave = () => {
     const trimmedName = name.trim();
     const trimmedUsername = username.trim();
     if (!trimmedName || !trimmedUsername) return;
+    if (usernameStatus !== 'available') return;
+
     onUpdateProfile({
       name: trimmedName,
       username: trimmedUsername,
@@ -40,7 +108,11 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
     setUsername(user.username);
     setBio(user.bio);
     setIsEditing(false);
+    setUsernameStatus('idle');
+    setUsernameHint('');
   };
+
+  const canSave = isEditing && !!name.trim() && !!username.trim() && usernameStatus === 'available';
 
   return (
     <div className="profile">
@@ -62,7 +134,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
               <X size={14} />
               Cancel
             </button>
-            <button onClick={handleSave} className="profile__save-btn">
+            <button onClick={handleSave} className="profile__save-btn" disabled={!canSave}>
               <Save size={14} />
               Save
             </button>
@@ -126,16 +198,34 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
           <div className="profile__field-group">
             <label className="profile__field-label">Username</label>
             {isEditing ? (
-              <div className="profile__username-wrapper">
-                <span className="profile__username-at">@</span>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
-                  className="profile__field-input profile__field-input--username"
-                  placeholder="username"
-                  maxLength={30}
-                />
+              <div>
+                <div className="profile__username-wrapper">
+                  <span className="profile__username-at">@</span>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                    className="profile__field-input profile__field-input--username"
+                    placeholder="username"
+                    maxLength={32}
+                  />
+                </div>
+                {!!usernameHint && (
+                  <div
+                    style={{
+                      marginTop: 6,
+                      fontSize: 12,
+                      color:
+                        usernameStatus === 'available'
+                          ? '#16a34a'
+                          : usernameStatus === 'taken' || usernameStatus === 'invalid'
+                            ? '#dc2626'
+                            : '#6b7280',
+                    }}
+                  >
+                    {usernameHint}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="profile__field-static profile__field-static--with-copy">

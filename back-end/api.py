@@ -20,6 +20,7 @@ import traceback
 import asyncio
 import hashlib
 from bson import ObjectId
+import re
 
 load_dotenv()
 
@@ -82,6 +83,18 @@ def dt_to_epoch_ms(dt: Any) -> int:
         return int(float(dt))
     except Exception:
         return int(utc_now().timestamp() * 1000)
+
+
+def normalize_username(value: Optional[str]) -> str:
+    return (value or "").strip()
+
+
+def validate_username(value: str) -> bool:
+    if not value:
+        return False
+    if len(value) > 32:
+        return False
+    return bool(re.fullmatch(r"[A-Za-z0-9_]+", value))
 
 
 async def jwt_encode_async(payload: dict) -> str:
@@ -221,8 +234,29 @@ async def update_profile(
     update_data = {}
     if updates.name:
         update_data["profile.name"] = updates.name
+
     if updates.username:
-        update_data["profile.username"] = updates.username
+        desired = normalize_username(updates.username)
+        if not validate_username(desired):
+            raise HTTPException(status_code=400, detail="Invalid username")
+
+        my_un = normalize_username(current_user.get("profile", {}).get("username"))
+        if my_un.lower() != desired.lower():
+            exists = await cl_users.find_one(
+                {
+                    "profile.username": {
+                        "$regex": f"^{re.escape(desired)}$",
+                        "$options": "i",
+                    },
+                    "chatId": {"$ne": current_user["chatId"]},
+                },
+                {"_id": 1},
+            )
+            if exists:
+                raise HTTPException(status_code=409, detail="Username already taken")
+
+        update_data["profile.username"] = desired
+
     if updates.bio is not None:
         update_data["profile.bio"] = updates.bio
 
@@ -231,6 +265,30 @@ async def update_profile(
             {"chatId": current_user["chatId"]}, {"$set": update_data}
         )
     return {"message": "Profile updated"}
+
+
+@app.get("/users/username-available")
+async def username_available(
+    username: str = Query(..., min_length=1, max_length=32),
+    current_user: dict = Depends(get_current_user),
+):
+    desired = normalize_username(username)
+    if not validate_username(desired):
+        return {"available": False}
+
+    my_un = normalize_username(current_user.get("profile", {}).get("username"))
+    if my_un and my_un.lower() == desired.lower():
+        return {"available": True}
+
+    exists = await cl_users.find_one(
+        {
+            "profile.username": {"$regex": f"^{re.escape(desired)}$", "$options": "i"},
+            "chatId": {"$ne": current_user["chatId"]},
+        },
+        {"_id": 1},
+    )
+
+    return {"available": not bool(exists)}
 
 
 @app.get("/users/search", response_model=List[UserSearchResult])
@@ -243,7 +301,7 @@ async def search_users(
             {
                 "$or": [
                     {"profile.username": {"$regex": query, "$options": "i"}},
-                    {"profile.name": {"$regex": query, "$options": "i"}},
+                    {"chatId": {"$regex": query, "$options": "i"}},
                 ],
                 "chatId": {"$ne": current_user["chatId"]},
             }
