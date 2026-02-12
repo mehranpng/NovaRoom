@@ -15,7 +15,7 @@ import bcrypt
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from dotenv import load_dotenv
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import traceback
 import asyncio
 import hashlib
@@ -60,7 +60,7 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def dt_to_epoch_ms(dt: any) -> int:
+def dt_to_epoch_ms(dt: Any) -> int:
     if dt is None:
         return int(utc_now().timestamp() * 1000)
 
@@ -81,6 +81,13 @@ def dt_to_epoch_ms(dt: any) -> int:
         return int(float(dt))
     except Exception:
         return int(utc_now().timestamp() * 1000)
+
+
+async def bcrypt_checkpw_async(password: str, stored_hash: str) -> bool:
+    # bcrypt is CPU-bound; run it off the event loop.
+    pw = password.encode("utf-8")
+    sh = stored_hash.encode("utf-8")
+    return await asyncio.to_thread(bcrypt.checkpw, pw, sh)
 
 
 class LoginRequest(BaseModel):
@@ -163,7 +170,8 @@ async def login(req: LoginRequest):
     if not stored_hash or not isinstance(stored_hash, str):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    if not bcrypt.checkpw(req.password.encode("utf-8"), stored_hash.encode("utf-8")):
+    ok = await bcrypt_checkpw_async(req.password, stored_hash)
+    if not ok:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = create_access_token({"chatId": user["chatId"]})
