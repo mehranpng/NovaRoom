@@ -30,20 +30,27 @@ function normalizeTs(ts: any): number {
     return Date.now();
 }
 
-function formatMessageTime(ts: any) {
+function toIranDate(ts: any): Date {
+    // Force a Date instance whose clock time matches Tehran for formatting purposes.
     const t = normalizeTs(ts);
-    return new Date(t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const tzDateStr = new Date(t).toLocaleString('en-US', { timeZone: 'Asia/Tehran' });
+    return new Date(tzDateStr);
+}
+
+function formatMessageTime(ts: any) {
+    const d = toIranDate(ts);
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 function sameDay(a: any, b: any) {
-    const da = new Date(normalizeTs(a));
-    const db = new Date(normalizeTs(b));
+    const da = toIranDate(a);
+    const db = toIranDate(b);
     return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
 }
 
 function formatDayLabel(ts: any) {
-    const d = new Date(normalizeTs(ts));
-    const now = new Date();
+    const d = toIranDate(ts);
+    const now = toIranDate(Date.now());
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const thatDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
     const diffDays = Math.round((today - thatDay) / (1000 * 60 * 60 * 24));
@@ -77,6 +84,10 @@ export function ChatRoom({
 
     const menuRef = useRef<HTMLDivElement | null>(null);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
+    const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+
+    // Remember scroll position per chat (so going to ContactInfo and back doesn't jump)
+    const scrollPositionsRef = useRef<Record<string, number>>({});
 
     const canDelete = chatId !== 'pending';
 
@@ -108,8 +119,16 @@ export function ChatRoom({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
 
-    // When messages change, keep it pinned to bottom
+    // When messages change, keep it pinned to bottom, unless user has scrolled up.
     useEffect(() => {
+        const container = messagesContainerRef.current;
+        if (!container) return;
+
+        const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+        const nearBottom = distanceFromBottom < 120;
+
+        if (!nearBottom) return;
+
         const raf = requestAnimationFrame(() => scrollToBottom(true));
         return () => cancelAnimationFrame(raf);
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -156,8 +175,26 @@ export function ChatRoom({
         }
     };
 
+    const rememberScroll = () => {
+        const container = messagesContainerRef.current;
+        if (!container) return;
+        scrollPositionsRef.current[chatId] = container.scrollTop;
+    };
+
+    const restoreScroll = () => {
+        const container = messagesContainerRef.current;
+        if (!container) return;
+        const saved = scrollPositionsRef.current[chatId];
+        if (typeof saved === 'number') {
+            container.scrollTop = saved;
+        } else {
+            // first time: default to bottom
+            scrollToBottom(false);
+        }
+    };
+
     if (showContactInfo) {
-        return <ContactInfo user={contact} onBack={() => setShowContactInfo(false)} />;
+        return <ContactInfo user={contact} onBack={() => { setShowContactInfo(false); requestAnimationFrame(() => restoreScroll()); }} />;
     }
 
     return (
@@ -173,7 +210,7 @@ export function ChatRoom({
 
                 <button
                     className="chat-room__header-clickable chat-room__header-clickable--full"
-                    onClick={() => setShowContactInfo(true)}
+                    onClick={() => { rememberScroll(); setShowContactInfo(true); }}
                     aria-label="Open contact info"
                     type="button"
                 >
@@ -213,7 +250,7 @@ export function ChatRoom({
                 </div>
             </div>
 
-            <div className="chat-room__messages">
+            <div className="chat-room__messages" ref={messagesContainerRef} onScroll={rememberScroll}>
                 <div className="chat-room__messages-inner">
                     {items.map(({ m, isMine, dayBreak, shape }) => (
                         <div key={m.id}>

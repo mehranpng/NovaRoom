@@ -15,15 +15,29 @@ interface ChatListProps {
     onLogout: () => void;
 }
 
-function formatTime(timestamp: any): string {
-    const ts = typeof timestamp === 'string'
-        ? new Date(timestamp).getTime()
-        : typeof timestamp === 'number'
-            ? timestamp
-            : Date.now();
+function normalizeTs(ts: any): number {
+    if (ts == null) return Date.now();
+    if (typeof ts === 'string') {
+        const n = Date.parse(ts);
+        return Number.isFinite(n) ? n : Date.now();
+    }
+    if (typeof ts === 'number') {
+        return ts < 1_000_000_000_000 ? ts * 1000 : ts;
+    }
+    if (ts instanceof Date) return ts.getTime();
+    return Date.now();
+}
 
-    const now = new Date();
-    const date = new Date(ts);
+function toIranDate(ts: any): Date {
+    // Force a Date instance whose clock time matches Tehran for formatting purposes.
+    const t = normalizeTs(ts);
+    const tzDateStr = new Date(t).toLocaleString('en-US', { timeZone: 'Asia/Tehran' });
+    return new Date(tzDateStr);
+}
+
+function formatTime(timestamp: any): string {
+    const now = toIranDate(Date.now());
+    const date = toIranDate(timestamp);
     const diff = now.getTime() - date.getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
@@ -90,6 +104,8 @@ export function ChatList({
         );
     });
 
+    const hasActiveChat = Boolean(activeChatId);
+
     return (
         <div className="chat-list">
             {/* Header */}
@@ -150,7 +166,11 @@ export function ChatList({
             {/* Chat List */}
             <div className="chat-list__items">
                 {chats.length === 0 ? (
-                    <EmptyState />
+                    // Desktop: right pane (EmptyState) is enough; show this inside list only on mobile.
+                    // We also hide it when a chat is active to avoid visual duplication.
+                    <div className="chat-list__empty-mobile-only" style={{ display: hasActiveChat ? 'none' : undefined }}>
+                        <EmptyState />
+                    </div>
                 ) : filteredChats.length === 0 ? (
                     <div className="chat-list__empty">
                         <MessageSquarePlus size={48} strokeWidth={1} />
