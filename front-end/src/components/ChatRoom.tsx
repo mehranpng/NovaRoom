@@ -100,10 +100,22 @@ export function ChatRoom({
     const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number }>(null);
 
     const menuRef = useRef<HTMLDivElement | null>(null);
+    const msgMenuRef = useRef<HTMLDivElement | null>(null);
+
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const messagesContainerRef = useRef<HTMLDivElement | null>(null);
     const roomRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
+
+    const messageElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+    const [highlightId, setHighlightId] = useState<string | null>(null);
+    const highlightTimeoutRef = useRef<number | null>(null);
+
+    const [dragState, setDragState] = useState<{ id: string | null; x: number; active: boolean }>({
+        id: null,
+        x: 0,
+        active: false,
+    });
 
     const [newMsgCount, setNewMsgCount] = useState(0);
     const isAtBottomRef = useRef(true);
@@ -112,11 +124,22 @@ export function ChatRoom({
     const initialScrollDoneRef = useRef(false);
     const lastChatIdRef = useRef<string | null>(null);
 
-    const swipeRef = useRef<{ id: string | null; startX: number; startY: number; active: boolean }>({
+    const swipeRef = useRef<{
+        id: string | null;
+        startX: number;
+        startY: number;
+        active: boolean;
+        captured: boolean;
+        pointerId: number | null;
+        blockClickUntil: number;
+    }>({
         id: null,
         startX: 0,
         startY: 0,
         active: false,
+        captured: false,
+        pointerId: null,
+        blockClickUntil: 0,
     });
 
     const canDeleteChat = chatId !== 'pending';
@@ -134,16 +157,35 @@ export function ChatRoom({
         return distanceFromBottom < 120;
     };
 
+    const scrollToMessage = (messageId: string) => {
+        const el = messageElsRef.current.get(messageId);
+        if (!el) return;
+
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setHighlightId(messageId);
+
+        if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
+        highlightTimeoutRef.current = window.setTimeout(() => setHighlightId(null), 1000);
+    };
+
     // Close menus when clicking outside
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
-            if (menuRef.current && menuRef.current.contains(e.target as Node)) return;
+            const target = e.target as Node;
+            if (menuRef.current && menuRef.current.contains(target)) return;
+            if (msgMenuRef.current && msgMenuRef.current.contains(target)) return;
             setChatMenuOpen(false);
             setMsgMenu(null);
         };
 
         document.addEventListener('mousedown', onDocClick);
         return () => document.removeEventListener('mousedown', onDocClick);
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
+        };
     }, []);
 
     // Reset per-chat scroll state
@@ -224,7 +266,6 @@ export function ChatRoom({
 
             return {
                 m,
-                idx,
                 isMine,
                 dayBreak,
                 shape: bubbleShape(prevSameSender, nextSameSender),
@@ -307,7 +348,7 @@ export function ChatRoom({
         );
     }
 
-    const activeMsg = msgMenu ? messages.find(mm => mm.id === msgMenu.id) : null;
+    const activeMsg = msgMenu ? messages.find((mm) => mm.id === msgMenu.id) : null;
     const activeMsgIsMine = activeMsg ? activeMsg.senderId === currentUserId : false;
 
     return (
@@ -345,7 +386,7 @@ export function ChatRoom({
                 <div className="chat-room__header-actions" ref={menuRef}>
                     <button
                         className="icon-btn"
-                        onClick={() => setChatMenuOpen(v => !v)}
+                        onClick={() => setChatMenuOpen((v) => !v)}
                         aria-label="More"
                         disabled={!canDeleteChat}
                         style={!canDeleteChat ? { opacity: 0.4, cursor: 'default' } : undefined}
@@ -374,103 +415,188 @@ export function ChatRoom({
 
             <div className="chat-room__messages" ref={messagesContainerRef} onScroll={onMessagesScroll}>
                 <div className="chat-room__messages-inner">
-                    {items.map(({ m, isMine, dayBreak, shape }) => (
-                        <div key={m.id}>
-                            {dayBreak && (
-                                <div className="chat-room__date-separator">
-                                    <div className="chat-room__date-label">{formatDayLabel(m.timestamp)}</div>
-                                </div>
-                            )}
+                    {items.map(({ m, isMine, dayBreak, shape }) => {
+                        const isHighlighted = highlightId === m.id;
+                        const dragX = dragState.id === m.id ? dragState.x : 0;
+                        const dragActive = dragState.id === m.id ? dragState.active : false;
 
-                            <div
-                                className={isMine ? 'message-row message-row--mine' : 'message-row message-row--theirs'}
-                                onTouchStart={(e) => {
-                                    const t = e.touches[0];
-                                    swipeRef.current = { id: m.id, startX: t.clientX, startY: t.clientY, active: true };
-                                }}
-                                onTouchMove={(e) => {
-                                    if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
-                                    const t = e.touches[0];
-                                    const dx = t.clientX - swipeRef.current.startX;
-                                    const dy = t.clientY - swipeRef.current.startY;
+                        return (
+                            <div key={m.id}>
+                                {dayBreak && (
+                                    <div className="chat-room__date-separator">
+                                        <div className="chat-room__date-label">{formatDayLabel(m.timestamp)}</div>
+                                    </div>
+                                )}
 
-                                    // Right-to-left swipe => dx negative. Avoid triggering on vertical scroll.
-                                    if (Math.abs(dx) < 25 || Math.abs(dx) < Math.abs(dy)) return;
-                                    // prevent page scroll when swipe is clear
-                                    e.preventDefault();
-                                }}
-                                onTouchEnd={(e) => {
-                                    if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
-                                    swipeRef.current.active = false;
-                                    const changed = e.changedTouches[0];
-                                    const dx = changed.clientX - swipeRef.current.startX;
-                                    const dy = changed.clientY - swipeRef.current.startY;
-
-                                    if (dx < -60 && Math.abs(dx) > Math.abs(dy)) {
-                                        beginReply(m);
-                                    }
-                                }}
-                            >
                                 <div
-                                    className={
-                                        isMine
-                                            ? `message-bubble message-bubble--mine ${shape}`
-                                            : `message-bubble message-bubble--theirs ${shape}`
-                                    }
-                                    onClick={(e) => {
-                                        openMessageMenu(m.id, e.currentTarget);
+                                    className={isMine ? 'message-row message-row--mine' : 'message-row message-row--theirs'}
+                                    onPointerDown={(e) => {
+                                        if (e.pointerType === 'mouse' && e.button !== 0) return;
+                                        swipeRef.current = {
+                                            id: m.id,
+                                            startX: e.clientX,
+                                            startY: e.clientY,
+                                            active: true,
+                                            captured: false,
+                                            pointerId: e.pointerId,
+                                            blockClickUntil: swipeRef.current.blockClickUntil,
+                                        };
                                     }}
-                                    role="button"
-                                    tabIndex={0}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') openMessageMenu(m.id, e.currentTarget as any);
+                                    onPointerMove={(e) => {
+                                        if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+
+                                        const dx = e.clientX - swipeRef.current.startX;
+                                        const dy = e.clientY - swipeRef.current.startY;
+
+                                        if (!swipeRef.current.captured) {
+                                            if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy)) return;
+                                            if (dx <= 0) return; // left-to-right only
+
+                                            swipeRef.current.captured = true;
+                                            try {
+                                                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                                            } catch {
+                                                // ignore
+                                            }
+                                        }
+
+                                        if (!swipeRef.current.captured) return;
+
+                                        e.preventDefault();
+                                        const x = Math.max(0, Math.min(72, dx));
+                                        setDragState({ id: m.id, x, active: true });
                                     }}
-                                    style={{ cursor: 'pointer' }}
+                                    onPointerUp={(e) => {
+                                        if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+
+                                        const dx = e.clientX - swipeRef.current.startX;
+                                        const dy = e.clientY - swipeRef.current.startY;
+
+                                        if (swipeRef.current.captured) {
+                                            swipeRef.current.blockClickUntil = Date.now() + 280;
+                                        }
+
+                                        if (dx > 60 && Math.abs(dx) > Math.abs(dy)) {
+                                            beginReply(m);
+                                        }
+
+                                        setDragState({ id: m.id, x: 0, active: false });
+                                        window.setTimeout(() => {
+                                            setDragState((s) => (s.id === m.id ? { id: null, x: 0, active: false } : s));
+                                        }, 140);
+
+                                        swipeRef.current.active = false;
+                                        swipeRef.current.captured = false;
+                                        swipeRef.current.pointerId = null;
+                                    }}
+                                    onPointerCancel={() => {
+                                        if (swipeRef.current.id !== m.id) return;
+                                        setDragState({ id: m.id, x: 0, active: false });
+                                        window.setTimeout(() => {
+                                            setDragState((s) => (s.id === m.id ? { id: null, x: 0, active: false } : s));
+                                        }, 140);
+                                        swipeRef.current.active = false;
+                                        swipeRef.current.captured = false;
+                                        swipeRef.current.pointerId = null;
+                                    }}
                                 >
-                                    {m.replyTo && (
-                                        <div
-                                            style={{
-                                                marginBottom: 6,
-                                                padding: '6px 10px',
-                                                borderRadius: 12,
-                                                background: isMine ? 'rgba(255,255,255,0.12)' : '#f3f4f6',
-                                                borderLeft: isMine ? '3px solid rgba(255,255,255,0.55)' : '3px solid #3b82f6',
-                                            }}
-                                        >
-                                            <div style={{ fontSize: 12, opacity: isMine ? 0.9 : 0.7, fontWeight: 600 }}>
-                                                Reply
+                                    <div
+                                        ref={(el) => {
+                                            if (!el) {
+                                                messageElsRef.current.delete(m.id);
+                                                return;
+                                            }
+                                            messageElsRef.current.set(m.id, el);
+                                        }}
+                                        className={
+                                            isMine
+                                                ? `message-bubble message-bubble--mine ${shape}`
+                                                : `message-bubble message-bubble--theirs ${shape}`
+                                        }
+                                        onClick={(e) => {
+                                            if (Date.now() < swipeRef.current.blockClickUntil) return;
+                                            openMessageMenu(m.id, e.currentTarget);
+                                        }}
+                                        role="button"
+                                        tabIndex={0}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') openMessageMenu(m.id, e.currentTarget as any);
+                                        }}
+                                        style={{
+                                            cursor: 'pointer',
+                                            transform: `translateX(${dragX}px)`,
+                                            transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 180ms ease-out',
+                                            boxShadow: isHighlighted
+                                                ? isMine
+                                                    ? '0 0 0 3px rgba(191, 219, 254, 0.35)'
+                                                    : '0 0 0 3px rgba(59, 130, 246, 0.25)'
+                                                : undefined,
+                                        }}
+                                    >
+                                        {m.replyTo && (
+                                            <div
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    scrollToMessage(m.replyTo!.id);
+                                                }}
+                                                role="button"
+                                                tabIndex={0}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') scrollToMessage(m.replyTo!.id);
+                                                }}
+                                                style={{
+                                                    marginBottom: 6,
+                                                    padding: '6px 10px',
+                                                    borderRadius: 12,
+                                                    background: isMine ? 'rgba(255,255,255,0.12)' : '#f3f4f6',
+                                                    borderLeft: isMine ? '3px solid rgba(255,255,255,0.55)' : '3px solid #3b82f6',
+                                                    cursor: 'pointer',
+                                                }}
+                                            >
+                                                <div style={{ fontSize: 12, opacity: isMine ? 0.9 : 0.7, fontWeight: 600 }}>
+                                                    Reply
+                                                </div>
+                                                <div
+                                                    style={{
+                                                        fontSize: 13,
+                                                        opacity: isMine ? 0.95 : 0.85,
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                        whiteSpace: 'nowrap',
+                                                    }}
+                                                >
+                                                    {m.replyTo.text}
+                                                </div>
                                             </div>
-                                            <div style={{ fontSize: 13, opacity: isMine ? 0.95 : 0.85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                {m.replyTo.text}
-                                            </div>
+                                        )}
+
+                                        <div className="message-text">{m.text}</div>
+
+                                        <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
+                                            <span className="message-time">{formatMessageTime(m.timestamp)}</span>
+                                            {m.edited && (
+                                                <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>
+                                                    edited
+                                                </span>
+                                            )}
+                                            {isMine && (
+                                                <span className={m.seen ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
+                                                    {m.seen ? '✓✓' : '✓'}
+                                                </span>
+                                            )}
                                         </div>
-                                    )}
-
-                                    <div className="message-text">{m.text}</div>
-
-                                    <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
-                                        <span className="message-time">{formatMessageTime(m.timestamp)}</span>
-                                        {m.edited && (
-                                            <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>
-                                                edited
-                                            </span>
-                                        )}
-                                        {isMine && (
-                                            <span className={m.seen ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
-                                                {m.seen ? '✓✓' : '✓'}
-                                            </span>
-                                        )}
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                     <div ref={messagesEndRef} />
                 </div>
             </div>
 
             {msgMenu && activeMsg && (
                 <div
+                    ref={msgMenuRef}
                     className="popover popover--mini"
                     style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
                     onClick={(e) => e.stopPropagation()}
@@ -486,7 +612,11 @@ export function ChatRoom({
                         </button>
                     )}
                     {activeMsgIsMine && (
-                        <button className="popover__item popover__item--danger" onClick={() => doDeleteMessage(activeMsg)} type="button">
+                        <button
+                            className="popover__item popover__item--danger"
+                            onClick={() => doDeleteMessage(activeMsg)}
+                            type="button"
+                        >
                             <Trash2 size={16} />
                             Delete
                         </button>
@@ -556,7 +686,16 @@ export function ChatRoom({
                                 {editingId ? 'Editing message' : 'Replying'}
                             </div>
                             {!editingId && replyTo && (
-                                <div style={{ fontSize: 13, color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 520 }}>
+                                <div
+                                    style={{
+                                        fontSize: 13,
+                                        color: '#6b7280',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                        maxWidth: 520,
+                                    }}
+                                >
                                     {replyTo.text}
                                 </div>
                             )}
@@ -593,7 +732,9 @@ export function ChatRoom({
                     />
                     <button
                         className={
-                            text.trim() ? 'chat-room__send-btn chat-room__send-btn--active' : 'chat-room__send-btn chat-room__send-btn--disabled'
+                            text.trim()
+                                ? 'chat-room__send-btn chat-room__send-btn--active'
+                                : 'chat-room__send-btn chat-room__send-btn--disabled'
                         }
                         onClick={submit}
                         disabled={!text.trim()}
