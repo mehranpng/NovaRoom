@@ -21,6 +21,7 @@ import asyncio
 import hashlib
 from bson import ObjectId
 import re
+from ai_service import generate_ai_response
 
 load_dotenv()
 
@@ -51,6 +52,7 @@ db = client["Messenger"]
 cl_users = db["users"]
 cl_chats = db["chats"]
 cl_messages = db["messages"]
+cl_ai_messages = db["ai_messages"]
 
 # Store active connections (multiple tabs/devices per user)
 active_connections: Dict[str, List[WebSocket]] = {}
@@ -181,6 +183,8 @@ async def startup_db():
     await cl_chats.create_index([("updatedAt", -1)])
     await cl_messages.create_index("chatId")
     await cl_messages.create_index([("chatId", 1), ("timestamp", -1)])
+    await cl_ai_messages.create_index("userId")
+    await cl_ai_messages.create_index([("userId", 1), ("timestamp", -1)])
 
 
 @app.post("/auth/login", response_model=TokenResponse)
@@ -813,6 +817,124 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     contacts_to_notify,
                     {"type": "user_status", "userId": chat_id, "online": False},
                 )
+
+
+@app.websocket("/ws/ai")
+async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
+    await websocket.accept()
+    user_id: Optional[str] = None
+
+    try:
+        try:
+            payload = await jwt_decode_async(token)
+            user_id = payload.get("chatId")
+        except Exception:
+            await websocket.close(code=1008)
+            return
+
+        if not user_id:
+            await websocket.close(code=1008)
+            return
+
+        user = await cl_users.find_one({"chatId": user_id})
+        if not user:
+            await websocket.close(code=1008)
+            return
+
+        user_name = user.get("profile", {}).get("name", "")
+
+        while True:
+            try:
+                data = await websocket.receive_json()
+            except ValueError:
+                continue
+
+            if data.get("type") == "ai_message":
+                text = data.get("text")
+                
+                if not isinstance(text, str) or not text.strip():
+                    continue
+
+                # Save user message
+                user_message_doc = {
+                    "userId": user_id,
+                    "role": "user",
+                    "content": text,
+                    "timestamp": utc_now(),
+                }
+                await cl_ai_messages.insert_one(user_message_doc)
+
+                # Get conversation history (last 20 messages)
+                history_docs = (
+                    await cl_ai_messages.find({"userId": user_id})
+                    .sort("timestamp", -1)
+                    .limit(20)
+                    .to_list(20)
+                )
+                history_docs.reverse()
+
+                # Prepare messages for AI
+                messages = [
+                    {"role": doc["role"], "content": doc["content"]}
+                    for doc in history_docs
+                ]
+
+                # Generate AI response
+                ai_response = await generate_ai_response(messages, user_name)
+
+                # Save AI response
+                ai_message_doc = {
+                    "userId": user_id,
+                    "role": "assistant",
+                    "content": ai_response,
+                    "timestamp": utc_now(),
+                }
+                result = await cl_ai_messages.insert_one(ai_message_doc)
+                ai_msg_id = str(result.inserted_id)
+
+                # Send response back to user
+                await websocket.send_json({
+                    "type": "ai_response",
+                    "message": {
+                        "id": ai_msg_id,
+                        "senderId": "ai",
+                        "text": ai_response,
+                        "timestamp": dt_to_epoch_ms(ai_message_doc["timestamp"]),
+                    },
+                })
+
+            elif data.get("type") == "ping":
+                await websocket.send_json({"type": "pong"})
+
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        print(f"AI WebSocket Error for {user_id}: {traceback.format_exc()}")
+
+
+@app.get("/ai/messages")
+async def get_ai_messages(
+    limit: int = 50, current_user: dict = Depends(get_current_user)
+):
+    user_id = current_user["chatId"]
+
+    msgs = (
+        await cl_ai_messages.find({"userId": user_id})
+        .sort("timestamp", -1)
+        .limit(limit)
+        .to_list(limit)
+    )
+    msgs.reverse()
+
+    return [
+        {
+            "id": str(m["_id"]),
+            "senderId": "ai" if m["role"] == "assistant" else user_id,
+            "text": m.get("content", ""),
+            "timestamp": dt_to_epoch_ms(m.get("timestamp")),
+        }
+        for m in msgs
+    ]
 
 
 if __name__ == "__main__":
