@@ -155,8 +155,6 @@
   cursor: pointer;
   color: #111827;
   font-family: inherit;
-  direction: rtl;
-  text-align: right;
 }
 
 .popover__item:hover {
@@ -187,7 +185,6 @@
   justify-content: space-between;
   border-bottom: 1px solid #f3f4f6;
   padding: 12px 16px;
-  direction: rtl;
 }
 
 .chat-list__header-left {
@@ -235,7 +232,7 @@
 
 .chat-list__search-icon {
   position: absolute;
-  right: 12px;
+  left: 12px;
   top: 50%;
   transform: translateY(-50%);
   color: #9ca3af;
@@ -247,21 +244,17 @@
   width: 100%;
   border-radius: 12px;
   background: #f3f4f6;
-  padding: 10px 36px 10px 16px;
+  padding: 10px 16px 10px 36px;
   font-size: 14px;
   color: #111827;
   border: none;
   outline: none;
   transition: all 0.15s;
   font-family: inherit;
-  direction: rtl;
-  text-align: right;
 }
 
 .chat-list__search-input::placeholder {
   color: #6b7280;
-  direction: rtl;
-  text-align: right;
 }
 
 .chat-list__search-input:focus {
@@ -286,8 +279,6 @@
 .chat-list__empty p {
   margin-top: 12px;
   font-size: 14px;
-  direction: rtl;
-  text-align: center;
 }
 
 .chat-list__item {
@@ -296,13 +287,12 @@
   align-items: center;
   gap: 12px;
   padding: 12px;
-  text-align: right;
+  text-align: left;
   background: none;
   border: none;
   cursor: pointer;
   transition: background 0.15s;
   font-family: inherit;
-  direction: rtl;
 }
 
 .chat-list__item:hover {
@@ -322,7 +312,6 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  direction: rtl;
 }
 
 .chat-list__item-name {
@@ -332,7 +321,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: right;
 }
 
 .chat-list__item--active .chat-list__item-name {
@@ -340,7 +328,7 @@
 }
 
 .chat-list__item-time {
-  margin-right: 8px;
+  margin-left: 8px;
   flex-shrink: 0;
   font-size: 12px;
   color: #9ca3af;
@@ -350,7 +338,6 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  direction: rtl;
 }
 
 .chat-list__item-text {
@@ -359,8 +346,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  direction: rtl;
-  text-align: right;
 }
 
 .chat-list__item-text-prefix {
@@ -368,7 +353,7 @@
 }
 
 .chat-list__unread-badge {
-  margin-right: 8px;
+  margin-left: 8px;
   display: flex;
   height: 20px;
   min-width: 20px;
@@ -402,8 +387,6 @@
   background: #ffffff;
   padding: 10px 12px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  /* Keep header LTR */
-  direction: ltr;
 }
 
 .chat-room__close-btn {
@@ -495,8 +478,6 @@
 .chat-room__contact-status {
   font-size: 12px;
   color: #6b7280;
-  direction: rtl;
-  text-align: right;
 }
 
 .chat-room__contact-status--online {
@@ -508,7 +489,6 @@
   overflow-y: auto;
   padding: 16px 12px;
   overscroll-behavior: contain;
-  direction: rtl;
 }
 
 @media (min-width: 640px) {
@@ -536,22 +516,20 @@
   font-weight: 500;
   color: #6b7280;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  direction: rtl;
 }
 
 .message-row {
   display: flex;
   margin-top: 2px;
   touch-action: pan-y;
-  direction: ltr;
 }
 
 .message-row--mine {
-  justify-content: flex-start;
+  justify-content: flex-end;
 }
 
 .message-row--theirs {
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .message-row--first {
@@ -583,21 +561,22 @@
 
 /* Grouping shapes - mine */
 .message-bubble--mine.msg-shape--single { border-radius: 16px; }
-.message-bubble--mine.msg-shape--first { border-radius: 16px; border-bottom-left-radius: 8px; }
-.message-bubble--mine.msg-shape--middle { border-radius: 16px; border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
-.message-bubble--mine.msg-shape--last { border-radius: 16px; border-top-left-radius: 8px; }
+.message-bubble--mine.msg-shape--first { border-radius: 16px; border-bottom-right-radius: 8px; }
+.message-bubble--mine.msg-shape--middle { border-radius: 16px; border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
+.message-bubble--mine.msg-shape--last { border-radius: 16px; border-top-right-radius: 8px; }
 
 /* Grouping shapes - theirs */
 .message-bubble--theirs.msg-shape--single { border-radius: 16px; }
-.message-bubble--theirs.msg-shape--first { border-radius: 16px; border-bottom-right-radius: 8px; }
-.message-bubble--theirs.msg-shape--middle { border-radius: 16px; border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
-.message-bubble--theirs.msg-shape--last { border-radius: 16px; border-top-right-radius: 8px; }
+.message-bubble--theirs.msg-shape--first { border-radius: 16px; border-bottom-left-radius: 8px; }
+.message-bubble--theirs.msg-shape--middle { border-radius: 16px; border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
+.message-bubble--theirs.msg-shape--last { border-radius: 16px; border-top-left-radius: 8px; }
 
 .message-text {
   font-size: 15px;
   line-height: 1.625;
   white-space: pre-wrap;
   word-break: break-word;
+  /* RTL for message text content */
   direction: rtl;
   text-align: right;
 }
@@ -642,7 +621,6 @@
   border-top: 1px solid #f3f4f6;
   background: #ffffff;
   padding: 12px;
-  direction: rtl;
 }
 
 @media (min-width: 640px) {
@@ -669,14 +647,10 @@
   outline: none;
   transition: all 0.15s;
   font-family: inherit;
-  direction: rtl;
-  text-align: right;
 }
 
 .chat-room__text-input::placeholder {
   color: #6b7280;
-  direction: rtl;
-  text-align: right;
 }
 
 .chat-room__text-input:focus {
@@ -725,7 +699,6 @@
   background: #f9fafb;
   display: flex;
   flex-direction: column;
-  direction: rtl;
 }
 
 .contact-info__header {
@@ -759,8 +732,6 @@
   font-size: 18px;
   font-weight: 700;
   color: #111827;
-  direction: rtl;
-  text-align: right;
 }
 
 .contact-info__spacer {
@@ -802,7 +773,6 @@
   margin-top: 5px;
   font-size: 12px;
   color: #6b7280;
-  direction: rtl;
 }
 
 .contact-info__status--online {
@@ -824,8 +794,6 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #9ca3af;
-  direction: rtl;
-  text-align: right;
 }
 
 .contact-info__bio {
@@ -833,15 +801,11 @@
   font-size: 14px;
   color: #111827;
   line-height: 1.6;
-  direction: rtl;
-  text-align: right;
 }
 
 .contact-info__bio--empty {
   color: #9ca3af;
   font-style: italic;
-  direction: rtl;
-  text-align: right;
 }
 
 .contact-info__mono {
@@ -864,7 +828,6 @@
   box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.4);
   padding: 20px;
   animation: popover-in 0.12s ease-out;
-  direction: rtl;
 }
 
 .confirm-modal__title {
@@ -872,8 +835,6 @@
   font-size: 18px;
   font-weight: 800;
   color: #111827;
-  direction: rtl;
-  text-align: right;
 }
 
 .confirm-modal__text {
@@ -881,8 +842,6 @@
   font-size: 14px;
   color: #6b7280;
   line-height: 1.6;
-  direction: rtl;
-  text-align: right;
 }
 
 .confirm-modal__actions {
@@ -901,7 +860,6 @@
   cursor: pointer;
   font-weight: 600;
   font-family: inherit;
-  direction: rtl;
 }
 
 .confirm-modal__btn:hover {
@@ -925,7 +883,6 @@
   flex-direction: column;
   height: 100%;
   background: #ffffff;
-  direction: rtl;
 }
 
 .profile__header {
@@ -957,7 +914,6 @@
   font-size: 20px;
   font-weight: 700;
   color: #111827;
-  direction: rtl;
 }
 
 .profile__header-spacer {
@@ -978,7 +934,6 @@
   cursor: pointer;
   transition: background 0.15s;
   font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  direction: rtl;
 }
 
 .profile__edit-btn:hover {
@@ -999,7 +954,6 @@
   cursor: pointer;
   transition: background 0.15s;
   font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  direction: rtl;
 }
 
 .profile__cancel-btn:hover {
@@ -1020,7 +974,6 @@
   cursor: pointer;
   transition: background 0.15s;
   font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  direction: rtl;
 }
 
 .profile__save-btn:hover {
@@ -1068,7 +1021,6 @@
   font-size: 12px;
   font-weight: 500;
   color: #047857;
-  direction: rtl;
 }
 
 .profile__online-dot {
@@ -1105,6 +1057,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #9ca3af;
+  /* RTL for Profile labels */
   direction: rtl;
   text-align: right;
 }
@@ -1160,8 +1113,6 @@
   outline: none;
   transition: all 0.15s;
   font-family: inherit;
-  direction: rtl;
-  text-align: right;
 }
 
 .profile__field-input:focus {
@@ -1171,8 +1122,6 @@
 
 .profile__field-input::placeholder {
   color: #9ca3af;
-  direction: rtl;
-  text-align: right;
 }
 
 .profile__field-input--username {
@@ -1200,8 +1149,6 @@
 .profile__field-static p {
   font-size: 15px;
   color: #111827;
-  direction: rtl;
-  text-align: right;
 }
 
 .profile__field-static--with-copy {
@@ -1243,8 +1190,6 @@
   outline: none;
   transition: all 0.15s;
   font-family: inherit;
-  direction: rtl;
-  text-align: right;
 }
 
 .profile__textarea:focus {
@@ -1254,8 +1199,6 @@
 
 .profile__textarea::placeholder {
   color: #9ca3af;
-  direction: rtl;
-  text-align: right;
 }
 
 .profile__char-count {
@@ -1263,14 +1206,11 @@
   text-align: right;
   font-size: 12px;
   color: #9ca3af;
-  direction: rtl;
 }
 
 .profile__bio-empty {
   font-style: italic;
   color: #9ca3af !important;
-  direction: rtl;
-  text-align: right;
 }
 
 .profile__info-note {
@@ -1285,6 +1225,7 @@
   font-size: 12px;
   line-height: 1.625;
   color: #2563eb;
+  /* RTL for Profile info note */
   direction: rtl;
 }
 
@@ -1299,6 +1240,7 @@
   justify-content: center;
   background: #f9fafb;
   padding: 32px;
+  /* RTL for entire EmptyState */
   direction: rtl;
 }
 
@@ -1319,7 +1261,6 @@
   font-size: 24px;
   font-weight: 700;
   color: #111827;
-  direction: rtl;
   text-align: center;
 }
 
@@ -1329,7 +1270,6 @@
   text-align: center;
   color: #6b7280;
   line-height: 1.5;
-  direction: rtl;
 }
 
 .empty-state__footer {
@@ -1339,7 +1279,6 @@
   gap: 8px;
   font-size: 14px;
   color: #9ca3af;
-  direction: rtl;
 }
 
 .empty-state__dot {
@@ -1366,7 +1305,6 @@
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
   width: 100%;
   max-width: 380px;
-  direction: rtl;
 }
 
 .login-header {
@@ -1382,7 +1320,6 @@
 
 .login-header p {
   color: #6b7280;
-  direction: rtl;
 }
 
 .form-group {
@@ -1395,6 +1332,7 @@
   font-size: 14px;
   font-weight: 500;
   color: #374151;
+  /* RTL for Login labels */
   direction: rtl;
   text-align: right;
 }
@@ -1406,8 +1344,6 @@
   border-radius: 12px;
   font-size: 15px;
   font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  direction: rtl;
-  text-align: right;
 }
 
 .login-btn {
@@ -1422,6 +1358,7 @@
   cursor: pointer;
   margin-top: 8px;
   font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* RTL for Login button */
   direction: rtl;
 }
 
@@ -1429,8 +1366,6 @@
   color: #ef4444;
   font-size: 14px;
   margin: 8px 0;
-  direction: rtl;
-  text-align: right;
 }
 
 .login-footer {
@@ -1461,7 +1396,6 @@
   max-height: 85vh;
   overflow: hidden;
   box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.4);
-  direction: rtl;
 }
 
 .modal-header {
@@ -1477,7 +1411,6 @@
   font-size: 18px;
   font-weight: 700;
   color: #111827;
-  direction: rtl;
 }
 
 .search-box {
@@ -1496,13 +1429,6 @@
   font-size: 15px;
   outline: none;
   font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  direction: rtl;
-  text-align: right;
-}
-
-.search-box input::placeholder {
-  direction: rtl;
-  text-align: right;
 }
 
 .results {
@@ -1516,7 +1442,6 @@
   text-align: center;
   font-size: 14px;
   color: #6b7280;
-  direction: rtl;
 }
 
 .user-item {
@@ -1525,11 +1450,10 @@
   gap: 14px;
   padding: 14px 24px;
   width: 100%;
-  text-align: right;
+  text-align: left;
   border: none;
   background: none;
   cursor: pointer;
-  direction: rtl;
 }
 
 .user-item:hover {
