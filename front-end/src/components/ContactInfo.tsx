@@ -33,7 +33,7 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
                 <button className="contact-info__back" onClick={onBack} aria-label="Back" type="button">
                     <ArrowLeft size={20} />
                 </button>
-                <div className="contact-info__title">Contact</div>
+                <div className="contact-info__title">مخاطب</div>
                 <div className="contact-info__spacer" />
             </div>
 
@@ -48,19 +48,19 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
                         {user.verified ? <VerifiedBadge size={16} /> : null}
                     </div>
                     <div className={user.online ? 'contact-info__status contact-info__status--online' : 'contact-info__status'}>
-                        {user.online ? 'Online' : 'Offline'}
+                        {user.online ? 'آنلاین' : 'آفلاین'}
                     </div>
                 </div>
 
                 <div className="contact-info__card">
-                    <div className="contact-info__label">Bio</div>
+                    <div className="contact-info__label">بیوگرافی</div>
                     <div className={bio ? 'contact-info__bio' : 'contact-info__bio contact-info__bio--empty'}>
-                        {bio || 'No bio'}
+                        {bio || 'بدون بیوگرافی'}
                     </div>
                 </div>
 
                 <div className="contact-info__card">
-                    <div className="contact-info__label">Username</div>
+                    <div className="contact-info__label">نام کاربری</div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <div className="contact-info__mono">@{user.username}</div>
                         <button

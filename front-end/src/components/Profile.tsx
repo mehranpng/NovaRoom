@@ -53,19 +53,19 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
 
         if (!trimmed) {
             setUsernameStatus('invalid');
-            setUsernameHint('Username is required.');
+            setUsernameHint('نام کاربری الزامی است.');
             return;
         }
 
         if (trimmed.length > 32) {
             setUsernameStatus('invalid');
-            setUsernameHint('Max 32 characters.');
+            setUsernameHint('حداکثر 32 کاراکتر.');
             return;
         }
 
         if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
             setUsernameStatus('invalid');
-            setUsernameHint('Only letters, numbers, and underscore.');
+            setUsernameHint('فقط حروف لاتین، اعداد و آندرلاین.');
             return;
         }
 
@@ -77,7 +77,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
         }
 
         setUsernameStatus('checking');
-        setUsernameHint('Checking...');
+        setUsernameHint('در حال بررسی...');
 
         if (checkTimerRef.current) window.clearTimeout(checkTimerRef.current);
         checkTimerRef.current = window.setTimeout(async () => {
@@ -87,14 +87,14 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                 );
                 if (res?.available) {
                     setUsernameStatus('available');
-                    setUsernameHint('Username is available.');
+                    setUsernameHint('نام کاربری قابل استفاده است.');
                 } else {
                     setUsernameStatus('taken');
-                    setUsernameHint('This username is already taken.');
+                    setUsernameHint('این نام کاربری قبلاً گرفته شده.');
                 }
             } catch {
                 setUsernameStatus('invalid');
-                setUsernameHint('Could not check username.');
+                setUsernameHint('بررسی نام کاربری ممکن نشد.');
             }
         }, 350);
 
@@ -136,22 +136,22 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                 <button onClick={onBack} className="profile__header-back">
                     <ArrowLeft size={22} />
                 </button>
-                <h1 className="profile__header-title">Profile</h1>
+                <h1 className="profile__header-title">پروفایل</h1>
                 <div className="profile__header-spacer" />
                 {!isEditing ? (
                     <button onClick={() => setIsEditing(true)} className="profile__edit-btn">
                         <Pencil size={14} />
-                        Edit
+                        ویرایش
                     </button>
                 ) : (
                     <div className="profile__header-actions">
                         <button onClick={handleCancel} className="profile__cancel-btn">
                             <X size={14} />
-                            Cancel
+                            لغو
                         </button>
                         <button onClick={handleSave} className="profile__save-btn" disabled={!canSave}>
                             <Save size={14} />
-                            Save
+                            ذخیره
                         </button>
                     </div>
                 )}
@@ -171,7 +171,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                     <p className="profile__username-display">@{user.username}</p>
                     <span className="profile__online-badge">
                         <span className="profile__online-dot" />
-                        Online
+                        آنلاین
                     </span>
                 </div>
 
@@ -180,7 +180,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                     <div className="profile__chat-id-card">
                         <div className="profile__chat-id-row">
                             <div>
-                                <p className="profile__field-label">Chat ID</p>
+                                <p className="profile__field-label">شناسه چت</p>
                                 <p className="profile__chat-id-value">{user.chatId}</p>
                             </div>
                             <button
@@ -198,7 +198,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                     {/* Editable Fields */}
                     {/* Name */}
                     <div className="profile__field-group">
-                        <label className="profile__field-label">Name</label>
+                        <label className="profile__field-label">نام</label>
                         {isEditing ? (
                             <input
                                 ref={nameRef}
@@ -207,7 +207,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                                 onChange={(e) => setName(e.target.value)}
                                 onFocus={() => scrollIntoViewOnMobile(nameRef.current)}
                                 className="profile__field-input"
-                                placeholder="Your name"
+                                placeholder="نام شما"
                                 maxLength={50}
                             />
                         ) : (
@@ -221,7 +221,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
 
                     {/* Username */}
                     <div className="profile__field-group">
-                        <label className="profile__field-label">Username</label>
+                        <label className="profile__field-label">نام کاربری</label>
                         {isEditing ? (
                             <div>
                                 <div className="profile__username-wrapper">
@@ -233,7 +233,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                                         onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
                                         onFocus={() => scrollIntoViewOnMobile(usernameRef.current)}
                                         className="profile__field-input profile__field-input--username"
-                                        placeholder="username"
+                                        placeholder="نام کاربری"
                                         maxLength={32}
                                     />
                                 </div>
@@ -272,7 +272,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
 
                     {/* Bio */}
                     <div className="profile__field-group">
-                        <label className="profile__field-label">Bio</label>
+                        <label className="profile__field-label">بیوگرافی</label>
                         {isEditing ? (
                             <div>
                                 <textarea
@@ -281,7 +281,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                                     onChange={(e) => setBio(e.target.value)}
                                     onFocus={() => scrollIntoViewOnMobile(bioRef.current)}
                                     className="profile__textarea"
-                                    placeholder="Tell something about yourself..."
+                                    placeholder="درباره خود چیزی بنویسید..."
                                     rows={3}
                                     maxLength={150}
                                 />
@@ -290,7 +290,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                         ) : (
                             <div className="profile__field-static">
                                 <p className={!user.bio ? 'profile__bio-empty' : ''}>
-                                    {user.bio || 'No bio yet'}
+                                    {user.bio || 'بیوگرافی وجود ندارد'}
                                 </p>
                             </div>
                         )}
@@ -299,8 +299,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                     {/* Info Note */}
                     <div className="profile__info-note">
                         <p>
-                            Your Chat ID is unique and cannot be changed. Share username with others so they can find
-                            and message you.
+                            شناسه چت شما یکتا بوده و قابل تغییر نیست. نام کاربری خود را با دیگران به اشتراک بگذارید تا بتوانند شما را پیدا کرده و پیام بدهند.
                         </p>
                     </div>
                 </div>

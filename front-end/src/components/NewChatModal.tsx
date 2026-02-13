@@ -69,7 +69,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
         >
             <div className="new-chat-modal">
                 <div className="modal-header">
-                    <h2>New Chat</h2>
+                    <h2>گفتگوی جدید</h2>
                     <button onClick={onClose} className="icon-btn" aria-label="Close">
                         <X size={20} />
                     </button>
@@ -80,7 +80,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
                     <input
                         ref={inputRef}
                         type="text"
-                        placeholder="Search by username..."
+                        placeholder="جستجو با نام کاربری..."
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onFocus={() => {
@@ -94,9 +94,9 @@ export function NewChatModal({ isOpen, onClose, onUserSelected }: NewChatModalPr
 
                 <div className="results">
                     {loading ? (
-                        <p className="loading">Searching...</p>
+                        <p className="loading">در حال جستجو...</p>
                     ) : results.length === 0 && query.trim().replace(/^@+/, '').length >= 2 ? (
-                        <p className="no-results">No users found</p>
+                        <p className="no-results">کاربری یافت نشد</p>
                     ) : (
                         results.map((user) => (
                             <div
