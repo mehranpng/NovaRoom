@@ -256,23 +256,17 @@ export function AIChatRoom({
                 </button>
 
                 <div className="chat-room__header-clickable chat-room__header-clickable--full">
-                    <div
+                    <img
+                        src="/avatars/ai.png"
+                        alt="NovaRoom AI"
                         style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
                             width: '40px',
                             height: '40px',
                             borderRadius: '50%',
-                            background: 'linear-gradient(135deg, #4F46E5, #6366F1)',
-                            color: 'white',
-                            fontWeight: 'bold',
-                            fontSize: '14px',
+                            objectFit: 'cover',
                             flexShrink: 0,
                         }}
-                    >
-                        AI
-                    </div>
+                    />
                     <div className="chat-room__header-info">
                         <div
                             className="chat-room__contact-name"
