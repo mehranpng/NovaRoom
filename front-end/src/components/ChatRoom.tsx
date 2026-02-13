@@ -92,7 +92,8 @@ export function ChatRoom({
 }: ChatRoomProps) {
     const [text, setText] = useState('');
     const [chatMenuOpen, setChatMenuOpen] = useState(false);
-    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [confirmDeleteChat, setConfirmDeleteChat] = useState(false);
+    const [confirmDeleteMsg, setConfirmDeleteMsg] = useState<string | null>(null);
     const [showContactInfo, setShowContactInfo] = useState(false);
 
     const [replyTo, setReplyTo] = useState<MessageReplyType | null>(null);
@@ -120,6 +121,7 @@ export function ChatRoom({
     });
 
     const [newMsgCount, setNewMsgCount] = useState(0);
+    const [showScrollBtn, setShowScrollBtn] = useState(false);
     const isAtBottomRef = useRef(true);
 
     const prevLenRef = useRef(0);
@@ -311,6 +313,7 @@ export function ChatRoom({
         initialScrollDoneRef.current = false;
         prevLenRef.current = messages.length;
         setNewMsgCount(0);
+        setShowScrollBtn(false);
         isAtBottomRef.current = true;
         setReplyTo(null);
         setEditingId(null);
@@ -364,9 +367,19 @@ export function ChatRoom({
     }, [messages.length, chatId]);
 
     const onMessagesScroll = () => {
+        const container = messagesContainerRef.current;
+        if (!container) return;
+        
         const nearBottom = computeNearBottom();
         isAtBottomRef.current = nearBottom;
-        if (nearBottom) setNewMsgCount(0);
+        if (nearBottom) {
+            setNewMsgCount(0);
+            setShowScrollBtn(false);
+        } else {
+            // Show scroll button when user scrolls up
+            const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+            setShowScrollBtn(distanceFromBottom > 300);
+        }
     };
 
     const items = useMemo(() => {
@@ -408,7 +421,7 @@ export function ChatRoom({
     const doDeleteChat = async () => {
         try {
             await apiFetch(`/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
-            setConfirmOpen(false);
+            setConfirmDeleteChat(false);
             setChatMenuOpen(false);
             if (onChatDeleted) onChatDeleted(chatId);
             else onBack();
@@ -424,8 +437,21 @@ export function ChatRoom({
         const roomRect = room.getBoundingClientRect();
         const r = targetEl.getBoundingClientRect();
 
-        const top = Math.max(56, r.top - roomRect.top);
-        const left = Math.max(12, Math.min(roomRect.width - 200, r.left - roomRect.left));
+        // Calculate position relative to room, ensuring menu stays visible
+        let top = r.top - roomRect.top;
+        let left = r.left - roomRect.left;
+
+        // Menu dimensions (approximate)
+        const menuHeight = 180; // approximate height for 4 items
+        const menuWidth = 180;
+
+        // Adjust top to keep menu within viewport
+        const maxTop = roomRect.height - menuHeight - 16;
+        top = Math.max(56, Math.min(top, maxTop));
+
+        // Adjust left to keep menu within viewport
+        const maxLeft = roomRect.width - menuWidth - 16;
+        left = Math.max(12, Math.min(left, maxLeft));
 
         setMsgMenu({ id: messageId, top, left });
     };
@@ -446,10 +472,16 @@ export function ChatRoom({
         setTimeout(() => inputRef.current?.focus(), 0);
     };
 
-    const doDeleteMessage = (m: Message) => {
+    const doDeleteMessage = (messageId: string) => {
         setMsgMenu(null);
-        if (!window.confirm('این پیام حذف شود؟')) return;
-        onDeleteMessage(m.id);
+        setConfirmDeleteMsg(messageId);
+    };
+
+    const confirmDeleteMessage = () => {
+        if (confirmDeleteMsg) {
+            onDeleteMessage(confirmDeleteMsg);
+            setConfirmDeleteMsg(null);
+        }
     };
 
     if (showContactInfo) {
@@ -522,7 +554,7 @@ export function ChatRoom({
                             <button
                                 className="popover__item popover__item--danger"
                                 onClick={() => {
-                                    setConfirmOpen(true);
+                                    setConfirmDeleteChat(true);
                                     setChatMenuOpen(false);
                                 }}
                                 type="button"
@@ -535,7 +567,14 @@ export function ChatRoom({
                 </div>
             </div>
 
-            <div className="chat-room__messages" ref={messagesContainerRef} onScroll={onMessagesScroll}>
+            <div 
+                className="chat-room__messages" 
+                ref={messagesContainerRef} 
+                onScroll={onMessagesScroll}
+                style={{
+                    overflowY: dragState.active ? 'hidden' : 'auto'
+                }}
+            >
                 <div className="chat-room__messages-inner">
                     {items.map(({ m, isMine, dayBreak, shape }) => {
                         const isHighlighted = highlightId === m.id;
@@ -792,7 +831,7 @@ export function ChatRoom({
                     {activeMsgIsMine && (
                         <button
                             className="popover__item popover__item--danger"
-                            onClick={() => doDeleteMessage(activeMsg)}
+                            onClick={() => doDeleteMessage(activeMsg.id)}
                             type="button"
                         >
                             <Trash2 size={16} />
@@ -802,13 +841,14 @@ export function ChatRoom({
                 </div>
             )}
 
-            {newMsgCount > 0 && (
+            {(newMsgCount > 0 || showScrollBtn) && (
                 <button
                     type="button"
                     aria-label="Jump to latest messages"
                     onClick={() => {
                         scrollToBottom(true);
                         setNewMsgCount(0);
+                        setShowScrollBtn(false);
                     }}
                     style={{
                         position: 'absolute',
@@ -817,7 +857,7 @@ export function ChatRoom({
                         display: 'flex',
                         alignItems: 'center',
                         gap: 10,
-                        padding: '8px 10px',
+                        padding: newMsgCount > 0 ? '8px 10px' : '10px',
                         borderRadius: 999,
                         border: '1px solid rgba(0,0,0,0.12)',
                         background: '#fff',
@@ -828,18 +868,20 @@ export function ChatRoom({
                     }}
                 >
                     <ArrowDown size={16} />
-                    <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{newMsgCount}</span>
-                        <span
-                            style={{
-                                width: 6,
-                                height: 6,
-                                borderRadius: 999,
-                                background: '#2F80ED',
-                                marginTop: 4,
-                            }}
-                        />
-                    </span>
+                    {newMsgCount > 0 && (
+                        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{newMsgCount}</span>
+                            <span
+                                style={{
+                                    width: 6,
+                                    height: 6,
+                                    borderRadius: 999,
+                                    background: '#2F80ED',
+                                    marginTop: 4,
+                                }}
+                            />
+                        </span>
+                    )}
                 </button>
             )}
 
@@ -926,16 +968,33 @@ export function ChatRoom({
                 </div>
             </div>
 
-            {confirmOpen && (
-                <div className="modal-overlay">
-                    <div className="confirm-modal">
-                        <h3 className="confirm-modal__title">گفتگو حذف شود؟</h3>
-                        <p className="confirm-modal__text">این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.</p>
-                        <div className="confirm-modal__actions">
-                            <button className="confirm-modal__btn" onClick={() => setConfirmOpen(false)} type="button">
+            {confirmDeleteChat && (
+                <div className="chat-room-modal-overlay">
+                    <div className="chat-room-confirm-modal">
+                        <h3 className="chat-room-confirm-modal__title">گفتگو حذف شود؟</h3>
+                        <p className="chat-room-confirm-modal__text">این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.</p>
+                        <div className="chat-room-confirm-modal__actions">
+                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteChat(false)} type="button">
                                 لغو
                             </button>
-                            <button className="confirm-modal__btn confirm-modal__btn--danger" onClick={doDeleteChat} type="button">
+                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doDeleteChat} type="button">
+                                حذف
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {confirmDeleteMsg && (
+                <div className="chat-room-modal-overlay">
+                    <div className="chat-room-confirm-modal">
+                        <h3 className="chat-room-confirm-modal__title">این پیام حذف شود؟</h3>
+                        <p className="chat-room-confirm-modal__text">این عمل پیام را برای هر دو کاربر حذف خواهد کرد.</p>
+                        <div className="chat-room-confirm-modal__actions">
+                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteMsg(null)} type="button">
+                                لغو
+                            </button>
+                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={confirmDeleteMessage} type="button">
                                 حذف
                             </button>
                         </div>
