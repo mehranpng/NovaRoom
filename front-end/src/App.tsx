@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Message, View, User, Chat, ChatLastMessage } from './types';
 import { apiFetch } from './config/api';
 import { useWebSocket } from './hooks/useWebSocket';
-import { useNavigation } from './AppRouter';
+import { useAIWebSocket } from './hooks/useAIWebSocket';
 import { ChatList } from './components/ChatList';
 import { ChatRoom } from './components/ChatRoom';
+import { AIChatRoom } from './components/AIChatRoom';
 import { Profile } from './components/Profile';
 import { EmptyState } from './components/EmptyState';
 import { Login } from './components/Login';
@@ -30,7 +31,12 @@ export function App() {
     const [chats, setChats] = useState<Chat[]>([]);
     const [messages, setMessages] = useState<Record<string, Message[]>>({});
     const [newChatModalOpen, setNewChatModalOpen] = useState(false);
-    const { navigate } = useNavigation();
+    
+    // AI Chat state
+    const [showAIChat, setShowAIChat] = useState(false);
+    const [aiMessages, setAIMessages] = useState<Message[]>([]);
+    const [aiLoading, setAILoading] = useState(true);
+    const [aiTyping, setAITyping] = useState(false);
     
     // Track if this is the initial load (show skeleton only once)
     const [isInitialChatsLoad, setIsInitialChatsLoad] = useState(true);
@@ -69,6 +75,30 @@ export function App() {
             window.visualViewport?.removeEventListener('scroll', apply);
         };
     }, []);
+
+    // Load AI chat history
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        
+        const loadAIMessages = async () => {
+            try {
+                setAILoading(true);
+                const data = await apiFetch('/ai/messages?limit=100');
+                const messagesWithChatId = data.map((msg: any) => ({
+                    ...msg,
+                    chatId: 'ai_chat',
+                    seen: true,
+                }));
+                setAIMessages(messagesWithChatId);
+            } catch (error) {
+                console.error('Failed to load AI messages:', error);
+            } finally {
+                setAILoading(false);
+            }
+        };
+
+        loadAIMessages();
+    }, [isAuthenticated]);
 
     const loadChats = useCallback(async (showLoading = true) => {
         if (!isAuthenticated) return;
@@ -119,6 +149,8 @@ export function App() {
         setNewChatModalOpen(false);
         setIsInitialChatsLoad(true);
         setMessagesLoadedOnce({});
+        setShowAIChat(false);
+        setAIMessages([]);
     }, []);
 
     // WebSocket handlers wrapped in useCallback to prevent infinite reconnection loops
@@ -239,6 +271,17 @@ export function App() {
         setChats(prev => prev.map(c => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
     }, []);
 
+    // AI WebSocket handlers
+    const handleNewAIMessage = useCallback((message: any) => {
+        const messageWithChatId: Message = {
+            ...message,
+            chatId: 'ai_chat',
+            seen: true,
+        };
+        setAIMessages(prev => [...prev, messageWithChatId]);
+        setAITyping(false);
+    }, []);
+
     // WebSocket initialization
     const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen } = useWebSocket({
         token: localStorage.getItem('token'),
@@ -247,6 +290,12 @@ export function App() {
         onMessageDeleted: handleMessageDeleted,
         onUserStatusChange: handleUserStatusChange,
         onMessagesSeen: handleMessagesSeen
+    });
+
+    // AI WebSocket initialization
+    const { sendMessage: sendAIMessage } = useAIWebSocket({
+        token: localStorage.getItem('token'),
+        onNewMessage: handleNewAIMessage,
     });
 
     // Check auth
@@ -274,6 +323,7 @@ export function App() {
 
     const handleSelectChat = useCallback(async (chatId: string) => {
         setPendingUser(null);
+        setShowAIChat(false);
         setActiveChatId(chatId);
         setView('chatRoom');
 
@@ -401,6 +451,7 @@ export function App() {
         // Otherwise stay in "pending" mode (chat is created on first message).
         setPendingUser(user);
         setActiveChatId(null);
+        setShowAIChat(false);
         setView('chatRoom');
     }, [currentUser?.chatId, handleSelectChat]);
 
@@ -408,6 +459,7 @@ export function App() {
     const handleBack = () => {
         setView('chatList');
         setPendingUser(null);
+        setShowAIChat(false);
         // Clear active chat when going back so messages don't get marked as seen
         setActiveChatId(null);
     };
@@ -415,6 +467,7 @@ export function App() {
     const handleCloseChat = () => {
         setActiveChatId(null);
         setPendingUser(null);
+        setShowAIChat(false);
         setView('chatRoom');
     };
 
@@ -430,13 +483,41 @@ export function App() {
         });
         setActiveChatId(null);
         setPendingUser(null);
+        setShowAIChat(false);
         setView('chatList');
         loadChats(false);
     };
 
     const handleOpenAIChat = () => {
-        navigate('/aichat');
+        setActiveChatId(null);
+        setPendingUser(null);
+        setShowAIChat(true);
+        setView('chatRoom');
     };
+
+    const handleSendAIMessage = useCallback((text: string) => {
+        if (!currentUser) return;
+
+        // Add user message to UI immediately
+        const userMessage: Message = {
+            id: `temp-${Date.now()}`,
+            chatId: 'ai_chat',
+            senderId: currentUser.chatId,
+            text,
+            timestamp: Date.now(),
+            seen: false,
+        };
+
+        setAIMessages(prev => [...prev, userMessage]);
+        setAITyping(true);
+
+        // Send to AI
+        const success = sendAIMessage(text);
+        if (!success) {
+            console.warn('Failed to send message to AI');
+            setAITyping(false);
+        }
+    }, [currentUser, sendAIMessage]);
 
     // Temporary contact resolver
     const getActiveContact = (): User => {
@@ -512,7 +593,16 @@ export function App() {
 
             {view !== 'profile' && (
                 <div className={cx('app__main', view === 'chatList' && 'app__main--hidden-mobile')}>
-                    {view === 'chatRoom' && (activeChat || pendingUser) ? (
+                    {view === 'chatRoom' && showAIChat ? (
+                        <AIChatRoom
+                            messages={aiMessages}
+                            currentUserId={currentUser!.chatId}
+                            onSendMessage={handleSendAIMessage}
+                            onBack={handleBack}
+                            loading={aiLoading}
+                            isTyping={aiTyping}
+                        />
+                    ) : view === 'chatRoom' && (activeChat || pendingUser) ? (
                         <ChatRoom
                             chatId={activeChat?.id || 'pending'}
                             contact={getActiveContact()}
