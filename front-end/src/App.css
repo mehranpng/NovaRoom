@@ -1441,6 +1441,11 @@
   overflow-y: auto;
 }
 
+.loading{
+    direction: rtl;
+    text-align: right;
+}
+
 .loading,
 .no-results {
   padding: 35px 24px;
