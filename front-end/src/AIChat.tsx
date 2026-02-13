@@ -5,7 +5,11 @@ import { useAIWebSocket } from './hooks/useAIWebSocket';
 import { AIChatRoom } from './components/AIChatRoom';
 import './App.css';
 
-export function AIChat() {
+interface AIChatProps {
+    onBack: () => void;
+}
+
+export function AIChat({ onBack }: AIChatProps) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [loading, setLoading] = useState(true);
     const [isTyping, setIsTyping] = useState(false);
@@ -94,7 +98,7 @@ export function AIChat() {
                     messages={messages}
                     currentUserId={currentUserId}
                     onSendMessage={handleSendMessage}
-                    onBack={() => {}}
+                    onBack={onBack}
                     loading={loading}
                     isTyping={isTyping}
                 />
