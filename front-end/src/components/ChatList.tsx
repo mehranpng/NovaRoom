@@ -15,6 +15,7 @@ interface ChatListProps {
     onOpenProfile: () => void;
     onNewChatClick: () => void;
     onLogout: () => void;
+    onOpenAIChat: () => void;
     loading?: boolean;
 }
 
@@ -123,6 +124,7 @@ export function ChatList({
     onOpenProfile,
     onNewChatClick,
     onLogout,
+    onOpenAIChat,
     loading = false,
 }: ChatListProps) {
     const [searchQuery, setSearchQuery] = useState('');
@@ -176,6 +178,9 @@ export function ChatList({
     });
 
     const hasActiveChat = Boolean(activeChatId);
+
+    // Check if we should show AI chat in search results
+    const showAIChat = !searchQuery || 'novaroom ai'.includes(searchQuery.toLowerCase()) || 'دستیار'.includes(searchQuery);
 
     return (
         <div className="chat-list">
@@ -238,56 +243,105 @@ export function ChatList({
             <div className="chat-list__items">
                 {loading ? (
                     <ChatListSkeleton />
-                ) : chats.length === 0 ? (
-                    // Desktop: right pane (EmptyState) is enough; show this inside list only on mobile.
-                    // We also hide it when a chat is active to avoid visual duplication.
-                    isMobile && !hasActiveChat ? <EmptyState /> : null
-                ) : filteredChats.length === 0 ? (
-                    <div className="chat-list__empty">
-                        <MessageSquarePlus size={48} strokeWidth={1} />
-                        <p>گفتگویی یافت نشد</p>
-                    </div>
                 ) : (
-                    filteredChats.map((chat) => {
-                        const contact = getContact(chat);
-                        const isActive = activeChatId === chat.id;
-                        const isMine = chat.lastMessage?.senderId === currentUser.chatId;
-
-                        return (
+                    <>
+                        {/* AI Chat - Always pinned at top */}
+                        {showAIChat && (
                             <button
-                                key={chat.id}
-                                onClick={() => onSelectChat(chat.id)}
-                                className={cx('chat-list__item', isActive && 'chat-list__item--active')}
+                                onClick={onOpenAIChat}
+                                className="chat-list__item"
+                                style={{
+                                    background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)',
+                                    borderBottom: '1px solid #BFDBFE',
+                                }}
                             >
-                                <Avatar name={contact.name} size="md" online={contact.online} />
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        width: '48px',
+                                        height: '48px',
+                                        borderRadius: '50%',
+                                        background: 'linear-gradient(135deg, #4F46E5, #6366F1)',
+                                        color: 'white',
+                                        fontWeight: 'bold',
+                                        fontSize: '16px',
+                                        flexShrink: 0,
+                                    }}
+                                >
+                                    AI
+                                </div>
                                 <div className="chat-list__item-content">
                                     <div className="chat-list__item-row">
                                         <span
                                             className="chat-list__item-name"
                                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                                         >
-                                            {contact.name}
-                                            {contact.verified ? <VerifiedBadge size={14} /> : null}
+                                            NovaRoom AI
+                                            <VerifiedBadge size={14} />
                                         </span>
-                                        {chat.lastMessage && (
-                                            <span className="chat-list__item-time">
-                                                {formatTime(chat.lastMessage.timestamp)}
-                                            </span>
-                                        )}
                                     </div>
                                     <div className="chat-list__item-preview">
                                         <p className="chat-list__item-text">
-                                            {isMine && <span className="chat-list__item-text-prefix">شما: </span>}
-                                            {chat.lastMessage?.text || 'هنوز پیامی ارسال نشده'}
+                                            دستیار هوشمند شما
                                         </p>
-                                        {chat.unreadCount > 0 && (
-                                            <span className="chat-list__unread-badge">{chat.unreadCount}</span>
-                                        )}
                                     </div>
                                 </div>
                             </button>
-                        );
-                    })
+                        )}
+
+                        {/* Regular chats */}
+                        {chats.length === 0 ? (
+                            isMobile && !hasActiveChat ? <EmptyState /> : null
+                        ) : filteredChats.length === 0 ? (
+                            <div className="chat-list__empty">
+                                <MessageSquarePlus size={48} strokeWidth={1} />
+                                <p>گفتگویی یافت نشد</p>
+                            </div>
+                        ) : (
+                            filteredChats.map((chat) => {
+                                const contact = getContact(chat);
+                                const isActive = activeChatId === chat.id;
+                                const isMine = chat.lastMessage?.senderId === currentUser.chatId;
+
+                                return (
+                                    <button
+                                        key={chat.id}
+                                        onClick={() => onSelectChat(chat.id)}
+                                        className={cx('chat-list__item', isActive && 'chat-list__item--active')}
+                                    >
+                                        <Avatar name={contact.name} size="md" online={contact.online} />
+                                        <div className="chat-list__item-content">
+                                            <div className="chat-list__item-row">
+                                                <span
+                                                    className="chat-list__item-name"
+                                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                                                >
+                                                    {contact.name}
+                                                    {contact.verified ? <VerifiedBadge size={14} /> : null}
+                                                </span>
+                                                {chat.lastMessage && (
+                                                    <span className="chat-list__item-time">
+                                                        {formatTime(chat.lastMessage.timestamp)}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="chat-list__item-preview">
+                                                <p className="chat-list__item-text">
+                                                    {isMine && <span className="chat-list__item-text-prefix">شما: </span>}
+                                                    {chat.lastMessage?.text || 'هنوز پیامی ارسال نشده'}
+                                                </p>
+                                                {chat.unreadCount > 0 && (
+                                                    <span className="chat-list__unread-badge">{chat.unreadCount}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </button>
+                                );
+                            })
+                        )}
+                    </>
                 )}
             </div>
         </div>
