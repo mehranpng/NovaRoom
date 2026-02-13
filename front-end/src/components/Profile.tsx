@@ -214,7 +214,6 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                             <div className="profile__field-static">
                                 <p style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                     {user.name}
-                                    {user.verified ? <VerifiedBadge size={14} /> : null}
                                 </p>
                             </div>
                         )}
