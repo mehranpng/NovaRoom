@@ -155,6 +155,8 @@
   cursor: pointer;
   color: #111827;
   font-family: inherit;
+  direction: rtl;
+  text-align: right;
 }
 
 .popover__item:hover {
@@ -251,10 +253,14 @@
   outline: none;
   transition: all 0.15s;
   font-family: inherit;
+  direction: rtl;
+  text-align: right;
 }
 
 .chat-list__search-input::placeholder {
   color: #6b7280;
+  direction: rtl;
+  text-align: right;
 }
 
 .chat-list__search-input:focus {
@@ -279,6 +285,8 @@
 .chat-list__empty p {
   margin-top: 12px;
   font-size: 14px;
+  direction: rtl;
+  text-align: center;
 }
 
 .chat-list__item {
@@ -346,6 +354,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  direction: rtl;
+  text-align: right;
 }
 
 .chat-list__item-text-prefix {
@@ -478,6 +488,8 @@
 .chat-room__contact-status {
   font-size: 12px;
   color: #6b7280;
+  direction: rtl;
+  text-align: right;
 }
 
 .chat-room__contact-status--online {
@@ -516,6 +528,7 @@
   font-weight: 500;
   color: #6b7280;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  direction: rtl;
 }
 
 .message-row {
@@ -576,6 +589,8 @@
   line-height: 1.625;
   white-space: pre-wrap;
   word-break: break-word;
+  direction: rtl;
+  text-align: right;
 }
 
 .message-meta {
@@ -644,10 +659,14 @@
   outline: none;
   transition: all 0.15s;
   font-family: inherit;
+  direction: rtl;
+  text-align: right;
 }
 
 .chat-room__text-input::placeholder {
   color: #6b7280;
+  direction: rtl;
+  text-align: right;
 }
 
 .chat-room__text-input:focus {
@@ -729,6 +748,8 @@
   font-size: 18px;
   font-weight: 700;
   color: #111827;
+  direction: rtl;
+  text-align: right;
 }
 
 .contact-info__spacer {
@@ -770,6 +791,7 @@
   margin-top: 5px;
   font-size: 12px;
   color: #6b7280;
+  direction: rtl;
 }
 
 .contact-info__status--online {
@@ -791,6 +813,8 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #9ca3af;
+  direction: rtl;
+  text-align: right;
 }
 
 .contact-info__bio {
@@ -798,11 +822,15 @@
   font-size: 14px;
   color: #111827;
   line-height: 1.6;
+  direction: rtl;
+  text-align: right;
 }
 
 .contact-info__bio--empty {
   color: #9ca3af;
   font-style: italic;
+  direction: rtl;
+  text-align: right;
 }
 
 .contact-info__mono {
@@ -832,6 +860,8 @@
   font-size: 18px;
   font-weight: 800;
   color: #111827;
+  direction: rtl;
+  text-align: right;
 }
 
 .confirm-modal__text {
@@ -839,6 +869,8 @@
   font-size: 14px;
   color: #6b7280;
   line-height: 1.6;
+  direction: rtl;
+  text-align: right;
 }
 
 .confirm-modal__actions {
@@ -857,6 +889,7 @@
   cursor: pointer;
   font-weight: 600;
   font-family: inherit;
+  direction: rtl;
 }
 
 .confirm-modal__btn:hover {
@@ -911,6 +944,7 @@
   font-size: 20px;
   font-weight: 700;
   color: #111827;
+  direction: rtl;
 }
 
 .profile__header-spacer {
@@ -931,6 +965,7 @@
   cursor: pointer;
   transition: background 0.15s;
   font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  direction: rtl;
 }
 
 .profile__edit-btn:hover {
@@ -951,6 +986,7 @@
   cursor: pointer;
   transition: background 0.15s;
   font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  direction: rtl;
 }
 
 .profile__cancel-btn:hover {
@@ -971,6 +1007,7 @@
   cursor: pointer;
   transition: background 0.15s;
   font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  direction: rtl;
 }
 
 .profile__save-btn:hover {
@@ -1018,6 +1055,7 @@
   font-size: 12px;
   font-weight: 500;
   color: #047857;
+  direction: rtl;
 }
 
 .profile__online-dot {
@@ -1054,6 +1092,8 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #9ca3af;
+  direction: rtl;
+  text-align: right;
 }
 
 .profile__chat-id-value {
@@ -1107,6 +1147,8 @@
   outline: none;
   transition: all 0.15s;
   font-family: inherit;
+  direction: rtl;
+  text-align: right;
 }
 
 .profile__field-input:focus {
@@ -1116,6 +1158,8 @@
 
 .profile__field-input::placeholder {
   color: #9ca3af;
+  direction: rtl;
+  text-align: right;
 }
 
 .profile__field-input--username {
@@ -1143,6 +1187,8 @@
 .profile__field-static p {
   font-size: 15px;
   color: #111827;
+  direction: rtl;
+  text-align: right;
 }
 
 .profile__field-static--with-copy {
@@ -1184,6 +1230,8 @@
   outline: none;
   transition: all 0.15s;
   font-family: inherit;
+  direction: rtl;
+  text-align: right;
 }
 
 .profile__textarea:focus {
@@ -1193,6 +1241,8 @@
 
 .profile__textarea::placeholder {
   color: #9ca3af;
+  direction: rtl;
+  text-align: right;
 }
 
 .profile__char-count {
@@ -1200,11 +1250,14 @@
   text-align: right;
   font-size: 12px;
   color: #9ca3af;
+  direction: rtl;
 }
 
 .profile__bio-empty {
   font-style: italic;
   color: #9ca3af !important;
+  direction: rtl;
+  text-align: right;
 }
 
 .profile__info-note {
@@ -1219,6 +1272,7 @@
   font-size: 12px;
   line-height: 1.625;
   color: #2563eb;
+  direction: rtl;
 }
 
 /* ========================================
@@ -1251,6 +1305,8 @@
   font-size: 24px;
   font-weight: 700;
   color: #111827;
+  direction: rtl;
+  text-align: center;
 }
 
 .empty-state__description {
@@ -1259,6 +1315,7 @@
   text-align: center;
   color: #6b7280;
   line-height: 1.5;
+  direction: rtl;
 }
 
 .empty-state__footer {
@@ -1268,6 +1325,7 @@
   gap: 8px;
   font-size: 14px;
   color: #9ca3af;
+  direction: rtl;
 }
 
 .empty-state__dot {
@@ -1309,6 +1367,7 @@
 
 .login-header p {
   color: #6b7280;
+  direction: rtl;
 }
 
 .form-group {
@@ -1321,6 +1380,8 @@
   font-size: 14px;
   font-weight: 500;
   color: #374151;
+  direction: rtl;
+  text-align: right;
 }
 
 .form-group input {
@@ -1330,6 +1391,8 @@
   border-radius: 12px;
   font-size: 15px;
   font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  direction: rtl;
+  text-align: right;
 }
 
 .login-btn {
@@ -1344,12 +1407,15 @@
   cursor: pointer;
   margin-top: 8px;
   font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  direction: rtl;
 }
 
 .error-message {
   color: #ef4444;
   font-size: 14px;
   margin: 8px 0;
+  direction: rtl;
+  text-align: right;
 }
 
 .login-footer {
@@ -1395,6 +1461,7 @@
   font-size: 18px;
   font-weight: 700;
   color: #111827;
+  direction: rtl;
 }
 
 .search-box {
@@ -1413,6 +1480,13 @@
   font-size: 15px;
   outline: none;
   font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  direction: rtl;
+  text-align: right;
+}
+
+.search-box input::placeholder {
+  direction: rtl;
+  text-align: right;
 }
 
 .results {
@@ -1426,6 +1500,7 @@
   text-align: center;
   font-size: 14px;
   color: #6b7280;
+  direction: rtl;
 }
 
 .user-item {
