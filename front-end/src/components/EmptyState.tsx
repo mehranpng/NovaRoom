@@ -6,7 +6,7 @@ export function EmptyState() {
             <div className="empty-state__icon">
                 <MessageCircle size={36} />
             </div>
-            <h2 className="empty-state__title">به NovaRoom خوش آمدید</h2>
+            <h2 className="empty-state__title">به نوا روم خوش آمدید</h2>
             <p className="empty-state__description">
                 یک گفتگو را از نوار کناری انتخاب کرده و شروع به صحبت کنید یا یک گفتگوی جدید ایجاد نمایید.
             </p>

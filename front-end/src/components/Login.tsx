@@ -41,7 +41,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
             <div className="login-container">
                 <div className="login-header">
                     <LogIn size={48} strokeWidth={1.5} />
-                    <h1>NovaRoom</h1>
+                    <h1>نوا روم</h1>
                     <p>برای ادامه وارد شوید</p>
                 </div>
 
