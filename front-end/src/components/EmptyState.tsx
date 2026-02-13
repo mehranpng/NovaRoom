@@ -6,13 +6,13 @@ export function EmptyState() {
             <div className="empty-state__icon">
                 <MessageCircle size={36} />
             </div>
-            <h2 className="empty-state__title">Welcome to NovaRoom</h2>
+            <h2 className="empty-state__title">به NovaRoom خوش آمدید</h2>
             <p className="empty-state__description">
-                Select a conversation from the sidebar to start messaging, or create a new one.
+                یک گفتگو را از نوار کناری انتخاب کرده و شروع به صحبت کنید یا یک گفتگوی جدید ایجاد نمایید.
             </p>
             <div className="empty-state__footer">
                 <span className="empty-state__dot" />
-                End-to-end encrypted
+                رمزگذاری سرتاسری
             </div>
         </div>
     );

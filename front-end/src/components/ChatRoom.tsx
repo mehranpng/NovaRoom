@@ -65,8 +65,8 @@ function formatDayLabel(ts: any) {
     const thatDay = iranDayNumber(ts);
     const diffDays = today - thatDay;
 
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
+    if (diffDays === 0) return 'امروز';
+    if (diffDays === 1) return 'دیروز';
 
     const d = iranShiftedDate(ts);
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
@@ -413,7 +413,7 @@ export function ChatRoom({
             if (onChatDeleted) onChatDeleted(chatId);
             else onBack();
         } catch (e) {
-            alert('Failed to delete chat');
+            alert('حذف گفتگو با خطا مواجه شد');
         }
     };
 
@@ -448,7 +448,7 @@ export function ChatRoom({
 
     const doDeleteMessage = (m: Message) => {
         setMsgMenu(null);
-        if (!window.confirm('Delete this message?')) return;
+        if (!window.confirm('این پیام حذف شود؟')) return;
         onDeleteMessage(m.id);
     };
 
@@ -500,7 +500,7 @@ export function ChatRoom({
                                     : 'chat-room__contact-status'
                             }
                         >
-                            {contact.online ? 'Online' : 'Offline'}
+                            {contact.online ? 'آنلاین' : 'آفلاین'}
                         </div>
                     </div>
                 </button>
@@ -528,7 +528,7 @@ export function ChatRoom({
                                 type="button"
                             >
                                 <Trash2 size={16} />
-                                Delete chat
+                                حذف گفتگو
                             </button>
                         </div>
                     )}
@@ -728,7 +728,7 @@ export function ChatRoom({
                                                 }}
                                             >
                                                 <div style={{ fontSize: 12, opacity: isMine ? 0.9 : 0.7, fontWeight: 600 }}>
-                                                    Reply
+                                                    پاسخ
                                                 </div>
                                                 <div
                                                     style={{
@@ -750,7 +750,7 @@ export function ChatRoom({
                                             <span className="message-time">{formatMessageTime(m.timestamp)}</span>
                                             {m.edited && (
                                                 <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>
-                                                    edited
+                                                    ویرایش شده
                                                 </span>
                                             )}
                                             {isMine && (
@@ -777,17 +777,17 @@ export function ChatRoom({
                 >
                     <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button">
                         <Reply size={16} />
-                        Reply
+                        پاسخ
                     </button>
                     {activeMsgIsMine && (
                         <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button">
                             <Pencil size={16} />
-                            Edit
+                            ویرایش
                         </button>
                     )}
                     <button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button">
                         <Copy size={16} />
-                        Copy
+                        کپی
                     </button>
                     {activeMsgIsMine && (
                         <button
@@ -796,7 +796,7 @@ export function ChatRoom({
                             type="button"
                         >
                             <Trash2 size={16} />
-                            Delete
+                            حذف
                         </button>
                     )}
                 </div>
@@ -861,7 +861,7 @@ export function ChatRoom({
                     >
                         <div style={{ minWidth: 0 }}>
                             <div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>
-                                {editingId ? 'Editing message' : 'Replying'}
+                                {editingId ? 'در حال ویرایش' : 'در حال پاسخ'}
                             </div>
                             {!editingId && replyTo && (
                                 <div
@@ -897,7 +897,7 @@ export function ChatRoom({
                     <input
                         ref={inputRef}
                         className="chat-room__text-input"
-                        placeholder="Message..."
+                        placeholder="پیام..."
                         value={text}
                         onChange={(e) => setText(e.target.value)}
                         onFocus={() => {
@@ -929,14 +929,14 @@ export function ChatRoom({
             {confirmOpen && (
                 <div className="modal-overlay">
                     <div className="confirm-modal">
-                        <h3 className="confirm-modal__title">Delete chat?</h3>
-                        <p className="confirm-modal__text">This will delete the chat and all messages for both users.</p>
+                        <h3 className="confirm-modal__title">گفتگو حذف شود؟</h3>
+                        <p className="confirm-modal__text">این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.</p>
                         <div className="confirm-modal__actions">
                             <button className="confirm-modal__btn" onClick={() => setConfirmOpen(false)} type="button">
-                                Cancel
+                                لغو
                             </button>
                             <button className="confirm-modal__btn confirm-modal__btn--danger" onClick={doDeleteChat} type="button">
-                                Delete
+                                حذف
                             </button>
                         </div>
                     </div>

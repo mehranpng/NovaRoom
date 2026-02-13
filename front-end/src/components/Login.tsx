@@ -30,7 +30,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
             localStorage.setItem('token', data.token);
             onLoginSuccess(data.user, data.token);
         } catch (err: any) {
-            setError(err.message || 'Invalid email or password');
+            setError(err.message || 'ایمیل یا رمز عبور نامعتبر است');
         } finally {
             setLoading(false);
         }
@@ -42,12 +42,12 @@ export function Login({ onLoginSuccess }: LoginProps) {
                 <div className="login-header">
                     <LogIn size={48} strokeWidth={1.5} />
                     <h1>NovaRoom</h1>
-                    <p>Sign in to continue</p>
+                    <p>برای ادامه وارد شوید</p>
                 </div>
 
                 <form onSubmit={handleSubmit}>
                     <div className="form-group">
-                        <label>Email</label>
+                        <label>ایمیل</label>
                         <input
                             ref={emailRef}
                             type="email"
@@ -64,7 +64,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                     </div>
 
                     <div className="form-group">
-                        <label>Password</label>
+                        <label>رمز عبور</label>
                         <input
                             ref={passwordRef}
                             type="password"
@@ -83,7 +83,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                     {error && <div className="error-message">{error}</div>}
 
                     <button type="submit" className="login-btn" disabled={loading}>
-                        {loading ? 'Signing in...' : 'Sign In'}
+                        {loading ? 'در حال ورود...' : 'ورود'}
                     </button>
                 </form>
             </div>
