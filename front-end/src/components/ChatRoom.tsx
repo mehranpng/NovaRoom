@@ -369,7 +369,7 @@ export function ChatRoom({
     const onMessagesScroll = () => {
         const container = messagesContainerRef.current;
         if (!container) return;
-        
+
         const nearBottom = computeNearBottom();
         isAtBottomRef.current = nearBottom;
         if (nearBottom) {
@@ -567,12 +567,12 @@ export function ChatRoom({
                 </div>
             </div>
 
-            <div 
-                className="chat-room__messages" 
-                ref={messagesContainerRef} 
+            <div
+                className="chat-room__messages"
+                ref={messagesContainerRef}
                 onScroll={onMessagesScroll}
                 style={{
-                    overflowY: dragState.active ? 'hidden' : 'auto'
+                    overflowX: dragState.active ? 'hidden' : 'auto'
                 }}
             >
                 <div className="chat-room__messages-inner">
