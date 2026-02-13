@@ -5,6 +5,7 @@ import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { apiFetch } from '../config/api';
 import { ContactInfo } from './ContactInfo';
+import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
 
 interface ChatRoomProps {
     chatId: string;
@@ -16,6 +17,7 @@ interface ChatRoomProps {
     onBack: () => void;
     onCloseChat: () => void;
     onChatDeleted?: (chatId: string) => void;
+    loading?: boolean;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000; // +03:30
@@ -89,6 +91,7 @@ export function ChatRoom({
     onBack,
     onCloseChat,
     onChatDeleted,
+    loading = false,
 }: ChatRoomProps) {
     const [text, setText] = useState('');
     const [chatMenuOpen, setChatMenuOpen] = useState(false);
@@ -576,233 +579,237 @@ export function ChatRoom({
                 }}
             >
                 <div className="chat-room__messages-inner">
-                    {items.map(({ m, isMine, dayBreak, shape }) => {
-                        const isHighlighted = highlightId === m.id;
-                        const dragX = dragState.id === m.id ? dragState.x : 0;
-                        const dragActive = dragState.id === m.id ? dragState.active : false;
+                    {loading ? (
+                        <ChatMessagesSkeleton />
+                    ) : (
+                        items.map(({ m, isMine, dayBreak, shape }) => {
+                            const isHighlighted = highlightId === m.id;
+                            const dragX = dragState.id === m.id ? dragState.x : 0;
+                            const dragActive = dragState.id === m.id ? dragState.active : false;
 
-                        return (
-                            <div key={m.id}>
-                                {dayBreak && (
-                                    <div className="chat-room__date-separator">
-                                        <div className="chat-room__date-label">{formatDayLabel(m.timestamp)}</div>
-                                    </div>
-                                )}
+                            return (
+                                <div key={m.id}>
+                                    {dayBreak && (
+                                        <div className="chat-room__date-separator">
+                                            <div className="chat-room__date-label">{formatDayLabel(m.timestamp)}</div>
+                                        </div>
+                                    )}
 
-                                <div
-                                    className={isMine ? 'message-row message-row--mine' : 'message-row message-row--theirs'}
-                                    onPointerDown={(e) => {
-                                        // Mouse-only here; mobile uses touch handlers below for compatibility.
-                                        if (e.pointerType !== 'mouse') return;
-                                        if (e.button !== 0) return;
-                                        swipeRef.current = {
-                                            id: m.id,
-                                            startX: e.clientX,
-                                            startY: e.clientY,
-                                            active: true,
-                                            captured: false,
-                                            pointerId: e.pointerId,
-                                            blockClickUntil: swipeRef.current.blockClickUntil,
-                                        };
-                                    }}
-                                    onPointerMove={(e) => {
-                                        if (e.pointerType !== 'mouse') return;
-                                        if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
-
-                                        const dx = e.clientX - swipeRef.current.startX;
-                                        const dy = e.clientY - swipeRef.current.startY;
-
-                                        if (!swipeRef.current.captured) {
-                                            if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy)) return;
-                                            if (dx <= 0) return; // left-to-right only
-
-                                            swipeRef.current.captured = true;
-                                            try {
-                                                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                                            } catch {
-                                                // ignore
-                                            }
-                                        }
-
-                                        if (!swipeRef.current.captured) return;
-
-                                        e.preventDefault();
-                                        const x = Math.max(0, Math.min(72, dx));
-                                        setDragState({ id: m.id, x, active: true });
-                                    }}
-                                    onPointerUp={(e) => {
-                                        if (e.pointerType !== 'mouse') return;
-                                        if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
-
-                                        const dx = e.clientX - swipeRef.current.startX;
-                                        const dy = e.clientY - swipeRef.current.startY;
-
-                                        if (swipeRef.current.captured) {
-                                            swipeRef.current.blockClickUntil = Date.now() + 280;
-                                        }
-
-                                        if (dx > 60 && Math.abs(dx) > Math.abs(dy)) {
-                                            beginReply(m);
-                                        }
-
-                                        resetDrag(m.id);
-
-                                        swipeRef.current.active = false;
-                                        swipeRef.current.captured = false;
-                                        swipeRef.current.pointerId = null;
-                                    }}
-                                    onPointerCancel={(e) => {
-                                        if (e.pointerType !== 'mouse') return;
-                                        if (swipeRef.current.id !== m.id) return;
-                                        resetDrag(m.id);
-                                        swipeRef.current.active = false;
-                                        swipeRef.current.captured = false;
-                                        swipeRef.current.pointerId = null;
-                                    }}
-                                    onTouchStart={(e) => {
-                                        const t = e.touches[0];
-                                        swipeRef.current = {
-                                            id: m.id,
-                                            startX: t.clientX,
-                                            startY: t.clientY,
-                                            active: true,
-                                            captured: false,
-                                            pointerId: null,
-                                            blockClickUntil: swipeRef.current.blockClickUntil,
-                                        };
-                                    }}
-                                    onTouchMove={(e) => {
-                                        if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
-                                        const t = e.touches[0];
-                                        const dx = t.clientX - swipeRef.current.startX;
-                                        const dy = t.clientY - swipeRef.current.startY;
-
-                                        if (!swipeRef.current.captured) {
-                                            if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy)) return;
-                                            if (dx <= 0) return; // left-to-right only
-                                            swipeRef.current.captured = true;
-                                        }
-
-                                        if (!swipeRef.current.captured) return;
-                                        // Try to prevent vertical scrolling while swiping.
-                                        e.preventDefault();
-                                        const x = Math.max(0, Math.min(72, dx));
-                                        setDragState({ id: m.id, x, active: true });
-                                    }}
-                                    onTouchEnd={(e) => {
-                                        if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
-                                        const t = e.changedTouches[0];
-                                        const dx = t.clientX - swipeRef.current.startX;
-                                        const dy = t.clientY - swipeRef.current.startY;
-
-                                        if (swipeRef.current.captured) {
-                                            swipeRef.current.blockClickUntil = Date.now() + 280;
-                                        }
-
-                                        if (dx > 60 && Math.abs(dx) > Math.abs(dy)) {
-                                            beginReply(m);
-                                        }
-
-                                        resetDrag(m.id);
-
-                                        swipeRef.current.active = false;
-                                        swipeRef.current.captured = false;
-                                        swipeRef.current.pointerId = null;
-                                    }}
-                                    onTouchCancel={() => {
-                                        if (swipeRef.current.id !== m.id) return;
-                                        resetDrag(m.id);
-                                        swipeRef.current.active = false;
-                                        swipeRef.current.captured = false;
-                                        swipeRef.current.pointerId = null;
-                                    }}
-                                >
                                     <div
-                                        ref={(el) => {
-                                            if (!el) {
-                                                messageElsRef.current.delete(m.id);
-                                                return;
+                                        className={isMine ? 'message-row message-row--mine' : 'message-row message-row--theirs'}
+                                        onPointerDown={(e) => {
+                                            // Mouse-only here; mobile uses touch handlers below for compatibility.
+                                            if (e.pointerType !== 'mouse') return;
+                                            if (e.button !== 0) return;
+                                            swipeRef.current = {
+                                                id: m.id,
+                                                startX: e.clientX,
+                                                startY: e.clientY,
+                                                active: true,
+                                                captured: false,
+                                                pointerId: e.pointerId,
+                                                blockClickUntil: swipeRef.current.blockClickUntil,
+                                            };
+                                        }}
+                                        onPointerMove={(e) => {
+                                            if (e.pointerType !== 'mouse') return;
+                                            if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+
+                                            const dx = e.clientX - swipeRef.current.startX;
+                                            const dy = e.clientY - swipeRef.current.startY;
+
+                                            if (!swipeRef.current.captured) {
+                                                if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy)) return;
+                                                if (dx <= 0) return; // left-to-right only
+
+                                                swipeRef.current.captured = true;
+                                                try {
+                                                    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                                                } catch {
+                                                    // ignore
+                                                }
                                             }
-                                            messageElsRef.current.set(m.id, el);
+
+                                            if (!swipeRef.current.captured) return;
+
+                                            e.preventDefault();
+                                            const x = Math.max(0, Math.min(72, dx));
+                                            setDragState({ id: m.id, x, active: true });
                                         }}
-                                        className={
-                                            isMine
-                                                ? `message-bubble message-bubble--mine ${shape}`
-                                                : `message-bubble message-bubble--theirs ${shape}`
-                                        }
-                                        onClick={(e) => {
-                                            if (Date.now() < swipeRef.current.blockClickUntil) return;
-                                            openMessageMenu(m.id, e.currentTarget);
+                                        onPointerUp={(e) => {
+                                            if (e.pointerType !== 'mouse') return;
+                                            if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+
+                                            const dx = e.clientX - swipeRef.current.startX;
+                                            const dy = e.clientY - swipeRef.current.startY;
+
+                                            if (swipeRef.current.captured) {
+                                                swipeRef.current.blockClickUntil = Date.now() + 280;
+                                            }
+
+                                            if (dx > 60 && Math.abs(dx) > Math.abs(dy)) {
+                                                beginReply(m);
+                                            }
+
+                                            resetDrag(m.id);
+
+                                            swipeRef.current.active = false;
+                                            swipeRef.current.captured = false;
+                                            swipeRef.current.pointerId = null;
                                         }}
-                                        role="button"
-                                        tabIndex={0}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') openMessageMenu(m.id, e.currentTarget as any);
+                                        onPointerCancel={(e) => {
+                                            if (e.pointerType !== 'mouse') return;
+                                            if (swipeRef.current.id !== m.id) return;
+                                            resetDrag(m.id);
+                                            swipeRef.current.active = false;
+                                            swipeRef.current.captured = false;
+                                            swipeRef.current.pointerId = null;
                                         }}
-                                        style={{
-                                            cursor: 'pointer',
-                                            transform: `translateX(${dragX}px)`,
-                                            transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 180ms ease-out',
-                                            boxShadow: isHighlighted ? '0 0 0 3px rgba(245, 158, 11, 0.4)' : undefined,
+                                        onTouchStart={(e) => {
+                                            const t = e.touches[0];
+                                            swipeRef.current = {
+                                                id: m.id,
+                                                startX: t.clientX,
+                                                startY: t.clientY,
+                                                active: true,
+                                                captured: false,
+                                                pointerId: null,
+                                                blockClickUntil: swipeRef.current.blockClickUntil,
+                                            };
+                                        }}
+                                        onTouchMove={(e) => {
+                                            if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                            const t = e.touches[0];
+                                            const dx = t.clientX - swipeRef.current.startX;
+                                            const dy = t.clientY - swipeRef.current.startY;
+
+                                            if (!swipeRef.current.captured) {
+                                                if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy)) return;
+                                                if (dx <= 0) return; // left-to-right only
+                                                swipeRef.current.captured = true;
+                                            }
+
+                                            if (!swipeRef.current.captured) return;
+                                            // Try to prevent vertical scrolling while swiping.
+                                            e.preventDefault();
+                                            const x = Math.max(0, Math.min(72, dx));
+                                            setDragState({ id: m.id, x, active: true });
+                                        }}
+                                        onTouchEnd={(e) => {
+                                            if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                            const t = e.changedTouches[0];
+                                            const dx = t.clientX - swipeRef.current.startX;
+                                            const dy = t.clientY - swipeRef.current.startY;
+
+                                            if (swipeRef.current.captured) {
+                                                swipeRef.current.blockClickUntil = Date.now() + 280;
+                                            }
+
+                                            if (dx > 60 && Math.abs(dx) > Math.abs(dy)) {
+                                                beginReply(m);
+                                            }
+
+                                            resetDrag(m.id);
+
+                                            swipeRef.current.active = false;
+                                            swipeRef.current.captured = false;
+                                            swipeRef.current.pointerId = null;
+                                        }}
+                                        onTouchCancel={() => {
+                                            if (swipeRef.current.id !== m.id) return;
+                                            resetDrag(m.id);
+                                            swipeRef.current.active = false;
+                                            swipeRef.current.captured = false;
+                                            swipeRef.current.pointerId = null;
                                         }}
                                     >
-                                        {m.replyTo && (
-                                            <div
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    scrollToMessage(m.replyTo!.id);
-                                                }}
-                                                role="button"
-                                                tabIndex={0}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') scrollToMessage(m.replyTo!.id);
-                                                }}
-                                                style={{
-                                                    marginBottom: 6,
-                                                    padding: '6px 10px',
-                                                    borderRadius: 12,
-                                                    background: isMine ? 'rgba(255,255,255,0.12)' : '#f3f4f6',
-                                                    borderLeft: isMine ? '3px solid rgba(255,255,255,0.55)' : '3px solid #3b82f6',
-                                                    cursor: 'pointer',
-                                                }}
-                                            >
-                                                <div style={{ fontSize: 12, opacity: isMine ? 0.9 : 0.7, fontWeight: 600 }}>
-                                                    پاسخ
-                                                </div>
+                                        <div
+                                            ref={(el) => {
+                                                if (!el) {
+                                                    messageElsRef.current.delete(m.id);
+                                                    return;
+                                                }
+                                                messageElsRef.current.set(m.id, el);
+                                            }}
+                                            className={
+                                                isMine
+                                                    ? `message-bubble message-bubble--mine ${shape}`
+                                                    : `message-bubble message-bubble--theirs ${shape}`
+                                            }
+                                            onClick={(e) => {
+                                                if (Date.now() < swipeRef.current.blockClickUntil) return;
+                                                openMessageMenu(m.id, e.currentTarget);
+                                            }}
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') openMessageMenu(m.id, e.currentTarget as any);
+                                            }}
+                                            style={{
+                                                cursor: 'pointer',
+                                                transform: `translateX(${dragX}px)`,
+                                                transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 180ms ease-out',
+                                                boxShadow: isHighlighted ? '0 0 0 3px rgba(245, 158, 11, 0.4)' : undefined,
+                                            }}
+                                        >
+                                            {m.replyTo && (
                                                 <div
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        scrollToMessage(m.replyTo!.id);
+                                                    }}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') scrollToMessage(m.replyTo!.id);
+                                                    }}
                                                     style={{
-                                                        fontSize: 13,
-                                                        opacity: isMine ? 0.95 : 0.85,
-                                                        overflow: 'hidden',
-                                                        textOverflow: 'ellipsis',
-                                                        whiteSpace: 'nowrap',
+                                                        marginBottom: 6,
+                                                        padding: '6px 10px',
+                                                        borderRadius: 12,
+                                                        background: isMine ? 'rgba(255,255,255,0.12)' : '#f3f4f6',
+                                                        borderLeft: isMine ? '3px solid rgba(255,255,255,0.55)' : '3px solid #3b82f6',
+                                                        cursor: 'pointer',
                                                     }}
                                                 >
-                                                    {m.replyTo.text}
+                                                    <div style={{ fontSize: 12, opacity: isMine ? 0.9 : 0.7, fontWeight: 600 }}>
+                                                        پاسخ
+                                                    </div>
+                                                    <div
+                                                        style={{
+                                                            fontSize: 13,
+                                                            opacity: isMine ? 0.95 : 0.85,
+                                                            overflow: 'hidden',
+                                                            textOverflow: 'ellipsis',
+                                                            whiteSpace: 'nowrap',
+                                                        }}
+                                                    >
+                                                        {m.replyTo.text}
+                                                    </div>
                                                 </div>
+                                            )}
+
+                                            <div className="message-text">{m.text}</div>
+
+                                            <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
+                                                <span className="message-time">{formatMessageTime(m.timestamp)}</span>
+                                                {m.edited && (
+                                                    <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>
+                                                        ویرایش شده
+                                                    </span>
+                                                )}
+                                                {isMine && (
+                                                    <span className={m.seen ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
+                                                        {m.seen ? '✓✓' : '✓'}
+                                                    </span>
+                                                )}
                                             </div>
-                                        )}
-
-                                        <div className="message-text">{m.text}</div>
-
-                                        <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
-                                            <span className="message-time">{formatMessageTime(m.timestamp)}</span>
-                                            {m.edited && (
-                                                <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>
-                                                    ویرایش شده
-                                                </span>
-                                            )}
-                                            {isMine && (
-                                                <span className={m.seen ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
-                                                    {m.seen ? '✓✓' : '✓'}
-                                                </span>
-                                            )}
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        );
-                    })}
+                            );
+                        })
+                    )}
                     <div ref={messagesEndRef} />
                 </div>
             </div>
