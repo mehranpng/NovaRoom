@@ -930,6 +930,7 @@
   border: none;
   cursor: pointer;
   transition: background 0.15s;
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .profile__edit-btn:hover {
@@ -949,6 +950,7 @@
   border: none;
   cursor: pointer;
   transition: background 0.15s;
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .profile__cancel-btn:hover {
@@ -968,6 +970,7 @@
   border: none;
   cursor: pointer;
   transition: background 0.15s;
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .profile__save-btn:hover {
@@ -1326,6 +1329,7 @@
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   font-size: 15px;
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .login-btn {
@@ -1339,6 +1343,7 @@
   font-weight: 600;
   cursor: pointer;
   margin-top: 8px;
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .error-message {
@@ -1407,6 +1412,7 @@
   background: none;
   font-size: 15px;
   outline: none;
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .results {
