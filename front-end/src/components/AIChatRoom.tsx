@@ -16,6 +16,7 @@ export function AIChatRoom({
     messages,
     currentUserId,
     onSendMessage,
+    onBack,
     loading = false,
     isTyping = false,
 }: AIChatRoomProps) {
@@ -84,6 +85,11 @@ export function AIChatRoom({
     return (
         <div className="chat-room">
             <div className="chat-room__header">
+                <button className="chat-room__back-btn" onClick={onBack}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M15 18l-6-6 6-6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                </button>
                 <div className="chat-room__header-clickable">
                     <div
                         style={{
