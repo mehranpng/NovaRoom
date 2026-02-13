@@ -29,6 +29,8 @@ export function App() {
     const [chats, setChats] = useState<Chat[]>([]);
     const [messages, setMessages] = useState<Record<string, Message[]>>({});
     const [newChatModalOpen, setNewChatModalOpen] = useState(false);
+    const [chatsLoading, setChatsLoading] = useState(false);
+    const [messagesLoading, setMessagesLoading] = useState<Record<string, boolean>>({});
 
     // When user is selected from search, we open the room but do NOT create the chat
     // until the first message is sent.
@@ -65,6 +67,7 @@ export function App() {
 
     const loadChats = useCallback(async () => {
         if (!isAuthenticated) return;
+        setChatsLoading(true);
         try {
             const data = await apiFetch('/chats');
             const normalized: Chat[] = (data as any[]).map((c) => {
@@ -89,6 +92,8 @@ export function App() {
             setChats(merged);
         } catch (error) {
             console.error('Failed to load chats', error);
+        } finally {
+            setChatsLoading(false);
         }
     }, [isAuthenticated, activeChatId, view]);
 
@@ -263,12 +268,15 @@ export function App() {
         // Optimistic: remove unread badge immediately
         setChats(prev => prev.map(c => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
 
+        setMessagesLoading(prev => ({ ...prev, [chatId]: true }));
         try {
             const msgs = await apiFetch(`/chats/${chatId}/messages?limit=100`);
             setMessages(prev => ({ ...prev, [chatId]: msgs }));
             sendSeen(chatId);
         } catch (err) {
             console.error(err);
+        } finally {
+            setMessagesLoading(prev => ({ ...prev, [chatId]: false }));
         }
 
         loadChats();
@@ -438,6 +446,7 @@ export function App() {
 
     const activeChat = chats.find(c => c.id === activeChatId) || null;
     const activeMessages = activeChatId ? messages[activeChatId] || [] : [];
+    const activeMessagesLoading = activeChatId ? messagesLoading[activeChatId] || false : false;
 
     return (
         <div className="app">
@@ -451,6 +460,7 @@ export function App() {
                         onOpenProfile={handleOpenProfile}
                         onNewChatClick={() => setNewChatModalOpen(true)}
                         onLogout={handleLogout}
+                        loading={chatsLoading}
                     />
                 </div>
             )}
@@ -481,6 +491,7 @@ export function App() {
                             onBack={handleBack}
                             onCloseChat={handleCloseChat}
                             onChatDeleted={handleChatDeleted}
+                            loading={activeMessagesLoading}
                         />
                     ) : (
                         <EmptyState />

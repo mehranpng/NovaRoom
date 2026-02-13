@@ -5,6 +5,7 @@ import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { cx } from '../utils/cx';
 import { EmptyState } from './EmptyState';
+import { ChatListSkeleton } from './ChatListSkeleton';
 
 interface ChatListProps {
     chats: Chat[];
@@ -14,6 +15,7 @@ interface ChatListProps {
     onOpenProfile: () => void;
     onNewChatClick: () => void;
     onLogout: () => void;
+    loading?: boolean;
 }
 
 const TEHRAN_TZ = 'Asia/Tehran';
@@ -121,6 +123,7 @@ export function ChatList({
     onOpenProfile,
     onNewChatClick,
     onLogout,
+    loading = false,
 }: ChatListProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const [menuOpen, setMenuOpen] = useState(false);
@@ -233,7 +236,9 @@ export function ChatList({
 
             {/* Chat List */}
             <div className="chat-list__items">
-                {chats.length === 0 ? (
+                {loading ? (
+                    <ChatListSkeleton />
+                ) : chats.length === 0 ? (
                     // Desktop: right pane (EmptyState) is enough; show this inside list only on mobile.
                     // We also hide it when a chat is active to avoid visual duplication.
                     isMobile && !hasActiveChat ? <EmptyState /> : null
