@@ -251,23 +251,17 @@ export function ChatList({
                             borderBottom: '1px solid #BFDBFE',
                         }}
                     >
-                        <div
+                        <img
+                            src="/avatars/ai.png"
+                            alt="NovaRoom AI"
                             style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
                                 width: '48px',
                                 height: '48px',
                                 borderRadius: '50%',
-                                background: 'linear-gradient(135deg, #4F46E5, #6366F1)',
-                                color: 'white',
-                                fontWeight: 'bold',
-                                fontSize: '16px',
+                                objectFit: 'cover',
                                 flexShrink: 0,
                             }}
-                        >
-                            AI
-                        </div>
+                        />
                         <div className="chat-list__item-content">
                             <div className="chat-list__item-row">
                                 <span
