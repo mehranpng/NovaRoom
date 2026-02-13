@@ -241,107 +241,103 @@ export function ChatList({
 
             {/* Chat List */}
             <div className="chat-list__items">
+                {/* AI Chat - Always pinned at top - show even during loading */}
+                {showAIChat && (
+                    <button
+                        onClick={onOpenAIChat}
+                        className="chat-list__item"
+                        style={{
+                            background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)',
+                            borderBottom: '1px solid #BFDBFE',
+                        }}
+                    >
+                        <div
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '48px',
+                                height: '48px',
+                                borderRadius: '50%',
+                                background: 'linear-gradient(135deg, #4F46E5, #6366F1)',
+                                color: 'white',
+                                fontWeight: 'bold',
+                                fontSize: '16px',
+                                flexShrink: 0,
+                            }}
+                        >
+                            AI
+                        </div>
+                        <div className="chat-list__item-content">
+                            <div className="chat-list__item-row">
+                                <span
+                                    className="chat-list__item-name"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                                >
+                                    NovaRoom AI
+                                    <VerifiedBadge size={14} />
+                                </span>
+                            </div>
+                            <div className="chat-list__item-preview">
+                                <p className="chat-list__item-text">
+                                    دستیار هوشمند شما
+                                </p>
+                            </div>
+                        </div>
+                    </button>
+                )}
+
+                {/* Regular chats */}
                 {loading ? (
                     <ChatListSkeleton />
+                ) : chats.length === 0 ? (
+                    isMobile && !hasActiveChat ? <EmptyState /> : null
+                ) : filteredChats.length === 0 ? (
+                    <div className="chat-list__empty">
+                        <MessageSquarePlus size={48} strokeWidth={1} />
+                        <p>گفتگویی یافت نشد</p>
+                    </div>
                 ) : (
-                    <>
-                        {/* AI Chat - Always pinned at top */}
-                        {showAIChat && (
+                    filteredChats.map((chat) => {
+                        const contact = getContact(chat);
+                        const isActive = activeChatId === chat.id;
+                        const isMine = chat.lastMessage?.senderId === currentUser.chatId;
+
+                        return (
                             <button
-                                onClick={onOpenAIChat}
-                                className="chat-list__item"
-                                style={{
-                                    background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)',
-                                    borderBottom: '1px solid #BFDBFE',
-                                }}
+                                key={chat.id}
+                                onClick={() => onSelectChat(chat.id)}
+                                className={cx('chat-list__item', isActive && 'chat-list__item--active')}
                             >
-                                <div
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        width: '48px',
-                                        height: '48px',
-                                        borderRadius: '50%',
-                                        background: 'linear-gradient(135deg, #4F46E5, #6366F1)',
-                                        color: 'white',
-                                        fontWeight: 'bold',
-                                        fontSize: '16px',
-                                        flexShrink: 0,
-                                    }}
-                                >
-                                    AI
-                                </div>
+                                <Avatar name={contact.name} size="md" online={contact.online} />
                                 <div className="chat-list__item-content">
                                     <div className="chat-list__item-row">
                                         <span
                                             className="chat-list__item-name"
                                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                                         >
-                                            NovaRoom AI
-                                            <VerifiedBadge size={14} />
+                                            {contact.name}
+                                            {contact.verified ? <VerifiedBadge size={14} /> : null}
                                         </span>
+                                        {chat.lastMessage && (
+                                            <span className="chat-list__item-time">
+                                                {formatTime(chat.lastMessage.timestamp)}
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="chat-list__item-preview">
                                         <p className="chat-list__item-text">
-                                            دستیار هوشمند شما
+                                            {isMine && <span className="chat-list__item-text-prefix">شما: </span>}
+                                            {chat.lastMessage?.text || 'هنوز پیامی ارسال نشده'}
                                         </p>
+                                        {chat.unreadCount > 0 && (
+                                            <span className="chat-list__unread-badge">{chat.unreadCount}</span>
+                                        )}
                                     </div>
                                 </div>
                             </button>
-                        )}
-
-                        {/* Regular chats */}
-                        {chats.length === 0 ? (
-                            isMobile && !hasActiveChat ? <EmptyState /> : null
-                        ) : filteredChats.length === 0 ? (
-                            <div className="chat-list__empty">
-                                <MessageSquarePlus size={48} strokeWidth={1} />
-                                <p>گفتگویی یافت نشد</p>
-                            </div>
-                        ) : (
-                            filteredChats.map((chat) => {
-                                const contact = getContact(chat);
-                                const isActive = activeChatId === chat.id;
-                                const isMine = chat.lastMessage?.senderId === currentUser.chatId;
-
-                                return (
-                                    <button
-                                        key={chat.id}
-                                        onClick={() => onSelectChat(chat.id)}
-                                        className={cx('chat-list__item', isActive && 'chat-list__item--active')}
-                                    >
-                                        <Avatar name={contact.name} size="md" online={contact.online} />
-                                        <div className="chat-list__item-content">
-                                            <div className="chat-list__item-row">
-                                                <span
-                                                    className="chat-list__item-name"
-                                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                                                >
-                                                    {contact.name}
-                                                    {contact.verified ? <VerifiedBadge size={14} /> : null}
-                                                </span>
-                                                {chat.lastMessage && (
-                                                    <span className="chat-list__item-time">
-                                                        {formatTime(chat.lastMessage.timestamp)}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className="chat-list__item-preview">
-                                                <p className="chat-list__item-text">
-                                                    {isMine && <span className="chat-list__item-text-prefix">شما: </span>}
-                                                    {chat.lastMessage?.text || 'هنوز پیامی ارسال نشده'}
-                                                </p>
-                                                {chat.unreadCount > 0 && (
-                                                    <span className="chat-list__unread-badge">{chat.unreadCount}</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </button>
-                                );
-                            })
-                        )}
-                    </>
+                        );
+                    })
                 )}
             </div>
         </div>
