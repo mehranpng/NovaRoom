@@ -286,9 +286,8 @@ export function App() {
         
         try {
             const msgs = await apiFetch(`/chats/${chatId}/messages?limit=100`);
-            // Reverse the messages so latest ones are at the bottom
-            const reversedMsgs = [...msgs].reverse();
-            setMessages(prev => ({ ...prev, [chatId]: reversedMsgs }));
+            // API already returns messages in correct order (oldest first, newest last)
+            setMessages(prev => ({ ...prev, [chatId]: msgs }));
             setMessagesLoadedOnce(prev => ({ ...prev, [chatId]: true }));
             sendSeen(chatId);
         } catch (err) {
