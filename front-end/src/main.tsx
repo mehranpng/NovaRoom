@@ -16,13 +16,8 @@ function Router() {
         return () => window.removeEventListener('popstate', handlePopState);
     }, []);
 
-    const navigate = (path: string) => {
-        window.history.pushState({}, '', path);
-        setCurrentPath(path);
-    };
-
     if (currentPath === '/aichat') {
-        return <AIChat onBack={() => navigate('/')} />;
+        return <AIChat />;
     }
 
     return <App />;
