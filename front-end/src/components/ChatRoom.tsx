@@ -106,6 +106,8 @@ export function ChatRoom({
 
     const menuRef = useRef<HTMLDivElement | null>(null);
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
+    const confirmDeleteChatRef = useRef<HTMLDivElement | null>(null);
+    const confirmDeleteMsgRef = useRef<HTMLDivElement | null>(null);
 
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -294,6 +296,23 @@ export function ChatRoom({
             const target = e.target as Node;
             if (menuRef.current && menuRef.current.contains(target)) return;
             if (msgMenuRef.current && msgMenuRef.current.contains(target)) return;
+            
+            // Close modals if clicking on backdrop (overlay)
+            if (confirmDeleteChatRef.current) {
+                const modal = confirmDeleteChatRef.current.querySelector('.chat-room-confirm-modal');
+                if (modal && !modal.contains(target)) {
+                    setConfirmDeleteChat(false);
+                    return;
+                }
+            }
+            if (confirmDeleteMsgRef.current) {
+                const modal = confirmDeleteMsgRef.current.querySelector('.chat-room-confirm-modal');
+                if (modal && !modal.contains(target)) {
+                    setConfirmDeleteMsg(null);
+                    return;
+                }
+            }
+            
             setChatMenuOpen(false);
             setMsgMenu(null);
         };
@@ -976,7 +995,7 @@ export function ChatRoom({
             </div>
 
             {confirmDeleteChat && (
-                <div className="chat-room-modal-overlay">
+                <div className="chat-room-modal-overlay" ref={confirmDeleteChatRef}>
                     <div className="chat-room-confirm-modal">
                         <h3 className="chat-room-confirm-modal__title">گفتگو حذف شود؟</h3>
                         <p className="chat-room-confirm-modal__text">این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.</p>
@@ -993,7 +1012,7 @@ export function ChatRoom({
             )}
 
             {confirmDeleteMsg && (
-                <div className="chat-room-modal-overlay">
+                <div className="chat-room-modal-overlay" ref={confirmDeleteMsgRef}>
                     <div className="chat-room-confirm-modal">
                         <h3 className="chat-room-confirm-modal__title">این پیام حذف شود؟</h3>
                         <p className="chat-room-confirm-modal__text">این عمل پیام را برای هر دو کاربر حذف خواهد کرد.</p>

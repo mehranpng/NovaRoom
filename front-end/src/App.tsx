@@ -407,6 +407,8 @@ export function App() {
     const handleBack = () => {
         setView('chatList');
         setPendingUser(null);
+        // Clear active chat when going back so messages don't get marked as seen
+        setActiveChatId(null);
     };
 
     const handleCloseChat = () => {
