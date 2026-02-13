@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import type { KeyboardEvent } from 'react';
+import { ArrowDown, ArrowLeft, Copy } from 'lucide-react';
 import type { Message } from '../types';
+import { VerifiedBadge } from './VerifiedBadge';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
 
 interface AIChatRoomProps {
@@ -12,6 +13,30 @@ interface AIChatRoomProps {
     isTyping?: boolean;
 }
 
+const IRAN_OFFSET_MS = 210 * 60 * 1000; // +03:30
+
+function normalizeTs(ts: any): number {
+    if (ts == null) return Date.now();
+    if (typeof ts === 'string') {
+        const n = Date.parse(ts);
+        return Number.isFinite(n) ? n : Date.now();
+    }
+    if (typeof ts === 'number') {
+        return ts < 1_000_000_000_000 ? ts * 1000 : ts;
+    }
+    if (ts instanceof Date) return ts.getTime();
+    return Date.now();
+}
+
+function iranShiftedDate(ts: any): Date {
+    return new Date(normalizeTs(ts) + IRAN_OFFSET_MS);
+}
+
+function formatMessageTime(ts: any) {
+    const d = iranShiftedDate(ts);
+    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
+}
+
 export function AIChatRoom({
     messages,
     currentUserId,
@@ -20,183 +45,397 @@ export function AIChatRoom({
     loading = false,
     isTyping = false,
 }: AIChatRoomProps) {
-    const [messageText, setMessageText] = useState('');
-    const [contextMenu, setContextMenu] = useState<{
-        x: number;
-        y: number;
-        text: string;
-    } | null>(null);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const [text, setText] = useState('');
+    const [msgMenu, setMsgMenu] = useState<{ id: string; top: number; left: number } | null>(null);
+    const [newMsgCount, setNewMsgCount] = useState(0);
+    const [showScrollBtn, setShowScrollBtn] = useState(false);
 
-    // Auto-scroll to bottom when messages change
+    const msgMenuRef = useRef<HTMLDivElement | null>(null);
+    const messagesEndRef = useRef<HTMLDivElement | null>(null);
+    const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+    const roomRef = useRef<HTMLDivElement | null>(null);
+    const inputRef = useRef<HTMLInputElement | null>(null);
+    const isAtBottomRef = useRef(true);
+    const prevLenRef = useRef(0);
+    const initialScrollDoneRef = useRef(false);
+
+    const scrollToBottom = (smooth = false) => {
+        const container = messagesContainerRef.current;
+        if (container) {
+            const top = Math.max(0, container.scrollHeight - container.clientHeight);
+            container.scrollTo({ top, behavior: smooth ? 'smooth' : 'auto' });
+            return;
+        }
+        const el = messagesEndRef.current;
+        if (!el) return;
+        el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
+    };
+
+    const computeNearBottom = () => {
+        const container = messagesContainerRef.current;
+        if (!container) return true;
+        const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+        return distanceFromBottom < 120;
+    };
+
+    // Keyboard offset handling
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages, isTyping]);
+        const room = roomRef.current;
+        if (!room) return;
 
-    // Close context menu on click outside
+        const vv = (window as any).visualViewport as VisualViewport | undefined;
+        if (!vv) {
+            room.style.setProperty('--keyboard-offset', '0px');
+            return;
+        }
+
+        let raf: number | null = null;
+
+        const update = () => {
+            const el = roomRef.current;
+            if (!el) return;
+
+            const offsetTop = typeof vv.offsetTop === 'number' ? vv.offsetTop : 0;
+            const keyboard = Math.max(0, window.innerHeight - vv.height - offsetTop);
+            el.style.setProperty('--keyboard-offset', `${Math.round(keyboard)}px`);
+
+            if (isAtBottomRef.current) {
+                if (raf) cancelAnimationFrame(raf);
+                raf = requestAnimationFrame(() => scrollToBottom(false));
+            }
+        };
+
+        update();
+        vv.addEventListener('resize', update);
+        vv.addEventListener('scroll', update);
+        window.addEventListener('orientationchange', update);
+
+        return () => {
+            vv.removeEventListener('resize', update);
+            vv.removeEventListener('scroll', update);
+            window.removeEventListener('orientationchange', update);
+            if (raf) cancelAnimationFrame(raf);
+            room.style.removeProperty('--keyboard-offset');
+        };
+    }, []);
+
+    // Close menu when clicking outside
     useEffect(() => {
-        const handleClick = () => setContextMenu(null);
-        if (contextMenu) {
-            document.addEventListener('click', handleClick);
-            return () => document.removeEventListener('click', handleClick);
+        const onDocClick = (e: MouseEvent) => {
+            if (msgMenuRef.current && msgMenuRef.current.contains(e.target as Node)) return;
+            setMsgMenu(null);
+        };
+        document.addEventListener('mousedown', onDocClick);
+        return () => document.removeEventListener('mousedown', onDocClick);
+    }, []);
+
+    // Initial scroll to bottom
+    useEffect(() => {
+        const raf = requestAnimationFrame(() => scrollToBottom(false));
+        return () => cancelAnimationFrame(raf);
+    }, []);
+
+    // Handle new messages
+    useEffect(() => {
+        const container = messagesContainerRef.current;
+        if (!container) {
+            prevLenRef.current = messages.length;
+            return;
         }
-    }, [contextMenu]);
 
-    const handleSend = () => {
-        const text = messageText.trim();
-        if (!text) return;
+        const nearBottom = computeNearBottom();
+        isAtBottomRef.current = nearBottom;
 
-        onSendMessage(text);
-        setMessageText('');
-    };
+        if (!initialScrollDoneRef.current) {
+            if (messages.length > 0) {
+                const raf = requestAnimationFrame(() => scrollToBottom(false));
+                initialScrollDoneRef.current = true;
+                prevLenRef.current = messages.length;
+                return () => cancelAnimationFrame(raf);
+            }
+            prevLenRef.current = messages.length;
+            return;
+        }
 
-    const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            handleSend();
+        const added = messages.length - prevLenRef.current;
+        if (added > 0) {
+            if (nearBottom) {
+                const raf = requestAnimationFrame(() => scrollToBottom(true));
+                prevLenRef.current = messages.length;
+                return () => cancelAnimationFrame(raf);
+            }
+            setNewMsgCount((c) => c + added);
+        }
+
+        prevLenRef.current = messages.length;
+    }, [messages.length]);
+
+    // Handle typing indicator
+    useEffect(() => {
+        if (isTyping && isAtBottomRef.current) {
+            requestAnimationFrame(() => scrollToBottom(true));
+        }
+    }, [isTyping]);
+
+    const onMessagesScroll = () => {
+        const container = messagesContainerRef.current;
+        if (!container) return;
+
+        const nearBottom = computeNearBottom();
+        isAtBottomRef.current = nearBottom;
+        if (nearBottom) {
+            setNewMsgCount(0);
+            setShowScrollBtn(false);
+        } else {
+            const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+            setShowScrollBtn(distanceFromBottom > 300);
         }
     };
 
-    const handleMessageClick = (e: React.MouseEvent, text: string) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setContextMenu({
-            x: e.clientX,
-            y: e.clientY,
-            text,
-        });
+    const submit = () => {
+        const t = text.trim();
+        if (!t || isTyping) return;
+
+        onSendMessage(t);
+        setText('');
+        requestAnimationFrame(() => scrollToBottom(true));
     };
 
-    const handleCopyMessage = () => {
-        if (contextMenu) {
-            navigator.clipboard.writeText(contextMenu.text);
-            setContextMenu(null);
+    const openMessageMenu = (messageId: string, targetEl: HTMLElement) => {
+        const room = roomRef.current;
+        if (!room) return;
+
+        const roomRect = room.getBoundingClientRect();
+        const r = targetEl.getBoundingClientRect();
+
+        let top = r.top - roomRect.top;
+        let left = r.left - roomRect.left;
+
+        const menuHeight = 80;
+        const menuWidth = 180;
+
+        const maxTop = roomRect.height - menuHeight - 16;
+        top = Math.max(56, Math.min(top, maxTop));
+
+        const maxLeft = roomRect.width - menuWidth - 16;
+        left = Math.max(12, Math.min(left, maxLeft));
+
+        setMsgMenu({ id: messageId, top, left });
+    };
+
+    const doCopyMessage = async (m: Message) => {
+        const value = m.text ?? '';
+        try {
+            if (navigator.clipboard && (window as any).isSecureContext) {
+                await navigator.clipboard.writeText(value);
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = value;
+                ta.style.position = 'fixed';
+                ta.style.left = '-9999px';
+                ta.style.top = '0';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
+        } catch {
+            // ignore
         }
+        setMsgMenu(null);
     };
 
-    const formatTime = (timestamp: number) => {
-        const date = new Date(timestamp);
-        return date.toLocaleTimeString('fa-IR', {
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-    };
+    const activeMsg = msgMenu ? messages.find((m) => m.id === msgMenu.id) : null;
 
     return (
-        <div className="chat-room">
+        <div className="chat-room" style={{ position: 'relative' }} ref={roomRef}>
             <div className="chat-room__header">
-                <button className="chat-room__back-btn" onClick={onBack}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path d="M15 18l-6-6 6-6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                <button className="chat-room__back-btn" onClick={onBack} aria-label="Back" type="button">
+                    <ArrowLeft size={20} />
                 </button>
-                <div className="chat-room__header-clickable">
+
+                <div className="chat-room__header-clickable chat-room__header-clickable--full">
                     <div
                         style={{
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            width: '48px',
-                            height: '48px',
+                            width: '40px',
+                            height: '40px',
                             borderRadius: '50%',
                             background: 'linear-gradient(135deg, #4F46E5, #6366F1)',
                             color: 'white',
                             fontWeight: 'bold',
-                            fontSize: '16px',
+                            fontSize: '14px',
                             flexShrink: 0,
                         }}
                     >
                         AI
                     </div>
                     <div className="chat-room__header-info">
-                        <h2 className="chat-room__contact-name">NovaRoom AI</h2>
-                        <p className="chat-room__contact-status">
+                        <div
+                            className="chat-room__contact-name"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        >
+                            NovaRoom AI
+                            <VerifiedBadge size={14} />
+                        </div>
+                        <div className="chat-room__contact-status">
                             {isTyping ? 'در حال تایپ...' : 'دستیار هوشمند شما'}
-                        </p>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div className="chat-room__messages">
-                {loading ? (
-                    <ChatMessagesSkeleton />
-                ) : (
-                    <div className="chat-room__messages-inner">
-                        {messages.map((message) => {
+            <div
+                className="chat-room__messages"
+                ref={messagesContainerRef}
+                onScroll={onMessagesScroll}
+            >
+                <div className="chat-room__messages-inner">
+                    {loading ? (
+                        <ChatMessagesSkeleton />
+                    ) : (
+                        messages.map((message) => {
                             const isMine = message.senderId === currentUserId;
 
                             return (
                                 <div
                                     key={message.id}
-                                    className={`message-row ${
-                                        isMine ? 'message-row--mine' : 'message-row--theirs'
-                                    } message-row--first`}
+                                    className={isMine ? 'message-row message-row--mine' : 'message-row message-row--theirs'}
                                 >
                                     <div
-                                        className={`message-bubble ${
+                                        className={
                                             isMine
-                                                ? 'message-bubble--mine'
-                                                : 'message-bubble--theirs'
-                                        } msg-shape--single`}
-                                        onClick={(e) => handleMessageClick(e, message.text)}
+                                                ? 'message-bubble message-bubble--mine msg-shape--single'
+                                                : 'message-bubble message-bubble--theirs msg-shape--single'
+                                        }
+                                        onClick={(e) => openMessageMenu(message.id, e.currentTarget)}
+                                        role="button"
+                                        tabIndex={0}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') openMessageMenu(message.id, e.currentTarget as any);
+                                        }}
                                         style={{ cursor: 'pointer' }}
                                     >
                                         <div className="message-text">{message.text}</div>
-                                        <div
-                                            className={`message-meta ${
-                                                isMine ? 'message-meta--mine' : 'message-meta--theirs'
-                                            }`}
-                                        >
-                                            <span className="message-time">
-                                                {formatTime(message.timestamp)}
-                                            </span>
+                                        <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
+                                            <span className="message-time">{formatMessageTime(message.timestamp)}</span>
                                         </div>
                                     </div>
                                 </div>
                             );
-                        })}
+                        })
+                    )}
 
-                        {/* Typing indicator */}
-                        {isTyping && (
-                            <div className="message-row message-row--theirs message-row--first">
-                                <div className="message-bubble message-bubble--theirs msg-shape--single">
-                                    <div className="typing-indicator">
-                                        <span></span>
-                                        <span></span>
-                                        <span></span>
-                                    </div>
+                    {/* Typing indicator */}
+                    {isTyping && (
+                        <div className="message-row message-row--theirs">
+                            <div className="message-bubble message-bubble--theirs msg-shape--single">
+                                <div className="typing-indicator">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
                                 </div>
                             </div>
-                        )}
+                        </div>
+                    )}
 
-                        <div ref={messagesEndRef} />
-                    </div>
-                )}
+                    <div ref={messagesEndRef} />
+                </div>
             </div>
+
+            {msgMenu && activeMsg && (
+                <div
+                    ref={msgMenuRef}
+                    className="popover popover--mini"
+                    style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button">
+                        <Copy size={16} />
+                        کپی
+                    </button>
+                </div>
+            )}
+
+            {(newMsgCount > 0 || showScrollBtn) && (
+                <button
+                    type="button"
+                    aria-label="Jump to latest messages"
+                    onClick={() => {
+                        scrollToBottom(true);
+                        setNewMsgCount(0);
+                        setShowScrollBtn(false);
+                    }}
+                    style={{
+                        position: 'absolute',
+                        right: 16,
+                        bottom: 96,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: newMsgCount > 0 ? '8px 10px' : '10px',
+                        borderRadius: 999,
+                        border: '1px solid rgba(0,0,0,0.12)',
+                        background: '#fff',
+                        boxShadow: '0 6px 20px rgba(0,0,0,0.10)',
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        lineHeight: '12px',
+                    }}
+                >
+                    <ArrowDown size={16} />
+                    {newMsgCount > 0 && (
+                        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{newMsgCount}</span>
+                            <span
+                                style={{
+                                    width: 6,
+                                    height: 6,
+                                    borderRadius: 999,
+                                    background: '#2F80ED',
+                                    marginTop: 4,
+                                }}
+                            />
+                        </span>
+                    )}
+                </button>
+            )}
 
             <div className="chat-room__input-area">
                 <div className="chat-room__input-wrapper">
                     <input
-                        type="text"
+                        ref={inputRef}
                         className="chat-room__text-input"
                         placeholder="پیام خود را بنویسید..."
-                        value={messageText}
-                        onChange={(e) => setMessageText(e.target.value)}
-                        onKeyDown={handleKeyDown}
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                        onFocus={() => {
+                            setTimeout(() => {
+                                if (computeNearBottom()) scrollToBottom(false);
+                            }, 80);
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') submit();
+                        }}
                         disabled={isTyping}
                     />
                     <button
-                        className={`chat-room__send-btn ${
-                            messageText.trim() && !isTyping
-                                ? 'chat-room__send-btn--active'
-                                : 'chat-room__send-btn--disabled'
-                        }`}
-                        onClick={handleSend}
-                        disabled={!messageText.trim() || isTyping}
+                        className={
+                            text.trim() && !isTyping
+                                ? 'chat-room__send-btn chat-room__send-btn--active'
+                                : 'chat-room__send-btn chat-room__send-btn--disabled'
+                        }
+                        onClick={submit}
+                        disabled={!text.trim() || isTyping}
+                        aria-label="Send"
+                        type="button"
                     >
                         <svg
-                            width="20"
-                            height="20"
+                            width="18"
+                            height="18"
                             viewBox="0 0 24 24"
                             fill="none"
                             stroke="currentColor"
@@ -210,28 +449,6 @@ export function AIChatRoom({
                     </button>
                 </div>
             </div>
-
-            {/* Context Menu */}
-            {contextMenu && (
-                <div
-                    className="popover popover--mini"
-                    style={{
-                        position: 'fixed',
-                        left: `${contextMenu.x}px`,
-                        top: `${contextMenu.y}px`,
-                        right: 'auto',
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <button className="popover__item" onClick={handleCopyMessage}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <rect x="9" y="9" width="13" height="13" rx="2" strokeWidth="2" />
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" strokeWidth="2" />
-                        </svg>
-                        کپی کردن
-                    </button>
-                </div>
-            )}
 
             <style>{`
                 .typing-indicator {
