@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Message, View, User, Chat, ChatLastMessage } from './types';
 import { apiFetch } from './config/api';
 import { useWebSocket } from './hooks/useWebSocket';
+import { useNavigation } from './AppRouter';
 import { ChatList } from './components/ChatList';
 import { ChatRoom } from './components/ChatRoom';
 import { Profile } from './components/Profile';
@@ -29,6 +30,7 @@ export function App() {
     const [chats, setChats] = useState<Chat[]>([]);
     const [messages, setMessages] = useState<Record<string, Message[]>>({});
     const [newChatModalOpen, setNewChatModalOpen] = useState(false);
+    const { navigate } = useNavigation();
     
     // Track if this is the initial load (show skeleton only once)
     const [isInitialChatsLoad, setIsInitialChatsLoad] = useState(true);
@@ -432,6 +434,10 @@ export function App() {
         loadChats(false);
     };
 
+    const handleOpenAIChat = () => {
+        navigate('/aichat');
+    };
+
     // Temporary contact resolver
     const getActiveContact = (): User => {
         if (pendingUser) return pendingUser;
@@ -485,6 +491,7 @@ export function App() {
                         onOpenProfile={handleOpenProfile}
                         onNewChatClick={() => setNewChatModalOpen(true)}
                         onLogout={handleLogout}
+                        onOpenAIChat={handleOpenAIChat}
                         loading={isInitialChatsLoad}
                     />
                 </div>
