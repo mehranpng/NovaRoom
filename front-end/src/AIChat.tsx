@@ -32,7 +32,13 @@ export function AIChat({ onBack }: AIChatProps) {
             try {
                 setLoading(true);
                 const data = await apiFetch('/ai/messages?limit=100');
-                setMessages(data);
+                // Add chatId to messages from API
+                const messagesWithChatId = data.map((msg: any) => ({
+                    ...msg,
+                    chatId: 'ai_chat',
+                    seen: true,
+                }));
+                setMessages(messagesWithChatId);
             } catch (error) {
                 console.error('Failed to load AI messages:', error);
             } finally {
@@ -44,8 +50,13 @@ export function AIChat({ onBack }: AIChatProps) {
     }, []);
 
     // Handle new AI response
-    const handleNewMessage = useCallback((message: Message) => {
-        setMessages(prev => [...prev, message]);
+    const handleNewMessage = useCallback((message: any) => {
+        const messageWithChatId: Message = {
+            ...message,
+            chatId: 'ai_chat',
+            seen: true,
+        };
+        setMessages(prev => [...prev, messageWithChatId]);
     }, []);
 
     // Initialize AI WebSocket
@@ -60,6 +71,7 @@ export function AIChat({ onBack }: AIChatProps) {
         // Add user message to UI immediately
         const userMessage: Message = {
             id: `temp-${Date.now()}`,
+            chatId: 'ai_chat',
             senderId: currentUserId,
             text,
             timestamp: Date.now(),
