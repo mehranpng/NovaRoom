@@ -77,7 +77,7 @@ function formatTime(timestamp: any): string {
         return tehranTimeFmt.format(d);
     }
     if (diffDays === 1) {
-        return 'Yesterday';
+        return 'دیروز';
     }
     if (diffDays < 7) {
         return tehranWeekdayFmt.format(d);
@@ -203,11 +203,11 @@ export function ChatList({
                             <div className="popover popover--mini popover--right">
                                 <button className="popover__item" onClick={() => { setMenuOpen(false); onOpenProfile(); }} type="button">
                                     <UserIcon size={16} />
-                                    Profile
+                                    پروفایل
                                 </button>
                                 <button className="popover__item popover__item--danger" onClick={() => { setMenuOpen(false); onLogout(); }} type="button">
                                     <LogOut size={16} />
-                                    Logout
+                                    خروج
                                 </button>
                             </div>
                         )}
@@ -223,7 +223,7 @@ export function ChatList({
                     </span>
                     <input
                         type="text"
-                        placeholder="Search conversations..."
+                        placeholder="جستجوی گفتگو..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="chat-list__search-input"
@@ -240,7 +240,7 @@ export function ChatList({
                 ) : filteredChats.length === 0 ? (
                     <div className="chat-list__empty">
                         <MessageSquarePlus size={48} strokeWidth={1} />
-                        <p>No conversations found</p>
+                        <p>گفتگویی یافت نشد</p>
                     </div>
                 ) : (
                     filteredChats.map((chat) => {
@@ -272,8 +272,8 @@ export function ChatList({
                                     </div>
                                     <div className="chat-list__item-preview">
                                         <p className="chat-list__item-text">
-                                            {isMine && <span className="chat-list__item-text-prefix">You: </span>}
-                                            {chat.lastMessage?.text || 'No messages yet'}
+                                            {isMine && <span className="chat-list__item-text-prefix">شما: </span>}
+                                            {chat.lastMessage?.text || 'هنوز پیامی ارسال نشده'}
                                         </p>
                                         {chat.unreadCount > 0 && (
                                             <span className="chat-list__unread-badge">{chat.unreadCount}</span>
