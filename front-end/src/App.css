@@ -1,38 +1,26 @@
 /* ========================================
    GLOBAL MOBILE OPTIMIZATIONS
    ======================================== */
-/* Disable zoom on entire app */
-* {
-  touch-action: manipulation;
+/* Disable zoom and selection on ALL elements */
+*,
+*::before,
+*::after {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+  -webkit-touch-callout: none !important;
+  touch-action: manipulation !important;
 }
 
-/* Disable text selection globally */
-body, html {
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
-  /* Disable tap highlight (blue halo on mobile) */
-  -webkit-tap-highlight-color: transparent;
-  -webkit-touch-callout: none;
-}
-
-/* Re-enable selection for inputs and textareas */
+/* Re-enable selection ONLY for input fields */
 input,
-textarea,
-[contenteditable] {
-  -webkit-user-select: text;
-  -moz-user-select: text;
-  -ms-user-select: text;
-  user-select: text;
-}
-
-/* Allow selection for message text (for copy) */
-.message-text {
-  -webkit-user-select: text;
-  -moz-user-select: text;
-  -ms-user-select: text;
-  user-select: text;
+textarea {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
 }
 
 .app {
