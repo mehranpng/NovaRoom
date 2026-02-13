@@ -29,7 +29,10 @@ export function App() {
     const [chats, setChats] = useState<Chat[]>([]);
     const [messages, setMessages] = useState<Record<string, Message[]>>({});
     const [newChatModalOpen, setNewChatModalOpen] = useState(false);
-    const [chatsLoading, setChatsLoading] = useState(false);
+    
+    // Track if this is the initial load (show skeleton only once)
+    const [isInitialChatsLoad, setIsInitialChatsLoad] = useState(true);
+    const [messagesLoadedOnce, setMessagesLoadedOnce] = useState<Record<string, boolean>>({});
     const [messagesLoading, setMessagesLoading] = useState<Record<string, boolean>>({});
 
     // When user is selected from search, we open the room but do NOT create the chat
@@ -65,9 +68,14 @@ export function App() {
         };
     }, []);
 
-    const loadChats = useCallback(async () => {
+    const loadChats = useCallback(async (showLoading = true) => {
         if (!isAuthenticated) return;
-        setChatsLoading(true);
+        
+        // Only show skeleton on initial load
+        if (showLoading && isInitialChatsLoad) {
+            // Will be set to false after first load
+        }
+        
         try {
             const data = await apiFetch('/chats');
             const normalized: Chat[] = (data as any[]).map((c) => {
@@ -90,12 +98,12 @@ export function App() {
             });
 
             setChats(merged);
+            setIsInitialChatsLoad(false);
         } catch (error) {
             console.error('Failed to load chats', error);
-        } finally {
-            setChatsLoading(false);
+            setIsInitialChatsLoad(false);
         }
-    }, [isAuthenticated, activeChatId, view]);
+    }, [isAuthenticated, activeChatId, view, isInitialChatsLoad]);
 
     const handleLogout = useCallback(() => {
         localStorage.removeItem('token');
@@ -107,6 +115,8 @@ export function App() {
         setChats([]);
         setMessages({});
         setNewChatModalOpen(false);
+        setIsInitialChatsLoad(true);
+        setMessagesLoadedOnce({});
     }, []);
 
     // WebSocket handlers wrapped in useCallback to prevent infinite reconnection loops
@@ -128,7 +138,7 @@ export function App() {
         // in the sidebar without a refresh.
         const hasChat = chatsRef.current.some(c => c.id === chatId);
         if (!hasChat) {
-            loadChats();
+            loadChats(false);
         }
 
         // Update last message + unread counter in chat list
@@ -268,19 +278,29 @@ export function App() {
         // Optimistic: remove unread badge immediately
         setChats(prev => prev.map(c => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
 
-        setMessagesLoading(prev => ({ ...prev, [chatId]: true }));
+        // Only show skeleton if this chat has never been loaded before
+        const shouldShowSkeleton = !messagesLoadedOnce[chatId];
+        if (shouldShowSkeleton) {
+            setMessagesLoading(prev => ({ ...prev, [chatId]: true }));
+        }
+        
         try {
             const msgs = await apiFetch(`/chats/${chatId}/messages?limit=100`);
-            setMessages(prev => ({ ...prev, [chatId]: msgs }));
+            // Reverse the messages so latest ones are at the bottom
+            const reversedMsgs = [...msgs].reverse();
+            setMessages(prev => ({ ...prev, [chatId]: reversedMsgs }));
+            setMessagesLoadedOnce(prev => ({ ...prev, [chatId]: true }));
             sendSeen(chatId);
         } catch (err) {
             console.error(err);
         } finally {
-            setMessagesLoading(prev => ({ ...prev, [chatId]: false }));
+            if (shouldShowSkeleton) {
+                setMessagesLoading(prev => ({ ...prev, [chatId]: false }));
+            }
         }
 
-        loadChats();
-    }, [loadChats, sendSeen]);
+        loadChats(false);
+    }, [loadChats, sendSeen, messagesLoadedOnce]);
 
     const handleSendMessage = useCallback(async (payload: { text: string; replyToId?: string; editMessageId?: string }) => {
         if (!currentUser) return;
@@ -320,7 +340,7 @@ export function App() {
                 }
 
                 // Sync chat list (server has the authoritative otherUser/lastMessage/unreadCount)
-                loadChats();
+                loadChats(false);
                 return;
             } catch (err) {
                 console.error(err);
@@ -401,10 +421,14 @@ export function App() {
             const { [chatId]: _, ...rest } = prev;
             return rest;
         });
+        setMessagesLoadedOnce(prev => {
+            const { [chatId]: _, ...rest } = prev;
+            return rest;
+        });
         setActiveChatId(null);
         setPendingUser(null);
         setView('chatList');
-        loadChats();
+        loadChats(false);
     };
 
     // Temporary contact resolver
@@ -460,7 +484,7 @@ export function App() {
                         onOpenProfile={handleOpenProfile}
                         onNewChatClick={() => setNewChatModalOpen(true)}
                         onLogout={handleLogout}
-                        loading={chatsLoading}
+                        loading={isInitialChatsLoad}
                     />
                 </div>
             )}
