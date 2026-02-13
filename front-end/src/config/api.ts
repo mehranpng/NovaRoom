@@ -4,6 +4,9 @@ export const API_BASE_URL = isDev
     ? import.meta.env.VITE_DEV_API_URL
     : import.meta.env.VITE_PROD_API_URL;
 
+// WebSocket URL (convert http/https to ws/wss)
+export const API_WS_URL = API_BASE_URL?.replace(/^http/, 'ws') || '';
+
 export const getHeaders = (includeAuth = true) => {
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
