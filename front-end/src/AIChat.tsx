@@ -8,6 +8,7 @@ import './App.css';
 export function AIChat() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isTyping, setIsTyping] = useState(false);
     const token = localStorage.getItem('token');
     const [currentUserId, setCurrentUserId] = useState<string>('');
 
@@ -53,6 +54,7 @@ export function AIChat() {
             seen: true,
         };
         setMessages(prev => [...prev, messageWithChatId]);
+        setIsTyping(false);
     }, []);
 
     // Initialize AI WebSocket
@@ -75,11 +77,13 @@ export function AIChat() {
         };
 
         setMessages(prev => [...prev, userMessage]);
+        setIsTyping(true);
 
         // Send to AI
         const success = sendMessage(text);
         if (!success) {
             console.warn('Failed to send message to AI');
+            setIsTyping(false);
         }
     }, [currentUserId, sendMessage]);
 
@@ -92,6 +96,7 @@ export function AIChat() {
                     onSendMessage={handleSendMessage}
                     onBack={() => {}}
                     loading={loading}
+                    isTyping={isTyping}
                 />
             </div>
         </div>
