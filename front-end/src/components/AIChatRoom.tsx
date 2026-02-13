@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { Message } from '../types';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
-import { cx } from '../utils/cx';
 
 interface AIChatRoomProps {
     messages: Message[];
@@ -20,20 +19,11 @@ export function AIChatRoom({
 }: AIChatRoomProps) {
     const [messageText, setMessageText] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     // Auto-scroll to bottom when messages change
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
-
-    // Auto-resize textarea
-    useEffect(() => {
-        if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto';
-            textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-        }
-    }, [messageText]);
 
     const handleSend = () => {
         const text = messageText.trim();
@@ -41,14 +31,10 @@ export function AIChatRoom({
 
         onSendMessage(text);
         setMessageText('');
-
-        if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto';
-        }
     };
 
-    const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+    const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
             e.preventDefault();
             handleSend();
         }
@@ -69,24 +55,25 @@ export function AIChatRoom({
     return (
         <div className="chat-room">
             <div className="chat-room__header">
-                <div className="chat-room__header-info">
-                    <div className="chat-room__avatar">
-                        <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-                            <circle cx="20" cy="20" r="20" fill="#4F46E5" />
-                            <text
-                                x="50%"
-                                y="50%"
-                                textAnchor="middle"
-                                dy=".3em"
-                                fontSize="16"
-                                fill="white"
-                                fontWeight="bold"
-                            >
-                                AI
-                            </text>
-                        </svg>
+                <div className="chat-room__header-clickable">
+                    <div
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '48px',
+                            height: '48px',
+                            borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #4F46E5, #6366F1)',
+                            color: 'white',
+                            fontWeight: 'bold',
+                            fontSize: '16px',
+                            flexShrink: 0,
+                        }}
+                    >
+                        AI
                     </div>
-                    <div className="chat-room__contact-details">
+                    <div className="chat-room__header-info">
                         <h2 className="chat-room__contact-name">NovaRoom AI</h2>
                         <p className="chat-room__contact-status">دستیار هوشمند شما</p>
                     </div>
@@ -97,35 +84,49 @@ export function AIChatRoom({
                 {loading ? (
                     <ChatMessagesSkeleton />
                 ) : (
-                    <>
+                    <div className="chat-room__messages-inner">
                         {messages.map((message) => {
                             const isMine = message.senderId === currentUserId;
 
                             return (
                                 <div
                                     key={message.id}
-                                    className={cx(
-                                        'chat-room__message',
-                                        isMine
-                                            ? 'chat-room__message--mine'
-                                            : 'chat-room__message--theirs'
-                                    )}
+                                    className={`message-row ${isMine ? 'message-row--mine' : 'message-row--theirs'} message-row--first`}
                                 >
-                                    <div className="chat-room__message-content">
-                                        <div className="chat-room__message-text">
-                                            {message.text}
-                                        </div>
-                                        <div className="chat-room__message-footer">
-                                            <span className="chat-room__message-time">
+                                    <div
+                                        className={`message-bubble ${
+                                            isMine
+                                                ? 'message-bubble--mine'
+                                                : 'message-bubble--theirs'
+                                        } msg-shape--single`}
+                                    >
+                                        <div className="message-text">{message.text}</div>
+                                        <div
+                                            className={`message-meta ${
+                                                isMine ? 'message-meta--mine' : 'message-meta--theirs'
+                                            }`}
+                                        >
+                                            <span className="message-time">
                                                 {formatTime(message.timestamp)}
                                             </span>
                                         </div>
                                     </div>
 
                                     <button
-                                        className="chat-room__message-action"
+                                        className="icon-btn"
                                         onClick={() => handleCopyMessage(message.text)}
                                         title="کپی"
+                                        style={{
+                                            opacity: 0,
+                                            marginRight: isMine ? '0' : '4px',
+                                            marginLeft: isMine ? '4px' : '0',
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            (e.currentTarget as HTMLElement).style.opacity = '1';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            (e.currentTarget as HTMLElement).style.opacity = '0';
+                                        }}
                                     >
                                         <svg
                                             width="16"
@@ -153,46 +154,44 @@ export function AIChatRoom({
                             );
                         })}
                         <div ref={messagesEndRef} />
-                    </>
+                    </div>
                 )}
             </div>
 
-            <div className="chat-room__input">
-                <textarea
-                    ref={textareaRef}
-                    className="chat-room__input-field"
-                    placeholder="پیام خود را بنویسید..."
-                    value={messageText}
-                    onChange={(e) => setMessageText(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    rows={1}
-                />
-                <button
-                    className="chat-room__send-button"
-                    onClick={handleSend}
-                    disabled={!messageText.trim()}
-                >
-                    <svg
-                        width="24"
-                        height="24"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
+            <div className="chat-room__input-area">
+                <div className="chat-room__input-wrapper">
+                    <input
+                        type="text"
+                        className="chat-room__text-input"
+                        placeholder="پیام خود را بنویسید..."
+                        value={messageText}
+                        onChange={(e) => setMessageText(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                    />
+                    <button
+                        className={`chat-room__send-btn ${
+                            messageText.trim()
+                                ? 'chat-room__send-btn--active'
+                                : 'chat-room__send-btn--disabled'
+                        }`}
+                        onClick={handleSend}
+                        disabled={!messageText.trim()}
                     >
-                        <path
-                            d="M22 2L11 13"
+                        <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
                             strokeWidth="2"
                             strokeLinecap="round"
                             strokeLinejoin="round"
-                        />
-                        <path
-                            d="M22 2L15 22L11 13L2 9L22 2Z"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                        />
-                    </svg>
-                </button>
+                        >
+                            <path d="M22 2L11 13" />
+                            <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+                        </svg>
+                    </button>
+                </div>
             </div>
         </div>
     );
