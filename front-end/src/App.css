@@ -680,6 +680,8 @@ textarea {
   outline: none;
   transition: all 0.15s;
   font-family: inherit;
+  direction: rtl;
+  text-align: right;
 }
 
 .chat-room__text-input::placeholder {
