@@ -67,6 +67,95 @@ textarea {
 }
 
 /* ========================================
+   SKELETON LOADING
+   ======================================== */
+@keyframes skeleton-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #f3f4f6 0%, #e5e7eb 50%, #f3f4f6 100%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-chat-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+}
+
+.skeleton-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.skeleton-chat-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.skeleton-chat-name {
+  height: 16px;
+  width: 45%;
+  margin-bottom: 8px;
+}
+
+.skeleton-chat-message {
+  height: 14px;
+  width: 70%;
+}
+
+.skeleton-message-row {
+  display: flex;
+  margin-top: 12px;
+}
+
+.skeleton-message-row--mine {
+  justify-content: flex-end;
+}
+
+.skeleton-message-row--theirs {
+  justify-content: flex-start;
+}
+
+.skeleton-message-bubble {
+  max-width: 70%;
+  height: 48px;
+  border-radius: 16px;
+}
+
+.skeleton-message-bubble--mine {
+  background: linear-gradient(90deg, #dbeafe 0%, #bfdbfe 50%, #dbeafe 100%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.skeleton-message-bubble--theirs {
+  background: linear-gradient(90deg, #f3f4f6 0%, #e5e7eb 50%, #f3f4f6 100%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+/* ========================================
    AVATAR
    ======================================== */
 .avatar {
