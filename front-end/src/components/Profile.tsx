@@ -238,7 +238,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                                     />
                                 </div>
                                 {!!usernameHint && (
-                                    <div
+                                    <div className='profile__field-hint'
                                         style={{
                                             marginTop: 6,
                                             fontSize: 12,

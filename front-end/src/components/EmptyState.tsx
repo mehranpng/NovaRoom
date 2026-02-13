@@ -7,7 +7,7 @@ export function EmptyState() {
                 <MessageCircle size={36} />
             </div>
             <h2 className="empty-state__title">به نوا روم خوش آمدید</h2>
-            <p className="empty-state__description">برای شروع صحبت یک گفتوگو انتخاب کنید یا یکی را شروع کنید.</p>
+            <p className="empty-state__description">برای شروع صحبت یک گفتوگو انتخاب کنید یا کاربری را جستوجو کنید.</p>
             <div className="empty-state__footer">
                 <span className="empty-state__dot" />
                 رمزگذاری سرتاسری

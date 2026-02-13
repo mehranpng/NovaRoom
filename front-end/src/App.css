@@ -1306,6 +1306,11 @@ textarea {
   font-family: inherit;
 }
 
+.profile__field-hint {
+    direction: rtl;
+  text-align: left;
+}
+
 .profile__field-input:focus {
   border-color: #3b82f6;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
