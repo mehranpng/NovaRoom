@@ -32,34 +32,10 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
 
     const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
     const [usernameHint, setUsernameHint] = useState<string>('');
     const checkTimerRef = useRef<number | null>(null);
-
-    // Prevent page refresh/unload
-    useEffect(() => {
-        const preventUnload = (e: BeforeUnloadEvent) => {
-            e.preventDefault();
-            e.returnValue = ''; // Chrome requires returnValue to be set
-        };
-
-        const preventPageHide = (e: PageTransitionEvent) => {
-            if (!e.persisted) {
-                e.preventDefault();
-            }
-        };
-
-        // Add listeners
-        window.addEventListener('beforeunload', preventUnload);
-        window.addEventListener('pagehide', preventPageHide);
-
-        return () => {
-            window.removeEventListener('beforeunload', preventUnload);
-            window.removeEventListener('pagehide', preventPageHide);
-        };
-    }, []);
 
     // Sync step with URL on mount and location change
     useEffect(() => {
@@ -107,7 +83,6 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
         if (checkTimerRef.current) window.clearTimeout(checkTimerRef.current);
         checkTimerRef.current = window.setTimeout(async () => {
             try {
-                // Use PUBLIC endpoint without authentication
                 const response = await fetch(
                     `${import.meta.env.VITE_IS_DEV_ENVIRONMENT === 'true' ? import.meta.env.VITE_DEV_API_URL : import.meta.env.VITE_PROD_API_URL}/auth/username-available?username=${encodeURIComponent(trimmed)}`,
                     {
@@ -159,33 +134,24 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
     const getErrorMessage = (err: any): string => {
         const message = err.message || '';
         
-        // Email errors
         if (message.includes('409') || message.includes('already exists') || message.includes('already registered')) {
             return 'این ایمیل قبلاً ثبت شده است';
         }
         if (message.includes('Invalid email')) {
             return 'فرمت ایمیل نامعتبر است';
         }
-        
-        // Code errors
         if (message.includes('Invalid') && message.includes('code')) {
             return 'کد تأیید نامعتبر است';
         }
         if (message.includes('expired')) {
             return 'کد تأیید منقضی شده است';
         }
-        
-        // Username errors
         if (message.includes('Username') && (message.includes('409') || message.includes('taken') || message.includes('exists'))) {
             return 'این نام کاربری قبلاً گرفته شده است';
         }
-        
-        // Network errors
         if (message.includes('Network') || message.includes('fetch')) {
             return 'خطا در ارتباط با سرور. لطفاً دوباره تلاش کنید';
         }
-        
-        // Generic errors
         if (message.includes('400')) {
             return 'درخواست نامعتبر است';
         }
@@ -198,9 +164,19 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
 
     const handleEmailSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
         setError('');
-        setSuccess('');
+
+        // Manual validation
+        if (!email) {
+            setError('لطفاً ایمیل خود را وارد کنید');
+            return;
+        }
+        if (!email.includes('@')) {
+            setError('لطفاً یک آدرس ایمیل معتبر وارد کنید');
+            return;
+        }
+
+        setLoading(true);
 
         try {
             await apiFetch('/auth/register/email', {
@@ -208,13 +184,9 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                 body: JSON.stringify({ email }),
             });
 
-            // Save email to sessionStorage
+            // Save email and move to next step WITHOUT showing success here
             sessionStorage.setItem('register_email', email);
-            
-            setSuccess(`کد تأیید به ایمیل ${email} ارسال شد`);
-            setTimeout(() => {
-                setStep('code');
-            }, 1500);
+            setStep('code');
         } catch (err: any) {
             setError(getErrorMessage(err));
         } finally {
@@ -224,9 +196,15 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
 
     const handleCodeSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
         setError('');
-        setSuccess('');
+
+        // Manual validation
+        if (!code || code.length !== 6) {
+            setError('لطفاً کد 6 رقمی را وارد کنید');
+            return;
+        }
+
+        setLoading(true);
 
         try {
             await apiFetch('/auth/register/verify', {
@@ -234,10 +212,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                 body: JSON.stringify({ email, code }),
             });
 
-            setSuccess('کد تأیید با موفقیت تایید شد');
-            setTimeout(() => {
-                setStep('details');
-            }, 1200);
+            setStep('details');
         } catch (err: any) {
             setError(getErrorMessage(err));
         } finally {
@@ -248,23 +223,30 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
     const handleDetailsSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-        setSuccess('');
 
-        // Validate passwords match
-        if (password !== confirmPassword) {
-            setError('رمز عبور و تکرار آن یکسان نیستند');
+        // Manual validation
+        if (!name) {
+            setError('لطفاً نام خود را وارد کنید');
             return;
         }
-
-        // Validate password length
+        if (!username) {
+            setError('لطفاً نام کاربری خود را وارد کنید');
+            return;
+        }
+        if (usernameStatus !== 'available') {
+            setError('لطفاً یک نام کاربری معتبر و در دسترس وارد کنید');
+            return;
+        }
+        if (!password) {
+            setError('لطفاً رمز عبور خود را وارد کنید');
+            return;
+        }
         if (password.length < 6) {
             setError('رمز عبور باید حداقل 6 کاراکتر باشد');
             return;
         }
-
-        // Validate username status
-        if (usernameStatus !== 'available') {
-            setError('لطفاً یک نام کاربری معتبر و در دسترس وارد کنید');
+        if (password !== confirmPassword) {
+            setError('رمز عبور و تکرار آن یکسان نیستند');
             return;
         }
 
@@ -291,7 +273,6 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
     const handleResendCode = async () => {
         setLoading(true);
         setError('');
-        setSuccess('');
 
         try {
             await apiFetch('/auth/register/email', {
@@ -299,7 +280,10 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                 body: JSON.stringify({ email }),
             });
 
-            setSuccess(`کد تأیید مجدداً به ایمیل ${email} ارسال شد`);
+            // Show temporary success
+            const originalError = error;
+            setError('');
+            setTimeout(() => setError(originalError), 3000);
         } catch (err: any) {
             setError(getErrorMessage(err));
         } finally {
@@ -336,26 +320,16 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                             <input
                                 type="email"
                                 value={email}
-                                onChange={(e) => setEmail(e.target.value)}
+                                onChange={(e) => {
+                                    setEmail(e.target.value);
+                                    setError('');
+                                }}
                                 placeholder="example@gmail.com"
-                                required
                                 autoFocus
                             />
                         </div>
 
                         {error && <div className="error-message">{error}</div>}
-                        {success && (
-                            <div className="success-message">
-                                <CheckCircle size={20} />
-                                <div>
-                                    <div>{success}</div>
-                                    <div className="info-message" style={{ marginTop: '8px', padding: '8px 10px' }}>
-                                        <AlertCircle size={16} />
-                                        <span>اگر ایمیل دریافت نکردید، پوشه هرزنامه را بررسی کنید</span>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
 
                         <button type="submit" className="login-btn" disabled={loading}>
                             {loading ? 'در حال ارسال...' : 'ارسال کد تأیید'}
@@ -367,7 +341,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                             onClick={handleBackToLogin}
                             style={{ marginTop: '10px' }}
                         >
-                            <ArrowLeft size={16} style={{ marginLeft: '5px' }} />
+                            <ArrowLeft size={16} />
                             بازگشت به ورود
                         </button>
                     </form>
@@ -385,10 +359,12 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                                 type="text"
                                 inputMode="numeric"
                                 value={code}
-                                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                onChange={(e) => {
+                                    setCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                                    setError('');
+                                }}
                                 placeholder="123456"
                                 maxLength={6}
-                                required
                                 autoFocus
                             />
                         </div>
@@ -397,7 +373,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                             <CheckCircle size={20} />
                             <div>
                                 <div>کد تأیید به ایمیل {email} ارسال شد</div>
-                                <div className="info-message" style={{ marginTop: '8px', padding: '8px 10px' }}>
+                                <div className="info-message" style={{ marginTop: '8px', padding: '8px 10px', marginBottom: 0 }}>
                                     <AlertCircle size={16} />
                                     <span>اگر ایمیل دریافت نکردید، پوشه هرزنامه را بررسی کنید</span>
                                 </div>
@@ -426,7 +402,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                             onClick={() => setStep('email')}
                             style={{ marginTop: '10px' }}
                         >
-                            <ArrowLeft size={16} style={{ marginLeft: '5px' }} />
+                            <ArrowLeft size={16} />
                             تغییر ایمیل
                         </button>
                     </form>
@@ -443,9 +419,12 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                             <input
                                 type="text"
                                 value={name}
-                                onChange={(e) => setName(e.target.value)}
+                                onChange={(e) => {
+                                    setName(e.target.value);
+                                    setError('');
+                                }}
                                 placeholder="نام خود را وارد کنید"
-                                required
+                                autoFocus
                             />
                         </div>
 
@@ -457,10 +436,12 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                             <input
                                 type="text"
                                 value={username}
-                                onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                                onChange={(e) => {
+                                    setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''));
+                                    setError('');
+                                }}
                                 placeholder="username123"
                                 maxLength={32}
-                                required
                             />
                             {!!usernameHint && (
                                 <small style={{
@@ -485,10 +466,11 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                             <input
                                 type="password"
                                 value={password}
-                                onChange={(e) => setPassword(e.target.value)}
+                                onChange={(e) => {
+                                    setPassword(e.target.value);
+                                    setError('');
+                                }}
                                 placeholder="••••••••"
-                                minLength={6}
-                                required
                             />
                         </div>
 
@@ -500,20 +482,15 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                             <input
                                 type="password"
                                 value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                onChange={(e) => {
+                                    setConfirmPassword(e.target.value);
+                                    setError('');
+                                }}
                                 placeholder="••••••••"
-                                minLength={6}
-                                required
                             />
                         </div>
 
                         {error && <div className="error-message">{error}</div>}
-                        {success && (
-                            <div className="success-message">
-                                <CheckCircle size={20} />
-                                {success}
-                            </div>
-                        )}
 
                         <button 
                             type="submit" 
@@ -529,7 +506,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                             onClick={() => setStep('code')}
                             style={{ marginTop: '10px' }}
                         >
-                            <ArrowLeft size={16} style={{ marginLeft: '5px' }} />
+                            <ArrowLeft size={16} />
                             بازگشت
                         </button>
                     </form>
