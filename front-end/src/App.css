@@ -1563,6 +1563,11 @@ textarea {
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
+/* Disable HTML validation messages */
+.form-group input:invalid {
+  box-shadow: none;
+}
+
 /* Numeric-only inputs for verification codes */
 .form-group input[type="text"][inputmode="numeric"] {
   font-family: 'SF Mono', 'Fira Code', monospace;
@@ -1612,8 +1617,17 @@ textarea {
   font-weight: 500;
   cursor: pointer;
   font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  direction: rtl;
   transition: background 0.15s, transform 0.1s;
+  /* Fix icon alignment */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  direction: rtl;
+}
+
+.secondary-btn svg {
+  flex-shrink: 0;
 }
 
 .secondary-btn:hover:not(:disabled) {
@@ -1644,7 +1658,7 @@ textarea {
 
 .success-message {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   color: #059669;
   font-size: 14px;
@@ -1662,6 +1676,7 @@ textarea {
 .success-message svg {
   flex-shrink: 0;
   color: #10b981;
+  margin-top: 2px;
 }
 
 .info-message {
