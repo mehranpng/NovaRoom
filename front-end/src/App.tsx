@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import type { Message, View, User, Chat, ChatLastMessage } from './types';
 import { apiFetch } from './config/api';
 import { useWebSocket } from './hooks/useWebSocket';
@@ -25,11 +26,9 @@ const normalizeTimestamp = (ts: unknown): number => {
     return Date.now();
 };
 
-type AuthView = 'login' | 'register' | 'forgot-password';
-
 export function App() {
+    const navigate = useNavigate();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [authView, setAuthView] = useState<AuthView>('login');
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [view, setView] = useState<View>('chatList');
     const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -146,7 +145,6 @@ export function App() {
         localStorage.removeItem('token');
         setIsAuthenticated(false);
         setCurrentUser(null);
-        setAuthView('login');
         setView('chatList');
         setActiveChatId(null);
         setPendingUser(null);
@@ -157,7 +155,8 @@ export function App() {
         setMessagesLoadedOnce({});
         setShowAIChat(false);
         setAIMessages([]);
-    }, []);
+        navigate('/login', { replace: true });
+    }, [navigate]);
 
     // WebSocket handlers wrapped in useCallback to prevent infinite reconnection loops
     const handleNewMessage = useCallback((chatId: string, newMsg: Message) => {
@@ -321,12 +320,14 @@ export function App() {
         setCurrentUser(user);
         setIsAuthenticated(true);
         localStorage.setItem('token', token);
+        navigate('/', { replace: true });
     };
 
     const handleRegisterSuccess = (user: User, token: string) => {
         setCurrentUser(user);
         setIsAuthenticated(true);
         localStorage.setItem('token', token);
+        navigate('/', { replace: true });
     };
 
     useEffect(() => {
@@ -565,30 +566,32 @@ export function App() {
     };
 
     if (!isAuthenticated) {
-        if (authView === 'register') {
-            return (
-                <Register
-                    onRegisterSuccess={handleRegisterSuccess}
-                    onBackToLogin={() => setAuthView('login')}
-                />
-            );
-        }
-
-        if (authView === 'forgot-password') {
-            return (
-                <ForgotPassword
-                    onBackToLogin={() => setAuthView('login')}
-                    onResetSuccess={() => setAuthView('login')}
-                />
-            );
-        }
-
         return (
-            <Login
-                onLoginSuccess={handleLoginSuccess}
-                onRegisterClick={() => setAuthView('register')}
-                onForgotPasswordClick={() => setAuthView('forgot-password')}
-            />
+            <Routes>
+                <Route path="/login" element={
+                    <Login
+                        onLoginSuccess={handleLoginSuccess}
+                        onRegisterClick={() => navigate('/register/email')}
+                        onForgotPasswordClick={() => navigate('/forgot-password/request')}
+                    />
+                } />
+                
+                <Route path="/register/*" element={
+                    <Register
+                        onRegisterSuccess={handleRegisterSuccess}
+                        onBackToLogin={() => navigate('/login')}
+                    />
+                } />
+                
+                <Route path="/forgot-password/*" element={
+                    <ForgotPassword
+                        onBackToLogin={() => navigate('/login')}
+                        onResetSuccess={() => navigate('/login')}
+                    />
+                } />
+                
+                <Route path="*" element={<Navigate to="/login" replace />} />
+            </Routes>
         );
     }
 
