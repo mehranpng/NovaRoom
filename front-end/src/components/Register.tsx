@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { apiFetch } from '../config/api';
 import { type User } from '../types';
@@ -10,6 +10,7 @@ interface RegisterProps {
 }
 
 type Step = 'email' | 'code' | 'details';
+type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
 export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
     const navigate = useNavigate();
@@ -33,6 +34,33 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
 
+    const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
+    const [usernameHint, setUsernameHint] = useState<string>('');
+    const checkTimerRef = useRef<number | null>(null);
+
+    // Prevent page refresh/unload
+    useEffect(() => {
+        const preventUnload = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            e.returnValue = ''; // Chrome requires returnValue to be set
+        };
+
+        const preventPageHide = (e: PageTransitionEvent) => {
+            if (!e.persisted) {
+                e.preventDefault();
+            }
+        };
+
+        // Add listeners
+        window.addEventListener('beforeunload', preventUnload);
+        window.addEventListener('pagehide', preventPageHide);
+
+        return () => {
+            window.removeEventListener('beforeunload', preventUnload);
+            window.removeEventListener('pagehide', preventPageHide);
+        };
+    }, []);
+
     // Sync step with URL on mount and location change
     useEffect(() => {
         const newStep = getStepFromPath();
@@ -45,6 +73,61 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
         }
     }, [location.pathname]);
 
+    // Username checking
+    useEffect(() => {
+        if (step !== 'details' || !username) {
+            setUsernameStatus('idle');
+            setUsernameHint('');
+            return;
+        }
+
+        const trimmed = username.trim();
+
+        if (!trimmed) {
+            setUsernameStatus('invalid');
+            setUsernameHint('نام کاربری الزامی است');
+            return;
+        }
+
+        if (trimmed.length > 32) {
+            setUsernameStatus('invalid');
+            setUsernameHint('حداکثر 32 کاراکتر');
+            return;
+        }
+
+        if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
+            setUsernameStatus('invalid');
+            setUsernameHint('فقط حروف لاتین، اعداد و آندرلاین');
+            return;
+        }
+
+        setUsernameStatus('checking');
+        setUsernameHint('در حال بررسی...');
+
+        if (checkTimerRef.current) window.clearTimeout(checkTimerRef.current);
+        checkTimerRef.current = window.setTimeout(async () => {
+            try {
+                const res = await apiFetch(
+                    `/users/username-available?username=${encodeURIComponent(trimmed)}`
+                );
+                if (res?.available) {
+                    setUsernameStatus('available');
+                    setUsernameHint('نام کاربری قابل استفاده است');
+                } else {
+                    setUsernameStatus('taken');
+                    setUsernameHint('این نام کاربری قبلاً گرفته شده');
+                }
+            } catch {
+                setUsernameStatus('invalid');
+                setUsernameHint('بررسی نام کاربری ممکن نشد');
+            }
+        }, 350);
+
+        return () => {
+            if (checkTimerRef.current) window.clearTimeout(checkTimerRef.current);
+        };
+    }, [username, step]);
+
     // Update step and navigate
     const setStep = (newStep: Step) => {
         setStepState(newStep);
@@ -55,6 +138,47 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
         } else if (newStep === 'details') {
             navigate('/register/complete', { replace: true });
         }
+    };
+
+    // Farsi error messages
+    const getErrorMessage = (err: any): string => {
+        const message = err.message || '';
+        
+        // Email errors
+        if (message.includes('409') || message.includes('already exists') || message.includes('already registered')) {
+            return 'این ایمیل قبلاً ثبت شده است';
+        }
+        if (message.includes('Invalid email')) {
+            return 'فرمت ایمیل نامعتبر است';
+        }
+        
+        // Code errors
+        if (message.includes('Invalid') && message.includes('code')) {
+            return 'کد تأیید نامعتبر است';
+        }
+        if (message.includes('expired')) {
+            return 'کد تأیید منقضی شده است';
+        }
+        
+        // Username errors
+        if (message.includes('Username') && (message.includes('409') || message.includes('taken') || message.includes('exists'))) {
+            return 'این نام کاربری قبلاً گرفته شده است';
+        }
+        
+        // Network errors
+        if (message.includes('Network') || message.includes('fetch')) {
+            return 'خطا در ارتباط با سرور. لطفاً دوباره تلاش کنید';
+        }
+        
+        // Generic errors
+        if (message.includes('400')) {
+            return 'درخواست نامعتبر است';
+        }
+        if (message.includes('500')) {
+            return 'خطای سرور. لطفاً بعداً تلاش کنید';
+        }
+        
+        return 'خطای نامشخص. لطفاً دوباره تلاش کنید';
     };
 
     const handleEmailSubmit = async (e: React.FormEvent) => {
@@ -77,11 +201,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                 setStep('code');
             }, 1500);
         } catch (err: any) {
-            if (err.message.includes('409')) {
-                setError('این ایمیل قبلاً ثبت شده است');
-            } else {
-                setError(err.message || 'خطا در ارسال کد تأیید');
-            }
+            setError(getErrorMessage(err));
         } finally {
             setLoading(false);
         }
@@ -104,7 +224,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                 setStep('details');
             }, 1200);
         } catch (err: any) {
-            setError(err.message || 'کد تأیید نامعتبر یا منقضی شده است');
+            setError(getErrorMessage(err));
         } finally {
             setLoading(false);
         }
@@ -127,15 +247,9 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
             return;
         }
 
-        // Validate username format
-        const usernameRegex = /^[A-Za-z0-9_]+$/;
-        if (!usernameRegex.test(username)) {
-            setError('نام کاربری فقط می‌تواند شامل حروف انگلیسی، اعداد و _ باشد');
-            return;
-        }
-
-        if (username.length > 32) {
-            setError('نام کاربری نباید بیشتر از 32 کاراکتر باشد');
+        // Validate username status
+        if (usernameStatus !== 'available') {
+            setError('لطفاً یک نام کاربری معتبر و در دسترس وارد کنید');
             return;
         }
 
@@ -144,7 +258,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
         try {
             const data = await apiFetch('/auth/register/complete', {
                 method: 'POST',
-                body: JSON.stringify({ email, name, username, password }),
+                body: JSON.stringify({ email, name, username: username.trim(), password }),
             });
 
             // Clear sessionStorage
@@ -153,17 +267,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
             localStorage.setItem('token', data.token);
             onRegisterSuccess(data.user, data.token);
         } catch (err: any) {
-            if (err.message.includes('409')) {
-                if (err.message.includes('Email')) {
-                    setError('این ایمیل قبلاً ثبت شده است');
-                } else if (err.message.includes('Username')) {
-                    setError('این نام کاربری قبلاً گرفته شده است');
-                } else {
-                    setError('ایمیل یا نام کاربری تکراری است');
-                }
-            } else {
-                setError(err.message || 'خطا در ثبت نام');
-            }
+            setError(getErrorMessage(err));
         } finally {
             setLoading(false);
         }
@@ -182,7 +286,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
 
             setSuccess(`کد تأیید مجدداً به ایمیل ${email} ارسال شد`);
         } catch (err: any) {
-            setError(err.message || 'خطا در ارسال مجدد کد');
+            setError(getErrorMessage(err));
         } finally {
             setLoading(false);
         }
@@ -220,6 +324,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                                 onChange={(e) => setEmail(e.target.value)}
                                 placeholder="example@gmail.com"
                                 required
+                                autoFocus
                             />
                         </div>
 
@@ -337,15 +442,24 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                             <input
                                 type="text"
                                 value={username}
-                                onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                                onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
                                 placeholder="username123"
-                                pattern="[A-Za-z0-9_]+"
                                 maxLength={32}
                                 required
                             />
-                            <small style={{ color: '#888', fontSize: '12px', marginTop: '5px', display: 'block', direction: 'rtl', textAlign: 'right' }}>
-                                فقط حروف انگلیسی، اعداد و _
-                            </small>
+                            {!!usernameHint && (
+                                <small style={{
+                                    color: usernameStatus === 'available' ? '#16a34a' :
+                                           usernameStatus === 'taken' || usernameStatus === 'invalid' ? '#dc2626' : '#6b7280',
+                                    fontSize: '12px',
+                                    marginTop: '5px',
+                                    display: 'block',
+                                    direction: 'rtl',
+                                    textAlign: 'right'
+                                }}>
+                                    {usernameHint}
+                                </small>
+                            )}
                         </div>
 
                         <div className="form-group">
@@ -386,7 +500,11 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                             </div>
                         )}
 
-                        <button type="submit" className="login-btn" disabled={loading}>
+                        <button 
+                            type="submit" 
+                            className="login-btn" 
+                            disabled={loading || usernameStatus !== 'available'}
+                        >
                             {loading ? 'در حال ثبت نام...' : 'ثبت نام'}
                         </button>
 
