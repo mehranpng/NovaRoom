@@ -45,6 +45,10 @@ textarea {
   --message-theirs-text: #111827;
   --input-bg: #f3f4f6;
   --input-bg-focus: #f9fafb;
+  --reply-box-bg: #f9fafb;
+  --reply-box-border: #f3f4f6;
+  --reply-box-text: #374151;
+  --reply-box-text-secondary: #6b7280;
 }
 
 .dark-mode {
@@ -66,6 +70,10 @@ textarea {
   --message-theirs-text: #f9fafb;
   --input-bg: #374151;
   --input-bg-focus: #4b5563;
+  --reply-box-bg: #374151;
+  --reply-box-border: #4b5563;
+  --reply-box-text: #f9fafb;
+  --reply-box-text-secondary: #d1d5db;
 }
 
 .app {
@@ -868,6 +876,20 @@ textarea {
   cursor: default;
 }
 
+/* Reply box styling - above the input */
+.chat-room__input-area > div[style*="margin"] {
+  background: var(--reply-box-bg) !important;
+  border-color: var(--reply-box-border) !important;
+}
+
+.chat-room__input-area > div[style*="margin"] > div:first-child > div:first-child {
+  color: var(--reply-box-text) !important;
+}
+
+.chat-room__input-area > div[style*="margin"] > div:first-child > div:last-child {
+  color: var(--reply-box-text-secondary) !important;
+}
+
 /* ChatRoom modals - scoped to chat room only */
 .chat-room-modal-overlay {
   position: absolute;
@@ -1612,6 +1634,10 @@ textarea {
   margin-bottom: 32px;
 }
 
+.login-header-icon {
+  color: var(--text-primary);
+}
+
 .login-header h1 {
   font-size: 28px;
   margin: 16px 0 8px;
@@ -1899,6 +1925,11 @@ textarea {
   align-items: center;
   gap: 12px;
   background: var(--bg-secondary);
+}
+
+.search-box svg {
+  color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 .search-box input {
