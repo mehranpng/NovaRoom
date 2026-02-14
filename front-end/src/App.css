@@ -600,10 +600,14 @@ textarea {
 .chat-room__contact-status {
   font-size: 12px;
   color: #6b7280;
+  direction: rtl;
+  text-align: left;
 }
 
 .chat-room__contact-status--online {
   color: #059669;
+  direction: rtl;
+  text-align: left;
 }
 
 .chat-room__messages {

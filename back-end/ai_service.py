@@ -7,7 +7,7 @@ load_dotenv()
 
 # Initialize DeepSeek client
 client = OpenAI(
-    api_key="sk-449474c22bc94b1688237f7604730ee4",
+    api_key=os.environ.get("DEEPSEEK_API_KEY"),
     base_url="https://api.deepseek.com",
 )
 
@@ -67,29 +67,29 @@ async def generate_ai_response(
 ) -> str:
     """
     Generate AI response based on conversation history using DeepSeek.
-    
+
     Args:
         messages: List of message dicts with 'role' and 'content'
         user_name: Optional user name for personalization
-    
+
     Returns:
         AI generated response text
     """
     try:
-        # Prepare messages with system prompt
         full_messages = [
             {"role": "system", "content": get_system_prompt(user_name)},
             *messages,
-        ]
+        ]  # type: ignore
 
-        # Call DeepSeek API
         response = client.chat.completions.create(
             model="deepseek-chat",
-            messages=full_messages,
+            messages=full_messages,  # type: ignore
             stream=False,
         )
 
-        return response.choices[0].message.content or "متأسفم، نتوانستم پاسخی تولید کنم."
+        return (
+            response.choices[0].message.content or "متأسفم، نتوانستم پاسخی تولید کنم."
+        )
 
     except Exception as e:
         print(f"AI generation error: {e}")

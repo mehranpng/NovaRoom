@@ -58,7 +58,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                                     emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                                 }, 150);
                             }}
-                            placeholder="mehran@gmail.com"
+                            placeholder="example@gmail.com"
                             required
                         />
                     </div>
