@@ -251,7 +251,13 @@ export function AIChatRoom({
     return (
         <div className="chat-room" style={{ position: 'relative' }} ref={roomRef}>
             <div className="chat-room__header">
-                <button className="chat-room__back-btn" onClick={onBack} aria-label="Back" type="button">
+                <button 
+                    className="chat-room__back-btn" 
+                    onClick={onBack} 
+                    aria-label="Back" 
+                    type="button"
+                    style={{ display: 'flex' }} // Ensure it's always visible
+                >
                     <ArrowLeft size={20} />
                 </button>
 
