@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { apiFetch } from '../config/api';
 import { type User } from '../types';
 import { LogIn } from 'lucide-react';
@@ -15,8 +15,37 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const emailRef = useRef<HTMLInputElement | null>(null);
-    const passwordRef = useRef<HTMLInputElement | null>(null);
+    // Farsi error messages
+    const getErrorMessage = (err: any): string => {
+        const message = err.message || '';
+        
+        // Authentication errors
+        if (message.includes('401') || message.includes('Unauthorized') || 
+            message.includes('Invalid credentials') || message.includes('incorrect')) {
+            return 'ایمیل یا رمز عبور نامعتبر است';
+        }
+        if (message.includes('404') || message.includes('not found') || message.includes('User not found')) {
+            return 'کاربری با این ایمیل یافت نشد';
+        }
+        if (message.includes('Invalid email')) {
+            return 'فرمت ایمیل نامعتبر است';
+        }
+        
+        // Network errors
+        if (message.includes('Network') || message.includes('fetch')) {
+            return 'خطا در ارتباط با سرور. لطفاً دوباره تلاش کنید';
+        }
+        
+        // Generic errors
+        if (message.includes('400')) {
+            return 'درخواست نامعتبر است';
+        }
+        if (message.includes('500')) {
+            return 'خطای سرور. لطفاً بعداً تلاش کنید';
+        }
+        
+        return 'ایمیل یا رمز عبور نامعتبر است';
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -32,7 +61,7 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
             localStorage.setItem('token', data.token);
             onLoginSuccess(data.user, data.token);
         } catch (err: any) {
-            setError(err.message || 'ایمیل یا رمز عبور نامعتبر است');
+            setError(getErrorMessage(err));
         } finally {
             setLoading(false);
         }
@@ -51,19 +80,18 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
                     <div className="form-group">
                         <label>ایمیل</label>
                         <input
-                            ref={emailRef}
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             placeholder="example@gmail.com"
                             required
+                            autoFocus
                         />
                     </div>
 
                     <div className="form-group">
                         <label>رمز عبور</label>
                         <input
-                            ref={passwordRef}
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
