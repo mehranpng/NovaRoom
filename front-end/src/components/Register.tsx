@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { apiFetch } from '../config/api';
 import { type User } from '../types';
 import { UserPlus, ArrowLeft, Mail, Key, User as UserIcon, CheckCircle, AlertCircle } from 'lucide-react';
@@ -13,8 +13,17 @@ type Step = 'email' | 'code' | 'details';
 
 export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
     const navigate = useNavigate();
-    const [step, setStep] = useState<Step>('email');
-    const [email, setEmail] = useState('');
+    const location = useLocation();
+    
+    // Determine step from URL path
+    const getStepFromPath = (): Step => {
+        if (location.pathname.includes('/verify')) return 'code';
+        if (location.pathname.includes('/complete')) return 'details';
+        return 'email';
+    };
+
+    const [step, setStepState] = useState<Step>(getStepFromPath());
+    const [email, setEmail] = useState(() => sessionStorage.getItem('register_email') || '');
     const [code, setCode] = useState('');
     const [name, setName] = useState('');
     const [username, setUsername] = useState('');
@@ -24,35 +33,29 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
 
-    const emailRef = useRef<HTMLInputElement | null>(null);
-    const codeRef = useRef<HTMLInputElement | null>(null);
-    const nameRef = useRef<HTMLInputElement | null>(null);
-    const usernameRef = useRef<HTMLInputElement | null>(null);
-    const passwordRef = useRef<HTMLInputElement | null>(null);
-    const confirmPasswordRef = useRef<HTMLInputElement | null>(null);
-
-    // Prevent page refresh when returning from another app
+    // Sync step with URL on mount and location change
     useEffect(() => {
-        const handleVisibilityChange = () => {
-            // Do nothing - just prevent default behavior
-        };
+        const newStep = getStepFromPath();
+        setStepState(newStep);
+        
+        // Restore email from sessionStorage if on code or details step
+        const savedEmail = sessionStorage.getItem('register_email');
+        if (savedEmail && (newStep === 'code' || newStep === 'details')) {
+            setEmail(savedEmail);
+        }
+    }, [location.pathname]);
 
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
-    }, []);
-
-    // Update URL based on step
-    useEffect(() => {
-        if (step === 'email') {
+    // Update step and navigate
+    const setStep = (newStep: Step) => {
+        setStepState(newStep);
+        if (newStep === 'email') {
             navigate('/register/email', { replace: true });
-        } else if (step === 'code') {
+        } else if (newStep === 'code') {
             navigate('/register/verify', { replace: true });
-        } else if (step === 'details') {
+        } else if (newStep === 'details') {
             navigate('/register/complete', { replace: true });
         }
-    }, [step, navigate]);
+    };
 
     const handleEmailSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -66,6 +69,9 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                 body: JSON.stringify({ email }),
             });
 
+            // Save email to sessionStorage
+            sessionStorage.setItem('register_email', email);
+            
             setSuccess(`کد تأیید به ایمیل ${email} ارسال شد`);
             setTimeout(() => {
                 setStep('code');
@@ -141,6 +147,9 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                 body: JSON.stringify({ email, name, username, password }),
             });
 
+            // Clear sessionStorage
+            sessionStorage.removeItem('register_email');
+            
             localStorage.setItem('token', data.token);
             onRegisterSuccess(data.user, data.token);
         } catch (err: any) {
@@ -179,6 +188,11 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
         }
     };
 
+    const handleBackToLogin = () => {
+        sessionStorage.removeItem('register_email');
+        onBackToLogin();
+    };
+
     return (
         <div className="login-page">
             <div className="login-container">
@@ -201,7 +215,6 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                                 ایمیل
                             </label>
                             <input
-                                ref={emailRef}
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
@@ -231,7 +244,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                         <button
                             type="button"
                             className="secondary-btn"
-                            onClick={onBackToLogin}
+                            onClick={handleBackToLogin}
                             style={{ marginTop: '10px' }}
                         >
                             <ArrowLeft size={16} style={{ marginLeft: '5px' }} />
@@ -249,7 +262,6 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                                 کد تأیید 6 رقمی
                             </label>
                             <input
-                                ref={codeRef}
                                 type="text"
                                 inputMode="numeric"
                                 value={code}
@@ -257,21 +269,21 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                                 placeholder="123456"
                                 maxLength={6}
                                 required
+                                autoFocus
                             />
                         </div>
 
-                        {success && (
-                            <div className="success-message">
-                                <CheckCircle size={20} />
-                                <div>
-                                    <div>کد تأیید به ایمیل {email} ارسال شد</div>
-                                    <div className="info-message" style={{ marginTop: '8px', padding: '8px 10px' }}>
-                                        <AlertCircle size={16} />
-                                        <span>اگر ایمیل دریافت نکردید، پوشه هرزنامه را بررسی کنید</span>
-                                    </div>
+                        <div className="success-message">
+                            <CheckCircle size={20} />
+                            <div>
+                                <div>کد تأیید به ایمیل {email} ارسال شد</div>
+                                <div className="info-message" style={{ marginTop: '8px', padding: '8px 10px' }}>
+                                    <AlertCircle size={16} />
+                                    <span>اگر ایمیل دریافت نکردید، پوشه هرزنامه را بررسی کنید</span>
                                 </div>
                             </div>
-                        )}
+                        </div>
+
                         {error && <div className="error-message">{error}</div>}
 
                         <button type="submit" className="login-btn" disabled={loading}>
@@ -309,7 +321,6 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                                 نام
                             </label>
                             <input
-                                ref={nameRef}
                                 type="text"
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
@@ -324,7 +335,6 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                                 نام کاربری
                             </label>
                             <input
-                                ref={usernameRef}
                                 type="text"
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value.toLowerCase())}
@@ -344,7 +354,6 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                                 رمز عبور
                             </label>
                             <input
-                                ref={passwordRef}
                                 type="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
@@ -360,7 +369,6 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                                 تکرار رمز عبور
                             </label>
                             <input
-                                ref={confirmPasswordRef}
                                 type="password"
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -396,7 +404,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
 
                 <div className="login-footer">
                     قبلاً ثبت نام کرده‌اید؟{' '}
-                    <button onClick={onBackToLogin}>وارد شوید</button>
+                    <button onClick={handleBackToLogin}>وارد شوید</button>
                 </div>
             </div>
         </div>
