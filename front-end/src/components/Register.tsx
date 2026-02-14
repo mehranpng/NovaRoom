@@ -73,7 +73,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
         }
     }, [location.pathname]);
 
-    // Username checking
+    // Username checking using PUBLIC endpoint
     useEffect(() => {
         if (step !== 'details' || !username) {
             setUsernameStatus('idle');
@@ -107,9 +107,24 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
         if (checkTimerRef.current) window.clearTimeout(checkTimerRef.current);
         checkTimerRef.current = window.setTimeout(async () => {
             try {
-                const res = await apiFetch(
-                    `/users/username-available?username=${encodeURIComponent(trimmed)}`
+                // Use PUBLIC endpoint without authentication
+                const response = await fetch(
+                    `${import.meta.env.VITE_IS_DEV_ENVIRONMENT === 'true' ? import.meta.env.VITE_DEV_API_URL : import.meta.env.VITE_PROD_API_URL}/auth/username-available?username=${encodeURIComponent(trimmed)}`,
+                    {
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'ngrok-skip-browser-warning': 'true',
+                        },
+                    }
                 );
+                
+                if (!response.ok) {
+                    setUsernameStatus('invalid');
+                    setUsernameHint('بررسی نام کاربری ممکن نشد');
+                    return;
+                }
+                
+                const res = await response.json();
                 if (res?.available) {
                     setUsernameStatus('available');
                     setUsernameHint('نام کاربری قابل استفاده است');
