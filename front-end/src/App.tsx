@@ -9,6 +9,8 @@ import { AIChatRoom } from './components/AIChatRoom';
 import { Profile } from './components/Profile';
 import { EmptyState } from './components/EmptyState';
 import { Login } from './components/Login';
+import { Register } from './components/Register';
+import { ForgotPassword } from './components/ForgotPassword';
 import { NewChatModal } from './components/NewChatModal';
 import { cx } from './utils/cx';
 import './App.css';
@@ -23,8 +25,11 @@ const normalizeTimestamp = (ts: unknown): number => {
     return Date.now();
 };
 
+type AuthView = 'login' | 'register' | 'forgot-password';
+
 export function App() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [authView, setAuthView] = useState<AuthView>('login');
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [view, setView] = useState<View>('chatList');
     const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -141,6 +146,7 @@ export function App() {
         localStorage.removeItem('token');
         setIsAuthenticated(false);
         setCurrentUser(null);
+        setAuthView('login');
         setView('chatList');
         setActiveChatId(null);
         setPendingUser(null);
@@ -312,6 +318,12 @@ export function App() {
     }, []);
 
     const handleLoginSuccess = (user: User, token: string) => {
+        setCurrentUser(user);
+        setIsAuthenticated(true);
+        localStorage.setItem('token', token);
+    };
+
+    const handleRegisterSuccess = (user: User, token: string) => {
         setCurrentUser(user);
         setIsAuthenticated(true);
         localStorage.setItem('token', token);
@@ -553,7 +565,31 @@ export function App() {
     };
 
     if (!isAuthenticated) {
-        return <Login onLoginSuccess={handleLoginSuccess} />;
+        if (authView === 'register') {
+            return (
+                <Register
+                    onRegisterSuccess={handleRegisterSuccess}
+                    onBackToLogin={() => setAuthView('login')}
+                />
+            );
+        }
+
+        if (authView === 'forgot-password') {
+            return (
+                <ForgotPassword
+                    onBackToLogin={() => setAuthView('login')}
+                    onResetSuccess={() => setAuthView('login')}
+                />
+            );
+        }
+
+        return (
+            <Login
+                onLoginSuccess={handleLoginSuccess}
+                onRegisterClick={() => setAuthView('register')}
+                onForgotPasswordClick={() => setAuthView('forgot-password')}
+            />
+        );
     }
 
     const activeChat = chats.find(c => c.id === activeChatId) || null;
