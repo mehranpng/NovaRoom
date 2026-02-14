@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { apiFetch } from '../config/api';
 import { type User } from '../types';
-import { LogIn } from 'lucide-react';
+import { LogIn, Mail, Key } from 'lucide-react';
 
 interface LoginProps {
     onLoginSuccess: (user: User, token: string) => void;
@@ -49,8 +49,23 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
         setError('');
+
+        // Manual validation
+        if (!email) {
+            setError('لطفاً ایمیل خود را وارد کنید');
+            return;
+        }
+        if (!email.includes('@')) {
+            setError('لطفاً یک آدرس ایمیل معتبر وارد کنید');
+            return;
+        }
+        if (!password) {
+            setError('لطفاً رمز عبور خود را وارد کنید');
+            return;
+        }
+
+        setLoading(true);
 
         try {
             const data = await apiFetch('/auth/login', {
@@ -78,25 +93,35 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
 
                 <form onSubmit={handleSubmit}>
                     <div className="form-group">
-                        <label>ایمیل</label>
+                        <label>
+                            <Mail size={16} />
+                            ایمیل
+                        </label>
                         <input
                             type="email"
                             value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            onChange={(e) => {
+                                setEmail(e.target.value);
+                                setError('');
+                            }}
                             placeholder="example@gmail.com"
-                            required
                             autoFocus
                         />
                     </div>
 
                     <div className="form-group">
-                        <label>رمز عبور</label>
+                        <label>
+                            <Key size={16} />
+                            رمز عبور
+                        </label>
                         <input
                             type="password"
                             value={password}
-                            onChange={(e) => setPassword(e.target.value)}
+                            onChange={(e) => {
+                                setPassword(e.target.value);
+                                setError('');
+                            }}
                             placeholder="••••••••"
-                            required
                         />
                     </div>
 
