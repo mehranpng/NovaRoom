@@ -31,13 +31,13 @@ export function App() {
     const [chats, setChats] = useState<Chat[]>([]);
     const [messages, setMessages] = useState<Record<string, Message[]>>({});
     const [newChatModalOpen, setNewChatModalOpen] = useState(false);
-    
+
     // AI Chat state
     const [showAIChat, setShowAIChat] = useState(false);
     const [aiMessages, setAIMessages] = useState<Message[]>([]);
     const [aiLoading, setAILoading] = useState(true);
     const [aiTyping, setAITyping] = useState(false);
-    
+
     // Track if this is the initial load (show skeleton only once)
     const [isInitialChatsLoad, setIsInitialChatsLoad] = useState(true);
     const [messagesLoadedOnce, setMessagesLoadedOnce] = useState<Record<string, boolean>>({});
@@ -79,7 +79,7 @@ export function App() {
     // Load AI chat history
     useEffect(() => {
         if (!isAuthenticated) return;
-        
+
         const loadAIMessages = async () => {
             try {
                 setAILoading(true);
@@ -102,12 +102,12 @@ export function App() {
 
     const loadChats = useCallback(async (showLoading = true) => {
         if (!isAuthenticated) return;
-        
+
         // Only show skeleton on initial load
         if (showLoading && isInitialChatsLoad) {
             // Will be set to false after first load
         }
-        
+
         try {
             const data = await apiFetch('/chats');
             const normalized: Chat[] = (data as any[]).map((c) => {
@@ -335,7 +335,7 @@ export function App() {
         if (shouldShowSkeleton) {
             setMessagesLoading(prev => ({ ...prev, [chatId]: true }));
         }
-        
+
         try {
             const msgs = await apiFetch(`/chats/${chatId}/messages?limit=100`);
             // API already returns messages in correct order (oldest first, newest last)
