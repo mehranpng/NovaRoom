@@ -29,6 +29,28 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
 
+    // Prevent page refresh/unload
+    useEffect(() => {
+        const preventUnload = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            e.returnValue = '';
+        };
+
+        const preventPageHide = (e: PageTransitionEvent) => {
+            if (!e.persisted) {
+                e.preventDefault();
+            }
+        };
+
+        window.addEventListener('beforeunload', preventUnload);
+        window.addEventListener('pagehide', preventPageHide);
+
+        return () => {
+            window.removeEventListener('beforeunload', preventUnload);
+            window.removeEventListener('pagehide', preventPageHide);
+        };
+    }, []);
+
     // Sync step with URL on mount and location change
     useEffect(() => {
         const newStep = getStepFromPath();
@@ -51,6 +73,42 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
         }
     };
 
+    // Farsi error messages
+    const getErrorMessage = (err: any): string => {
+        const message = err.message || '';
+        
+        // Email errors
+        if (message.includes('404') || message.includes('not found') || message.includes('User not found')) {
+            return 'کاربری با این ایمیل یافت نشد';
+        }
+        if (message.includes('Invalid email')) {
+            return 'فرمت ایمیل نامعتبر است';
+        }
+        
+        // Code errors
+        if (message.includes('Invalid') && message.includes('code')) {
+            return 'کد بازیابی نامعتبر است';
+        }
+        if (message.includes('expired')) {
+            return 'کد بازیابی منقضی شده است';
+        }
+        
+        // Network errors
+        if (message.includes('Network') || message.includes('fetch')) {
+            return 'خطا در ارتباط با سرور. لطفاً دوباره تلاش کنید';
+        }
+        
+        // Generic errors
+        if (message.includes('400')) {
+            return 'درخواست نامعتبر است';
+        }
+        if (message.includes('500')) {
+            return 'خطای سرور. لطفاً بعداً تلاش کنید';
+        }
+        
+        return 'خطای نامشخص. لطفاً دوباره تلاش کنید';
+    };
+
     const handleEmailSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -71,7 +129,7 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                 setStep('reset');
             }, 1500);
         } catch (err: any) {
-            setError(err.message || 'خطا در ارسال کد بازیابی');
+            setError(getErrorMessage(err));
         } finally {
             setLoading(false);
         }
@@ -110,13 +168,7 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                 onResetSuccess();
             }, 2000);
         } catch (err: any) {
-            if (err.message.includes('400')) {
-                setError('کد بازیابی نامعتبر یا منقضی شده است');
-            } else if (err.message.includes('404')) {
-                setError('کاربر پیدا نشد');
-            } else {
-                setError(err.message || 'خطا در بازیابی رمز عبور');
-            }
+            setError(getErrorMessage(err));
         } finally {
             setLoading(false);
         }
@@ -135,7 +187,7 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
 
             setSuccess(`کد بازیابی مجدداً به ایمیل ${email} ارسال شد`);
         } catch (err: any) {
-            setError(err.message || 'خطا در ارسال مجدد کد');
+            setError(getErrorMessage(err));
         } finally {
             setLoading(false);
         }
@@ -172,6 +224,7 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                                 onChange={(e) => setEmail(e.target.value)}
                                 placeholder="example@gmail.com"
                                 required
+                                autoFocus
                             />
                         </div>
 
