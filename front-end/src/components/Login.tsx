@@ -5,9 +5,11 @@ import { LogIn } from 'lucide-react';
 
 interface LoginProps {
     onLoginSuccess: (user: User, token: string) => void;
+    onRegisterClick: () => void;
+    onForgotPasswordClick: () => void;
 }
 
-export function Login({ onLoginSuccess }: LoginProps) {
+export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }: LoginProps) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -85,6 +87,27 @@ export function Login({ onLoginSuccess }: LoginProps) {
                     <button type="submit" className="login-btn" disabled={loading}>
                         {loading ? 'در حال ورود...' : 'ورود'}
                     </button>
+
+                    <button
+                        type="button"
+                        className="link-btn"
+                        onClick={onForgotPasswordClick}
+                        style={{ marginTop: '15px', color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                        رمز عبور خود را فراموش کرده‌اید؟
+                    </button>
+
+                    <div style={{ marginTop: '20px', textAlign: 'center', color: '#888' }}>
+                        <span>حساب کاربری ندارید؟ </span>
+                        <button
+                            type="button"
+                            className="link-btn"
+                            onClick={onRegisterClick}
+                            style={{ color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontWeight: 'bold' }}
+                        >
+                            ثبت نام کنید
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>
