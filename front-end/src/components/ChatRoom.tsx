@@ -112,7 +112,7 @@ export function ChatRoom({
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const messagesContainerRef = useRef<HTMLDivElement | null>(null);
     const roomRef = useRef<HTMLDivElement | null>(null);
-    const inputRef = useRef<HTMLInputElement | null>(null);
+    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
     const messageElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
     const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -173,6 +173,24 @@ export function ChatRoom({
         const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
         return distanceFromBottom < 120;
     };
+
+    // Auto-resize textarea based on content
+    const resizeTextarea = () => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        
+        // Reset height to auto to get the correct scrollHeight
+        textarea.style.height = 'auto';
+        
+        // Set height based on scrollHeight, with min and max constraints
+        const newHeight = Math.min(Math.max(textarea.scrollHeight, 44), 200);
+        textarea.style.height = `${newHeight}px`;
+    };
+
+    // Resize on text change
+    useEffect(() => {
+        resizeTextarea();
+    }, [text]);
 
     // Keep input just above mobile keyboard (iOS/Android browsers) by using VisualViewport.
     useEffect(() => {
@@ -483,7 +501,7 @@ export function ChatRoom({
         setReplyTo({ id: rt.id, senderId: rt.senderId, text: rt.text });
         setEditingId(null);
         setMsgMenu(null);
-        setTimeout(() => inputRef.current?.focus(), 0);
+        setTimeout(() => textareaRef.current?.focus(), 0);
     };
 
     const beginEdit = (m: Message) => {
@@ -491,7 +509,7 @@ export function ChatRoom({
         setReplyTo(null);
         setText(m.text);
         setMsgMenu(null);
-        setTimeout(() => inputRef.current?.focus(), 0);
+        setTimeout(() => textareaRef.current?.focus(), 0);
     };
 
     const doDeleteMessage = (messageId: string) => {
@@ -929,8 +947,8 @@ export function ChatRoom({
                 )}
 
                 <div className="chat-room__input-wrapper">
-                    <input
-                        ref={inputRef}
+                    <textarea
+                        ref={textareaRef}
                         className="chat-room__text-input"
                         placeholder="پیام..."
                         value={text}
@@ -942,8 +960,14 @@ export function ChatRoom({
                             }, 80);
                         }}
                         onKeyDown={(e) => {
-                            if (e.key === 'Enter') submit();
+                            // Ctrl+Enter or Cmd+Enter to send message
+                            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                e.preventDefault();
+                                submit();
+                            }
+                            // Just Enter alone allows new line (default textarea behavior)
                         }}
+                        rows={1}
                     />
                     <button
                         className={
