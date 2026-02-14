@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { apiFetch } from '../config/api';
 import { KeyRound, ArrowLeft, Mail, Key, CheckCircle, AlertCircle } from 'lucide-react';
 
@@ -12,8 +12,16 @@ type Step = 'email' | 'reset';
 
 export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPasswordProps) {
     const navigate = useNavigate();
-    const [step, setStep] = useState<Step>('email');
-    const [email, setEmail] = useState('');
+    const location = useLocation();
+    
+    // Determine step from URL path
+    const getStepFromPath = (): Step => {
+        if (location.pathname.includes('/reset')) return 'reset';
+        return 'email';
+    };
+
+    const [step, setStepState] = useState<Step>(getStepFromPath());
+    const [email, setEmail] = useState(() => sessionStorage.getItem('forgot_email') || '');
     const [code, setCode] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -21,31 +29,27 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
 
-    const emailRef = useRef<HTMLInputElement | null>(null);
-    const codeRef = useRef<HTMLInputElement | null>(null);
-    const newPasswordRef = useRef<HTMLInputElement | null>(null);
-    const confirmPasswordRef = useRef<HTMLInputElement | null>(null);
-
-    // Prevent page refresh when returning from another app
+    // Sync step with URL on mount and location change
     useEffect(() => {
-        const handleVisibilityChange = () => {
-            // Do nothing - just prevent default behavior
-        };
+        const newStep = getStepFromPath();
+        setStepState(newStep);
+        
+        // Restore email from sessionStorage if on reset step
+        const savedEmail = sessionStorage.getItem('forgot_email');
+        if (savedEmail && newStep === 'reset') {
+            setEmail(savedEmail);
+        }
+    }, [location.pathname]);
 
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
-    }, []);
-
-    // Update URL based on step
-    useEffect(() => {
-        if (step === 'email') {
+    // Update step and navigate
+    const setStep = (newStep: Step) => {
+        setStepState(newStep);
+        if (newStep === 'email') {
             navigate('/forgot-password/request', { replace: true });
-        } else if (step === 'reset') {
+        } else if (newStep === 'reset') {
             navigate('/forgot-password/reset', { replace: true });
         }
-    }, [step, navigate]);
+    };
 
     const handleEmailSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -59,6 +63,9 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                 body: JSON.stringify({ email }),
             });
 
+            // Save email to sessionStorage
+            sessionStorage.setItem('forgot_email', email);
+            
             setSuccess(`کد بازیابی به ایمیل ${email} ارسال شد`);
             setTimeout(() => {
                 setStep('reset');
@@ -95,6 +102,9 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                 body: JSON.stringify({ email, code, new_password: newPassword }),
             });
 
+            // Clear sessionStorage
+            sessionStorage.removeItem('forgot_email');
+            
             setSuccess('رمز عبور با موفقیت تغییر کرد');
             setTimeout(() => {
                 onResetSuccess();
@@ -131,6 +141,11 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
         }
     };
 
+    const handleBackToLogin = () => {
+        sessionStorage.removeItem('forgot_email');
+        onBackToLogin();
+    };
+
     return (
         <div className="login-page">
             <div className="login-container">
@@ -152,7 +167,6 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                                 ایمیل
                             </label>
                             <input
-                                ref={emailRef}
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
@@ -182,7 +196,7 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                         <button
                             type="button"
                             className="secondary-btn"
-                            onClick={onBackToLogin}
+                            onClick={handleBackToLogin}
                             style={{ marginTop: '10px' }}
                         >
                             <ArrowLeft size={16} style={{ marginLeft: '5px' }} />
@@ -200,7 +214,6 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                                 کد بازیابی 6 رقمی
                             </label>
                             <input
-                                ref={codeRef}
                                 type="text"
                                 inputMode="numeric"
                                 value={code}
@@ -208,21 +221,20 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                                 placeholder="123456"
                                 maxLength={6}
                                 required
+                                autoFocus
                             />
                         </div>
 
-                        {success && (
-                            <div className="success-message">
-                                <CheckCircle size={20} />
-                                <div>
-                                    <div>کد بازیابی به ایمیل {email} ارسال شد</div>
-                                    <div className="info-message" style={{ marginTop: '8px', padding: '8px 10px' }}>
-                                        <AlertCircle size={16} />
-                                        <span>اگر ایمیل دریافت نکردید، پوشه هرزنامه را بررسی کنید</span>
-                                    </div>
+                        <div className="success-message">
+                            <CheckCircle size={20} />
+                            <div>
+                                <div>کد بازیابی به ایمیل {email} ارسال شد</div>
+                                <div className="info-message" style={{ marginTop: '8px', padding: '8px 10px' }}>
+                                    <AlertCircle size={16} />
+                                    <span>اگر ایمیل دریافت نکردید، پوشه هرزنامه را بررسی کنید</span>
                                 </div>
                             </div>
-                        )}
+                        </div>
 
                         <div className="form-group">
                             <label>
@@ -230,7 +242,6 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                                 رمز عبور جدید
                             </label>
                             <input
-                                ref={newPasswordRef}
                                 type="password"
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
@@ -246,7 +257,6 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                                 تکرار رمز عبور جدید
                             </label>
                             <input
-                                ref={confirmPasswordRef}
                                 type="password"
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -292,7 +302,7 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
 
                 <div className="login-footer">
                     رمز عبور خود را به یاد آوردید؟{' '}
-                    <button onClick={onBackToLogin}>وارد شوید</button>
+                    <button onClick={handleBackToLogin}>وارد شوید</button>
                 </div>
             </div>
         </div>
