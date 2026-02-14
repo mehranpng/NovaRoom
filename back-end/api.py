@@ -492,6 +492,25 @@ async def username_available(
     return {"available": not bool(exists)}
 
 
+@app.get("/auth/username-available")
+async def public_username_available(
+    username: str = Query(..., min_length=1, max_length=32),
+):
+    """Public endpoint for checking username availability during registration"""
+    desired = normalize_username(username)
+    if not validate_username(desired):
+        return {"available": False}
+
+    exists = await cl_users.find_one(
+        {
+            "profile.username": {"$regex": f"^{re.escape(desired)}$", "$options": "i"},
+        },
+        {"_id": 1},
+    )
+
+    return {"available": not bool(exists)}
+
+
 @app.get("/users/search", response_model=List[UserSearchResult])
 async def search_users(
     query: str = Query(..., min_length=2),
