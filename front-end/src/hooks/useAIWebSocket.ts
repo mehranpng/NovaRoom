@@ -9,7 +9,7 @@ interface UseAIWebSocketProps {
 
 export function useAIWebSocket({ token, onNewMessage }: UseAIWebSocketProps) {
     const wsRef = useRef<WebSocket | null>(null);
-    const reconnectTimeoutRef = useRef<number>();
+    const reconnectTimeoutRef = useRef<number | undefined>(undefined);
     const reconnectAttemptsRef = useRef(0);
     const MAX_RECONNECT_ATTEMPTS = 5;
     const RECONNECT_DELAY = 2000;
