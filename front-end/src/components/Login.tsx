@@ -55,11 +55,6 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            onFocus={() => {
-                                setTimeout(() => {
-                                    emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                }, 150);
-                            }}
                             placeholder="example@gmail.com"
                             required
                         />
@@ -72,11 +67,6 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            onFocus={() => {
-                                setTimeout(() => {
-                                    passwordRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                }, 150);
-                            }}
                             placeholder="••••••••"
                             required
                         />
@@ -87,28 +77,17 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
                     <button type="submit" className="login-btn" disabled={loading}>
                         {loading ? 'در حال ورود...' : 'ورود'}
                     </button>
-
-                    <button
-                        type="button"
-                        className="link-btn"
-                        onClick={onForgotPasswordClick}
-                        style={{ marginTop: '15px', color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
-                    >
-                        رمز عبور خود را فراموش کرده‌اید؟
-                    </button>
-
-                    <div style={{ marginTop: '20px', textAlign: 'center', color: '#888' }}>
-                        <span>حساب کاربری ندارید؟ </span>
-                        <button
-                            type="button"
-                            className="link-btn"
-                            onClick={onRegisterClick}
-                            style={{ color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontWeight: 'bold' }}
-                        >
-                            ثبت نام کنید
-                        </button>
-                    </div>
                 </form>
+
+                <div className="login-footer">
+                    رمز عبور خود را فراموش کرده‌اید؟{' '}
+                    <button onClick={onForgotPasswordClick}>بازیابی رمز عبور</button>
+                </div>
+
+                <div className="login-footer" style={{ marginTop: '12px' }}>
+                    حساب کاربری ندارید؟{' '}
+                    <button onClick={onRegisterClick}>ثبت نام کنید</button>
+                </div>
             </div>
         </div>
     );
