@@ -29,7 +29,7 @@ from email_service import (
     verify_code,
     send_password_reset_email,
     verify_reset_code,
-    clear_reset_code
+    clear_reset_code,
 )
 
 load_dotenv()
@@ -57,7 +57,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 7
 
 client = AsyncIOMotorClient(os.getenv("MONGO_DB"))
-db = client["Messenger"]
+db = client["Messenger2"]
 cl_users = db["users"]
 cl_chats = db["chats"]
 cl_messages = db["messages"]
@@ -115,7 +115,9 @@ async def jwt_encode_async(payload: dict) -> str:
 
 async def jwt_decode_async(token: str) -> dict:
     # Offload JWT crypto to a worker thread.
-    return await asyncio.to_thread(jwt.decode, token, SECRET_KEY, algorithms=[ALGORITHM])
+    return await asyncio.to_thread(
+        jwt.decode, token, SECRET_KEY, algorithms=[ALGORITHM]
+    )
 
 
 async def bcrypt_checkpw_async(password: str, stored_hash: str) -> bool:
@@ -229,12 +231,12 @@ async def register_email(req: RegisterEmailRequest):
     existing_user = await cl_users.find_one({"login.email": req.email})
     if existing_user:
         raise HTTPException(status_code=409, detail="Email already registered")
-    
+
     # Send verification email
     code = await send_verification_email(req.email)
     if not code:
         raise HTTPException(status_code=500, detail="Failed to send verification email")
-    
+
     return {"message": "Verification code sent to email", "email": req.email}
 
 
@@ -244,8 +246,10 @@ async def verify_registration_code(req: VerifyCodeRequest):
     # Verify the code
     is_valid = await verify_code(req.email, req.code)
     if not is_valid:
-        raise HTTPException(status_code=400, detail="Invalid or expired verification code")
-    
+        raise HTTPException(
+            status_code=400, detail="Invalid or expired verification code"
+        )
+
     return {"message": "Code verified successfully", "email": req.email}
 
 
@@ -256,69 +260,64 @@ async def complete_registration(req: CompleteRegistrationRequest):
     existing_user = await cl_users.find_one({"login.email": req.email})
     if existing_user:
         raise HTTPException(status_code=409, detail="Email already registered")
-    
+
     # Validate username
     desired_username = normalize_username(req.username)
     if not validate_username(desired_username):
         raise HTTPException(status_code=400, detail="Invalid username format")
-    
+
     # Check if username is taken
-    existing_username = await cl_users.find_one({
-        "profile.username": {
-            "$regex": f"^{re.escape(desired_username)}$",
-            "$options": "i"
+    existing_username = await cl_users.find_one(
+        {
+            "profile.username": {
+                "$regex": f"^{re.escape(desired_username)}$",
+                "$options": "i",
+            }
         }
-    })
+    )
     if existing_username:
         raise HTTPException(status_code=409, detail="Username already taken")
-    
+
     # Generate unique chatId
     chat_id = f"user_{uuid.uuid4().hex[:16]}"
-    
+
     # Hash password
     def _hash_password(password: str) -> str:
-        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    
+        return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
     hashed_password = await asyncio.to_thread(_hash_password, req.password)
-    
+
     # Get current Jalali date
     now_jalali = jdatetime.datetime.now()
     registration_date = f"{now_jalali.year}/{now_jalali.month}/{now_jalali.day}"
-    
+
     # Create user document
     user_doc = {
         "chatId": chat_id,
-        "login": {
-            "email": req.email,
-            "password": hashed_password,
-            "token": None
-        },
+        "login": {"email": req.email, "password": hashed_password, "token": None},
         "profile": {
             "name": req.name,
             "username": desired_username,
             "bio": "",
-            "avatar": ""
+            "avatar": "",
         },
         "online": False,
         "verified": False,
         "registrationDate": registration_date,
-        "createdAt": utc_now()
+        "createdAt": utc_now(),
     }
-    
+
     try:
         await cl_users.insert_one(user_doc)
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to create user")
-    
+
     # Generate token
     token = await create_access_token({"chatId": chat_id})
-    
+
     # Update token in database
-    await cl_users.update_one(
-        {"chatId": chat_id},
-        {"$set": {"login.token": token}}
-    )
-    
+    await cl_users.update_one({"chatId": chat_id}, {"$set": {"login.token": token}})
+
     return {
         "token": token,
         "user": {
@@ -328,8 +327,8 @@ async def complete_registration(req: CompleteRegistrationRequest):
             "bio": "",
             "avatar": "",
             "online": False,
-            "verified": False
-        }
+            "verified": False,
+        },
     }
 
 
@@ -341,12 +340,12 @@ async def request_password_reset(req: PasswordResetRequest):
     if not user:
         # Don't reveal if email exists or not for security
         return {"message": "If the email exists, a reset code has been sent"}
-    
+
     # Send reset code
     code = await send_password_reset_email(req.email)
     if not code:
         raise HTTPException(status_code=500, detail="Failed to send reset email")
-    
+
     return {"message": "Password reset code sent to email"}
 
 
@@ -357,27 +356,26 @@ async def verify_and_reset_password(req: PasswordResetVerifyRequest):
     is_valid = await verify_reset_code(req.email, req.code)
     if not is_valid:
         raise HTTPException(status_code=400, detail="Invalid or expired reset code")
-    
+
     # Check if user exists
     user = await cl_users.find_one({"login.email": req.email})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     # Hash new password
     def _hash_password(password: str) -> str:
-        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    
+        return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
     hashed_password = await asyncio.to_thread(_hash_password, req.new_password)
-    
+
     # Update password
     await cl_users.update_one(
-        {"login.email": req.email},
-        {"$set": {"login.password": hashed_password}}
+        {"login.email": req.email}, {"$set": {"login.password": hashed_password}}
     )
-    
+
     # Clear the reset code
     await clear_reset_code(req.email)
-    
+
     return {"message": "Password reset successful"}
 
 
@@ -586,11 +584,15 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
     # Resolve other users in one query (avoid N+1 queries)
     other_ids: List[str] = []
     for c in chats:
-        other_id = next((pid for pid in c.get("participants", []) if pid != my_id), None)
+        other_id = next(
+            (pid for pid in c.get("participants", []) if pid != my_id), None
+        )
         if other_id:
             other_ids.append(other_id)
 
-    other_users = await cl_users.find({"chatId": {"$in": other_ids}}).to_list(len(other_ids) or 1)
+    other_users = await cl_users.find({"chatId": {"$in": other_ids}}).to_list(
+        len(other_ids) or 1
+    )
     user_by_id = {u["chatId"]: u for u in other_users}
 
     # Compute unread counts in one aggregation (avoid N count_documents)
@@ -613,27 +615,38 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
 
     result = []
     for chat in chats:
-        other_id = next((pid for pid in chat.get("participants", []) if pid != my_id), None)
+        other_id = next(
+            (pid for pid in chat.get("participants", []) if pid != my_id), None
+        )
         other_user = user_by_id.get(other_id) if other_id else None
 
         last_msg = chat.get("lastMessage")
         if isinstance(last_msg, dict) and last_msg.get("timestamp") is not None:
-            last_msg = {**last_msg, "timestamp": dt_to_epoch_ms(last_msg.get("timestamp"))}
+            last_msg = {
+                **last_msg,
+                "timestamp": dt_to_epoch_ms(last_msg.get("timestamp")),
+            }
 
         result.append(
             {
                 "id": chat["_id"],
                 "participantIds": chat.get("participants", []),
                 "otherUser": {
-                    "chatId": other_user.get("chatId") if other_user else (other_id or ""),
+                    "chatId": (
+                        other_user.get("chatId") if other_user else (other_id or "")
+                    ),
                     "name": other_user["profile"]["name"] if other_user else "Unknown",
                     "avatar": other_user["profile"]["avatar"] if other_user else "",
                     "username": (
-                        other_user["profile"]["username"] if other_user else (other_id or "")
+                        other_user["profile"]["username"]
+                        if other_user
+                        else (other_id or "")
                     ),
                     "bio": other_user["profile"]["bio"] if other_user else "",
                     "online": other_user.get("online", False) if other_user else False,
-                    "verified": bool(other_user.get("verified", False)) if other_user else False,
+                    "verified": (
+                        bool(other_user.get("verified", False)) if other_user else False
+                    ),
                 },
                 "lastMessage": last_msg,
                 "unreadCount": unread_map.get(chat["_id"], 0),
@@ -752,7 +765,12 @@ async def try_object_id(value: Any) -> Optional[ObjectId]:
 
 
 async def build_last_message(chat_id: str) -> Optional[dict]:
-    m = await cl_messages.find({"chatId": chat_id}).sort("timestamp", -1).limit(1).to_list(1)
+    m = (
+        await cl_messages.find({"chatId": chat_id})
+        .sort("timestamp", -1)
+        .limit(1)
+        .to_list(1)
+    )
     if not m:
         return None
 
@@ -824,7 +842,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 if reply_to_id:
                     oid = await try_object_id(reply_to_id)
                     if oid:
-                        base = await cl_messages.find_one({"_id": oid, "chatId": chat_id_target})
+                        base = await cl_messages.find_one(
+                            {"_id": oid, "chatId": chat_id_target}
+                        )
                         if base:
                             reply_to = {
                                 "id": str(base["_id"]),
@@ -887,7 +907,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 message_id = data.get("messageId")
                 new_text = data.get("text")
 
-                if not chat_id_target or not message_id or not isinstance(new_text, str) or not new_text.strip():
+                if (
+                    not chat_id_target
+                    or not message_id
+                    or not isinstance(new_text, str)
+                    or not new_text.strip()
+                ):
                     continue
 
                 oid = await try_object_id(message_id)
@@ -967,7 +992,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 out_last = None
                 if last_msg:
-                    out_last = {**last_msg, "timestamp": dt_to_epoch_ms(last_msg.get("timestamp"))}
+                    out_last = {
+                        **last_msg,
+                        "timestamp": dt_to_epoch_ms(last_msg.get("timestamp")),
+                    }
 
                 payload = {
                     "type": "message_deleted",
@@ -987,7 +1015,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         {"$addToSet": {"seenBy": chat_id}},
                     )
 
-                    chat_doc = await cl_chats.find_one({"_id": chat_id_target}, {"participants": 1})
+                    chat_doc = await cl_chats.find_one(
+                        {"_id": chat_id_target}, {"participants": 1}
+                    )
                     if chat_doc:
                         participants = chat_doc.get("participants", [])
                         await broadcast(
@@ -1019,7 +1049,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 )
 
                 # Notify contacts of offline status (only when last connection is gone)
-                user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
+                user_chats = await cl_chats.find({"participants": chat_id}).to_list(
+                    None
+                )
                 contacts_to_notify = set()
                 for chat in user_chats:
                     for p in chat.get("participants", []):
@@ -1064,7 +1096,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
 
             if data.get("type") == "ai_message":
                 text = data.get("text")
-                
+
                 if not isinstance(text, str) or not text.strip():
                     continue
 
@@ -1106,15 +1138,17 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 ai_msg_id = str(result.inserted_id)
 
                 # Send response back to user
-                await websocket.send_json({
-                    "type": "ai_response",
-                    "message": {
-                        "id": ai_msg_id,
-                        "senderId": "ai",
-                        "text": ai_response,
-                        "timestamp": dt_to_epoch_ms(ai_message_doc["timestamp"]),
-                    },
-                })
+                await websocket.send_json(
+                    {
+                        "type": "ai_response",
+                        "message": {
+                            "id": ai_msg_id,
+                            "senderId": "ai",
+                            "text": ai_response,
+                            "timestamp": dt_to_epoch_ms(ai_message_doc["timestamp"]),
+                        },
+                    }
+                )
 
             elif data.get("type") == "ping":
                 await websocket.send_json({"type": "pong"})
