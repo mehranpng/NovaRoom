@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { apiFetch } from '../config/api';
 import { type User } from '../types';
 import { LogIn, Mail, Key } from 'lucide-react';
+import { DarkModeToggle } from './DarkModeToggle';
+import { useDarkMode } from '../hooks/useDarkMode';
 
 interface LoginProps {
     onLoginSuccess: (user: User, token: string) => void;
@@ -14,6 +16,7 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const { isDarkMode, toggleDarkMode } = useDarkMode();
 
     // Farsi error messages
     const getErrorMessage = (err: any): string => {
@@ -84,9 +87,13 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
 
     return (
         <div className="login-page">
+            <div className="login-page__dark-toggle">
+                <DarkModeToggle isDarkMode={isDarkMode} onToggle={toggleDarkMode} />
+            </div>
+            
             <div className="login-container">
                 <div className="login-header">
-                    <LogIn size={48} strokeWidth={1.5} />
+                    <LogIn size={48} strokeWidth={1.5} className="login-header-icon" />
                     <h1>نوا روم</h1>
                     <p>برای ادامه وارد شوید</p>
                 </div>

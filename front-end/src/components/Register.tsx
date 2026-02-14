@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { apiFetch } from '../config/api';
 import { type User } from '../types';
 import { UserPlus, ArrowLeft, Mail, Key, User as UserIcon, CheckCircle, AlertCircle } from 'lucide-react';
+import { DarkModeToggle } from './DarkModeToggle';
+import { useDarkMode } from '../hooks/useDarkMode';
 
 interface RegisterProps {
     onRegisterSuccess: (user: User, token: string) => void;
@@ -15,6 +17,7 @@ type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
     const navigate = useNavigate();
     const location = useLocation();
+    const { isDarkMode, toggleDarkMode } = useDarkMode();
     
     // Determine step from URL path
     const getStepFromPath = (): Step => {
@@ -298,9 +301,13 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
 
     return (
         <div className="login-page">
+            <div className="login-page__dark-toggle">
+                <DarkModeToggle isDarkMode={isDarkMode} onToggle={toggleDarkMode} />
+            </div>
+            
             <div className="login-container">
                 <div className="login-header">
-                    <UserPlus size={48} strokeWidth={1.5} />
+                    <UserPlus size={48} strokeWidth={1.5} className="login-header-icon" />
                     <h1>ثبت نام در نوا روم</h1>
                     <p>
                         {step === 'email' && 'ایمیل خود را وارد کنید'}

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { apiFetch } from '../config/api';
 import { KeyRound, ArrowLeft, Mail, Key, CheckCircle, AlertCircle } from 'lucide-react';
+import { DarkModeToggle } from './DarkModeToggle';
+import { useDarkMode } from '../hooks/useDarkMode';
 
 interface ForgotPasswordProps {
     onBackToLogin: () => void;
@@ -13,6 +15,7 @@ type Step = 'email' | 'reset';
 export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPasswordProps) {
     const navigate = useNavigate();
     const location = useLocation();
+    const { isDarkMode, toggleDarkMode } = useDarkMode();
     
     // Determine step from URL path
     const getStepFromPath = (): Step => {
@@ -181,9 +184,13 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
 
     return (
         <div className="login-page">
+            <div className="login-page__dark-toggle">
+                <DarkModeToggle isDarkMode={isDarkMode} onToggle={toggleDarkMode} />
+            </div>
+            
             <div className="login-container">
                 <div className="login-header">
-                    <KeyRound size={48} strokeWidth={1.5} />
+                    <KeyRound size={48} strokeWidth={1.5} className="login-header-icon" />
                     <h1>بازیابی رمز عبور</h1>
                     <p>
                         {step === 'email' && 'ایمیل خود را وارد کنید'}
