@@ -27,29 +27,6 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
-
-    // Prevent page refresh/unload
-    useEffect(() => {
-        const preventUnload = (e: BeforeUnloadEvent) => {
-            e.preventDefault();
-            e.returnValue = '';
-        };
-
-        const preventPageHide = (e: PageTransitionEvent) => {
-            if (!e.persisted) {
-                e.preventDefault();
-            }
-        };
-
-        window.addEventListener('beforeunload', preventUnload);
-        window.addEventListener('pagehide', preventPageHide);
-
-        return () => {
-            window.removeEventListener('beforeunload', preventUnload);
-            window.removeEventListener('pagehide', preventPageHide);
-        };
-    }, []);
 
     // Sync step with URL on mount and location change
     useEffect(() => {
@@ -77,28 +54,21 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
     const getErrorMessage = (err: any): string => {
         const message = err.message || '';
         
-        // Email errors
         if (message.includes('404') || message.includes('not found') || message.includes('User not found')) {
             return 'کاربری با این ایمیل یافت نشد';
         }
         if (message.includes('Invalid email')) {
             return 'فرمت ایمیل نامعتبر است';
         }
-        
-        // Code errors
         if (message.includes('Invalid') && message.includes('code')) {
             return 'کد بازیابی نامعتبر است';
         }
         if (message.includes('expired')) {
             return 'کد بازیابی منقضی شده است';
         }
-        
-        // Network errors
         if (message.includes('Network') || message.includes('fetch')) {
             return 'خطا در ارتباط با سرور. لطفاً دوباره تلاش کنید';
         }
-        
-        // Generic errors
         if (message.includes('400')) {
             return 'درخواست نامعتبر است';
         }
@@ -111,9 +81,19 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
 
     const handleEmailSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
         setError('');
-        setSuccess('');
+
+        // Manual validation
+        if (!email) {
+            setError('لطفاً ایمیل خود را وارد کنید');
+            return;
+        }
+        if (!email.includes('@')) {
+            setError('لطفاً یک آدرس ایمیل معتبر وارد کنید');
+            return;
+        }
+
+        setLoading(true);
 
         try {
             await apiFetch('/auth/password-reset/request', {
@@ -121,13 +101,9 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                 body: JSON.stringify({ email }),
             });
 
-            // Save email to sessionStorage
+            // Save email and move to next step WITHOUT showing success here
             sessionStorage.setItem('forgot_email', email);
-            
-            setSuccess(`کد بازیابی به ایمیل ${email} ارسال شد`);
-            setTimeout(() => {
-                setStep('reset');
-            }, 1500);
+            setStep('reset');
         } catch (err: any) {
             setError(getErrorMessage(err));
         } finally {
@@ -138,17 +114,22 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
     const handleResetSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-        setSuccess('');
 
-        // Validate passwords match
-        if (newPassword !== confirmPassword) {
-            setError('رمز عبور جدید و تکرار آن یکسان نیستند');
+        // Manual validation
+        if (!code || code.length !== 6) {
+            setError('لطفاً کد 6 رقمی را وارد کنید');
             return;
         }
-
-        // Validate password length
+        if (!newPassword) {
+            setError('لطفاً رمز عبور جدید خود را وارد کنید');
+            return;
+        }
         if (newPassword.length < 6) {
             setError('رمز عبور باید حداقل 6 کاراکتر باشد');
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            setError('رمز عبور جدید و تکرار آن یکسان نیستند');
             return;
         }
 
@@ -163,10 +144,8 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
             // Clear sessionStorage
             sessionStorage.removeItem('forgot_email');
             
-            setSuccess('رمز عبور با موفقیت تغییر کرد');
-            setTimeout(() => {
-                onResetSuccess();
-            }, 2000);
+            // Redirect to login immediately
+            onResetSuccess();
         } catch (err: any) {
             setError(getErrorMessage(err));
         } finally {
@@ -177,7 +156,6 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
     const handleResendCode = async () => {
         setLoading(true);
         setError('');
-        setSuccess('');
 
         try {
             await apiFetch('/auth/password-reset/request', {
@@ -185,7 +163,10 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                 body: JSON.stringify({ email }),
             });
 
-            setSuccess(`کد بازیابی مجدداً به ایمیل ${email} ارسال شد`);
+            // Show temporary success
+            const originalError = error;
+            setError('');
+            setTimeout(() => setError(originalError), 3000);
         } catch (err: any) {
             setError(getErrorMessage(err));
         } finally {
@@ -221,26 +202,16 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                             <input
                                 type="email"
                                 value={email}
-                                onChange={(e) => setEmail(e.target.value)}
+                                onChange={(e) => {
+                                    setEmail(e.target.value);
+                                    setError('');
+                                }}
                                 placeholder="example@gmail.com"
-                                required
                                 autoFocus
                             />
                         </div>
 
                         {error && <div className="error-message">{error}</div>}
-                        {success && (
-                            <div className="success-message">
-                                <CheckCircle size={20} />
-                                <div>
-                                    <div>{success}</div>
-                                    <div className="info-message" style={{ marginTop: '8px', padding: '8px 10px' }}>
-                                        <AlertCircle size={16} />
-                                        <span>اگر ایمیل دریافت نکردید، پوشه هرزنامه را بررسی کنید</span>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
 
                         <button type="submit" className="login-btn" disabled={loading}>
                             {loading ? 'در حال ارسال...' : 'ارسال کد بازیابی'}
@@ -252,7 +223,7 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                             onClick={handleBackToLogin}
                             style={{ marginTop: '10px' }}
                         >
-                            <ArrowLeft size={16} style={{ marginLeft: '5px' }} />
+                            <ArrowLeft size={16} />
                             بازگشت به ورود
                         </button>
                     </form>
@@ -270,10 +241,12 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                                 type="text"
                                 inputMode="numeric"
                                 value={code}
-                                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                onChange={(e) => {
+                                    setCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                                    setError('');
+                                }}
                                 placeholder="123456"
                                 maxLength={6}
-                                required
                                 autoFocus
                             />
                         </div>
@@ -282,7 +255,7 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                             <CheckCircle size={20} />
                             <div>
                                 <div>کد بازیابی به ایمیل {email} ارسال شد</div>
-                                <div className="info-message" style={{ marginTop: '8px', padding: '8px 10px' }}>
+                                <div className="info-message" style={{ marginTop: '8px', padding: '8px 10px', marginBottom: 0 }}>
                                     <AlertCircle size={16} />
                                     <span>اگر ایمیل دریافت نکردید، پوشه هرزنامه را بررسی کنید</span>
                                 </div>
@@ -297,10 +270,11 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                             <input
                                 type="password"
                                 value={newPassword}
-                                onChange={(e) => setNewPassword(e.target.value)}
+                                onChange={(e) => {
+                                    setNewPassword(e.target.value);
+                                    setError('');
+                                }}
                                 placeholder="••••••••"
-                                minLength={6}
-                                required
                             />
                         </div>
 
@@ -312,20 +286,15 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                             <input
                                 type="password"
                                 value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                onChange={(e) => {
+                                    setConfirmPassword(e.target.value);
+                                    setError('');
+                                }}
                                 placeholder="••••••••"
-                                minLength={6}
-                                required
                             />
                         </div>
 
                         {error && <div className="error-message">{error}</div>}
-                        {success && (
-                            <div className="success-message">
-                                <CheckCircle size={20} />
-                                {success}
-                            </div>
-                        )}
 
                         <button type="submit" className="login-btn" disabled={loading}>
                             {loading ? 'در حال تغییر...' : 'تغییر رمز عبور'}
@@ -347,7 +316,7 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                             onClick={() => setStep('email')}
                             style={{ marginTop: '10px' }}
                         >
-                            <ArrowLeft size={16} style={{ marginLeft: '5px' }} />
+                            <ArrowLeft size={16} />
                             تغییر ایمیل
                         </button>
                     </form>
