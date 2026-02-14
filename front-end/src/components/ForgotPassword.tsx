@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../config/api';
-import { KeyRound, ArrowLeft, Mail, Key } from 'lucide-react';
+import { KeyRound, ArrowLeft, Mail, Key, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface ForgotPasswordProps {
     onBackToLogin: () => void;
@@ -10,6 +11,7 @@ interface ForgotPasswordProps {
 type Step = 'email' | 'reset';
 
 export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPasswordProps) {
+    const navigate = useNavigate();
     const [step, setStep] = useState<Step>('email');
     const [email, setEmail] = useState('');
     const [code, setCode] = useState('');
@@ -24,6 +26,27 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
     const newPasswordRef = useRef<HTMLInputElement | null>(null);
     const confirmPasswordRef = useRef<HTMLInputElement | null>(null);
 
+    // Prevent page refresh when returning from another app
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            // Do nothing - just prevent default behavior
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, []);
+
+    // Update URL based on step
+    useEffect(() => {
+        if (step === 'email') {
+            navigate('/forgot-password/request', { replace: true });
+        } else if (step === 'reset') {
+            navigate('/forgot-password/reset', { replace: true });
+        }
+    }, [step, navigate]);
+
     const handleEmailSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -36,8 +59,10 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                 body: JSON.stringify({ email }),
             });
 
-            setSuccess('کد بازیابی به ایمیل شما ارسال شد');
-            setStep('reset');
+            setSuccess(`کد بازیابی به ایمیل ${email} ارسال شد`);
+            setTimeout(() => {
+                setStep('reset');
+            }, 1500);
         } catch (err: any) {
             setError(err.message || 'خطا در ارسال کد بازیابی');
         } finally {
@@ -98,7 +123,7 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                 body: JSON.stringify({ email }),
             });
 
-            setSuccess('کد بازیابی مجدداً به ایمیل شما ارسال شد');
+            setSuccess(`کد بازیابی مجدداً به ایمیل ${email} ارسال شد`);
         } catch (err: any) {
             setError(err.message || 'خطا در ارسال مجدد کد');
         } finally {
@@ -123,7 +148,7 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                     <form onSubmit={handleEmailSubmit}>
                         <div className="form-group">
                             <label>
-                                <Mail size={16} style={{ display: 'inline', marginLeft: '5px' }} />
+                                <Mail size={16} />
                                 ایمیل
                             </label>
                             <input
@@ -131,18 +156,24 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                onFocus={() => {
-                                    setTimeout(() => {
-                                        emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                    }, 150);
-                                }}
                                 placeholder="example@gmail.com"
                                 required
                             />
                         </div>
 
                         {error && <div className="error-message">{error}</div>}
-                        {success && <div className="success-message">{success}</div>}
+                        {success && (
+                            <div className="success-message">
+                                <CheckCircle size={20} />
+                                <div>
+                                    <div>{success}</div>
+                                    <div className="info-message" style={{ marginTop: '8px', padding: '8px 10px' }}>
+                                        <AlertCircle size={16} />
+                                        <span>اگر ایمیل دریافت نکردید، پوشه هرزنامه را بررسی کنید</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         <button type="submit" className="login-btn" disabled={loading}>
                             {loading ? 'در حال ارسال...' : 'ارسال کد بازیابی'}
@@ -154,7 +185,7 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                             onClick={onBackToLogin}
                             style={{ marginTop: '10px' }}
                         >
-                            <ArrowLeft size={16} style={{ display: 'inline', marginLeft: '5px' }} />
+                            <ArrowLeft size={16} style={{ marginLeft: '5px' }} />
                             بازگشت به ورود
                         </button>
                     </form>
@@ -165,34 +196,37 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                     <form onSubmit={handleResetSubmit}>
                         <div className="form-group">
                             <label>
-                                <Key size={16} style={{ display: 'inline', marginLeft: '5px' }} />
+                                <Key size={16} />
                                 کد بازیابی 6 رقمی
                             </label>
                             <input
                                 ref={codeRef}
                                 type="text"
+                                inputMode="numeric"
                                 value={code}
                                 onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                onFocus={() => {
-                                    setTimeout(() => {
-                                        codeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                    }, 150);
-                                }}
                                 placeholder="123456"
                                 maxLength={6}
-                                pattern="\d{6}"
                                 required
                             />
-                            <small style={{ color: '#888', fontSize: '12px', marginTop: '8px', display: 'block' }}>
-                                کد به ایمیل <strong>{email}</strong> ارسال شد
-                                <br />
-                                <span style={{ color: '#ff9800' }}>⚠️ اگر دریافت نکردید، پوشه هرزنامه (Spam) را چک کنید</span>
-                            </small>
                         </div>
+
+                        {success && (
+                            <div className="success-message">
+                                <CheckCircle size={20} />
+                                <div>
+                                    <div>کد بازیابی به ایمیل {email} ارسال شد</div>
+                                    <div className="info-message" style={{ marginTop: '8px', padding: '8px 10px' }}>
+                                        <AlertCircle size={16} />
+                                        <span>اگر ایمیل دریافت نکردید، پوشه هرزنامه را بررسی کنید</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         <div className="form-group">
                             <label>
-                                <Key size={16} style={{ display: 'inline', marginLeft: '5px' }} />
+                                <Key size={16} />
                                 رمز عبور جدید
                             </label>
                             <input
@@ -200,11 +234,6 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                                 type="password"
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
-                                onFocus={() => {
-                                    setTimeout(() => {
-                                        newPasswordRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                    }, 150);
-                                }}
                                 placeholder="••••••••"
                                 minLength={6}
                                 required
@@ -213,7 +242,7 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
 
                         <div className="form-group">
                             <label>
-                                <Key size={16} style={{ display: 'inline', marginLeft: '5px' }} />
+                                <Key size={16} />
                                 تکرار رمز عبور جدید
                             </label>
                             <input
@@ -221,11 +250,6 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                                 type="password"
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
-                                onFocus={() => {
-                                    setTimeout(() => {
-                                        confirmPasswordRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                    }, 150);
-                                }}
                                 placeholder="••••••••"
                                 minLength={6}
                                 required
@@ -233,7 +257,12 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                         </div>
 
                         {error && <div className="error-message">{error}</div>}
-                        {success && <div className="success-message">{success}</div>}
+                        {success && (
+                            <div className="success-message">
+                                <CheckCircle size={20} />
+                                {success}
+                            </div>
+                        )}
 
                         <button type="submit" className="login-btn" disabled={loading}>
                             {loading ? 'در حال تغییر...' : 'تغییر رمز عبور'}
@@ -255,11 +284,16 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
                             onClick={() => setStep('email')}
                             style={{ marginTop: '10px' }}
                         >
-                            <ArrowLeft size={16} style={{ display: 'inline', marginLeft: '5px' }} />
+                            <ArrowLeft size={16} style={{ marginLeft: '5px' }} />
                             تغییر ایمیل
                         </button>
                     </form>
                 )}
+
+                <div className="login-footer">
+                    رمز عبور خود را به یاد آوردید؟{' '}
+                    <button onClick={onBackToLogin}>وارد شوید</button>
+                </div>
             </div>
         </div>
     );
