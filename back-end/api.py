@@ -21,7 +21,16 @@ import asyncio
 import hashlib
 from bson import ObjectId
 import re
+import uuid
+import jdatetime
 from ai_service import generate_ai_response
+from email_service import (
+    send_verification_email,
+    verify_code,
+    send_password_reset_email,
+    verify_reset_code,
+    clear_reset_code
+)
 
 load_dotenv()
 
@@ -146,6 +155,32 @@ class ChatCreateRequest(BaseModel):
     targetChatId: str
 
 
+class RegisterEmailRequest(BaseModel):
+    email: str
+
+
+class VerifyCodeRequest(BaseModel):
+    email: str
+    code: str
+
+
+class CompleteRegistrationRequest(BaseModel):
+    email: str
+    name: str
+    username: str
+    password: str
+
+
+class PasswordResetRequest(BaseModel):
+    email: str
+
+
+class PasswordResetVerifyRequest(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
+
 async def create_access_token(data: dict) -> str:
     to_encode = data.copy()
     expire = utc_now() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
@@ -185,6 +220,165 @@ async def startup_db():
     await cl_messages.create_index([("chatId", 1), ("timestamp", -1)])
     await cl_ai_messages.create_index("userId")
     await cl_ai_messages.create_index([("userId", 1), ("timestamp", -1)])
+
+
+@app.post("/auth/register/email")
+async def register_email(req: RegisterEmailRequest):
+    """Step 1: Send verification code to email"""
+    # Check if email already exists
+    existing_user = await cl_users.find_one({"login.email": req.email})
+    if existing_user:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    
+    # Send verification email
+    code = await send_verification_email(req.email)
+    if not code:
+        raise HTTPException(status_code=500, detail="Failed to send verification email")
+    
+    return {"message": "Verification code sent to email", "email": req.email}
+
+
+@app.post("/auth/register/verify")
+async def verify_registration_code(req: VerifyCodeRequest):
+    """Step 2: Verify the code sent to email"""
+    # Verify the code
+    is_valid = await verify_code(req.email, req.code)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification code")
+    
+    return {"message": "Code verified successfully", "email": req.email}
+
+
+@app.post("/auth/register/complete", response_model=TokenResponse)
+async def complete_registration(req: CompleteRegistrationRequest):
+    """Step 3: Complete registration with name, username and password"""
+    # Check if email already exists
+    existing_user = await cl_users.find_one({"login.email": req.email})
+    if existing_user:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    
+    # Validate username
+    desired_username = normalize_username(req.username)
+    if not validate_username(desired_username):
+        raise HTTPException(status_code=400, detail="Invalid username format")
+    
+    # Check if username is taken
+    existing_username = await cl_users.find_one({
+        "profile.username": {
+            "$regex": f"^{re.escape(desired_username)}$",
+            "$options": "i"
+        }
+    })
+    if existing_username:
+        raise HTTPException(status_code=409, detail="Username already taken")
+    
+    # Generate unique chatId
+    chat_id = f"user_{uuid.uuid4().hex[:16]}"
+    
+    # Hash password
+    def _hash_password(password: str) -> str:
+        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    
+    hashed_password = await asyncio.to_thread(_hash_password, req.password)
+    
+    # Get current Jalali date
+    now_jalali = jdatetime.datetime.now()
+    registration_date = f"{now_jalali.year}/{now_jalali.month}/{now_jalali.day}"
+    
+    # Create user document
+    user_doc = {
+        "chatId": chat_id,
+        "login": {
+            "email": req.email,
+            "password": hashed_password,
+            "token": None
+        },
+        "profile": {
+            "name": req.name,
+            "username": desired_username,
+            "bio": "",
+            "avatar": ""
+        },
+        "online": False,
+        "verified": False,
+        "registrationDate": registration_date,
+        "createdAt": utc_now()
+    }
+    
+    try:
+        await cl_users.insert_one(user_doc)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to create user")
+    
+    # Generate token
+    token = await create_access_token({"chatId": chat_id})
+    
+    # Update token in database
+    await cl_users.update_one(
+        {"chatId": chat_id},
+        {"$set": {"login.token": token}}
+    )
+    
+    return {
+        "token": token,
+        "user": {
+            "chatId": chat_id,
+            "username": desired_username,
+            "name": req.name,
+            "bio": "",
+            "avatar": "",
+            "online": False,
+            "verified": False
+        }
+    }
+
+
+@app.post("/auth/password-reset/request")
+async def request_password_reset(req: PasswordResetRequest):
+    """Request password reset - sends code to email"""
+    # Check if email exists
+    user = await cl_users.find_one({"login.email": req.email})
+    if not user:
+        # Don't reveal if email exists or not for security
+        return {"message": "If the email exists, a reset code has been sent"}
+    
+    # Send reset code
+    code = await send_password_reset_email(req.email)
+    if not code:
+        raise HTTPException(status_code=500, detail="Failed to send reset email")
+    
+    return {"message": "Password reset code sent to email"}
+
+
+@app.post("/auth/password-reset/verify")
+async def verify_and_reset_password(req: PasswordResetVerifyRequest):
+    """Verify reset code and change password"""
+    # Verify the code
+    is_valid = await verify_reset_code(req.email, req.code)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code")
+    
+    # Check if user exists
+    user = await cl_users.find_one({"login.email": req.email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Hash new password
+    def _hash_password(password: str) -> str:
+        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    
+    hashed_password = await asyncio.to_thread(_hash_password, req.new_password)
+    
+    # Update password
+    await cl_users.update_one(
+        {"login.email": req.email},
+        {"$set": {"login.password": hashed_password}}
+    )
+    
+    # Clear the reset code
+    await clear_reset_code(req.email)
+    
+    return {"message": "Password reset successful"}
 
 
 @app.post("/auth/login", response_model=TokenResponse)
