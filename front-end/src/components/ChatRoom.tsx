@@ -782,27 +782,16 @@ export function ChatRoom({
                                                     onKeyDown={(e) => {
                                                         if (e.key === 'Enter') scrollToMessage(m.replyTo!.id);
                                                     }}
+                                                    className="message-reply-box"
                                                     style={{
                                                         marginBottom: 6,
                                                         padding: '6px 10px',
                                                         borderRadius: 12,
-                                                        background: isMine ? 'rgba(255,255,255,0.12)' : '#f3f4f6',
-                                                        borderLeft: isMine ? '3px solid rgba(255,255,255,0.55)' : '3px solid #3b82f6',
                                                         cursor: 'pointer',
                                                     }}
                                                 >
-                                                    <div style={{ fontSize: 12, opacity: isMine ? 0.9 : 0.7, fontWeight: 600 }}>
-                                                        پاسخ
-                                                    </div>
-                                                    <div
-                                                        style={{
-                                                            fontSize: 13,
-                                                            opacity: isMine ? 0.95 : 0.85,
-                                                            overflow: 'hidden',
-                                                            textOverflow: 'ellipsis',
-                                                            whiteSpace: 'nowrap',
-                                                        }}
-                                                    >
+                                                    <div className="message-reply-box__label">پاسخ</div>
+                                                    <div className="message-reply-box__text">
                                                         {m.replyTo.text}
                                                     </div>
                                                 </div>
@@ -913,35 +902,13 @@ export function ChatRoom({
 
             <div className="chat-room__input-area">
                 {(replyTo || editingId) && (
-                    <div
-                        style={{
-                            maxWidth: 672,
-                            margin: '0 auto 8px',
-                            padding: '8px 10px',
-                            borderRadius: 14,
-                            background: '#f9fafb',
-                            border: '1px solid #f3f4f6',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: 10,
-                        }}
-                    >
+                    <div className="chat-room__reply-edit-box">
                         <div style={{ minWidth: 0 }}>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>
+                            <div className="chat-room__reply-edit-box__title">
                                 {editingId ? 'در حال ویرایش' : 'در حال پاسخ'}
                             </div>
                             {!editingId && replyTo && (
-                                <div
-                                    style={{
-                                        fontSize: 13,
-                                        color: '#6b7280',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap',
-                                        maxWidth: 520,
-                                    }}
-                                >
+                                <div className="chat-room__reply-edit-box__text">
                                     {replyTo.text}
                                 </div>
                             )}

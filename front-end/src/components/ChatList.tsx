@@ -250,11 +250,7 @@ export function ChatList({
                 {showAIChat && (
                     <button
                         onClick={onOpenAIChat}
-                        className="chat-list__item"
-                        style={{
-                            background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)',
-                            borderBottom: '1px solid #BFDBFE',
-                        }}
+                        className="chat-list__item chat-list__item--ai"
                     >
                         <img
                             src="/avatars/ai.png"
