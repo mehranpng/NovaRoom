@@ -6,6 +6,8 @@ import { VerifiedBadge } from './VerifiedBadge';
 import { cx } from '../utils/cx';
 import { EmptyState } from './EmptyState';
 import { ChatListSkeleton } from './ChatListSkeleton';
+import { DarkModeToggle } from './DarkModeToggle';
+import { useDarkMode } from '../hooks/useDarkMode';
 
 interface ChatListProps {
     chats: Chat[];
@@ -130,6 +132,7 @@ export function ChatList({
     const [searchQuery, setSearchQuery] = useState('');
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement | null>(null);
+    const { isDarkMode, toggleDarkMode } = useDarkMode();
 
     const isMobile = useIsMobile(768);
 
@@ -193,6 +196,8 @@ export function ChatList({
                     <h1 className="chat-list__title">NovaRoom</h1>
                 </div>
                 <div className="chat-list__header-actions">
+                    <DarkModeToggle isDarkMode={isDarkMode} onToggle={toggleDarkMode} />
+                    
                     <button className="icon-btn" onClick={onNewChatClick}>
                         <MessageSquarePlus size={20} />
                     </button>
