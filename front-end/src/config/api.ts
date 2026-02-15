@@ -38,3 +38,11 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
 
     return response.json();
 };
+
+// Add reaction to message
+export const toggleReaction = async (messageId: string, emoji: string) => {
+    return apiFetch(`/messages/${encodeURIComponent(messageId)}/react`, {
+        method: 'POST',
+        body: JSON.stringify({ messageId, emoji }),
+    });
+};
