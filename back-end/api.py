@@ -712,7 +712,16 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
             }
         )
 
-    return result
+        result.sort(
+            key=lambda c: (
+                c.get("lastMessage", {}).get("timestamp")
+                if c.get("lastMessage") and isinstance(c.get("lastMessage"), dict)
+                else datetime.min.replace(tzinfo=timezone.utc)
+            ),
+            reverse=True,
+        )
+
+        return result
 
 
 @app.delete("/chats/{chat_id}")
@@ -971,7 +980,7 @@ async def forward_message(
     # Check if user has access to the original message
     original_chat_id = original_msg.get("chatId")
     saved_chat_id = get_saved_messages_id(user_id)
-    
+
     # For saved messages, only the owner can forward
     if original_chat_id == saved_chat_id:
         pass  # User can forward their own saved messages
@@ -980,27 +989,29 @@ async def forward_message(
         chat_doc = await cl_chats.find_one({"_id": original_chat_id})
         if not chat_doc:
             raise HTTPException(status_code=404, detail="Original chat not found")
-        
+
         participants = chat_doc.get("participants", [])
         if user_id not in participants:
             raise HTTPException(status_code=403, detail="Not authorized")
 
     # Check if target chat exists or is saved messages
     is_target_saved = target_chat_id == get_saved_messages_id(user_id)
-    
+
     if not is_target_saved:
         target_chat = await cl_chats.find_one({"_id": target_chat_id})
         if not target_chat:
             raise HTTPException(status_code=404, detail="Target chat not found")
-        
+
         target_participants = target_chat.get("participants", [])
         if user_id not in target_participants:
-            raise HTTPException(status_code=403, detail="Not authorized to send to this chat")
+            raise HTTPException(
+                status_code=403, detail="Not authorized to send to this chat"
+            )
 
     # Get original sender info
     original_sender_id = original_msg.get("senderId")
     original_sender = await cl_users.find_one({"chatId": original_sender_id})
-    
+
     forwarded_from_info = {
         "originalSenderId": original_sender_id,
         "name": original_sender["profile"]["name"] if original_sender else "Unknown",
@@ -1568,6 +1579,26 @@ async def get_ai_messages(
         }
         for m in msgs
     ]
+
+
+@app.delete("/ai/messages/{message_id}")
+async def delete_ai_message(
+    message_id: str, current_user: dict = Depends(get_current_user)
+):
+    """Delete an AI message"""
+    user_id = current_user["chatId"]
+
+    oid = await try_object_id(message_id)
+    if not oid:
+        raise HTTPException(status_code=400, detail="Invalid message ID")
+
+    msg = await cl_ai_messages.find_one({"_id": oid, "userId": user_id})
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    await cl_ai_messages.delete_one({"_id": oid})
+
+    return {"success": True}
 
 
 if __name__ == "__main__":
