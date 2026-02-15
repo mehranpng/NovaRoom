@@ -14,6 +14,11 @@ export interface MessageReply {
     text: string;
 }
 
+export interface MessageReaction {
+    userId: string;
+    emoji: string;
+}
+
 export interface Message {
     id: string;
     chatId: string;
@@ -23,6 +28,7 @@ export interface Message {
     seen: boolean;
     replyTo?: MessageReply;
     edited?: boolean;
+    reactions?: MessageReaction[];
 }
 
 export interface ChatLastMessage {
