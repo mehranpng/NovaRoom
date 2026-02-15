@@ -605,7 +605,9 @@ export function ChatRoom({
     const activeMsgIsMine = activeMsg ? activeMsg.senderId === currentUserId : false;
 
     const reactionMsg = reactionMenu ? messages.find((mm) => mm.id === reactionMenu.id) : null;
-    const myReaction = reactionMsg?.reactions?.find((r: any) => r.userId === currentUserId);
+    const myReaction = reactionMsg?.reactions?.find((r: any) => 
+        r.userIds && Array.isArray(r.userIds) && r.userIds.includes(currentUserId)
+    );
 
     return (
         <div className="chat-room" style={{ position: 'relative' }} ref={roomRef}>
@@ -892,22 +894,30 @@ export function ChatRoom({
 
                                             {m.reactions && m.reactions.length > 0 && (
                                                 <div className="message-reactions">
-                                                    {m.reactions.map((reaction: any) => {
-                                                        const isMyReaction = reaction.userId === currentUserId;
+                                                    {m.reactions.map((reaction: any, idx: number) => {
+                                                        // Check if current user has reacted with this emoji
+                                                        const userIds = reaction.userIds || [];
+                                                        const isMyReaction = userIds.includes(currentUserId);
+                                                        
                                                         return (
                                                             <button
-                                                                key={reaction.userId}
+                                                                key={idx}
                                                                 className={isMyReaction ? 'message-reaction message-reaction--active' : 'message-reaction'}
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
+                                                                    // Toggle: if I already reacted with this emoji, remove it; otherwise add it
                                                                     if (isMyReaction) {
                                                                         handleDeleteReaction(m.id);
+                                                                    } else {
+                                                                        handleReact(m.id, reaction.emoji);
                                                                     }
                                                                 }}
                                                                 type="button"
                                                             >
                                                                 <span className="message-reaction__emoji">{reaction.emoji}</span>
-                                                                <span className="message-reaction__count">{reaction.count}</span>
+                                                                {reaction.count > 1 && (
+                                                                    <span className="message-reaction__count">{reaction.count}</span>
+                                                                )}
                                                             </button>
                                                         );
                                                     })}
