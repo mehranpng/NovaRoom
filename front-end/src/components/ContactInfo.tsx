@@ -29,10 +29,6 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
         });
     }, [user.createdAt]);
 
-    const birthDateLabel = user.birthDate
-        ? new Date(user.birthDate).toLocaleDateString('fa-IR', { year: 'numeric', month: 'long', day: 'numeric' })
-        : 'ثبت نشده';
-
     const members = ((user as any).members || []) as User[];
     const onlineCount = members.filter((m) => m.online).length;
     const offlineCount = Math.max(0, members.length - onlineCount);
@@ -84,28 +80,13 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
                             <Users size={16} /> وضعیت اعضا
                         </div>
                         <div className="contact-info__bio">{onlineCount} آنلاین • {offlineCount} آفلاین</div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }}>
-                            <div className="contact-info__mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{(user as any).inviteLink}</div>
-                            <button
-                                type="button"
-                                className="icon-btn"
-                                aria-label="Copy invite link"
-                                onClick={handleCopyInvite}
-                            >
-                                {copiedInvite ? <Check size={18} /> : <Copy size={18} />}
-                            </button>
-                        </div>
+                        <div className="contact-info__mono" style={{ marginTop: 8 }}>{(user as any).inviteLink}</div>
                     </div>
                 )}
 
                 <div className="contact-info__card">
                     <div className="contact-info__label">تاریخ ساخت اکانت</div>
                     <div className="contact-info__bio">{createdAtLabel}</div>
-                </div>
-
-                <div className="contact-info__card">
-                    <div className="contact-info__label">تاریخ تولد</div>
-                    <div className="contact-info__bio">{birthDateLabel}</div>
                 </div>
 
                 <div className="contact-info__card">

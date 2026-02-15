@@ -2114,31 +2114,3 @@ textarea {
   border-color: #2F80ED;
   background: rgba(47, 128, 237, 0.12);
 }
-
-.message-reactions--stacked {
-  margin-top: 8px;
-}
-
-.message-reaction-picker {
-  position: absolute;
-  top: -46px;
-  left: 8px;
-  right: 8px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 8px;
-  border-radius: 999px;
-  background: rgba(19, 31, 47, 0.95);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.message-reaction-picker::-webkit-scrollbar {
-  display: none;
-}
-
-.message-reaction-picker .icon-btn {
-  color: #fff;
-}

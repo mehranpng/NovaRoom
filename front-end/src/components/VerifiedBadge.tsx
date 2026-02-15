@@ -8,60 +8,26 @@ declare global {
     }
 }
 
-const LOTTIE_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js';
-
-async function ensureBodymovin(): Promise<boolean> {
-    if (typeof window === 'undefined') return false;
-    if (window.bodymovin) return true;
-
-    return new Promise((resolve) => {
-        const existing = document.querySelector(`script[src="${LOTTIE_CDN}"]`) as HTMLScriptElement | null;
-        if (existing) {
-            existing.addEventListener('load', () => resolve(Boolean(window.bodymovin)), { once: true });
-            existing.addEventListener('error', () => resolve(false), { once: true });
-            return;
-        }
-
-        const script = document.createElement('script');
-        script.src = LOTTIE_CDN;
-        script.async = true;
-        script.onload = () => resolve(Boolean(window.bodymovin));
-        script.onerror = () => resolve(false);
-        document.head.appendChild(script);
-    });
-}
-
 export function VerifiedBadge({ size = 16 }: { size?: number }) {
     const ref = useRef<HTMLSpanElement | null>(null);
     const [useFallback, setUseFallback] = useState(false);
 
     useEffect(() => {
-        let anim: { destroy: () => void } | null = null;
-        let mounted = true;
+        if (!ref.current || !window.bodymovin) {
+            setUseFallback(true);
+            return;
+        }
 
-        const run = async () => {
-            const ok = await ensureBodymovin();
-            if (!mounted || !ref.current || !ok || !window.bodymovin) {
-                setUseFallback(true);
-                return;
-            }
+        setUseFallback(false);
+        const anim = window.bodymovin.loadAnimation({
+            container: ref.current,
+            renderer: 'svg',
+            loop: true,
+            autoplay: true,
+            path: '/anm/verify.json',
+        });
 
-            setUseFallback(false);
-            anim = window.bodymovin.loadAnimation({
-                container: ref.current,
-                renderer: 'svg',
-                loop: true,
-                autoplay: true,
-                path: '/anm/verify.json',
-            });
-        };
-
-        run();
-
-        return () => {
-            mounted = false;
-            anim?.destroy();
-        };
+        return () => anim.destroy();
     }, []);
 
     const inner = Math.max(10, Math.round(size * 0.7));

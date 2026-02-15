@@ -893,7 +893,7 @@ export function ChatRoom({
 
                                             <div className="message-text">{m.text}</div>
                                             {messageReactions[m.id] && Object.keys(messageReactions[m.id]).length > 0 && (
-                                                <div className="message-reactions message-reactions--stacked">
+                                                <div className="message-reactions">
                                                     {Object.entries(messageReactions[m.id]).map(([emoji, count]) => (
                                                         <span key={emoji} className={myReactions[m.id] === emoji ? 'message-reaction message-reaction--mine' : 'message-reaction'}>{emoji} {count}</span>
                                                     ))}
@@ -927,17 +927,17 @@ export function ChatRoom({
                 <div
                     ref={msgMenuRef}
                     className="popover popover--mini"
-                    style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50, minWidth: 220, paddingTop: 14, overflow: 'visible' }}
+                    style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50, minWidth: 220 }}
                     onClick={(e) => e.stopPropagation()}
                 >
-                    <div className="message-reaction-picker">
-                        {['😂', '👍', '❤️', '😮', '😭', '👎', '🍓', '🔥', '👏', '🎉', '🤯', '🙏'].map((emoji) => (
+                    <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--border-color)' }}>
+                        {['👍', '❤️', '😂', '🔥', '😮', '🙏'].map((emoji) => (
                             <button
                                 key={emoji}
                                 type="button"
                                 className="icon-btn"
                                 onClick={() => toggleReaction(activeMsg.id, emoji)}
-                                style={{ width: 30, height: 30, fontSize: 20, background: 'transparent' }}
+                                style={{ width: 28, height: 28 }}
                             >
                                 {emoji}
                             </button>

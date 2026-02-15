@@ -508,10 +508,12 @@ export function App() {
         if (!currentUser) return;
 
         const groupId = `group-${Date.now()}`;
-        const inviteToken = Math.random().toString(36).slice(2, 12);
-        const inviteLink = `${window.location.origin}/join?group=${groupId}&token=${inviteToken}`;
-        const dedupMembers = payload.members.filter((m, idx, arr) => arr.findIndex((x) => x.chatId === m.chatId) === idx);
-        const members = [{ ...currentUser, online: true }, ...dedupMembers];
+        const inviteCode = Math.random().toString(36).slice(2, 10);
+        const inviteLink = `${window.location.origin}/join/${inviteCode}`;
+        const members = [
+            { ...currentUser, online: true },
+            ...payload.members,
+        ];
 
         const groupChat: Chat = {
             id: groupId,
@@ -519,9 +521,9 @@ export function App() {
             unreadCount: 0,
             otherUser: {
                 chatId: groupId,
-                username: `group_${inviteToken}`,
+                username: `group_${inviteCode}`,
                 name: payload.name,
-                bio: `گروه ${payload.name}`,
+                bio: `لینک دعوت: ${inviteLink}`,
                 avatar: '',
                 online: true,
                 verified: false,
@@ -532,8 +534,6 @@ export function App() {
             },
         };
 
-        setNewChatModalOpen(false);
-        setNewChatMode('direct');
         setChats((prev) => [groupChat, ...prev]);
         setMessages((prev) => ({ ...prev, [groupId]: [] }));
         setPendingUser(null);
@@ -585,11 +585,6 @@ export function App() {
         setShowAIChat(true);
         setShowSavedMessages(false);
         setView('chatRoom');
-    };
-
-    const handleOpenGroupBuilder = () => {
-        setNewChatMode('group');
-        setNewChatModalOpen(true);
     };
 
     const handleOpenSavedMessages = () => {

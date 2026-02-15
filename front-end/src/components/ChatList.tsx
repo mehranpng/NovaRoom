@@ -1,4 +1,4 @@
-import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Pin, PinOff, Users, UsersRound } from 'lucide-react';
+import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Pin, PinOff, Users } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';

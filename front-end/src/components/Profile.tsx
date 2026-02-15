@@ -9,7 +9,7 @@ import { apiFetch } from '../config/api';
 interface ProfileProps {
     user: User;
     onBack: () => void;
-    onUpdateProfile: (updates: Partial<Pick<User, 'name' | 'username' | 'bio' | 'avatar' | 'birthDate'>>) => void;
+    onUpdateProfile: (updates: Partial<Pick<User, 'name' | 'username' | 'bio' | 'avatar'>>) => void;
 }
 
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
@@ -21,7 +21,6 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
     const [bio, setBio] = useState(user.bio);
     const [copiedField, setCopiedField] = useState<string | null>(null);
     const [avatar, setAvatar] = useState(user.avatar);
-    const [birthDate, setBirthDate] = useState(user.birthDate || '');
 
     const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
     const [usernameHint, setUsernameHint] = useState<string>('');
@@ -116,7 +115,6 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
             username: trimmedUsername,
             bio: bio.trim(),
             avatar,
-            birthDate: birthDate || undefined,
         });
         setIsEditing(false);
     };
@@ -126,7 +124,6 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
         setUsername(user.username);
         setBio(user.bio);
         setAvatar(user.avatar);
-        setBirthDate(user.birthDate || '');
         setIsEditing(false);
         setUsernameStatus('idle');
         setUsernameHint('');
@@ -174,7 +171,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
             <div className="profile__content">
                 {/* Avatar & Name Section */}
                 <div className="profile__avatar-section">
-                    <Avatar name={user.name} size="xl" online={true} avatar={isEditing ? avatar : user.avatar} />
+                    <Avatar name={user.name} size="xl" online={true} avatar={avatar || user.avatar} />
                     <h2
                         className="profile__name"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
