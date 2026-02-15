@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Forward, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Forward } from 'lucide-react';
 import type { Message, Chat } from '../types';
 import { VerifiedBadge } from './VerifiedBadge';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
@@ -59,14 +59,12 @@ export function AIChatRoom({
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     const [forwardModalOpen, setForwardModalOpen] = useState(false);
     const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
-    const [confirmDeleteMsg, setConfirmDeleteMsg] = useState<string | null>(null);
 
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const messagesContainerRef = useRef<HTMLDivElement | null>(null);
     const roomRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
-    const confirmDeleteMsgRef = useRef<HTMLDivElement | null>(null);
     const isAtBottomRef = useRef(true);
     const prevLenRef = useRef(0);
     const initialScrollDoneRef = useRef(false);
@@ -135,15 +133,6 @@ export function AIChatRoom({
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
             if (msgMenuRef.current && msgMenuRef.current.contains(e.target as Node)) return;
-            
-            if (confirmDeleteMsgRef.current) {
-                const modal = confirmDeleteMsgRef.current.querySelector('.chat-room-confirm-modal');
-                if (modal && !modal.contains(e.target as Node)) {
-                    setConfirmDeleteMsg(null);
-                    return;
-                }
-            }
-            
             setMsgMenu(null);
         };
         document.addEventListener('mousedown', onDocClick);
@@ -232,7 +221,7 @@ export function AIChatRoom({
         let top = r.top - roomRect.top;
         let left = r.left - roomRect.left;
 
-        const menuHeight = 140;
+        const menuHeight = 80; // Reduced height since we removed delete button
         const menuWidth = 180;
 
         const maxTop = roomRect.height - menuHeight - 16;
@@ -298,18 +287,6 @@ export function AIChatRoom({
         } catch (error) {
             console.error('Failed to forward message:', error);
             alert('فوروارد پیام با خطا مواجه شد');
-        }
-    };
-
-    const doDeleteMessage = (messageId: string) => {
-        setMsgMenu(null);
-        setConfirmDeleteMsg(messageId);
-    };
-
-    const confirmDeleteMessage = () => {
-        if (confirmDeleteMsg) {
-            onDeleteMessage(confirmDeleteMsg);
-            setConfirmDeleteMsg(null);
         }
     };
 
@@ -431,14 +408,6 @@ export function AIChatRoom({
                             فوروارد
                         </button>
                     )}
-                    <button
-                        className="popover__item popover__item--danger"
-                        onClick={() => doDeleteMessage(activeMsg.id)}
-                        type="button"
-                    >
-                        <Trash2 size={16} />
-                        حذف
-                    </button>
                 </div>
             )}
 
@@ -450,23 +419,6 @@ export function AIChatRoom({
                 onForward={handleForwardMessage}
                 onSelectChat={onSelectChat}
             />
-
-            {confirmDeleteMsg && (
-                <div className="chat-room-modal-overlay" ref={confirmDeleteMsgRef}>
-                    <div className="chat-room-confirm-modal">
-                        <h3 className="chat-room-confirm-modal__title">این پیام حذف شود؟</h3>
-                        <p className="chat-room-confirm-modal__text">این پیام به طور کامل حذف خواهد شد.</p>
-                        <div className="chat-room-confirm-modal__actions">
-                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteMsg(null)} type="button">
-                                لغو
-                            </button>
-                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={confirmDeleteMessage} type="button">
-                                حذف
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {(newMsgCount > 0 || showScrollBtn) && (
                 <button
