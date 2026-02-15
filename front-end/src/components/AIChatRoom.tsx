@@ -424,10 +424,13 @@ export function AIChatRoom({
                         <Copy size={16} />
                         کپی
                     </button>
-                    <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button">
-                        <Forward size={16} />
-                        فوروارد
-                    </button>
+                    {/* Only show forward button for AI messages (not mine) */}
+                    {activeMsg.senderId !== currentUserId && (
+                        <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button">
+                            <Forward size={16} />
+                            فوروارد
+                        </button>
+                    )}
                     <button
                         className="popover__item popover__item--danger"
                         onClick={() => doDeleteMessage(activeMsg.id)}
