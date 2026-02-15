@@ -1,16 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowDown, ArrowLeft, Copy } from 'lucide-react';
-import type { Message } from '../types';
+import { ArrowDown, ArrowLeft, Copy, Forward, Trash2 } from 'lucide-react';
+import type { Message, Chat } from '../types';
 import { VerifiedBadge } from './VerifiedBadge';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
+import { ForwardModal } from './ForwardModal';
+import { apiFetch } from '../config/api';
 
 interface AIChatRoomProps {
     messages: Message[];
     currentUserId: string;
     onSendMessage: (text: string) => void;
+    onDeleteMessage: (messageId: string) => void;
     onBack: () => void;
     loading?: boolean;
     isTyping?: boolean;
+    chats: Chat[];
+    onSelectChat?: (chatId: string) => void;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000; // +03:30
@@ -41,20 +46,27 @@ export function AIChatRoom({
     messages,
     currentUserId,
     onSendMessage,
+    onDeleteMessage,
     onBack,
     loading = false,
     isTyping = false,
+    chats,
+    onSelectChat,
 }: AIChatRoomProps) {
     const [text, setText] = useState('');
     const [msgMenu, setMsgMenu] = useState<{ id: string; top: number; left: number } | null>(null);
     const [newMsgCount, setNewMsgCount] = useState(0);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
+    const [forwardModalOpen, setForwardModalOpen] = useState(false);
+    const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
+    const [confirmDeleteMsg, setConfirmDeleteMsg] = useState<string | null>(null);
 
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const messagesContainerRef = useRef<HTMLDivElement | null>(null);
     const roomRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
+    const confirmDeleteMsgRef = useRef<HTMLDivElement | null>(null);
     const isAtBottomRef = useRef(true);
     const prevLenRef = useRef(0);
     const initialScrollDoneRef = useRef(false);
@@ -123,6 +135,15 @@ export function AIChatRoom({
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
             if (msgMenuRef.current && msgMenuRef.current.contains(e.target as Node)) return;
+            
+            if (confirmDeleteMsgRef.current) {
+                const modal = confirmDeleteMsgRef.current.querySelector('.chat-room-confirm-modal');
+                if (modal && !modal.contains(e.target as Node)) {
+                    setConfirmDeleteMsg(null);
+                    return;
+                }
+            }
+            
             setMsgMenu(null);
         };
         document.addEventListener('mousedown', onDocClick);
@@ -211,7 +232,7 @@ export function AIChatRoom({
         let top = r.top - roomRect.top;
         let left = r.left - roomRect.left;
 
-        const menuHeight = 80;
+        const menuHeight = 140;
         const menuWidth = 180;
 
         const maxTop = roomRect.height - menuHeight - 16;
@@ -244,6 +265,52 @@ export function AIChatRoom({
             // ignore
         }
         setMsgMenu(null);
+    };
+
+    const openForwardModal = (messageId: string) => {
+        setForwardingMessageId(messageId);
+        setForwardModalOpen(true);
+        setMsgMenu(null);
+    };
+
+    const handleForwardMessage = async (targetChatId: string) => {
+        if (!forwardingMessageId) return;
+        
+        try {
+            // Get the AI chat ID - we can use a special ID for AI messages
+            const aiChatId = `ai_chat_${currentUserId}`;
+            
+            await apiFetch('/messages/forward', {
+                method: 'POST',
+                body: JSON.stringify({
+                    messageId: forwardingMessageId,
+                    targetChatId,
+                }),
+            });
+            
+            setForwardingMessageId(null);
+            setForwardModalOpen(false);
+            
+            // Navigate to target chat if callback provided
+            if (onSelectChat && targetChatId !== aiChatId) {
+                onSelectChat(targetChatId);
+            }
+        } catch (error) {
+            console.error('Failed to forward message:', error);
+            alert('فوروارد پیام با خطا مواجه شد');
+        }
+    };
+
+    const doDeleteMessage = (messageId: string) => {
+        setMsgMenu(null);
+        setConfirmDeleteMsg(messageId);
+    };
+
+    const confirmDeleteMessage = () => {
+        if (confirmDeleteMsg) {
+            onDeleteMessage(confirmDeleteMsg);
+            setConfirmDeleteMsg(null);
+        }
     };
 
     const activeMsg = msgMenu ? messages.find((m) => m.id === msgMenu.id) : null;
@@ -357,6 +424,44 @@ export function AIChatRoom({
                         <Copy size={16} />
                         کپی
                     </button>
+                    <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button">
+                        <Forward size={16} />
+                        فوروارد
+                    </button>
+                    <button
+                        className="popover__item popover__item--danger"
+                        onClick={() => doDeleteMessage(activeMsg.id)}
+                        type="button"
+                    >
+                        <Trash2 size={16} />
+                        حذف
+                    </button>
+                </div>
+            )}
+
+            <ForwardModal
+                isOpen={forwardModalOpen}
+                chats={chats}
+                currentUserId={currentUserId}
+                onClose={() => setForwardModalOpen(false)}
+                onForward={handleForwardMessage}
+                onSelectChat={onSelectChat}
+            />
+
+            {confirmDeleteMsg && (
+                <div className="chat-room-modal-overlay" ref={confirmDeleteMsgRef}>
+                    <div className="chat-room-confirm-modal">
+                        <h3 className="chat-room-confirm-modal__title">این پیام حذف شود؟</h3>
+                        <p className="chat-room-confirm-modal__text">این پیام به طور کامل حذف خواهد شد.</p>
+                        <div className="chat-room-confirm-modal__actions">
+                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteMsg(null)} type="button">
+                                لغو
+                            </button>
+                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={confirmDeleteMessage} type="button">
+                                حذف
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
