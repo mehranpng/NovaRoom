@@ -276,6 +276,18 @@ export function App() {
         setChats(prev => prev.map(c => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
     }, []);
 
+    const handleReactionUpdated = useCallback((chatId: string, messageId: string, reactions: any[]) => {
+        setMessages(prev => {
+            const arr = prev[chatId];
+            if (!arr) return prev;
+            return {
+                ...prev,
+                [chatId]: arr.map(m => (m.id === messageId ? { ...m, reactions } : m))
+            };
+        });
+    }, []);
+
+
     // AI WebSocket handlers
     const handleNewAIMessage = useCallback((message: any) => {
         const messageWithChatId: Message = {
@@ -294,8 +306,10 @@ export function App() {
         onMessageEdited: handleMessageEdited,
         onMessageDeleted: handleMessageDeleted,
         onUserStatusChange: handleUserStatusChange,
-        onMessagesSeen: handleMessagesSeen
+        onMessagesSeen: handleMessagesSeen,
+        onReactionUpdated: handleReactionUpdated  // ← ADD THIS LINE
     });
+
 
     // AI WebSocket initialization
     const { sendMessage: sendAIMessage } = useAIWebSocket({
@@ -354,7 +368,7 @@ export function App() {
             // API already returns messages in correct order (oldest first, newest last)
             setMessages(prev => ({ ...prev, [chatId]: msgs }));
             setMessagesLoadedOnce(prev => ({ ...prev, [chatId]: true }));
-            
+
             // Don't send seen for saved messages
             if (currentUser && chatId !== `saved_messages_${currentUser.chatId}`) {
                 sendSeen(chatId);
@@ -611,21 +625,21 @@ export function App() {
                         onForgotPasswordClick={() => navigate('/forgot-password/request')}
                     />
                 } />
-                
+
                 <Route path="/register/*" element={
                     <Register
                         onRegisterSuccess={handleRegisterSuccess}
                         onBackToLogin={() => navigate('/login')}
                     />
                 } />
-                
+
                 <Route path="/forgot-password/*" element={
                     <ForgotPassword
                         onBackToLogin={() => navigate('/login')}
                         onResetSuccess={() => navigate('/login')}
                     />
                 } />
-                
+
                 <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
         );
@@ -634,7 +648,7 @@ export function App() {
     const activeChat = chats.find(c => c.id === activeChatId) || null;
     const activeMessages = activeChatId ? messages[activeChatId] || [] : [];
     const activeMessagesLoading = activeChatId ? messagesLoading[activeChatId] || false : false;
-    
+
     // Check if we have saved messages open (even if not in chat list)
     const isSavedMessagesActive = currentUser && activeChatId === `saved_messages_${currentUser.chatId}`;
 

@@ -70,7 +70,7 @@ active_connections: Dict[str, List[WebSocket]] = {}
 security = HTTPBearer()
 
 # Valid emojis for reactions
-VALID_REACTIONS = ['❤️', '😂', '😮', '😢', '🙏', '👍', '🔥']
+VALID_REACTIONS = ['👍', '👎', '🤣', '😢', '❤', '💔', '😐']
 
 
 def utc_now() -> datetime:
