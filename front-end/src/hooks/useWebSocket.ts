@@ -9,6 +9,7 @@ interface UseWebSocketProps {
     onMessageDeleted?: (chatId: string, messageId: string, lastMessage?: any) => void;
     onUserStatusChange?: (userId: string, online: boolean) => void;
     onMessagesSeen?: (chatId: string) => void;
+    onReactionUpdated?: (chatId: string, messageId: string, reactions: any[]) => void;
     onConnectionChange?: (isConnected: boolean) => void;
 }
 
@@ -28,6 +29,7 @@ export function useWebSocket({
     onMessageDeleted,
     onUserStatusChange,
     onMessagesSeen,
+    onReactionUpdated,
     onConnectionChange,
 }: UseWebSocketProps) {
     const socketRef = useRef<WebSocket | null>(null);
@@ -104,6 +106,8 @@ export function useWebSocket({
                     onUserStatusChange?.(data.userId, data.online);
                 } else if (data.type === 'messages_seen') {
                     onMessagesSeen?.(data.chatId);
+                } else if (data.type === 'reaction_updated') {
+                    onReactionUpdated?.(data.chatId, data.messageId, data.reactions);
                 }
             } catch (err) {
                 console.error('WebSocket message parse error:', err);
@@ -126,7 +130,7 @@ export function useWebSocket({
         };
 
         socketRef.current = ws;
-    }, [token, onNewMessage, onMessageEdited, onMessageDeleted, onUserStatusChange, onMessagesSeen, onConnectionChange, scheduleReconnect]);
+    }, [token, onNewMessage, onMessageEdited, onMessageDeleted, onUserStatusChange, onMessagesSeen, onReactionUpdated, onConnectionChange, scheduleReconnect]);
 
     const send = useCallback(
         (event: OutgoingEvent): boolean => {
