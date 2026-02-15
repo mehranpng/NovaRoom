@@ -707,6 +707,7 @@ export function App() {
                             onCloseChat={handleCloseChat}
                             onChatDeleted={handleChatDeleted}
                             loading={activeMessagesLoading}
+                            chats={chats}
                         />
                     ) : (
                         <EmptyState />

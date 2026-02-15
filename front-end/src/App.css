@@ -2079,6 +2079,19 @@ textarea {
 }
 
 /* ========================================
+   FORWARD MODAL
+   ======================================== */
+.forward-modal {
+  background: var(--bg-primary);
+  border-radius: 20px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 85vh;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+
+/* ========================================
    REACTION PICKER
    ======================================== */
 .reaction-picker {
