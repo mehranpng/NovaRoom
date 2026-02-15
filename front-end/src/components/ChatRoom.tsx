@@ -544,23 +544,32 @@ export function ChatRoom({
         const roomRect = room.getBoundingClientRect();
         const r = targetEl.getBoundingClientRect();
 
-        // Calculate position relative to room, ensuring menu stays visible
-        let top = r.top - roomRect.top;
-        let left = r.left - roomRect.left;
-
         // Menu dimensions (approximate)
         const menuHeight = 220; // approximate height for 5 items
         const menuWidth = 180;
 
-        // Adjust top to keep menu within viewport
-        const maxTop = roomRect.height - menuHeight - 16;
-        top = Math.max(56, Math.min(top, maxTop));
+        // Calculate initial position relative to message bubble
+        let top = r.top - roomRect.top;
+        const left = r.left - roomRect.left;
 
-        // Adjust left to keep menu within viewport
+        // Check if there's enough space below the message
+        const spaceBelow = roomRect.height - (r.bottom - roomRect.top);
+        
+        // If not enough space below, position menu above the message
+        if (spaceBelow < menuHeight + 16) {
+            top = (r.top - roomRect.top) - menuHeight;
+            // Ensure menu doesn't go above header
+            top = Math.max(64, top);
+        } else {
+            // Position below message
+            top = r.bottom - roomRect.top;
+        }
+
+        // Ensure menu stays within horizontal bounds
         const maxLeft = roomRect.width - menuWidth - 16;
-        left = Math.max(12, Math.min(left, maxLeft));
+        const finalLeft = Math.max(12, Math.min(left, maxLeft));
 
-        setMsgMenu({ id: messageId, top, left });
+        setMsgMenu({ id: messageId, top, left: finalLeft });
         setReactionMenu(null);
     };
 
@@ -571,22 +580,31 @@ export function ChatRoom({
         const roomRect = room.getBoundingClientRect();
         const r = targetEl.getBoundingClientRect();
 
-        // Calculate position relative to room
-        let top = r.top - roomRect.top;
-        let left = r.left - roomRect.left;
-
         // Reaction picker dimensions (approximate)
         const pickerHeight = 200;
         const pickerWidth = 320;
 
-        // Adjust to keep picker visible
-        const maxTop = roomRect.height - pickerHeight - 16;
-        top = Math.max(56, Math.min(top, maxTop));
+        // Calculate initial position
+        let top = r.top - roomRect.top;
+        const left = r.left - roomRect.left;
 
+        // Check if there's enough space below
+        const spaceBelow = roomRect.height - (r.bottom - roomRect.top);
+        
+        if (spaceBelow < pickerHeight + 16) {
+            // Position above message
+            top = (r.top - roomRect.top) - pickerHeight;
+            top = Math.max(64, top);
+        } else {
+            // Position below message
+            top = r.bottom - roomRect.top;
+        }
+
+        // Ensure picker stays within horizontal bounds
         const maxLeft = roomRect.width - pickerWidth - 16;
-        left = Math.max(12, Math.min(left, maxLeft));
+        const finalLeft = Math.max(12, Math.min(left, maxLeft));
 
-        setReactionMenu({ id: messageId, top, left });
+        setReactionMenu({ id: messageId, top, left: finalLeft });
         setMsgMenu(null);
     };
 
