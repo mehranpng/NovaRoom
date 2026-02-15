@@ -954,36 +954,49 @@ async def remove_reaction(
 async def forward_message(
     req: ForwardMessageRequest, current_user: dict = Depends(get_current_user)
 ):
-    """Forward a message to another chat"""
+    """Forward a message to another chat (supports both regular and AI messages)"""
     user_id = current_user["chatId"]
     message_id = req.messageId
     target_chat_id = req.targetChatId
 
-    # Get original message
+    # Get original message - check both collections
     oid = await try_object_id(message_id)
     if not oid:
         raise HTTPException(status_code=400, detail="Invalid message ID")
 
+    # Try to find in regular messages first
     original_msg = await cl_messages.find_one({"_id": oid})
+    is_ai_message = False
+    
+    # If not found, try AI messages
+    if not original_msg:
+        original_msg = await cl_ai_messages.find_one({"_id": oid})
+        is_ai_message = True
+    
     if not original_msg:
         raise HTTPException(status_code=404, detail="Message not found")
 
     # Check if user has access to the original message
-    original_chat_id = original_msg.get("chatId")
-    saved_chat_id = get_saved_messages_id(user_id)
-
-    # For saved messages, only the owner can forward
-    if original_chat_id == saved_chat_id:
-        pass  # User can forward their own saved messages
-    else:
-        # For regular chats, check if user is a participant
-        chat_doc = await cl_chats.find_one({"_id": original_chat_id})
-        if not chat_doc:
-            raise HTTPException(status_code=404, detail="Original chat not found")
-
-        participants = chat_doc.get("participants", [])
-        if user_id not in participants:
+    if is_ai_message:
+        # For AI messages, check if it belongs to the user
+        if original_msg.get("userId") != user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
+    else:
+        original_chat_id = original_msg.get("chatId")
+        saved_chat_id = get_saved_messages_id(user_id)
+
+        # For saved messages, only the owner can forward
+        if original_chat_id == saved_chat_id:
+            pass  # User can forward their own saved messages
+        else:
+            # For regular chats, check if user is a participant
+            chat_doc = await cl_chats.find_one({"_id": original_chat_id})
+            if not chat_doc:
+                raise HTTPException(status_code=404, detail="Original chat not found")
+
+            participants = chat_doc.get("participants", [])
+            if user_id not in participants:
+                raise HTTPException(status_code=403, detail="Not authorized")
 
     # Check if target chat exists or is saved messages
     is_target_saved = target_chat_id == get_saved_messages_id(user_id)
@@ -1000,20 +1013,30 @@ async def forward_message(
             )
 
     # Get original sender info
-    original_sender_id = original_msg.get("senderId")
-    original_sender = await cl_users.find_one({"chatId": original_sender_id})
+    if is_ai_message:
+        # For AI messages, the sender is AI
+        forwarded_from_info = {
+            "originalSenderId": "ai",
+            "name": "NovaRoom AI",
+            "username": "novaroom_ai",
+        }
+        message_text = original_msg.get("content", "")
+    else:
+        original_sender_id = original_msg.get("senderId")
+        original_sender = await cl_users.find_one({"chatId": original_sender_id})
 
-    forwarded_from_info = {
-        "originalSenderId": original_sender_id,
-        "name": original_sender["profile"]["name"] if original_sender else "Unknown",
-        "username": original_sender["profile"]["username"] if original_sender else "",
-    }
+        forwarded_from_info = {
+            "originalSenderId": original_sender_id,
+            "name": original_sender["profile"]["name"] if original_sender else "Unknown",
+            "username": original_sender["profile"]["username"] if original_sender else "",
+        }
+        message_text = original_msg.get("text", "")
 
     # Create forwarded message
     forwarded_msg = {
         "chatId": target_chat_id,
         "senderId": user_id,
-        "text": original_msg.get("text", ""),
+        "text": message_text,
         "timestamp": utc_now(),
         "seenBy": [user_id],
         "replyTo": None,  # Forwarded messages don't preserve replies
@@ -1570,6 +1593,29 @@ async def get_ai_messages(
         }
         for m in msgs
     ]
+
+
+@app.delete("/ai/messages/{message_id}")
+async def delete_ai_message(
+    message_id: str, current_user: dict = Depends(get_current_user)
+):
+    """Delete an AI chat message"""
+    user_id = current_user["chatId"]
+
+    # Convert message_id to ObjectId
+    oid = await try_object_id(message_id)
+    if not oid:
+        raise HTTPException(status_code=400, detail="Invalid message ID")
+
+    # Find the message
+    msg = await cl_ai_messages.find_one({"_id": oid, "userId": user_id})
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    # Delete the message
+    await cl_ai_messages.delete_one({"_id": oid})
+
+    return {"success": True, "message": "Message deleted successfully"}
 
 
 if __name__ == "__main__":
