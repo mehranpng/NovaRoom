@@ -234,7 +234,7 @@ export function ChatList({
                                 </button>
                                 <button 
                                     className="popover__item" 
-                                    onClick={() => { toggleDarkMode(); }} 
+                                    onClick={() => { setMenuOpen(false); toggleDarkMode(); }} 
                                     type="button"
                                 >
                                     {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
