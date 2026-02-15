@@ -72,21 +72,27 @@ function tehranMidnightEpoch(ts: any): number {
 }
 
 function formatTime(timestamp: any): string {
-    const today = tehranMidnightEpoch(Date.now());
+    const now = Date.now();
+    const today = tehranMidnightEpoch(now);
     const thatDay = tehranMidnightEpoch(timestamp);
-    const diffDays = Math.round((today - thatDay) / 86400000);
+    const diffMs = today - thatDay;
+    const diffDays = Math.floor(diffMs / 86400000);
 
     const d = new Date(normalizeTs(timestamp));
 
+    // Same day
     if (diffDays === 0) {
         return tehranTimeFmt.format(d);
     }
+    // Yesterday
     if (diffDays === 1) {
         return 'دیروز';
     }
-    if (diffDays < 7) {
+    // Within a week
+    if (diffDays > 1 && diffDays < 7) {
         return tehranWeekdayFmt.format(d);
     }
+    // Older
     return tehranMonthDayFmt.format(d);
 }
 
@@ -174,17 +180,13 @@ export function ChatList({
 
     const savedMessagesId = `saved_messages_${currentUser.chatId}`;
 
-    const filteredChats = chats.filter((chat) => {
-        const isSavedMessages = chat.id === savedMessagesId;
-        
+    // Separate saved messages from regular chats
+    const savedMessagesChat = chats.find(chat => chat.id === savedMessagesId);
+    const regularChats = chats.filter(chat => chat.id !== savedMessagesId);
+
+    const filteredChats = regularChats.filter((chat) => {
         if (!searchQuery) return true;
         
-        // Check saved messages
-        if (isSavedMessages) {
-            return 'پیام‌های ذخیره شده'.includes(searchQuery) || 'saved'.includes(searchQuery.toLowerCase());
-        }
-        
-        // Check regular contacts
         const contact = getContact(chat);
         return (
             contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -196,6 +198,14 @@ export function ChatList({
 
     // Check if we should show AI chat in search results
     const showAIChat = !searchQuery || 'novaroom ai'.includes(searchQuery.toLowerCase()) || 'دستیار'.includes(searchQuery);
+    
+    // Check if we should show saved messages in search results
+    const showSavedMessages = savedMessagesChat && (
+        !searchQuery || 
+        'پیام‌های ذخیره شده'.includes(searchQuery) || 
+        'saved'.includes(searchQuery.toLowerCase()) ||
+        'ذخیره'.includes(searchQuery)
+    );
 
     return (
         <div className="chat-list">
@@ -304,10 +314,40 @@ export function ChatList({
                     </button>
                 )}
 
-                {/* Regular chats (including saved messages) */}
+                {/* Saved Messages - Always pinned second */}
+                {showSavedMessages && (
+                    <button
+                        onClick={() => onSelectChat(savedMessagesChat.id)}
+                        className={cx('chat-list__item', activeChatId === savedMessagesChat.id && 'chat-list__item--active')}
+                    >
+                        <Avatar name="" size="md" savedMessages={true} />
+                        <div className="chat-list__item-content">
+                            <div className="chat-list__item-row">
+                                <span className="chat-list__item-name">
+                                    پیام‌های ذخیره شده
+                                </span>
+                                {savedMessagesChat.lastMessage && (
+                                    <span className="chat-list__item-time">
+                                        {formatTime(savedMessagesChat.lastMessage.timestamp)}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="chat-list__item-preview">
+                                <p className="chat-list__item-text">
+                                    {savedMessagesChat.lastMessage?.text || 'پیام‌های ذخیره شده شما'}
+                                </p>
+                                {savedMessagesChat.unreadCount > 0 && (
+                                    <span className="chat-list__unread-badge">{savedMessagesChat.unreadCount}</span>
+                                )}
+                            </div>
+                        </div>
+                    </button>
+                )}
+
+                {/* Regular chats */}
                 {loading ? (
                     <ChatListSkeleton />
-                ) : chats.length === 0 ? (
+                ) : regularChats.length === 0 ? (
                     isMobile && !hasActiveChat ? <EmptyState /> : null
                 ) : filteredChats.length === 0 ? (
                     <div className="chat-list__empty">
@@ -316,40 +356,12 @@ export function ChatList({
                     </div>
                 ) : (
                     filteredChats.map((chat) => {
-                        const isSavedMessages = chat.id === savedMessagesId;
                         const isActive = activeChatId === chat.id;
                         const isMine = chat.lastMessage?.senderId === currentUser.chatId;
-
-                        if (isSavedMessages) {
-                            return (
-                                <button
-                                    key={chat.id}
-                                    onClick={() => onSelectChat(chat.id)}
-                                    className={cx('chat-list__item', isActive && 'chat-list__item--active')}
-                                >
-                                    <Avatar name="" size="md" savedMessages={true} />
-                                    <div className="chat-list__item-content">
-                                        <div className="chat-list__item-row">
-                                            <span className="chat-list__item-name">
-                                                پیام‌های ذخیره شده
-                                            </span>
-                                            {chat.lastMessage && (
-                                                <span className="chat-list__item-time">
-                                                    {formatTime(chat.lastMessage.timestamp)}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="chat-list__item-preview">
-                                            <p className="chat-list__item-text">
-                                                {chat.lastMessage?.text || 'پیام‌های ذخیره شده شما'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </button>
-                            );
-                        }
-
                         const contact = getContact(chat);
+                        
+                        // Ensure unreadCount is a valid number
+                        const unreadCount = typeof chat.unreadCount === 'number' && chat.unreadCount > 0 ? chat.unreadCount : 0;
 
                         return (
                             <button
@@ -378,8 +390,8 @@ export function ChatList({
                                             {isMine && <span className="chat-list__item-text-prefix">شما: </span>}
                                             {chat.lastMessage?.text || 'هنوز پیامی ارسال نشده'}
                                         </p>
-                                        {chat.unreadCount > 0 && (
-                                            <span className="chat-list__unread-badge">{chat.unreadCount}</span>
+                                        {unreadCount > 0 && (
+                                            <span className="chat-list__unread-badge">{unreadCount}</span>
                                         )}
                                     </div>
                                 </div>
