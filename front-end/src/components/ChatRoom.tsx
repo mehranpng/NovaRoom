@@ -615,7 +615,7 @@ export function ChatRoom({
                     aria-label="Open contact info"
                     type="button"
                 >
-                    <Avatar name={contact.name} size="sm" online={contact.online} />
+                    <Avatar name={contact.name} size="sm" online={contact.online} avatar={contact.avatar} />
                     <div className="chat-room__header-info">
                         <div
                             className="chat-room__contact-name"
@@ -631,7 +631,9 @@ export function ChatRoom({
                                     : 'chat-room__contact-status'
                             }
                         >
-                            {contact.online ? 'آنلاین' : 'آفلاین'}
+                            {(contact as any).isGroup
+                                ? `${((contact as any).members || []).filter((m: any) => m.online).length} آنلاین • ${((contact as any).members || []).filter((m: any) => !m.online).length} آفلاین`
+                                : (contact.online ? 'آنلاین' : 'آفلاین')}
                         </div>
                     </div>
                 </button>

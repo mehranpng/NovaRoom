@@ -166,7 +166,7 @@ export function ChatList({
         if (chat.otherUser) {
             return {
                 ...chat.otherUser,
-                chatId: chat.participantIds.find(id => id !== currentUser.chatId) || '',
+                chatId: chat.otherUser?.isGroup ? chat.id : (chat.participantIds.find(id => id !== currentUser.chatId) || ''),
                 // Make sure online is always boolean so Avatar renders the status dot.
                 online: typeof chat.otherUser.online === 'boolean' ? chat.otherUser.online : false,
                 verified: Boolean((chat.otherUser as any)?.verified),
@@ -205,7 +205,7 @@ export function ChatList({
             <div className="chat-list__header">
                 <div className="chat-list__header-left">
                     <button onClick={onOpenProfile}>
-                        <Avatar name={currentUser.name} size="sm" online={true} />
+                        <Avatar name={currentUser.name} size="sm" online={true} avatar={currentUser.avatar} />
                     </button>
                     <h1 className="chat-list__title">NovaRoom</h1>
                 </div>
@@ -350,7 +350,7 @@ export function ChatList({
                                 onClick={() => onSelectChat(chat.id)}
                                 className={cx('chat-list__item', isActive && 'chat-list__item--active')}
                             >
-                                <Avatar name={contact.name} size="md" online={contact.online} />
+                                <Avatar name={contact.name} size="md" online={contact.online} avatar={contact.avatar} />
                                 <div className="chat-list__item-content">
                                     <div className="chat-list__item-row">
                                         <span
@@ -373,6 +373,11 @@ export function ChatList({
                                             {isMine && <span className="chat-list__item-text-prefix">شما: </span>}
                                             {chat.lastMessage?.text || 'هنوز پیامی ارسال نشده'}
                                         </p>
+                                        {chat.otherUser?.isGroup && Array.isArray(chat.otherUser?.members) && (
+                                            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                                                {chat.otherUser.members.filter((m: any) => m.online).length} آنلاین • {chat.otherUser.members.filter((m: any) => !m.online).length} آفلاین
+                                            </span>
+                                        )}
                                         {chat.unreadCount > 0 && (
                                             <span className="chat-list__unread-badge">{chat.unreadCount}</span>
                                         )}

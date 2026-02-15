@@ -470,6 +470,7 @@ export function App() {
         const myId = currentUser?.chatId;
         if (myId) {
             const existing = chatsRef.current.find((c) => {
+                if ((c as any).otherUser?.isGroup) return false;
                 const hasParticipants = Array.isArray(c.participantIds) && c.participantIds.includes(myId) && c.participantIds.includes(user.chatId);
                 if (hasParticipants) return true;
 
@@ -498,6 +499,46 @@ export function App() {
         setShowAIChat(false);
         setView('chatRoom');
     }, [currentUser?.chatId, handleSelectChat]);
+
+
+    const handleCreateGroup = useCallback((payload: { name: string; members: User[] }) => {
+        if (!currentUser) return;
+
+        const groupId = `group-${Date.now()}`;
+        const inviteCode = Math.random().toString(36).slice(2, 10);
+        const inviteLink = `${window.location.origin}/join/${inviteCode}`;
+        const members = [
+            { ...currentUser, online: true },
+            ...payload.members,
+        ];
+
+        const groupChat: Chat = {
+            id: groupId,
+            participantIds: members.map((m) => m.chatId),
+            unreadCount: 0,
+            otherUser: {
+                chatId: groupId,
+                username: `group_${inviteCode}`,
+                name: payload.name,
+                bio: `لینک دعوت: ${inviteLink}`,
+                avatar: '',
+                online: true,
+                verified: false,
+                createdAt: Date.now(),
+                isGroup: true,
+                inviteLink,
+                members,
+            },
+        };
+
+        setChats((prev) => [groupChat, ...prev]);
+        setMessages((prev) => ({ ...prev, [groupId]: [] }));
+        setPendingUser(null);
+        setShowAIChat(false);
+        setShowSavedMessages(false);
+        setActiveChatId(groupId);
+        setView('chatRoom');
+    }, [currentUser]);
 
     const handleOpenProfile = () => setView('profile');
     const handleBack = () => {
@@ -629,6 +670,7 @@ export function App() {
 
         if (chat.otherUser) {
             return {
+                ...(chat.otherUser as any),
                 chatId: chat.otherUser.chatId ?? chat.otherUser.username ?? '',
                 name: chat.otherUser.name ?? 'Unknown',
                 username: chat.otherUser.username ?? '',
@@ -636,6 +678,7 @@ export function App() {
                 bio: chat.otherUser.bio ?? '',
                 online: Boolean(chat.otherUser.online),
                 verified: Boolean((chat.otherUser as any)?.verified),
+                createdAt: (chat.otherUser as any)?.createdAt,
             };
         }
 
@@ -784,6 +827,7 @@ export function App() {
                 isOpen={newChatModalOpen}
                 onClose={() => setNewChatModalOpen(false)}
                 onUserSelected={handleUserSelectedFromModal}
+                onCreateGroup={handleCreateGroup}
             />
         </div>
     );
