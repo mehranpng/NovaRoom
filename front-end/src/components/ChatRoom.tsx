@@ -21,6 +21,7 @@ interface ChatRoomProps {
     onChatDeleted?: (chatId: string) => void;
     loading?: boolean;
     chats: Chat[];
+    onSelectChat?: (chatId: string) => void;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000; // +03:30
@@ -96,6 +97,7 @@ export function ChatRoom({
     onChatDeleted,
     loading = false,
     chats,
+    onSelectChat,
 }: ChatRoomProps) {
     const [text, setText] = useState('');
     const [chatMenuOpen, setChatMenuOpen] = useState(false);
@@ -633,6 +635,7 @@ export function ChatRoom({
 
     const activeMsg = msgMenu ? messages.find((mm) => mm.id === msgMenu.id) : null;
     const activeMsgIsMine = activeMsg ? activeMsg.senderId === currentUserId : false;
+    const activeMsgIsForwarded = activeMsg?.forwardedFrom ? true : false;
 
     const reactionMsg = reactionMenu ? messages.find((mm) => mm.id === reactionMenu.id) : null;
     const myReaction = reactionMsg?.reactions?.find((r: any) => 
@@ -901,9 +904,10 @@ export function ChatRoom({
                                                         opacity: 0.7,
                                                         marginBottom: 4,
                                                         fontStyle: 'italic',
+                                                        fontFamily: 'Vazir, sans-serif',
                                                     }}
                                                 >
-                                                    فوروارد شده از: {m.forwardedFrom.originalSenderName}
+                                                    فوروارد شده از: {m.forwardedFrom.name || m.forwardedFrom.username || 'ناشناس'}
                                                 </div>
                                             )}
 
@@ -1013,7 +1017,7 @@ export function ChatRoom({
                         <Forward size={16} />
                         فوروارد
                     </button>
-                    {activeMsgIsMine && (
+                    {activeMsgIsMine && !activeMsgIsForwarded && (
                         <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button">
                             <Pencil size={16} />
                             ویرایش
@@ -1175,6 +1179,7 @@ export function ChatRoom({
                 currentUserId={currentUserId}
                 onClose={() => setForwardModalOpen(false)}
                 onForward={handleForwardMessage}
+                onSelectChat={onSelectChat}
             />
 
             {confirmDeleteChat && (

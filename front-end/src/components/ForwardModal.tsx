@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { X, Search, MessageCircle } from 'lucide-react';
+import { X, Search, MessageCircle, Bookmark } from 'lucide-react';
 import type { Chat } from '../types';
 import { Avatar } from './Avatar';
+import { VerifiedBadge } from './VerifiedBadge';
 
 interface ForwardModalProps {
     isOpen: boolean;
@@ -9,14 +10,24 @@ interface ForwardModalProps {
     currentUserId: string;
     onClose: () => void;
     onForward: (chatId: string) => void;
+    onSelectChat?: (chatId: string) => void;
 }
 
-export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward }: ForwardModalProps) {
+export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward, onSelectChat }: ForwardModalProps) {
     const [searchQuery, setSearchQuery] = useState('');
 
     if (!isOpen) return null;
 
-    // Filter out saved messages and current chat
+    // Build saved messages chat object
+    const savedMessagesChat = {
+        id: `saved_messages_${currentUserId}`,
+        name: 'پیام\u200cهای ذخیره شده',
+        username: 'saved',
+        online: false,
+        verified: false,
+    };
+
+    // Filter out saved messages from regular chats (in case it exists)
     const availableChats = chats.filter(chat => {
         if (chat.id.startsWith('saved_messages_')) return false;
         if (!chat.otherUser) return false;
@@ -29,6 +40,9 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward 
               chat.otherUser?.username?.toLowerCase().includes(searchQuery.toLowerCase())
           )
         : availableChats;
+
+    // Show saved messages only if no search query, always at top
+    const showSavedMessages = !searchQuery;
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -44,7 +58,7 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward 
                     <Search size={18} />
                     <input
                         type="text"
-                        placeholder="جستجو در گفتگو‌ها..."
+                        placeholder="جستجو در گفتگو\u200cها..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         autoFocus
@@ -52,7 +66,28 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward 
                 </div>
 
                 <div className="results">
-                    {filteredChats.length === 0 ? (
+                    {showSavedMessages && (
+                        <button
+                            key={savedMessagesChat.id}
+                            className="user-item"
+                            onClick={() => {
+                                onForward(savedMessagesChat.id);
+                                if (onSelectChat) onSelectChat(savedMessagesChat.id);
+                                onClose();
+                            }}
+                            type="button"
+                        >
+                            <Avatar name="" size="md" online={false} savedMessages />
+                            <div className="user-item-info">
+                                <div className="user-name" style={{ fontFamily: 'Vazir, sans-serif' }}>
+                                    {savedMessagesChat.name}
+                                </div>
+                            </div>
+                            <Bookmark size={18} style={{ color: 'var(--text-tertiary)', marginLeft: 'auto' }} />
+                        </button>
+                    )}
+
+                    {filteredChats.length === 0 && !showSavedMessages ? (
                         <div className="no-results">
                             {searchQuery ? 'گفتگویی یافت نشد' : 'گفتگوی فعالی وجود ندارد'}
                         </div>
@@ -67,16 +102,20 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward 
                                     className="user-item"
                                     onClick={() => {
                                         onForward(chat.id);
+                                        if (onSelectChat) onSelectChat(chat.id);
                                         onClose();
                                     }}
                                     type="button"
                                 >
                                     <Avatar name={user.name || user.username} size="md" online={user.online} />
-                                    <div style={{ minWidth: 0, flex: 1, textAlign: 'right' }}>
-                                        <div className="user-name">{user.name}</div>
-                                        <div className="user-username">@{user.username}</div>
+                                    <div className="user-item-info">
+                                        <div className="user-name" style={{ fontFamily: 'Vazir, sans-serif', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                            {user.name}
+                                            {user.verified && <VerifiedBadge size={14} />}
+                                        </div>
+                                        <div className="user-username" style={{ fontFamily: 'Vazir, sans-serif' }}>@{user.username}</div>
                                     </div>
-                                    <MessageCircle size={18} style={{ color: 'var(--text-tertiary)' }} />
+                                    <MessageCircle size={18} style={{ color: 'var(--text-tertiary)', marginLeft: 'auto' }} />
                                 </button>
                             );
                         })
