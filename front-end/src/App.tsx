@@ -38,6 +38,7 @@ export function App() {
 
     // AI Chat state
     const [showAIChat, setShowAIChat] = useState(false);
+    const [showSavedMessages, setShowSavedMessages] = useState(false);
     const [aiMessages, setAIMessages] = useState<Message[]>([]);
     const [aiLoading, setAILoading] = useState(true);
     const [aiTyping, setAITyping] = useState(false);
@@ -50,11 +51,37 @@ export function App() {
     // When user is selected from search, we open the room but do NOT create the chat
     // until the first message is sent.
     const [pendingUser, setPendingUser] = useState<User | null>(null);
+    const [savedMessages, setSavedMessages] = useState<Message[]>([]);
+    const [pinnedChatIds, setPinnedChatIds] = useState<string[]>([]);
 
     const chatsRef = useRef<Chat[]>([]);
     useEffect(() => {
         chatsRef.current = chats;
     }, [chats]);
+
+    useEffect(() => {
+        if (!currentUser?.chatId) return;
+        const rawSaved = localStorage.getItem(`saved_messages_${currentUser.chatId}`);
+        const rawPinned = localStorage.getItem(`pinned_chats_${currentUser.chatId}`);
+        if (rawSaved) {
+            try {
+                setSavedMessages(JSON.parse(rawSaved));
+            } catch {
+                setSavedMessages([]);
+            }
+        } else {
+            setSavedMessages([]);
+        }
+        if (rawPinned) {
+            try {
+                setPinnedChatIds(JSON.parse(rawPinned));
+            } catch {
+                setPinnedChatIds([]);
+            }
+        } else {
+            setPinnedChatIds([]);
+        }
+    }, [currentUser?.chatId]);
 
     // Mobile keyboard/viewport fix: keep app sized to VisualViewport when available.
     useEffect(() => {
@@ -154,7 +181,10 @@ export function App() {
         setIsInitialChatsLoad(true);
         setMessagesLoadedOnce({});
         setShowAIChat(false);
+        setShowSavedMessages(false);
         setAIMessages([]);
+        setSavedMessages([]);
+        setPinnedChatIds([]);
         navigate('/login', { replace: true });
     }, [navigate]);
 
@@ -337,6 +367,7 @@ export function App() {
     const handleSelectChat = useCallback(async (chatId: string) => {
         setPendingUser(null);
         setShowAIChat(false);
+        setShowSavedMessages(false);
         setActiveChatId(chatId);
         setView('chatRoom');
 
@@ -439,6 +470,7 @@ export function App() {
         const myId = currentUser?.chatId;
         if (myId) {
             const existing = chatsRef.current.find((c) => {
+                if ((c as any).otherUser?.isGroup) return false;
                 const hasParticipants = Array.isArray(c.participantIds) && c.participantIds.includes(myId) && c.participantIds.includes(user.chatId);
                 if (hasParticipants) return true;
 
@@ -468,11 +500,52 @@ export function App() {
         setView('chatRoom');
     }, [currentUser?.chatId, handleSelectChat]);
 
+
+    const handleCreateGroup = useCallback((payload: { name: string; members: User[] }) => {
+        if (!currentUser) return;
+
+        const groupId = `group-${Date.now()}`;
+        const inviteCode = Math.random().toString(36).slice(2, 10);
+        const inviteLink = `${window.location.origin}/join/${inviteCode}`;
+        const members = [
+            { ...currentUser, online: true },
+            ...payload.members,
+        ];
+
+        const groupChat: Chat = {
+            id: groupId,
+            participantIds: members.map((m) => m.chatId),
+            unreadCount: 0,
+            otherUser: {
+                chatId: groupId,
+                username: `group_${inviteCode}`,
+                name: payload.name,
+                bio: `لینک دعوت: ${inviteLink}`,
+                avatar: '',
+                online: true,
+                verified: false,
+                createdAt: Date.now(),
+                isGroup: true,
+                inviteLink,
+                members,
+            },
+        };
+
+        setChats((prev) => [groupChat, ...prev]);
+        setMessages((prev) => ({ ...prev, [groupId]: [] }));
+        setPendingUser(null);
+        setShowAIChat(false);
+        setShowSavedMessages(false);
+        setActiveChatId(groupId);
+        setView('chatRoom');
+    }, [currentUser]);
+
     const handleOpenProfile = () => setView('profile');
     const handleBack = () => {
         setView('chatList');
         setPendingUser(null);
         setShowAIChat(false);
+        setShowSavedMessages(false);
         // Clear active chat when going back so messages don't get marked as seen
         setActiveChatId(null);
     };
@@ -481,6 +554,7 @@ export function App() {
         setActiveChatId(null);
         setPendingUser(null);
         setShowAIChat(false);
+        setShowSavedMessages(false);
         setView('chatRoom');
     };
 
@@ -497,6 +571,7 @@ export function App() {
         setActiveChatId(null);
         setPendingUser(null);
         setShowAIChat(false);
+        setShowSavedMessages(false);
         setView('chatList');
         loadChats(false);
     };
@@ -505,7 +580,45 @@ export function App() {
         setActiveChatId(null);
         setPendingUser(null);
         setShowAIChat(true);
+        setShowSavedMessages(false);
         setView('chatRoom');
+    };
+
+    const handleOpenSavedMessages = () => {
+        setActiveChatId(null);
+        setPendingUser(null);
+        setShowAIChat(false);
+        setShowSavedMessages(true);
+        setView('chatRoom');
+    };
+
+    const persistSavedMessages = (next: Message[]) => {
+        setSavedMessages(next);
+        if (currentUser?.chatId) {
+            localStorage.setItem(`saved_messages_${currentUser.chatId}`, JSON.stringify(next));
+        }
+    };
+
+    const handleToggleSaveMessage = (message: Message) => {
+        const exists = savedMessages.some((m) => m.id === message.id);
+        if (exists) {
+            persistSavedMessages(savedMessages.filter((m) => m.id !== message.id));
+            return;
+        }
+        persistSavedMessages([
+            ...savedMessages,
+            { ...message, sourceChatId: message.chatId, chatId: 'saved_messages' },
+        ]);
+    };
+
+    const handleTogglePinChat = (chatId: string) => {
+        const next = pinnedChatIds.includes(chatId)
+            ? pinnedChatIds.filter((id) => id !== chatId)
+            : [chatId, ...pinnedChatIds];
+        setPinnedChatIds(next);
+        if (currentUser?.chatId) {
+            localStorage.setItem(`pinned_chats_${currentUser.chatId}`, JSON.stringify(next));
+        }
     };
 
     const handleSendAIMessage = useCallback((text: string) => {
@@ -532,6 +645,20 @@ export function App() {
         }
     }, [currentUser, sendAIMessage]);
 
+    const handleSendSavedMessage = (text: string) => {
+        if (!currentUser) return;
+        const newMsg: Message = {
+            id: `saved-${Date.now()}`,
+            chatId: 'saved_messages',
+            senderId: currentUser.chatId,
+            text,
+            timestamp: Date.now(),
+            seen: true,
+            sourceChatId: 'saved_messages',
+        };
+        persistSavedMessages([...savedMessages, newMsg]);
+    };
+
     // Temporary contact resolver
     const getActiveContact = (): User => {
         if (pendingUser) return pendingUser;
@@ -543,6 +670,7 @@ export function App() {
 
         if (chat.otherUser) {
             return {
+                ...(chat.otherUser as any),
                 chatId: chat.otherUser.chatId ?? chat.otherUser.username ?? '',
                 name: chat.otherUser.name ?? 'Unknown',
                 username: chat.otherUser.username ?? '',
@@ -550,6 +678,7 @@ export function App() {
                 bio: chat.otherUser.bio ?? '',
                 online: Boolean(chat.otherUser.online),
                 verified: Boolean((chat.otherUser as any)?.verified),
+                createdAt: (chat.otherUser as any)?.createdAt,
             };
         }
 
@@ -596,6 +725,12 @@ export function App() {
     }
 
     const activeChat = chats.find(c => c.id === activeChatId) || null;
+    const sortedChats = [...chats].sort((a, b) => {
+        const aPinned = pinnedChatIds.includes(a.id) ? 1 : 0;
+        const bPinned = pinnedChatIds.includes(b.id) ? 1 : 0;
+        if (aPinned !== bPinned) return bPinned - aPinned;
+        return normalizeTimestamp(b.lastMessage?.timestamp ?? 0) - normalizeTimestamp(a.lastMessage?.timestamp ?? 0);
+    });
     const activeMessages = activeChatId ? messages[activeChatId] || [] : [];
     const activeMessagesLoading = activeChatId ? messagesLoading[activeChatId] || false : false;
 
@@ -604,7 +739,8 @@ export function App() {
             {view !== 'profile' && (
                 <div className={cx('app__sidebar', view === 'chatRoom' && 'app__sidebar--hidden-mobile')}>
                     <ChatList
-                        chats={chats}
+                        chats={sortedChats}
+                        pinnedChatIds={pinnedChatIds}
                         currentUser={currentUser!}
                         activeChatId={activeChatId}
                         onSelectChat={handleSelectChat}
@@ -612,6 +748,9 @@ export function App() {
                         onNewChatClick={() => setNewChatModalOpen(true)}
                         onLogout={handleLogout}
                         onOpenAIChat={handleOpenAIChat}
+                        onOpenSavedMessages={handleOpenSavedMessages}
+                        savedMessages={savedMessages}
+                        onTogglePinChat={handleTogglePinChat}
                         loading={isInitialChatsLoad}
                     />
                 </div>
@@ -641,6 +780,28 @@ export function App() {
                             loading={aiLoading}
                             isTyping={aiTyping}
                         />
+                    ) : view === 'chatRoom' && showSavedMessages ? (
+                        <ChatRoom
+                            chatId="saved_messages"
+                            contact={{
+                                chatId: currentUser!.chatId,
+                                name: 'پیام‌های ذخیره‌شده',
+                                username: currentUser!.username,
+                                bio: 'فقط برای شما قابل مشاهده است',
+                                avatar: '',
+                                online: true,
+                                verified: true,
+                            }}
+                            messages={savedMessages}
+                            currentUserId={currentUser!.chatId}
+                            onSendMessage={({ text }) => handleSendSavedMessage(text)}
+                            onDeleteMessage={(messageId) => persistSavedMessages(savedMessages.filter((m) => m.id !== messageId))}
+                            onBack={handleBack}
+                            onCloseChat={handleCloseChat}
+                            onToggleSaveMessage={handleToggleSaveMessage}
+                            savedMessageIds={new Set(savedMessages.map((m) => m.id))}
+                            loading={false}
+                        />
                     ) : view === 'chatRoom' && (activeChat || pendingUser) ? (
                         <ChatRoom
                             chatId={activeChat?.id || 'pending'}
@@ -652,6 +813,8 @@ export function App() {
                             onBack={handleBack}
                             onCloseChat={handleCloseChat}
                             onChatDeleted={handleChatDeleted}
+                            onToggleSaveMessage={handleToggleSaveMessage}
+                            savedMessageIds={new Set(savedMessages.map((m) => m.id))}
                             loading={activeMessagesLoading}
                         />
                     ) : (
@@ -664,6 +827,7 @@ export function App() {
                 isOpen={newChatModalOpen}
                 onClose={() => setNewChatModalOpen(false)}
                 onUserSelected={handleUserSelectedFromModal}
+                onCreateGroup={handleCreateGroup}
             />
         </div>
     );

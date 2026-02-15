@@ -9,7 +9,7 @@ import { apiFetch } from '../config/api';
 interface ProfileProps {
     user: User;
     onBack: () => void;
-    onUpdateProfile: (updates: Partial<Pick<User, 'name' | 'username' | 'bio'>>) => void;
+    onUpdateProfile: (updates: Partial<Pick<User, 'name' | 'username' | 'bio' | 'avatar'>>) => void;
 }
 
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
@@ -20,6 +20,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
     const [username, setUsername] = useState(user.username);
     const [bio, setBio] = useState(user.bio);
     const [copiedField, setCopiedField] = useState<string | null>(null);
+    const [avatar, setAvatar] = useState(user.avatar);
 
     const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
     const [usernameHint, setUsernameHint] = useState<string>('');
@@ -113,6 +114,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
             name: trimmedName,
             username: trimmedUsername,
             bio: bio.trim(),
+            avatar,
         });
         setIsEditing(false);
     };
@@ -121,6 +123,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
         setName(user.name);
         setUsername(user.username);
         setBio(user.bio);
+        setAvatar(user.avatar);
         setIsEditing(false);
         setUsernameStatus('idle');
         setUsernameHint('');
@@ -128,6 +131,14 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
 
     const canSave =
         isEditing && !!name.trim() && !!username.trim() && usernameStatus === 'available';
+
+    const createdAtLabel = user.createdAt
+        ? new Date(user.createdAt).toLocaleDateString('fa-IR', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+        })
+        : 'نامشخص';
 
     return (
         <div className="profile">
@@ -160,7 +171,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
             <div className="profile__content">
                 {/* Avatar & Name Section */}
                 <div className="profile__avatar-section">
-                    <Avatar name={user.name} size="xl" online={true} />
+                    <Avatar name={user.name} size="xl" online={true} avatar={avatar || user.avatar} />
                     <h2
                         className="profile__name"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
@@ -169,6 +180,23 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                         {user.verified ? <VerifiedBadge size={16} /> : null}
                     </h2>
                     <p className="profile__username-display">@{user.username}</p>
+                    {isEditing && (
+                        <div style={{ marginTop: 8 }}>
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    const reader = new FileReader();
+                                    reader.onload = () => setAvatar(String(reader.result || ''));
+                                    reader.readAsDataURL(file);
+                                }}
+                            />
+                            <p className="profile__char-count">سایز پیشنهادی: 512x512</p>
+                        </div>
+                    )}
+
                     <span className="profile__online-badge">
                         <span className="profile__online-dot" />
                         آنلاین
@@ -196,6 +224,13 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                     </div>
 
                     {/* Editable Fields */}
+                    <div className="profile__field-group">
+                        <label className="profile__field-label">تاریخ ساخت اکانت</label>
+                        <div className="profile__field-static">
+                            <p>{createdAtLabel}</p>
+                        </div>
+                    </div>
+
                     {/* Name */}
                     <div className="profile__field-group">
                         <label className="profile__field-label">نام</label>
