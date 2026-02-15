@@ -1002,9 +1002,9 @@ async def forward_message(
     original_sender = await cl_users.find_one({"chatId": original_sender_id})
     
     forwarded_from_info = {
-        "senderId": original_sender_id,
-        "senderName": original_sender["profile"]["name"] if original_sender else "Unknown",
-        "senderUsername": original_sender["profile"]["username"] if original_sender else "",
+        "originalSenderId": original_sender_id,
+        "name": original_sender["profile"]["name"] if original_sender else "Unknown",
+        "username": original_sender["profile"]["username"] if original_sender else "",
     }
 
     # Create forwarded message
