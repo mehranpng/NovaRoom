@@ -1,35 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
-
-declare global {
-    interface Window {
-        bodymovin?: {
-            loadAnimation: (config: Record<string, any>) => { destroy: () => void };
-        };
-    }
-}
+import { useState } from 'react';
+import { LottieJson } from './LottieJson';
 
 export function VerifiedBadge({ size = 16 }: { size?: number }) {
-    const ref = useRef<HTMLSpanElement | null>(null);
-    const [useFallback, setUseFallback] = useState(false);
-
-    useEffect(() => {
-        if (!ref.current || !window.bodymovin) {
-            setUseFallback(true);
-            return;
-        }
-
-        setUseFallback(false);
-        const anim = window.bodymovin.loadAnimation({
-            container: ref.current,
-            renderer: 'svg',
-            loop: true,
-            autoplay: true,
-            path: '/anm/verify.json',
-        });
-
-        return () => anim.destroy();
-    }, []);
-
+    const [fallback, setFallback] = useState(false);
     const inner = Math.max(10, Math.round(size * 0.7));
 
     return (
@@ -47,9 +20,14 @@ export function VerifiedBadge({ size = 16 }: { size?: number }) {
                 flex: '0 0 auto',
                 overflow: 'hidden',
             }}
-            ref={ref}
         >
-            {useFallback && (
+            {!fallback ? (
+                <LottieJson
+                    path="/anm/verify.json"
+                    className="verified-badge__lottie"
+                    onUnavailable={() => setFallback(true)}
+                />
+            ) : (
                 <svg width={inner} height={inner} viewBox="0 0 24 24" fill="none">
                     <path
                         d="M20 6L9 17l-5-5"

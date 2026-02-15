@@ -59,6 +59,24 @@ export function App() {
         chatsRef.current = chats;
     }, [chats]);
 
+
+    const readLocalGroups = useCallback((): Chat[] => {
+        if (!currentUser?.chatId) return [];
+        const raw = localStorage.getItem(`local_groups_${currentUser.chatId}`);
+        if (!raw) return [];
+        try {
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    }, [currentUser?.chatId]);
+
+    const persistLocalGroups = useCallback((groups: Chat[]) => {
+        if (!currentUser?.chatId) return;
+        localStorage.setItem(`local_groups_${currentUser.chatId}`, JSON.stringify(groups));
+    }, [currentUser?.chatId]);
+
     useEffect(() => {
         if (!currentUser?.chatId) return;
         const rawSaved = localStorage.getItem(`saved_messages_${currentUser.chatId}`);
@@ -160,13 +178,16 @@ export function App() {
                 return c;
             });
 
-            setChats(merged);
+            const localGroups = readLocalGroups();
+            const localOnlyGroups = localGroups.filter((g) => !merged.some((c) => c.id === g.id));
+
+            setChats([...localOnlyGroups, ...merged]);
             setIsInitialChatsLoad(false);
         } catch (error) {
             console.error('Failed to load chats', error);
             setIsInitialChatsLoad(false);
         }
-    }, [isAuthenticated, activeChatId, view, isInitialChatsLoad]);
+    }, [isAuthenticated, activeChatId, view, isInitialChatsLoad, readLocalGroups]);
 
     const handleLogout = useCallback(() => {
         localStorage.removeItem('token');
@@ -501,16 +522,33 @@ export function App() {
     }, [currentUser?.chatId, handleSelectChat]);
 
 
-    const handleCreateGroup = useCallback((payload: { name: string; members: User[] }) => {
-        if (!currentUser) return;
+    const handleCreateGroup = useCallback(async (payload: { name: string; members: User[]; description?: string }) => {
+        if (!currentUser) return false;
 
-        const groupId = `group-${Date.now()}`;
         const inviteCode = Math.random().toString(36).slice(2, 10);
         const inviteLink = `${window.location.origin}/join/${inviteCode}`;
-        const members = [
-            { ...currentUser, online: true },
-            ...payload.members,
-        ];
+
+        try {
+            const res = await apiFetch('/chats/group', {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: payload.name,
+                    description: payload.description || '',
+                    memberIds: [...new Set(payload.members.map((m) => m.chatId))],
+                }),
+            });
+
+            if (res?.chatId) {
+                await handleSelectChat(res.chatId);
+                return true;
+            }
+        } catch (err) {
+            console.warn('Failed to create group on API, falling back to local group.', err);
+        }
+
+        const groupId = `group-${Date.now()}`;
+        const uniqueMembers = payload.members.filter((member, idx, arr) => arr.findIndex((m) => m.chatId === member.chatId) === idx);
+        const members = [{ ...currentUser, online: true }, ...uniqueMembers.filter((m) => m.chatId !== currentUser.chatId)];
 
         const groupChat: Chat = {
             id: groupId,
@@ -520,7 +558,9 @@ export function App() {
                 chatId: groupId,
                 username: `group_${inviteCode}`,
                 name: payload.name,
-                bio: `لینک دعوت: ${inviteLink}`,
+                bio: payload.description?.trim()
+                    ? `${payload.description.trim()}\nلینک دعوت: ${inviteLink}`
+                    : `لینک دعوت: ${inviteLink}`,
                 avatar: '',
                 online: true,
                 verified: false,
@@ -531,14 +571,20 @@ export function App() {
             },
         };
 
-        setChats((prev) => [groupChat, ...prev]);
+        setChats((prev) => {
+            const next = [groupChat, ...prev.filter((c) => c.id !== groupId)];
+            const localGroups = next.filter((c) => Boolean((c as any)?.otherUser?.isGroup) && String(c.id).startsWith('group-'));
+            persistLocalGroups(localGroups);
+            return next;
+        });
         setMessages((prev) => ({ ...prev, [groupId]: [] }));
         setPendingUser(null);
         setShowAIChat(false);
         setShowSavedMessages(false);
         setActiveChatId(groupId);
         setView('chatRoom');
-    }, [currentUser]);
+        return true;
+    }, [currentUser, handleSelectChat, persistLocalGroups]);
 
     const handleOpenProfile = () => setView('profile');
     const handleBack = () => {
