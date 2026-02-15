@@ -712,16 +712,7 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
             }
         )
 
-        result.sort(
-            key=lambda c: (
-                c.get("lastMessage", {}).get("timestamp")
-                if c.get("lastMessage") and isinstance(c.get("lastMessage"), dict)
-                else datetime.min.replace(tzinfo=timezone.utc)
-            ),
-            reverse=True,
-        )
-
-        return result
+    return result
 
 
 @app.delete("/chats/{chat_id}")
@@ -1579,26 +1570,6 @@ async def get_ai_messages(
         }
         for m in msgs
     ]
-
-
-@app.delete("/ai/messages/{message_id}")
-async def delete_ai_message(
-    message_id: str, current_user: dict = Depends(get_current_user)
-):
-    """Delete an AI message"""
-    user_id = current_user["chatId"]
-
-    oid = await try_object_id(message_id)
-    if not oid:
-        raise HTTPException(status_code=400, detail="Invalid message ID")
-
-    msg = await cl_ai_messages.find_one({"_id": oid, "userId": user_id})
-    if not msg:
-        raise HTTPException(status_code=404, detail="Message not found")
-
-    await cl_ai_messages.delete_one({"_id": oid})
-
-    return {"success": True}
 
 
 if __name__ == "__main__":
