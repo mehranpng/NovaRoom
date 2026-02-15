@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, Bookmark, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X } from 'lucide-react';
-import type { Message, MessageReply as MessageReplyType, User } from '../types';
+import { ArrowDown, ArrowLeft, Bookmark, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X, Forward } from 'lucide-react';
+import type { Message, MessageReply as MessageReplyType, User, Chat } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { apiFetch } from '../config/api';
 import { ContactInfo } from './ContactInfo';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
 import { ReactionPicker } from './ReactionPicker';
+import { ForwardModal } from './ForwardModal';
 
 interface ChatRoomProps {
     chatId: string;
@@ -19,6 +20,7 @@ interface ChatRoomProps {
     onCloseChat: () => void;
     onChatDeleted?: (chatId: string) => void;
     loading?: boolean;
+    chats: Chat[];
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000; // +03:30
@@ -93,12 +95,15 @@ export function ChatRoom({
     onCloseChat,
     onChatDeleted,
     loading = false,
+    chats,
 }: ChatRoomProps) {
     const [text, setText] = useState('');
     const [chatMenuOpen, setChatMenuOpen] = useState(false);
     const [confirmDeleteChat, setConfirmDeleteChat] = useState(false);
     const [confirmDeleteMsg, setConfirmDeleteMsg] = useState<string | null>(null);
     const [showContactInfo, setShowContactInfo] = useState(false);
+    const [forwardModalOpen, setForwardModalOpen] = useState(false);
+    const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
 
     const [replyTo, setReplyTo] = useState<MessageReplyType | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -340,6 +345,31 @@ export function ChatRoom({
         }
     };
 
+    const handleForwardMessage = async (targetChatId: string) => {
+        if (!forwardingMessageId) return;
+        
+        try {
+            await apiFetch('/messages/forward', {
+                method: 'POST',
+                body: JSON.stringify({
+                    sourceChatId: chatId,
+                    messageId: forwardingMessageId,
+                    targetChatId,
+                }),
+            });
+            setForwardingMessageId(null);
+        } catch (error) {
+            console.error('Failed to forward message:', error);
+            alert('فوروارد پیام با خطا مواجه شد');
+        }
+    };
+
+    const openForwardModal = (messageId: string) => {
+        setForwardingMessageId(messageId);
+        setForwardModalOpen(true);
+        setMsgMenu(null);
+    };
+
     // Close menus when clicking outside
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
@@ -517,7 +547,7 @@ export function ChatRoom({
         let left = r.left - roomRect.left;
 
         // Menu dimensions (approximate)
-        const menuHeight = 180; // approximate height for 4 items
+        const menuHeight = 220; // approximate height for 5 items
         const menuWidth = 180;
 
         // Adjust top to keep menu within viewport
@@ -864,6 +894,19 @@ export function ChatRoom({
                                                 boxShadow: isHighlighted ? '0 0 0 3px rgba(245, 158, 11, 0.4)' : undefined,
                                             }}
                                         >
+                                            {m.forwardedFrom && (
+                                                <div
+                                                    style={{
+                                                        fontSize: 11,
+                                                        opacity: 0.7,
+                                                        marginBottom: 4,
+                                                        fontStyle: 'italic',
+                                                    }}
+                                                >
+                                                    فوروارد شده از: {m.forwardedFrom.originalSenderName}
+                                                </div>
+                                            )}
+
                                             {m.replyTo && (
                                                 <div
                                                     onClick={(e) => {
@@ -965,6 +1008,10 @@ export function ChatRoom({
                     <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button">
                         <Reply size={16} />
                         پاسخ
+                    </button>
+                    <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button">
+                        <Forward size={16} />
+                        فوروارد
                     </button>
                     {activeMsgIsMine && (
                         <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button">
@@ -1121,6 +1168,14 @@ export function ChatRoom({
                     </button>
                 </div>
             </div>
+
+            <ForwardModal
+                isOpen={forwardModalOpen}
+                chats={chats}
+                currentUserId={currentUserId}
+                onClose={() => setForwardModalOpen(false)}
+                onForward={handleForwardMessage}
+            />
 
             {confirmDeleteChat && (
                 <div className="chat-room-modal-overlay" ref={confirmDeleteChatRef}>

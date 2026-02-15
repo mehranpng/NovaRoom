@@ -19,6 +19,11 @@ export interface MessageReaction {
     emoji: string;
 }
 
+export interface ForwardedFrom {
+    originalSenderId: string;
+    originalSenderName: string;
+}
+
 export interface Message {
     id: string;
     chatId: string;
@@ -29,6 +34,7 @@ export interface Message {
     replyTo?: MessageReply;
     edited?: boolean;
     reactions?: MessageReaction[];
+    forwardedFrom?: ForwardedFrom;
 }
 
 export interface ChatLastMessage {
