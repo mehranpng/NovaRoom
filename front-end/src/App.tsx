@@ -354,7 +354,11 @@ export function App() {
             // API already returns messages in correct order (oldest first, newest last)
             setMessages(prev => ({ ...prev, [chatId]: msgs }));
             setMessagesLoadedOnce(prev => ({ ...prev, [chatId]: true }));
-            sendSeen(chatId);
+            
+            // Don't send seen for saved messages
+            if (currentUser && chatId !== `saved_messages_${currentUser.chatId}`) {
+                sendSeen(chatId);
+            }
         } catch (err) {
             console.error(err);
         } finally {
@@ -364,7 +368,7 @@ export function App() {
         }
 
         loadChats(false);
-    }, [loadChats, sendSeen, messagesLoadedOnce]);
+    }, [loadChats, sendSeen, messagesLoadedOnce, currentUser]);
 
     const handleSendMessage = useCallback(async (payload: { text: string; replyToId?: string; editMessageId?: string }) => {
         if (!currentUser) return;
@@ -551,18 +555,12 @@ export function App() {
         }
     }, [currentUser, sendAIMessage]);
 
-    // Temporary contact resolver
+    // Temporary contact resolver - updated to handle saved messages even when not in chat list
     const getActiveContact = (): User => {
         if (pendingUser) return pendingUser;
 
-        const chat = chats.find(c => c.id === activeChatId);
-        if (!chat || !currentUser) {
-            return { chatId: '', name: 'Unknown', username: '', bio: '', avatar: '', online: false, verified: false };
-        }
-
-        // Check if this is saved messages
-        const savedMessagesId = `saved_messages_${currentUser.chatId}`;
-        if (chat.id === savedMessagesId) {
+        // Check if this is saved messages FIRST, before looking in chats
+        if (currentUser && activeChatId === `saved_messages_${currentUser.chatId}`) {
             return {
                 chatId: 'saved',
                 name: 'پیام‌های ذخیره شده',
@@ -572,6 +570,11 @@ export function App() {
                 online: false,
                 verified: false,
             };
+        }
+
+        const chat = chats.find(c => c.id === activeChatId);
+        if (!chat || !currentUser) {
+            return { chatId: '', name: 'Unknown', username: '', bio: '', avatar: '', online: false, verified: false };
         }
 
         if (chat.otherUser) {
@@ -631,6 +634,9 @@ export function App() {
     const activeChat = chats.find(c => c.id === activeChatId) || null;
     const activeMessages = activeChatId ? messages[activeChatId] || [] : [];
     const activeMessagesLoading = activeChatId ? messagesLoading[activeChatId] || false : false;
+    
+    // Check if we have saved messages open (even if not in chat list)
+    const isSavedMessagesActive = currentUser && activeChatId === `saved_messages_${currentUser.chatId}`;
 
     return (
         <div className="app">
@@ -675,11 +681,11 @@ export function App() {
                             loading={aiLoading}
                             isTyping={aiTyping}
                         />
-                    ) : view === 'chatRoom' && (activeChat || pendingUser) ? (
+                    ) : view === 'chatRoom' && (activeChat || pendingUser || isSavedMessagesActive) ? (
                         <ChatRoom
-                            chatId={activeChat?.id || 'pending'}
+                            chatId={activeChatId || 'pending'}
                             contact={getActiveContact()}
-                            messages={activeChat ? activeMessages : []}
+                            messages={activeMessages}
                             currentUserId={currentUser!.chatId}
                             onSendMessage={handleSendMessage}
                             onDeleteMessage={handleDeleteMessage}
