@@ -72,13 +72,14 @@ function tehranMidnightEpoch(ts: any): number {
 }
 
 function formatTime(timestamp: any): string {
+    const normalizedTimestamp = normalizeTs(timestamp);
     const now = Date.now();
     const today = tehranMidnightEpoch(now);
-    const thatDay = tehranMidnightEpoch(timestamp);
+    const thatDay = tehranMidnightEpoch(normalizedTimestamp);
     const diffMs = today - thatDay;
-    const diffDays = Math.floor(diffMs / 86400000);
+    const diffDays = Math.round(diffMs / 86400000);
 
-    const d = new Date(normalizeTs(timestamp));
+    const d = new Date(normalizedTimestamp);
 
     // Same day
     if (diffDays === 0) {
@@ -180,9 +181,16 @@ export function ChatList({
 
     const savedMessagesId = `saved_messages_${currentUser.chatId}`;
 
+    // Sort all chats (including saved messages) by last message timestamp
+    const sortedChats = [...chats].sort((a, b) => {
+        const aTime = a.lastMessage ? normalizeTs(a.lastMessage.timestamp) : 0;
+        const bTime = b.lastMessage ? normalizeTs(b.lastMessage.timestamp) : 0;
+        return bTime - aTime; // Descending order (newest first)
+    });
+
     // Separate saved messages from regular chats
-    const savedMessagesChat = chats.find(chat => chat.id === savedMessagesId);
-    const regularChats = chats.filter(chat => chat.id !== savedMessagesId);
+    const savedMessagesChat = sortedChats.find(chat => chat.id === savedMessagesId);
+    const regularChats = sortedChats.filter(chat => chat.id !== savedMessagesId);
 
     const filteredChats = regularChats.filter((chat) => {
         if (!searchQuery) return true;
@@ -314,7 +322,7 @@ export function ChatList({
                     </button>
                 )}
 
-                {/* Saved Messages - Always pinned second */}
+                {/* Saved Messages - Sorted with other chats */}
                 {showSavedMessages && (
                     <button
                         onClick={() => onSelectChat(savedMessagesChat.id)}
