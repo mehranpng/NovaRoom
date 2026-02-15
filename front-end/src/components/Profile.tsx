@@ -129,6 +129,14 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
     const canSave =
         isEditing && !!name.trim() && !!username.trim() && usernameStatus === 'available';
 
+    const createdAtLabel = user.createdAt
+        ? new Date(user.createdAt).toLocaleDateString('fa-IR', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+        })
+        : 'نامشخص';
+
     return (
         <div className="profile">
             {/* Header */}
@@ -196,6 +204,13 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                     </div>
 
                     {/* Editable Fields */}
+                    <div className="profile__field-group">
+                        <label className="profile__field-label">تاریخ ساخت اکانت</label>
+                        <div className="profile__field-static">
+                            <p>{createdAtLabel}</p>
+                        </div>
+                    </div>
+
                     {/* Name */}
                     <div className="profile__field-group">
                         <label className="profile__field-label">نام</label>
