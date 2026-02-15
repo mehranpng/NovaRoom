@@ -750,6 +750,14 @@ textarea {
   justify-content: flex-start;
 }
 
+.message-row--mine .message-reactions {
+  margin-left: auto;
+  transform: translateX(10px);
+}
+
+.message-row--theirs .message-reactions {
+  transform: translateX(-10px);
+}
 
 .message-row--first {
   margin-top: 12px;
@@ -2100,6 +2108,7 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+<<<<<<< codex/fix-group-creation-and-enhance-features-e4hiya
   margin-top: 6px;
   width: fit-content;
   max-width: 100%;
@@ -2112,6 +2121,12 @@ textarea {
 
 .message-reactions--theirs {
   transform: translateX(-12px);
+=======
+  margin-top: 8px;
+  margin-bottom: -4px;
+  width: fit-content;
+  max-width: calc(100% + 12px);
+>>>>>>> main
 }
 
 .message-reaction {
@@ -2128,29 +2143,28 @@ textarea {
   background: rgba(47, 128, 237, 0.12);
 }
 
-.message-reaction-bar {
+.message-reaction-picker {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
-  padding: 6px 8px;
-  border: 1px solid var(--border-color);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color);
   border-radius: 999px;
-  background: var(--bg-primary);
-  box-shadow: var(--shadow-md);
+  margin: 6px 8px;
+  background: var(--bg-secondary);
 }
 
-.message-reaction-bar__item {
-  width: 34px;
-  height: 34px;
+.message-reaction-picker__item {
+  width: 30px;
+  height: 30px;
   border: 0;
   border-radius: 50%;
   cursor: pointer;
   background: transparent;
-  font-size: 18px;
-  line-height: 1;
 }
 
-.message-reaction-bar__item:hover {
+.message-reaction-picker__item:hover {
   background: var(--hover-bg-light);
 }
 

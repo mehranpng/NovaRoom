@@ -70,13 +70,8 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup }:
         setSelectedMembers((prev) => [...prev, user]);
     };
 
-
-    const handleRemoveMember = (chatId: string) => {
-        setSelectedMembers((prev) => prev.filter((m) => m.chatId !== chatId));
-    };
-
     const handleCreateGroup = async () => {
-        if (!groupName.trim() || creatingGroup) return;
+        if (!groupName.trim() || selectedMembers.length === 0 || creatingGroup) return;
         setCreatingGroup(true);
         try {
             const ok = await onCreateGroup({
@@ -225,7 +220,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup }:
                             className="chat-room__send-btn chat-room__send-btn--active"
                             style={{ width: '100%', borderRadius: 10 }}
                             onClick={handleCreateGroup}
-                            disabled={creatingGroup || !groupName.trim()}
+                            disabled={creatingGroup || !groupName.trim() || selectedMembers.length === 0}
                         >
                             {creatingGroup ? 'در حال ساخت گروه...' : 'ایجاد گروه'}
                         </button>

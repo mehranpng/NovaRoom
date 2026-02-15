@@ -534,7 +534,7 @@ export function App() {
                 body: JSON.stringify({
                     name: payload.name,
                     description: payload.description || '',
-                    memberIds: [...new Set(payload.members.map((m) => m.chatId))],
+                    memberIds: payload.members.map((m) => m.chatId),
                 }),
             });
 
@@ -547,8 +547,7 @@ export function App() {
         }
 
         const groupId = `group-${Date.now()}`;
-        const uniqueMembers = payload.members.filter((member, idx, arr) => arr.findIndex((m) => m.chatId === member.chatId) === idx);
-        const members = [{ ...currentUser, online: true }, ...uniqueMembers.filter((m) => m.chatId !== currentUser.chatId)];
+        const members = [{ ...currentUser, online: true }, ...payload.members];
 
         const groupChat: Chat = {
             id: groupId,
@@ -584,7 +583,11 @@ export function App() {
         setActiveChatId(groupId);
         setView('chatRoom');
         return true;
+<<<<<<< codex/fix-group-creation-and-enhance-features-e4hiya
     }, [currentUser, handleSelectChat, persistLocalGroups]);
+=======
+    }, [currentUser, handleSelectChat]);
+>>>>>>> main
 
     const handleOpenProfile = () => setView('profile');
     const handleBack = () => {

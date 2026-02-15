@@ -897,6 +897,23 @@ export function ChatRoom({
                                             )}
 
                                             <div className="message-text">{m.text}</div>
+                                            {messageReactions[m.id] && Object.keys(messageReactions[m.id]).length > 0 && (
+                                                <div className="message-reactions">
+                                                    {Object.entries(messageReactions[m.id]).map(([emoji, count]) => (
+                                                        <button
+                                                            key={emoji}
+                                                            type="button"
+                                                            className={myReactions[m.id] === emoji ? 'message-reaction message-reaction--mine' : 'message-reaction'}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                toggleReaction(m.id, emoji);
+                                                            }}
+                                                        >
+                                                            {emoji} {count}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
 
                                             <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
                                                 <span className="message-time">{formatMessageTime(m.timestamp)}</span>
@@ -939,17 +956,18 @@ export function ChatRoom({
             </div>
 
             {msgMenu && activeMsg && (
-                <>
-                    <div
-                        className="message-reaction-bar"
-                        style={{ top: msgMenu.reactionTop, left: msgMenu.reactionLeft, right: 'auto', position: 'absolute', zIndex: 55 }}
-                        onClick={(e) => e.stopPropagation()}
-                    >
+                <div
+                    ref={msgMenuRef}
+                    className="popover popover--mini"
+                    style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50, minWidth: 220 }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="message-reaction-picker">
                         {REACTION_EMOJIS.map((emoji) => (
                             <button
                                 key={emoji}
                                 type="button"
-                                className="message-reaction-bar__item"
+                                className="message-reaction-picker__item"
                                 onClick={() => toggleReaction(activeMsg.id, emoji)}
                             >
                                 {emoji}
