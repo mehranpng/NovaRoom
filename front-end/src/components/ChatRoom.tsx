@@ -23,6 +23,7 @@ interface ChatRoomProps {
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000; // +03:30
+const REACTION_EMOJIS = ['😂', '👍', '❤️', '😮', '😭', '👎', '🔥', '🎉', '👏', '🤯', '😡', '🍓'];
 
 function normalizeTs(ts: any): number {
     if (ts == null) return Date.now();
@@ -895,7 +896,17 @@ export function ChatRoom({
                                             {messageReactions[m.id] && Object.keys(messageReactions[m.id]).length > 0 && (
                                                 <div className="message-reactions">
                                                     {Object.entries(messageReactions[m.id]).map(([emoji, count]) => (
-                                                        <span key={emoji} className={myReactions[m.id] === emoji ? 'message-reaction message-reaction--mine' : 'message-reaction'}>{emoji} {count}</span>
+                                                        <button
+                                                            key={emoji}
+                                                            type="button"
+                                                            className={myReactions[m.id] === emoji ? 'message-reaction message-reaction--mine' : 'message-reaction'}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                toggleReaction(m.id, emoji);
+                                                            }}
+                                                        >
+                                                            {emoji} {count}
+                                                        </button>
                                                     ))}
                                                 </div>
                                             )}
@@ -930,14 +941,13 @@ export function ChatRoom({
                     style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50, minWidth: 220 }}
                     onClick={(e) => e.stopPropagation()}
                 >
-                    <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--border-color)' }}>
-                        {['👍', '❤️', '😂', '🔥', '😮', '🙏'].map((emoji) => (
+                    <div className="message-reaction-picker">
+                        {REACTION_EMOJIS.map((emoji) => (
                             <button
                                 key={emoji}
                                 type="button"
-                                className="icon-btn"
+                                className="message-reaction-picker__item"
                                 onClick={() => toggleReaction(activeMsg.id, emoji)}
-                                style={{ width: 28, height: 28 }}
                             >
                                 {emoji}
                             </button>

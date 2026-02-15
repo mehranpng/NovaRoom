@@ -750,6 +750,15 @@ textarea {
   justify-content: flex-start;
 }
 
+.message-row--mine .message-reactions {
+  margin-left: auto;
+  transform: translateX(10px);
+}
+
+.message-row--theirs .message-reactions {
+  transform: translateX(-10px);
+}
+
 .message-row--first {
   margin-top: 12px;
 }
@@ -2099,7 +2108,10 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 6px;
+  margin-top: 8px;
+  margin-bottom: -4px;
+  width: fit-content;
+  max-width: calc(100% + 12px);
 }
 
 .message-reaction {
@@ -2108,9 +2120,41 @@ textarea {
   border: 1px solid var(--border-primary);
   padding: 2px 8px;
   background: var(--bg-secondary);
+  cursor: pointer;
 }
 
 .message-reaction--mine {
   border-color: #2F80ED;
   background: rgba(47, 128, 237, 0.12);
+}
+
+.message-reaction-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 999px;
+  margin: 6px 8px;
+  background: var(--bg-secondary);
+}
+
+.message-reaction-picker__item {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  background: transparent;
+}
+
+.message-reaction-picker__item:hover {
+  background: var(--hover-bg-light);
+}
+
+.verified-badge__lottie {
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
 }

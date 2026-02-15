@@ -9,16 +9,18 @@ interface NewChatModalProps {
     isOpen: boolean;
     onClose: () => void;
     onUserSelected: (user: User) => void;
-    onCreateGroup: (payload: { name: string; members: User[] }) => void;
+    onCreateGroup: (payload: { name: string; members: User[]; description?: string }) => Promise<boolean> | boolean;
 }
 
 export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup }: NewChatModalProps) {
     const [mode, setMode] = useState<'direct' | 'group'>('direct');
     const [query, setQuery] = useState('');
     const [groupName, setGroupName] = useState('');
+    const [groupDescription, setGroupDescription] = useState('');
     const [selectedMembers, setSelectedMembers] = useState<User[]>([]);
     const [results, setResults] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
+    const [creatingGroup, setCreatingGroup] = useState(false);
 
     const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -26,6 +28,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup }:
         if (!isOpen) return;
         setQuery('');
         setGroupName('');
+        setGroupDescription('');
         setSelectedMembers([]);
         setResults([]);
         setLoading(false);
@@ -67,10 +70,21 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup }:
         setSelectedMembers((prev) => [...prev, user]);
     };
 
-    const handleCreateGroup = () => {
-        if (!groupName.trim() || selectedMembers.length === 0) return;
-        onCreateGroup({ name: groupName.trim(), members: selectedMembers });
-        onClose();
+    const handleCreateGroup = async () => {
+        if (!groupName.trim() || selectedMembers.length === 0 || creatingGroup) return;
+        setCreatingGroup(true);
+        try {
+            const ok = await onCreateGroup({
+                name: groupName.trim(),
+                description: groupDescription.trim(),
+                members: selectedMembers,
+            });
+            if (ok !== false) {
+                onClose();
+            }
+        } finally {
+            setCreatingGroup(false);
+        }
     };
 
     if (!isOpen) return null;
@@ -104,14 +118,25 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup }:
                 </div>
 
                 {mode === 'group' && (
-                    <div className="search-box" style={{ paddingTop: 10, paddingBottom: 10 }}>
-                        <input
-                            type="text"
-                            placeholder="نام گروه..."
-                            value={groupName}
-                            onChange={(e) => setGroupName(e.target.value)}
-                        />
-                    </div>
+                    <>
+                        <div className="search-box" style={{ paddingTop: 10, paddingBottom: 10 }}>
+                            <input
+                                type="text"
+                                placeholder="نام گروه..."
+                                value={groupName}
+                                onChange={(e) => setGroupName(e.target.value)}
+                            />
+                        </div>
+                        <div className="search-box" style={{ paddingTop: 10, paddingBottom: 10 }}>
+                            <input
+                                type="text"
+                                placeholder="توضیحات گروه (اختیاری)..."
+                                value={groupDescription}
+                                onChange={(e) => setGroupDescription(e.target.value)}
+                                maxLength={120}
+                            />
+                        </div>
+                    </>
                 )}
 
                 <div className="search-box">
@@ -175,8 +200,14 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup }:
 
                 {mode === 'group' && (
                     <div style={{ padding: 12, borderTop: '1px solid var(--border-primary)' }}>
-                        <button type="button" className="chat-room__send-btn chat-room__send-btn--active" style={{ width: '100%', borderRadius: 10 }} onClick={handleCreateGroup}>
-                            ایجاد گروه
+                        <button
+                            type="button"
+                            className="chat-room__send-btn chat-room__send-btn--active"
+                            style={{ width: '100%', borderRadius: 10 }}
+                            onClick={handleCreateGroup}
+                            disabled={creatingGroup || !groupName.trim() || selectedMembers.length === 0}
+                        >
+                            {creatingGroup ? 'در حال ساخت گروه...' : 'ایجاد گروه'}
                         </button>
                     </div>
                 )}

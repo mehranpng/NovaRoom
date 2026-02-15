@@ -501,16 +501,32 @@ export function App() {
     }, [currentUser?.chatId, handleSelectChat]);
 
 
-    const handleCreateGroup = useCallback((payload: { name: string; members: User[] }) => {
-        if (!currentUser) return;
+    const handleCreateGroup = useCallback(async (payload: { name: string; members: User[]; description?: string }) => {
+        if (!currentUser) return false;
 
-        const groupId = `group-${Date.now()}`;
         const inviteCode = Math.random().toString(36).slice(2, 10);
         const inviteLink = `${window.location.origin}/join/${inviteCode}`;
-        const members = [
-            { ...currentUser, online: true },
-            ...payload.members,
-        ];
+
+        try {
+            const res = await apiFetch('/chats/group', {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: payload.name,
+                    description: payload.description || '',
+                    memberIds: payload.members.map((m) => m.chatId),
+                }),
+            });
+
+            if (res?.chatId) {
+                await handleSelectChat(res.chatId);
+                return true;
+            }
+        } catch (err) {
+            console.warn('Failed to create group on API, falling back to local group.', err);
+        }
+
+        const groupId = `group-${Date.now()}`;
+        const members = [{ ...currentUser, online: true }, ...payload.members];
 
         const groupChat: Chat = {
             id: groupId,
@@ -520,7 +536,9 @@ export function App() {
                 chatId: groupId,
                 username: `group_${inviteCode}`,
                 name: payload.name,
-                bio: `لینک دعوت: ${inviteLink}`,
+                bio: payload.description?.trim()
+                    ? `${payload.description.trim()}\nلینک دعوت: ${inviteLink}`
+                    : `لینک دعوت: ${inviteLink}`,
                 avatar: '',
                 online: true,
                 verified: false,
@@ -538,7 +556,8 @@ export function App() {
         setShowSavedMessages(false);
         setActiveChatId(groupId);
         setView('chatRoom');
-    }, [currentUser]);
+        return true;
+    }, [currentUser, handleSelectChat]);
 
     const handleOpenProfile = () => setView('profile');
     const handleBack = () => {
