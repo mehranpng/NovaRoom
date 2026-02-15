@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Bookmark, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Trash2, X } from 'lucide-react';
 import type { Message, MessageReply as MessageReplyType, User } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -151,7 +151,9 @@ export function ChatRoom({
         blockClickUntil: 0,
     });
 
-    const canDeleteChat = chatId !== 'pending';
+    // Check if this is saved messages
+    const isSavedMessages = contact.chatId === 'saved';
+    const canDeleteChat = chatId !== 'pending' && !isSavedMessages;
 
     const scrollToBottom = (smooth = false) => {
         const container = messagesContainerRef.current;
@@ -552,28 +554,48 @@ export function ChatRoom({
 
                 <button
                     className="chat-room__header-clickable chat-room__header-clickable--full"
-                    onClick={() => setShowContactInfo(true)}
-                    aria-label="Open contact info"
+                    onClick={() => !isSavedMessages && setShowContactInfo(true)}
+                    aria-label={isSavedMessages ? "" : "Open contact info"}
                     type="button"
+                    style={isSavedMessages ? { cursor: 'default' } : undefined}
                 >
-                    <Avatar name={contact.name} size="sm" online={contact.online} />
+                    {isSavedMessages ? (
+                        <div
+                            style={{
+                                width: '40px',
+                                height: '40px',
+                                borderRadius: '50%',
+                                backgroundColor: 'var(--primary)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                            }}
+                        >
+                            <Bookmark size={20} color="white" />
+                        </div>
+                    ) : (
+                        <Avatar name={contact.name} size="sm" online={contact.online} />
+                    )}
                     <div className="chat-room__header-info">
                         <div
                             className="chat-room__contact-name"
                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                         >
                             {contact.name}
-                            {contact.verified ? <VerifiedBadge size={14} /> : null}
+                            {!isSavedMessages && contact.verified ? <VerifiedBadge size={14} /> : null}
                         </div>
-                        <div
-                            className={
-                                contact.online
-                                    ? 'chat-room__contact-status chat-room__contact-status--online'
-                                    : 'chat-room__contact-status'
-                            }
-                        >
-                            {contact.online ? 'آنلاین' : 'آفلاین'}
-                        </div>
+                        {!isSavedMessages && (
+                            <div
+                                className={
+                                    contact.online
+                                        ? 'chat-room__contact-status chat-room__contact-status--online'
+                                        : 'chat-room__contact-status'
+                                }
+                            >
+                                {contact.online ? 'آنلاین' : 'آفلاین'}
+                            </div>
+                        )}
                     </div>
                 </button>
 
