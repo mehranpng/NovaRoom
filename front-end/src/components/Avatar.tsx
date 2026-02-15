@@ -44,15 +44,10 @@ export function Avatar({ name, size = 'md', online, savedMessages = false }: Ava
     return (
       <div className={cx('avatar', `avatar--${size}`)}>
         <div
+          className="avatar__circle avatar__circle--saved"
           style={{
             width: `${sizeMap[size]}px`,
             height: `${sizeMap[size]}px`,
-            borderRadius: '50%',
-            backgroundColor: 'var(--primary)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
           }}
         >
           <Bookmark size={iconSizeMap[size]} color="white" fill="white" />

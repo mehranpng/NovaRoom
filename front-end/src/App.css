@@ -242,6 +242,10 @@ textarea {
   box-shadow: var(--shadow-sm);
 }
 
+.avatar__circle--saved {
+  background: #3b82f6;
+}
+
 .avatar--sm .avatar__circle { width: 40px; height: 40px; font-size: 14px; }
 .avatar--md .avatar__circle { width: 48px; height: 48px; font-size: 16px; }
 .avatar--lg .avatar__circle { width: 64px; height: 64px; font-size: 20px; }
