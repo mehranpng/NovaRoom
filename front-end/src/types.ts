@@ -21,7 +21,9 @@ export interface MessageReaction {
 
 export interface ForwardedFrom {
     originalSenderId: string;
-    originalSenderName: string;
+    originalSenderName?: string;
+    name?: string;
+    username?: string;
 }
 
 export interface Message {
