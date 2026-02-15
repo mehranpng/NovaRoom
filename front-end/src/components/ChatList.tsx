@@ -16,6 +16,7 @@ interface ChatListProps {
     onSelectChat: (chatId: string) => void;
     onOpenProfile: () => void;
     onNewChatClick: () => void;
+    onNewGroupClick: () => void;
     onLogout: () => void;
     onOpenAIChat: () => void;
     onOpenSavedMessages: () => void;
@@ -135,6 +136,7 @@ export function ChatList({
     onSelectChat,
     onOpenProfile,
     onNewChatClick,
+    onNewGroupClick,
     onLogout,
     onOpenAIChat,
     onOpenSavedMessages,
@@ -145,7 +147,9 @@ export function ChatList({
 }: ChatListProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const [menuOpen, setMenuOpen] = useState(false);
+    const [composeOpen, setComposeOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement | null>(null);
+    const composeRef = useRef<HTMLDivElement | null>(null);
     const { isDarkMode, toggleDarkMode } = useDarkMode();
 
     const isMobile = useIsMobile(768);
@@ -161,6 +165,18 @@ export function ChatList({
         }
         return () => document.removeEventListener('mousedown', onDocClick);
     }, [menuOpen]);
+
+    useEffect(() => {
+        const onDocClick = (e: MouseEvent) => {
+            if (!composeRef.current) return;
+            if (composeRef.current.contains(e.target as Node)) return;
+            setComposeOpen(false);
+        };
+        if (composeOpen) {
+            document.addEventListener('mousedown', onDocClick);
+        }
+        return () => document.removeEventListener('mousedown', onDocClick);
+    }, [composeOpen]);
 
     const getContact = (chat: Chat): User => {
         if (chat.otherUser) {
@@ -212,9 +228,24 @@ export function ChatList({
                 <div className="chat-list__header-actions">
                     <DarkModeToggle isDarkMode={isDarkMode} onToggle={toggleDarkMode} />
                     
-                    <button className="icon-btn" onClick={onNewChatClick}>
-                        <MessageSquarePlus size={20} />
-                    </button>
+                    <div className="chat-list__menu" ref={composeRef}>
+                        <button className="icon-btn" onClick={() => setComposeOpen((v) => !v)}>
+                            <MessageSquarePlus size={20} />
+                        </button>
+
+                        {composeOpen && (
+                            <div className="popover popover--mini popover--right">
+                                <button className="popover__item" onClick={() => { setComposeOpen(false); onNewChatClick(); }} type="button">
+                                    <MessageSquarePlus size={16} />
+                                    گفتگوی جدید
+                                </button>
+                                <button className="popover__item" onClick={() => { setComposeOpen(false); onNewGroupClick(); }} type="button">
+                                    <Users size={16} />
+                                    گروه جدید
+                                </button>
+                            </div>
+                        )}
+                    </div>
 
                     <div className="chat-list__menu" ref={menuRef}>
                         <button

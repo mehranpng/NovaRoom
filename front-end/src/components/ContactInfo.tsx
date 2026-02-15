@@ -10,11 +10,11 @@ interface ContactInfoProps {
 }
 
 export function ContactInfo({ user, onBack }: ContactInfoProps) {
-    const [copied, setCopied] = useState(false);
+    const [copied, setCopied] = useState<'username' | 'invite' | null>(null);
 
     // Reset when switching contacts
     useEffect(() => {
-        setCopied(false);
+        setCopied(null);
     }, [user.chatId, user.username]);
 
     const bio = typeof user.bio === 'string' ? user.bio.trim() : '';
@@ -36,8 +36,16 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
         const un = (user.username || '').trim();
         if (!un) return;
         navigator.clipboard.writeText(`@${un}`).catch(() => { });
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        setCopied('username');
+        setTimeout(() => setCopied(null), 1500);
+    };
+
+    const handleCopyInviteLink = () => {
+        const link = String((user as any).inviteLink || '').trim();
+        if (!link) return;
+        navigator.clipboard.writeText(link).catch(() => { });
+        setCopied('invite');
+        setTimeout(() => setCopied(null), 1500);
     };
 
     return (
@@ -70,8 +78,19 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
                         <div className="contact-info__label" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                             <Users size={16} /> وضعیت اعضا
                         </div>
-                        <div className="contact-info__bio">{onlineCount} آنلاین • {offlineCount} آفلاین</div>
-                        <div className="contact-info__mono" style={{ marginTop: 8 }}>{(user as any).inviteLink}</div>
+                        <div className="contact-info__bio">{onlineCount} آنلاین • {offlineCount} آفلاین • {members.length} عضو</div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }}>
+                            <div className="contact-info__mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{(user as any).inviteLink}</div>
+                            <button
+                                type="button"
+                                className="icon-btn"
+                                aria-label="Copy invite link"
+                                onClick={handleCopyInviteLink}
+                                disabled={!((user as any).inviteLink)}
+                            >
+                                {copied === 'invite' ? <Check size={18} /> : <Copy size={18} />}
+                            </button>
+                        </div>
                     </div>
                 )}
 
@@ -98,7 +117,7 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
                             onClick={handleCopyUsername}
                             disabled={!user.username}
                         >
-                            {copied ? <Check size={18} /> : <Copy size={18} />}
+                            {copied === 'username' ? <Check size={18} /> : <Copy size={18} />}
                         </button>
                     </div>
                 </div>

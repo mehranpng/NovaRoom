@@ -23,6 +23,7 @@ interface ChatRoomProps {
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000; // +03:30
+const REACTION_EMOJIS = ['😂', '👍', '❤️', '😮', '😭', '👎', '🔥', '🎉', '👏', '🤯', '😡', '🍓'];
 
 function normalizeTs(ts: any): number {
     if (ts == null) return Date.now();
@@ -106,7 +107,7 @@ export function ChatRoom({
     const [replyTo, setReplyTo] = useState<MessageReplyType | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
 
-    const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number }>(null);
+    const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number; reactionTop: number; reactionLeft: number }>(null);
     const [pinnedMessageId, setPinnedMessageId] = useState<string | null>(null);
     const [messageReactions, setMessageReactions] = useState<Record<string, Record<string, number>>>({});
     const [myReactions, setMyReactions] = useState<Record<string, string>>({});
@@ -541,8 +542,8 @@ export function ChatRoom({
         let left = r.left - roomRect.left;
 
         // Menu dimensions (approximate)
-        const menuHeight = 180; // approximate height for 4 items
-        const menuWidth = 180;
+        const menuHeight = 220;
+        const menuWidth = 190;
 
         // Adjust top to keep menu within viewport
         const maxTop = roomRect.height - menuHeight - 16;
@@ -552,7 +553,11 @@ export function ChatRoom({
         const maxLeft = roomRect.width - menuWidth - 16;
         left = Math.max(12, Math.min(left, maxLeft));
 
-        setMsgMenu({ id: messageId, top, left });
+        const reactionBarWidth = 300;
+        const reactionLeft = Math.max(12, Math.min(r.left - roomRect.left + (r.width / 2) - (reactionBarWidth / 2), roomRect.width - reactionBarWidth - 12));
+        const reactionTop = Math.max(52, Math.min(r.top - roomRect.top - 56, top - 56));
+
+        setMsgMenu({ id: messageId, top, left, reactionTop, reactionLeft });
     };
 
     const beginReply = (m: Message) => {
@@ -892,13 +897,6 @@ export function ChatRoom({
                                             )}
 
                                             <div className="message-text">{m.text}</div>
-                                            {messageReactions[m.id] && Object.keys(messageReactions[m.id]).length > 0 && (
-                                                <div className="message-reactions">
-                                                    {Object.entries(messageReactions[m.id]).map(([emoji, count]) => (
-                                                        <span key={emoji} className={myReactions[m.id] === emoji ? 'message-reaction message-reaction--mine' : 'message-reaction'}>{emoji} {count}</span>
-                                                    ))}
-                                                </div>
-                                            )}
 
                                             <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
                                                 <span className="message-time">{formatMessageTime(m.timestamp)}</span>
@@ -913,6 +911,23 @@ export function ChatRoom({
                                                     </span>
                                                 )}
                                             </div>
+                                            {messageReactions[m.id] && Object.keys(messageReactions[m.id]).length > 0 && (
+                                                <div className={isMine ? 'message-reactions message-reactions--mine' : 'message-reactions message-reactions--theirs'}>
+                                                    {Object.entries(messageReactions[m.id]).map(([emoji, count]) => (
+                                                        <button
+                                                            key={emoji}
+                                                            type="button"
+                                                            className={myReactions[m.id] === emoji ? 'message-reaction message-reaction--mine' : 'message-reaction'}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                toggleReaction(m.id, emoji);
+                                                            }}
+                                                        >
+                                                            {emoji} {count}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -924,25 +939,30 @@ export function ChatRoom({
             </div>
 
             {msgMenu && activeMsg && (
-                <div
-                    ref={msgMenuRef}
-                    className="popover popover--mini"
-                    style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50, minWidth: 220 }}
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--border-color)' }}>
-                        {['👍', '❤️', '😂', '🔥', '😮', '🙏'].map((emoji) => (
+                <>
+                    <div
+                        className="message-reaction-bar"
+                        style={{ top: msgMenu.reactionTop, left: msgMenu.reactionLeft, right: 'auto', position: 'absolute', zIndex: 55 }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {REACTION_EMOJIS.map((emoji) => (
                             <button
                                 key={emoji}
                                 type="button"
-                                className="icon-btn"
+                                className="message-reaction-bar__item"
                                 onClick={() => toggleReaction(activeMsg.id, emoji)}
-                                style={{ width: 28, height: 28 }}
                             >
                                 {emoji}
                             </button>
                         ))}
                     </div>
+
+                    <div
+                    ref={msgMenuRef}
+                    className="popover popover--mini"
+                    style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50, minWidth: 220 }}
+                    onClick={(e) => e.stopPropagation()}
+                >
                     <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button">
                         <Reply size={16} />
                         پاسخ
@@ -978,6 +998,7 @@ export function ChatRoom({
                         </button>
                     )}
                 </div>
+                </>
             )}
 
             {(newMsgCount > 0 || showScrollBtn) && (

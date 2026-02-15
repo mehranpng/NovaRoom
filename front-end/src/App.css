@@ -750,6 +750,7 @@ textarea {
   justify-content: flex-start;
 }
 
+
 .message-row--first {
   margin-top: 12px;
 }
@@ -2100,17 +2101,61 @@ textarea {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 6px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.message-reactions--mine {
+  margin-left: auto;
+  transform: translateX(12px);
+}
+
+.message-reactions--theirs {
+  transform: translateX(-12px);
 }
 
 .message-reaction {
   font-size: 12px;
   border-radius: 999px;
   border: 1px solid var(--border-primary);
-  padding: 2px 8px;
+  padding: 3px 9px;
   background: var(--bg-secondary);
+  cursor: pointer;
 }
 
 .message-reaction--mine {
   border-color: #2F80ED;
   background: rgba(47, 128, 237, 0.12);
+}
+
+.message-reaction-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-md);
+}
+
+.message-reaction-bar__item {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.message-reaction-bar__item:hover {
+  background: var(--hover-bg-light);
+}
+
+.verified-badge__lottie {
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
 }

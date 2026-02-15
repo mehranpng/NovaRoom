@@ -141,6 +141,7 @@ class ProfileUpdate(BaseModel):
     name: Optional[str] = None
     username: Optional[str] = None
     bio: Optional[str] = None
+    birthday: Optional[str] = None
 
 
 class UserSearchResult(BaseModel):
@@ -171,6 +172,13 @@ class CompleteRegistrationRequest(BaseModel):
     name: str
     username: str
     password: str
+    birthday: Optional[str] = None
+
+
+class GroupCreateRequest(BaseModel):
+    name: str
+    description: Optional[str] = ''
+    memberIds: List[str] = []
 
 
 class PasswordResetRequest(BaseModel):
@@ -300,6 +308,7 @@ async def complete_registration(req: CompleteRegistrationRequest):
             "username": desired_username,
             "bio": "",
             "avatar": "",
+            "birthday": req.birthday or "",
         },
         "online": False,
         "verified": False,
@@ -328,6 +337,7 @@ async def complete_registration(req: CompleteRegistrationRequest):
             "avatar": "",
             "online": False,
             "verified": False,
+            "birthday": req.birthday or "",
         },
     }
 
@@ -409,6 +419,7 @@ async def login(req: LoginRequest):
             "avatar": user["profile"]["avatar"],
             "online": user.get("online", False),
             "verified": bool(user.get("verified", False)),
+            "birthday": (user.get("profile", {}) or {}).get("birthday", ""),
         },
     }
 
@@ -423,6 +434,7 @@ async def get_profile(current_user: dict = Depends(get_current_user)):
         "avatar": current_user["profile"]["avatar"],
         "online": current_user.get("online", False),
         "verified": bool(current_user.get("verified", False)),
+        "birthday": (current_user.get("profile", {}) or {}).get("birthday", ""),
     }
 
 
@@ -458,6 +470,9 @@ async def update_profile(
 
     if updates.bio is not None:
         update_data["profile.bio"] = updates.bio
+
+    if updates.birthday is not None:
+        update_data["profile.birthday"] = updates.birthday
 
     if update_data:
         await cl_users.update_one(
@@ -569,6 +584,57 @@ async def create_or_get_chat(
     return {"chatId": chat_id, "participants": new_chat["participants"]}
 
 
+@app.post("/chats/group")
+async def create_group_chat(
+    req: GroupCreateRequest, current_user: dict = Depends(get_current_user)
+):
+    my_id = current_user["chatId"]
+
+    name = (req.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Group name is required")
+
+    dedup_members = []
+    seen = set()
+    for uid in [my_id, *(req.memberIds or [])]:
+        if not uid or uid in seen:
+            continue
+        seen.add(uid)
+        dedup_members.append(uid)
+
+    # Keep only existing users
+    users = await cl_users.find({"chatId": {"$in": dedup_members}}, {"chatId": 1}).to_list(len(dedup_members) or 1)
+    existing_ids = {u.get("chatId") for u in users}
+    participants = [uid for uid in dedup_members if uid in existing_ids]
+
+    if my_id not in participants:
+        participants.insert(0, my_id)
+
+    now = utc_now()
+    invite_code = uuid.uuid4().hex[:10]
+    group_id = f"group_{uuid.uuid4().hex[:16]}"
+
+    new_chat = {
+        "_id": group_id,
+        "participants": participants,
+        "createdAt": now,
+        "updatedAt": now,
+        "lastMessage": None,
+        "isGroup": True,
+        "groupProfile": {
+            "name": name,
+            "description": (req.description or "").strip(),
+            "inviteCode": invite_code,
+            "inviteLink": f"/join/{invite_code}",
+            "avatar": "",
+            "createdBy": my_id,
+        },
+    }
+
+    await cl_chats.insert_one(new_chat)
+    return {"chatId": group_id, "participants": participants}
+
+
 @app.get("/chats")
 async def get_chat_list(current_user: dict = Depends(get_current_user)):
     my_id = current_user["chatId"]
@@ -581,21 +647,17 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
 
     chat_ids = [c["_id"] for c in chats]
 
-    # Resolve other users in one query (avoid N+1 queries)
-    other_ids: List[str] = []
+    # Resolve users in one query (for direct chats + group members)
+    all_participant_ids = set()
     for c in chats:
-        other_id = next(
-            (pid for pid in c.get("participants", []) if pid != my_id), None
-        )
-        if other_id:
-            other_ids.append(other_id)
+        for pid in c.get("participants", []):
+            all_participant_ids.add(pid)
 
-    other_users = await cl_users.find({"chatId": {"$in": other_ids}}).to_list(
-        len(other_ids) or 1
+    users = await cl_users.find({"chatId": {"$in": list(all_participant_ids)}}).to_list(
+        max(len(all_participant_ids), 1)
     )
-    user_by_id = {u["chatId"]: u for u in other_users}
+    user_by_id = {u["chatId"]: u for u in users}
 
-    # Compute unread counts in one aggregation (avoid N count_documents)
     unread_map: Dict[str, int] = {}
     unread_rows = await cl_messages.aggregate(
         [
@@ -615,17 +677,61 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
 
     result = []
     for chat in chats:
-        other_id = next(
-            (pid for pid in chat.get("participants", []) if pid != my_id), None
-        )
-        other_user = user_by_id.get(other_id) if other_id else None
-
         last_msg = chat.get("lastMessage")
         if isinstance(last_msg, dict) and last_msg.get("timestamp") is not None:
             last_msg = {
                 **last_msg,
                 "timestamp": dt_to_epoch_ms(last_msg.get("timestamp")),
             }
+
+        if chat.get("isGroup"):
+            gp = chat.get("groupProfile", {}) or {}
+            members = []
+            for pid in chat.get("participants", []):
+                u = user_by_id.get(pid)
+                if not u:
+                    continue
+                members.append(
+                    {
+                        "chatId": u.get("chatId"),
+                        "name": (u.get("profile", {}) or {}).get("name", "Unknown"),
+                        "avatar": (u.get("profile", {}) or {}).get("avatar", ""),
+                        "username": (u.get("profile", {}) or {}).get("username", ""),
+                        "bio": (u.get("profile", {}) or {}).get("bio", ""),
+                        "online": bool(u.get("online", False)),
+                        "verified": bool(u.get("verified", False)),
+                    }
+                )
+
+            invite_link = gp.get("inviteLink") or ""
+            if invite_link.startswith("/"):
+                invite_link = str(invite_link)
+
+            result.append(
+                {
+                    "id": chat["_id"],
+                    "participantIds": chat.get("participants", []),
+                    "otherUser": {
+                        "chatId": chat["_id"],
+                        "name": gp.get("name") or "گروه",
+                        "avatar": gp.get("avatar") or "",
+                        "username": f"group_{gp.get('inviteCode', chat['_id'][-6:])}",
+                        "bio": gp.get("description") or "",
+                        "online": any(m.get("online") for m in members),
+                        "verified": False,
+                        "isGroup": True,
+                        "inviteLink": invite_link,
+                        "members": members,
+                        "createdAt": dt_to_epoch_ms(chat.get("createdAt")),
+                    },
+                    "lastMessage": last_msg,
+                    "unreadCount": unread_map.get(chat["_id"], 0),
+                }
+            )
+            continue
+
+        other_id = next((pid for pid in chat.get("participants", []) if pid != my_id), None)
+        other_user = user_by_id.get(other_id) if other_id else None
 
         result.append(
             {

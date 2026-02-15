@@ -7,6 +7,7 @@ export interface User {
     online: boolean;
     verified?: boolean;
     createdAt?: string | number;
+    birthday?: string;
 }
 
 export interface MessageReply {
