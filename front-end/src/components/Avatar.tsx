@@ -1,9 +1,11 @@
+import { Bookmark } from 'lucide-react';
 import { cx } from '../utils/cx';
 
 interface AvatarProps {
   name: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   online?: boolean;
+  savedMessages?: boolean;
 }
 
 function getColorIndex(name: string): number {
@@ -23,7 +25,42 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-export function Avatar({ name, size = 'md', online }: AvatarProps) {
+const sizeMap = {
+  sm: 40,
+  md: 48,
+  lg: 64,
+  xl: 80,
+};
+
+const iconSizeMap = {
+  sm: 20,
+  md: 24,
+  lg: 32,
+  xl: 40,
+};
+
+export function Avatar({ name, size = 'md', online, savedMessages = false }: AvatarProps) {
+  if (savedMessages) {
+    return (
+      <div className={cx('avatar', `avatar--${size}`)}>
+        <div
+          style={{
+            width: `${sizeMap[size]}px`,
+            height: `${sizeMap[size]}px`,
+            borderRadius: '50%',
+            backgroundColor: 'var(--primary)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          <Bookmark size={iconSizeMap[size]} color="white" fill="white" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cx('avatar', `avatar--${size}`)}>
       <div className={cx('avatar__circle', `avatar-color-${getColorIndex(name)}`)}>

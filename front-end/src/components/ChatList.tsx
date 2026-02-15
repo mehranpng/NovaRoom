@@ -302,20 +302,7 @@ export function ChatList({
                         onClick={() => onSelectChat(savedMessagesChat.id)}
                         className={cx('chat-list__item', activeChatId === savedMessagesChat.id && 'chat-list__item--active')}
                     >
-                        <div
-                            style={{
-                                width: '48px',
-                                height: '48px',
-                                borderRadius: '50%',
-                                backgroundColor: 'var(--primary)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexShrink: 0,
-                            }}
-                        >
-                            <Bookmark size={24} color="white" />
-                        </div>
+                        <Avatar name="" size="md" savedMessages={true} />
                         <div className="chat-list__item-content">
                             <div className="chat-list__item-row">
                                 <span className="chat-list__item-name">

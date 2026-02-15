@@ -559,24 +559,7 @@ export function ChatRoom({
                     type="button"
                     style={isSavedMessages ? { cursor: 'default' } : undefined}
                 >
-                    {isSavedMessages ? (
-                        <div
-                            style={{
-                                width: '40px',
-                                height: '40px',
-                                borderRadius: '50%',
-                                backgroundColor: 'var(--primary)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexShrink: 0,
-                            }}
-                        >
-                            <Bookmark size={20} color="white" />
-                        </div>
-                    ) : (
-                        <Avatar name={contact.name} size="sm" online={contact.online} />
-                    )}
+                    <Avatar name={contact.name} size="sm" online={contact.online} savedMessages={isSavedMessages} />
                     <div className="chat-room__header-info">
                         <div
                             className="chat-room__contact-name"
@@ -599,34 +582,36 @@ export function ChatRoom({
                     </div>
                 </button>
 
-                <div className="chat-room__header-actions" ref={menuRef}>
-                    <button
-                        className="icon-btn"
-                        onClick={() => setChatMenuOpen((v) => !v)}
-                        aria-label="More"
-                        disabled={!canDeleteChat}
-                        style={!canDeleteChat ? { opacity: 0.4, cursor: 'default' } : undefined}
-                        type="button"
-                    >
-                        <MoreVertical size={20} />
-                    </button>
+                {!isSavedMessages && (
+                    <div className="chat-room__header-actions" ref={menuRef}>
+                        <button
+                            className="icon-btn"
+                            onClick={() => setChatMenuOpen((v) => !v)}
+                            aria-label="More"
+                            disabled={!canDeleteChat}
+                            style={!canDeleteChat ? { opacity: 0.4, cursor: 'default' } : undefined}
+                            type="button"
+                        >
+                            <MoreVertical size={20} />
+                        </button>
 
-                    {chatMenuOpen && canDeleteChat && (
-                        <div className="popover popover--mini popover--right">
-                            <button
-                                className="popover__item popover__item--danger"
-                                onClick={() => {
-                                    setConfirmDeleteChat(true);
-                                    setChatMenuOpen(false);
-                                }}
-                                type="button"
-                            >
-                                <Trash2 size={16} />
-                                حذف گفتگو
-                            </button>
-                        </div>
-                    )}
-                </div>
+                        {chatMenuOpen && canDeleteChat && (
+                            <div className="popover popover--mini popover--right">
+                                <button
+                                    className="popover__item popover__item--danger"
+                                    onClick={() => {
+                                        setConfirmDeleteChat(true);
+                                        setChatMenuOpen(false);
+                                    }}
+                                    type="button"
+                                >
+                                    <Trash2 size={16} />
+                                    حذف گفتگو
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             <div
@@ -855,7 +840,7 @@ export function ChatRoom({
                                         </div>
                                     </div>
                                 </div>
-                            );
+                                            );
                         })
                     )}
                     <div ref={messagesEndRef} />
