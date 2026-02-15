@@ -155,6 +155,7 @@ class UserSearchResult(BaseModel):
     bio: str
     online: bool
     verified: bool = False
+    registrationDate: Optional[str] = None
 
 
 class ChatCreateRequest(BaseModel):
@@ -345,6 +346,7 @@ async def complete_registration(req: CompleteRegistrationRequest):
             "avatar": "",
             "online": False,
             "verified": False,
+            "registrationDate": registration_date,
         },
     }
 
@@ -426,6 +428,7 @@ async def login(req: LoginRequest):
             "avatar": user["profile"]["avatar"],
             "online": user.get("online", False),
             "verified": bool(user.get("verified", False)),
+            "registrationDate": user.get("registrationDate"),
         },
     }
 
@@ -440,6 +443,7 @@ async def get_profile(current_user: dict = Depends(get_current_user)):
         "avatar": current_user["profile"]["avatar"],
         "online": current_user.get("online", False),
         "verified": bool(current_user.get("verified", False)),
+        "registrationDate": current_user.get("registrationDate"),
     }
 
 
@@ -555,6 +559,7 @@ async def search_users(
             "bio": u["profile"]["bio"],
             "online": u.get("online", False),
             "verified": bool(u.get("verified", False)),
+            "registrationDate": u.get("registrationDate"),
         }
         for u in users
     ]
@@ -669,6 +674,7 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                     "verified": (
                         bool(other_user.get("verified", False)) if other_user else False
                     ),
+                    "registrationDate": other_user.get("registrationDate") if other_user else None,
                 },
                 "lastMessage": last_msg,
                 "unreadCount": unread_map.get(chat["_id"], 0),
@@ -706,6 +712,7 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                     "bio": "",
                     "online": False,
                     "verified": False,
+                    "registrationDate": None,
                 },
                 "lastMessage": saved_last_msg,
                 "unreadCount": 0,
