@@ -599,44 +599,7 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
 
     result = []
 
-    # Add saved messages chat if it has messages
-    if saved_count > 0:
-        saved_msg = (
-            await cl_messages.find({"chatId": saved_chat_id})
-            .sort("timestamp", -1)
-            .limit(1)
-            .to_list(1)
-        )
-
-        saved_last_msg = None
-        if saved_msg:
-            doc = saved_msg[0]
-            saved_last_msg = {
-                "id": str(doc["_id"]),
-                "text": doc.get("text", ""),
-                "senderId": doc.get("senderId"),
-                "timestamp": doc.get("timestamp"),
-            }
-
-        result.append(
-            {
-                "id": saved_chat_id,
-                "participantIds": [my_id],
-                "otherUser": {
-                    "chatId": "saved",
-                    "name": "پیام‌های ذخیره شده",
-                    "avatar": "",
-                    "username": "saved",
-                    "bio": "",
-                    "online": False,
-                    "verified": False,
-                },
-                "lastMessage": saved_last_msg,
-                "unreadCount": 0,
-            }
-        )
-
-    if not chats:
+    if not chats and saved_count == 0:
         return result
 
     chat_ids = [c["_id"] for c in chats]
@@ -709,6 +672,43 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                 },
                 "lastMessage": last_msg,
                 "unreadCount": unread_map.get(chat["_id"], 0),
+            }
+        )
+
+    # Add saved messages chat if it has messages
+    if saved_count > 0:
+        saved_msg = (
+            await cl_messages.find({"chatId": saved_chat_id})
+            .sort("timestamp", -1)
+            .limit(1)
+            .to_list(1)
+        )
+
+        saved_last_msg = None
+        if saved_msg:
+            doc = saved_msg[0]
+            saved_last_msg = {
+                "id": str(doc["_id"]),
+                "text": doc.get("text", ""),
+                "senderId": doc.get("senderId"),
+                "timestamp": dt_to_epoch_ms(doc.get("timestamp")),
+            }
+
+        result.append(
+            {
+                "id": saved_chat_id,
+                "participantIds": [my_id],
+                "otherUser": {
+                    "chatId": "saved",
+                    "name": "پیام‌های ذخیره شده",
+                    "avatar": "",
+                    "username": "saved",
+                    "bio": "",
+                    "online": False,
+                    "verified": False,
+                },
+                "lastMessage": saved_last_msg,
+                "unreadCount": 0,
             }
         )
 
