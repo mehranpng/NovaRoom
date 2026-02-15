@@ -263,8 +263,8 @@ export function AIChatRoom({
 
                 <div className="chat-room__header-clickable chat-room__header-clickable--full">
                     <img
-                        src="/avatars/ai.png"
-                        alt="NovaRoom AI"
+                        src="/avatars/ch.png"
+                        alt="Nova Assistant"
                         style={{
                             width: '40px',
                             height: '40px',
@@ -278,7 +278,7 @@ export function AIChatRoom({
                             className="chat-room__contact-name"
                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                         >
-                            NovaRoom AI
+                            Nova Assistant
                             <VerifiedBadge size={14} />
                         </div>
                         <div className="chat-room__contact-status">

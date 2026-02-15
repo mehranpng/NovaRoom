@@ -1,4 +1,4 @@
-import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut } from 'lucide-react';
+import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Pin, PinOff, Users, UsersRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';
@@ -16,10 +16,21 @@ interface ChatListProps {
     onSelectChat: (chatId: string) => void;
     onOpenProfile: () => void;
     onNewChatClick: () => void;
+    onNewGroupClick: () => void;
     onLogout: () => void;
     onOpenAIChat: () => void;
+    onOpenSavedMessages: () => void;
+    savedMessages: UserMessage[];
+    pinnedChatIds: string[];
+    onTogglePinChat: (chatId: string) => void;
     loading?: boolean;
 }
+
+type UserMessage = {
+    id: string;
+    text: string;
+    timestamp: number;
+};
 
 const TEHRAN_TZ = 'Asia/Tehran';
 
@@ -125,8 +136,13 @@ export function ChatList({
     onSelectChat,
     onOpenProfile,
     onNewChatClick,
+    onNewGroupClick,
     onLogout,
     onOpenAIChat,
+    onOpenSavedMessages,
+    savedMessages,
+    pinnedChatIds,
+    onTogglePinChat,
     loading = false,
 }: ChatListProps) {
     const [searchQuery, setSearchQuery] = useState('');
@@ -152,7 +168,7 @@ export function ChatList({
         if (chat.otherUser) {
             return {
                 ...chat.otherUser,
-                chatId: chat.participantIds.find(id => id !== currentUser.chatId) || '',
+                chatId: chat.otherUser?.isGroup ? chat.id : (chat.participantIds.find(id => id !== currentUser.chatId) || ''),
                 // Make sure online is always boolean so Avatar renders the status dot.
                 online: typeof chat.otherUser.online === 'boolean' ? chat.otherUser.online : false,
                 verified: Boolean((chat.otherUser as any)?.verified),
@@ -191,14 +207,18 @@ export function ChatList({
             <div className="chat-list__header">
                 <div className="chat-list__header-left">
                     <button onClick={onOpenProfile}>
-                        <Avatar name={currentUser.name} size="sm" online={true} />
+                        <Avatar name={currentUser.name} size="sm" online={true} avatar={currentUser.avatar} />
                     </button>
                     <h1 className="chat-list__title">NovaRoom</h1>
                 </div>
                 <div className="chat-list__header-actions">
                     <DarkModeToggle isDarkMode={isDarkMode} onToggle={toggleDarkMode} />
                     
-                    <button className="icon-btn" onClick={onNewChatClick}>
+                    <button className="icon-btn" onClick={onNewGroupClick} title="ساخت گروه" type="button">
+                        <UsersRound size={20} />
+                    </button>
+
+                    <button className="icon-btn" onClick={onNewChatClick} title="چت جدید" type="button">
                         <MessageSquarePlus size={20} />
                     </button>
 
@@ -253,8 +273,8 @@ export function ChatList({
                         className="chat-list__item chat-list__item--ai"
                     >
                         <img
-                            src="/avatars/ai.png"
-                            alt="NovaRoom AI"
+                            src="/avatars/ch.png"
+                            alt="Nova Assistant"
                             style={{
                                 width: '48px',
                                 height: '48px',
@@ -269,7 +289,7 @@ export function ChatList({
                                     className="chat-list__item-name"
                                     style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                                 >
-                                    NovaRoom AI
+                                    Nova Assistant
                                     <VerifiedBadge size={14} />
                                 </span>
                             </div>
@@ -281,6 +301,38 @@ export function ChatList({
                         </div>
                     </button>
                 )}
+
+                <button
+                    onClick={onOpenSavedMessages}
+                    className="chat-list__item chat-list__item--ai"
+                >
+                    <span
+                        style={{
+                            width: '48px',
+                            height: '48px',
+                            borderRadius: '50%',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: '#2F80ED',
+                            color: '#fff',
+                            flexShrink: 0,
+                        }}
+                    >
+                        <Bookmark size={20} />
+                    </span>
+                    <div className="chat-list__item-content">
+                        <div className="chat-list__item-row">
+                            <span className="chat-list__item-name">پیام‌های ذخیره‌شده</span>
+                            {savedMessages.length > 0 && <span className="chat-list__item-time">{savedMessages.length}</span>}
+                        </div>
+                        <div className="chat-list__item-preview">
+                            <p className="chat-list__item-text">
+                                {(savedMessages[savedMessages.length - 1]?.text) || 'پیامی ذخیره نشده است'}
+                            </p>
+                        </div>
+                    </div>
+                </button>
 
                 {/* Regular chats */}
                 {loading ? (
@@ -304,7 +356,7 @@ export function ChatList({
                                 onClick={() => onSelectChat(chat.id)}
                                 className={cx('chat-list__item', isActive && 'chat-list__item--active')}
                             >
-                                <Avatar name={contact.name} size="md" online={contact.online} />
+                                <Avatar name={contact.name} size="md" online={contact.online} avatar={contact.avatar} />
                                 <div className="chat-list__item-content">
                                     <div className="chat-list__item-row">
                                         <span
@@ -312,7 +364,9 @@ export function ChatList({
                                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                                         >
                                             {contact.name}
+                                            {chat.participantIds.length > 2 ? <Users size={14} /> : null}
                                             {contact.verified ? <VerifiedBadge size={14} /> : null}
+                                            {pinnedChatIds.includes(chat.id) ? <Pin size={12} /> : null}
                                         </span>
                                         {chat.lastMessage && (
                                             <span className="chat-list__item-time">
@@ -325,9 +379,26 @@ export function ChatList({
                                             {isMine && <span className="chat-list__item-text-prefix">شما: </span>}
                                             {chat.lastMessage?.text || 'هنوز پیامی ارسال نشده'}
                                         </p>
+                                        {chat.otherUser?.isGroup && Array.isArray(chat.otherUser?.members) && (
+                                            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                                                {chat.otherUser.members.filter((m: any) => m.online).length} آنلاین • {chat.otherUser.members.filter((m: any) => !m.online).length} آفلاین
+                                            </span>
+                                        )}
                                         {chat.unreadCount > 0 && (
                                             <span className="chat-list__unread-badge">{chat.unreadCount}</span>
                                         )}
+                                        <button
+                                            type="button"
+                                            className="icon-btn"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onTogglePinChat(chat.id);
+                                            }}
+                                            aria-label="Pin chat"
+                                            style={{ width: 24, height: 24 }}
+                                        >
+                                            {pinnedChatIds.includes(chat.id) ? <PinOff size={14} /> : <Pin size={14} />}
+                                        </button>
                                     </div>
                                 </div>
                             </button>

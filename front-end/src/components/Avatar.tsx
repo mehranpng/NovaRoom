@@ -4,6 +4,7 @@ interface AvatarProps {
   name: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   online?: boolean;
+  avatar?: string;
 }
 
 function getColorIndex(name: string): number {
@@ -23,11 +24,15 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-export function Avatar({ name, size = 'md', online }: AvatarProps) {
+export function Avatar({ name, size = 'md', online, avatar }: AvatarProps) {
   return (
     <div className={cx('avatar', `avatar--${size}`)}>
       <div className={cx('avatar__circle', `avatar-color-${getColorIndex(name)}`)}>
-        {getInitials(name)}
+        {avatar ? (
+          <img src={avatar} alt={name} className="avatar__img" />
+        ) : (
+          getInitials(name)
+        )}
       </div>
       {online !== undefined && (
         <span

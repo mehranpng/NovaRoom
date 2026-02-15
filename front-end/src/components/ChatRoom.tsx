@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Trash2, X, Pin, PinOff, Bookmark, BookmarkCheck } from 'lucide-react';
 import type { Message, MessageReply as MessageReplyType, User } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -17,6 +17,8 @@ interface ChatRoomProps {
     onBack: () => void;
     onCloseChat: () => void;
     onChatDeleted?: (chatId: string) => void;
+    onToggleSaveMessage?: (message: Message) => void;
+    savedMessageIds?: Set<string>;
     loading?: boolean;
 }
 
@@ -91,6 +93,8 @@ export function ChatRoom({
     onBack,
     onCloseChat,
     onChatDeleted,
+    onToggleSaveMessage,
+    savedMessageIds = new Set(),
     loading = false,
 }: ChatRoomProps) {
     const [text, setText] = useState('');
@@ -103,6 +107,9 @@ export function ChatRoom({
     const [editingId, setEditingId] = useState<string | null>(null);
 
     const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number }>(null);
+    const [pinnedMessageId, setPinnedMessageId] = useState<string | null>(null);
+    const [messageReactions, setMessageReactions] = useState<Record<string, Record<string, number>>>({});
+    const [myReactions, setMyReactions] = useState<Record<string, string>>({});
 
     const menuRef = useRef<HTMLDivElement | null>(null);
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
@@ -151,7 +158,59 @@ export function ChatRoom({
         blockClickUntil: 0,
     });
 
-    const canDeleteChat = chatId !== 'pending';
+    const canDeleteChat = chatId !== 'pending' && chatId !== 'saved_messages';
+
+
+    useEffect(() => {
+        const reactionsRaw = localStorage.getItem(`chat_reactions_${chatId}`);
+        const mineRaw = localStorage.getItem(`chat_my_reactions_${chatId}`);
+        const pinnedRaw = localStorage.getItem(`chat_pinned_message_${chatId}`);
+        if (reactionsRaw) {
+            try { setMessageReactions(JSON.parse(reactionsRaw)); } catch { setMessageReactions({}); }
+        } else setMessageReactions({});
+        if (mineRaw) {
+            try { setMyReactions(JSON.parse(mineRaw)); } catch { setMyReactions({}); }
+        } else setMyReactions({});
+        setPinnedMessageId(pinnedRaw || null);
+    }, [chatId]);
+
+    const persistReactions = (next: Record<string, Record<string, number>>, nextMine: Record<string, string>) => {
+        setMessageReactions(next);
+        setMyReactions(nextMine);
+        localStorage.setItem(`chat_reactions_${chatId}`, JSON.stringify(next));
+        localStorage.setItem(`chat_my_reactions_${chatId}`, JSON.stringify(nextMine));
+    };
+
+    const toggleReaction = (messageId: string, emoji: string) => {
+        const current = myReactions[messageId];
+        const nextReactions = { ...messageReactions };
+        const nextMine = { ...myReactions };
+
+        if (!nextReactions[messageId]) nextReactions[messageId] = {};
+
+        if (current === emoji) {
+            nextReactions[messageId][emoji] = Math.max(0, (nextReactions[messageId][emoji] || 1) - 1);
+            if (nextReactions[messageId][emoji] === 0) delete nextReactions[messageId][emoji];
+            delete nextMine[messageId];
+        } else {
+            if (current) {
+                nextReactions[messageId][current] = Math.max(0, (nextReactions[messageId][current] || 1) - 1);
+                if (nextReactions[messageId][current] === 0) delete nextReactions[messageId][current];
+            }
+            nextReactions[messageId][emoji] = (nextReactions[messageId][emoji] || 0) + 1;
+            nextMine[messageId] = emoji;
+        }
+
+        persistReactions(nextReactions, nextMine);
+    };
+
+    const togglePinMessage = (messageId: string) => {
+        const next = pinnedMessageId === messageId ? null : messageId;
+        setPinnedMessageId(next);
+        if (next) localStorage.setItem(`chat_pinned_message_${chatId}`, next);
+        else localStorage.removeItem(`chat_pinned_message_${chatId}`);
+        setMsgMenu(null);
+    };
 
     const scrollToBottom = (smooth = false) => {
         const container = messagesContainerRef.current;
@@ -556,7 +615,7 @@ export function ChatRoom({
                     aria-label="Open contact info"
                     type="button"
                 >
-                    <Avatar name={contact.name} size="sm" online={contact.online} />
+                    <Avatar name={contact.name} size="sm" online={contact.online} avatar={contact.avatar} />
                     <div className="chat-room__header-info">
                         <div
                             className="chat-room__contact-name"
@@ -572,7 +631,9 @@ export function ChatRoom({
                                     : 'chat-room__contact-status'
                             }
                         >
-                            {contact.online ? 'آنلاین' : 'آفلاین'}
+                            {(contact as any).isGroup
+                                ? `${((contact as any).members || []).filter((m: any) => m.online).length} آنلاین • ${((contact as any).members || []).filter((m: any) => !m.online).length} آفلاین`
+                                : (contact.online ? 'آنلاین' : 'آفلاین')}
                         </div>
                     </div>
                 </button>
@@ -606,6 +667,21 @@ export function ChatRoom({
                     )}
                 </div>
             </div>
+
+            {pinnedMessageId && (() => {
+                const pinnedMessage = messages.find((m) => m.id === pinnedMessageId);
+                if (!pinnedMessage) return null;
+                return (
+                    <button
+                        type="button"
+                        className="chat-room__pinned"
+                        onClick={() => scrollToMessage(pinnedMessage.id)}
+                    >
+                        <Pin size={14} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pinnedMessage.text}</span>
+                    </button>
+                );
+            })()}
 
             <div
                 className="chat-room__messages"
@@ -816,6 +892,13 @@ export function ChatRoom({
                                             )}
 
                                             <div className="message-text">{m.text}</div>
+                                            {messageReactions[m.id] && Object.keys(messageReactions[m.id]).length > 0 && (
+                                                <div className="message-reactions message-reactions--stacked">
+                                                    {Object.entries(messageReactions[m.id]).map(([emoji, count]) => (
+                                                        <span key={emoji} className={myReactions[m.id] === emoji ? 'message-reaction message-reaction--mine' : 'message-reaction'}>{emoji} {count}</span>
+                                                    ))}
+                                                </div>
+                                            )}
 
                                             <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
                                                 <span className="message-time">{formatMessageTime(m.timestamp)}</span>
@@ -844,9 +927,22 @@ export function ChatRoom({
                 <div
                     ref={msgMenuRef}
                     className="popover popover--mini"
-                    style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
+                    style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50, minWidth: 220, paddingTop: 14, overflow: 'visible' }}
                     onClick={(e) => e.stopPropagation()}
                 >
+                    <div className="message-reaction-picker">
+                        {['😂', '👍', '❤️', '😮', '😭', '👎', '🍓', '🔥', '👏', '🎉', '🤯', '🙏'].map((emoji) => (
+                            <button
+                                key={emoji}
+                                type="button"
+                                className="icon-btn"
+                                onClick={() => toggleReaction(activeMsg.id, emoji)}
+                                style={{ width: 30, height: 30, fontSize: 20, background: 'transparent' }}
+                            >
+                                {emoji}
+                            </button>
+                        ))}
+                    </div>
                     <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button">
                         <Reply size={16} />
                         پاسخ
@@ -861,6 +957,16 @@ export function ChatRoom({
                         <Copy size={16} />
                         کپی
                     </button>
+                    {onToggleSaveMessage && (
+                        <button className="popover__item" onClick={() => { onToggleSaveMessage(activeMsg); setMsgMenu(null); }} type="button">
+                            {savedMessageIds.has(activeMsg.id) ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+                            {savedMessageIds.has(activeMsg.id) ? 'حذف از ذخیره‌ها' : 'ذخیره پیام'}
+                        </button>
+                    )}
+                    <button className="popover__item" onClick={() => togglePinMessage(activeMsg.id)} type="button">
+                        {pinnedMessageId === activeMsg.id ? <PinOff size={16} /> : <Pin size={16} />}
+                        {pinnedMessageId === activeMsg.id ? 'برداشتن پین' : 'پین پیام'}
+                    </button>
                     {activeMsgIsMine && (
                         <button
                             className="popover__item popover__item--danger"
@@ -868,7 +974,7 @@ export function ChatRoom({
                             type="button"
                         >
                             <Trash2 size={16} />
-                            حذف
+                            حذف پیام
                         </button>
                     )}
                 </div>

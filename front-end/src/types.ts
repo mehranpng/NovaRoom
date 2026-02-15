@@ -6,6 +6,8 @@ export interface User {
     avatar: string;
     online: boolean;
     verified?: boolean;
+    createdAt?: string | number;
+    birthDate?: string;
 }
 
 export interface MessageReply {
@@ -23,6 +25,7 @@ export interface Message {
     seen: boolean;
     replyTo?: MessageReply;
     edited?: boolean;
+    sourceChatId?: string;
 }
 
 export interface ChatLastMessage {
