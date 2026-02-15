@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, Bookmark, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Bookmark, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X } from 'lucide-react';
 import type { Message, MessageReply as MessageReplyType, User } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { apiFetch } from '../config/api';
 import { ContactInfo } from './ContactInfo';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
+import { ReactionPicker } from './ReactionPicker';
 
 interface ChatRoomProps {
     chatId: string;
@@ -103,9 +104,11 @@ export function ChatRoom({
     const [editingId, setEditingId] = useState<string | null>(null);
 
     const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number }>(null);
+    const [reactionMenu, setReactionMenu] = useState<null | { id: string; top: number; left: number }>(null);
 
     const menuRef = useRef<HTMLDivElement | null>(null);
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
+    const reactionMenuRef = useRef<HTMLDivElement | null>(null);
     const confirmDeleteChatRef = useRef<HTMLDivElement | null>(null);
     const confirmDeleteMsgRef = useRef<HTMLDivElement | null>(null);
 
@@ -310,12 +313,40 @@ export function ChatRoom({
         setMsgMenu(null);
     };
 
+    const handleReact = async (messageId: string, emoji: string) => {
+        setReactionMenu(null);
+        setMsgMenu(null);
+        
+        try {
+            await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, {
+                method: 'POST',
+                body: JSON.stringify({ emoji }),
+            });
+        } catch (error) {
+            console.error('Failed to react:', error);
+        }
+    };
+
+    const handleDeleteReaction = async (messageId: string) => {
+        setReactionMenu(null);
+        setMsgMenu(null);
+        
+        try {
+            await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, {
+                method: 'DELETE',
+            });
+        } catch (error) {
+            console.error('Failed to delete reaction:', error);
+        }
+    };
+
     // Close menus when clicking outside
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
             const target = e.target as Node;
             if (menuRef.current && menuRef.current.contains(target)) return;
             if (msgMenuRef.current && msgMenuRef.current.contains(target)) return;
+            if (reactionMenuRef.current && reactionMenuRef.current.contains(target)) return;
             
             // Close modals if clicking on backdrop (overlay)
             if (confirmDeleteChatRef.current) {
@@ -335,6 +366,7 @@ export function ChatRoom({
             
             setChatMenuOpen(false);
             setMsgMenu(null);
+            setReactionMenu(null);
         };
 
         document.addEventListener('mousedown', onDocClick);
@@ -360,6 +392,7 @@ export function ChatRoom({
         setReplyTo(null);
         setEditingId(null);
         setMsgMenu(null);
+        setReactionMenu(null);
         setText('');
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
@@ -496,6 +529,33 @@ export function ChatRoom({
         left = Math.max(12, Math.min(left, maxLeft));
 
         setMsgMenu({ id: messageId, top, left });
+        setReactionMenu(null);
+    };
+
+    const openReactionMenu = (messageId: string, targetEl: HTMLElement) => {
+        const room = roomRef.current;
+        if (!room) return;
+
+        const roomRect = room.getBoundingClientRect();
+        const r = targetEl.getBoundingClientRect();
+
+        // Calculate position relative to room
+        let top = r.top - roomRect.top;
+        let left = r.left - roomRect.left;
+
+        // Reaction picker dimensions (approximate)
+        const pickerHeight = 200;
+        const pickerWidth = 320;
+
+        // Adjust to keep picker visible
+        const maxTop = roomRect.height - pickerHeight - 16;
+        top = Math.max(56, Math.min(top, maxTop));
+
+        const maxLeft = roomRect.width - pickerWidth - 16;
+        left = Math.max(12, Math.min(left, maxLeft));
+
+        setReactionMenu({ id: messageId, top, left });
+        setMsgMenu(null);
     };
 
     const beginReply = (m: Message) => {
@@ -503,6 +563,7 @@ export function ChatRoom({
         setReplyTo({ id: rt.id, senderId: rt.senderId, text: rt.text });
         setEditingId(null);
         setMsgMenu(null);
+        setReactionMenu(null);
         setTimeout(() => textareaRef.current?.focus(), 0);
     };
 
@@ -511,11 +572,13 @@ export function ChatRoom({
         setReplyTo(null);
         setText(m.text);
         setMsgMenu(null);
+        setReactionMenu(null);
         setTimeout(() => textareaRef.current?.focus(), 0);
     };
 
     const doDeleteMessage = (messageId: string) => {
         setMsgMenu(null);
+        setReactionMenu(null);
         setConfirmDeleteMsg(messageId);
     };
 
@@ -540,6 +603,9 @@ export function ChatRoom({
 
     const activeMsg = msgMenu ? messages.find((mm) => mm.id === msgMenu.id) : null;
     const activeMsgIsMine = activeMsg ? activeMsg.senderId === currentUserId : false;
+
+    const reactionMsg = reactionMenu ? messages.find((mm) => mm.id === reactionMenu.id) : null;
+    const myReaction = reactionMsg?.reactions?.find((r: any) => r.userId === currentUserId);
 
     return (
         <div className="chat-room" style={{ position: 'relative' }} ref={roomRef}>
@@ -824,6 +890,30 @@ export function ChatRoom({
 
                                             <div className="message-text">{m.text}</div>
 
+                                            {m.reactions && m.reactions.length > 0 && (
+                                                <div className="message-reactions">
+                                                    {m.reactions.map((reaction: any) => {
+                                                        const isMyReaction = reaction.userId === currentUserId;
+                                                        return (
+                                                            <button
+                                                                key={reaction.userId}
+                                                                className={isMyReaction ? 'message-reaction message-reaction--active' : 'message-reaction'}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (isMyReaction) {
+                                                                        handleDeleteReaction(m.id);
+                                                                    }
+                                                                }}
+                                                                type="button"
+                                                            >
+                                                                <span className="message-reaction__emoji">{reaction.emoji}</span>
+                                                                <span className="message-reaction__count">{reaction.count}</span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+
                                             <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
                                                 <span className="message-time">{formatMessageTime(m.timestamp)}</span>
                                                 {m.edited && (
@@ -840,7 +930,7 @@ export function ChatRoom({
                                         </div>
                                     </div>
                                 </div>
-                                            );
+                            );
                         })
                     )}
                     <div ref={messagesEndRef} />
@@ -854,6 +944,14 @@ export function ChatRoom({
                     style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
                     onClick={(e) => e.stopPropagation()}
                 >
+                    <button 
+                        className="popover__item" 
+                        onClick={() => openReactionMenu(activeMsg.id, msgMenuRef.current!)} 
+                        type="button"
+                    >
+                        <Smile size={16} />
+                        واکنش
+                    </button>
                     <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button">
                         <Reply size={16} />
                         پاسخ
@@ -878,6 +976,28 @@ export function ChatRoom({
                             حذف
                         </button>
                     )}
+                </div>
+            )}
+
+            {reactionMenu && reactionMsg && (
+                <div
+                    ref={reactionMenuRef}
+                    style={{ 
+                        top: reactionMenu.top, 
+                        left: reactionMenu.left, 
+                        right: 'auto', 
+                        position: 'absolute', 
+                        zIndex: 50 
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <ReactionPicker
+                        messageId={reactionMsg.id}
+                        currentReaction={myReaction?.emoji}
+                        onReact={handleReact}
+                        onDeleteReaction={handleDeleteReaction}
+                        onClose={() => setReactionMenu(null)}
+                    />
                 </div>
             )}
 
