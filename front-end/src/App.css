@@ -2073,3 +2073,36 @@ textarea {
   font-size: 13px;
   color: var(--text-secondary);
 }
+
+.chat-room__pinned {
+  margin: 8px 12px 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  padding: 8px 10px;
+  width: calc(100% - 24px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+}
+
+.message-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.message-reaction {
+  font-size: 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-primary);
+  padding: 2px 8px;
+  background: var(--bg-secondary);
+}
+
+.message-reaction--mine {
+  border-color: #2F80ED;
+  background: rgba(47, 128, 237, 0.12);
+}
