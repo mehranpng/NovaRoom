@@ -8,7 +8,6 @@ import asyncio
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 
-# Email configuration
 SMTP_SERVER = "mc.mailfa.com"
 SMTP_PORT = 587
 EMAIL_SENDER = "novaroom@mailfa.com"
@@ -21,11 +20,12 @@ password_reset_codes = {}
 
 def generate_verification_code(length: int = 6) -> str:
     """Generate a random verification code"""
-    return ''.join(random.choices(string.digits, k=length))
+    return "".join(random.choices(string.digits, k=length))
 
 
 async def send_email_async(receiver_email: str, subject: str, body: str) -> bool:
     """Send email asynchronously"""
+
     def _send_email():
         try:
             message = MIMEMultipart()
@@ -50,7 +50,7 @@ async def send_email_async(receiver_email: str, subject: str, body: str) -> bool
 async def send_verification_email(email: str) -> Optional[str]:
     """Send verification code to email and store it temporarily"""
     code = generate_verification_code()
-    
+
     subject = "کد تأیید ثبت‌نام NovaRoom"
     body = f"""
 سلام،
@@ -66,17 +66,17 @@ async def send_verification_email(email: str) -> Optional[str]:
 با احترام،
 تیم NovaRoom
     """
-    
+
     success = await send_email_async(email, subject, body)
-    
+
     if success:
         # Store code with expiration time (10 minutes)
         verification_codes[email] = {
             "code": code,
-            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10)
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
         }
         return code
-    
+
     return None
 
 
@@ -84,18 +84,18 @@ async def verify_code(email: str, code: str) -> bool:
     """Verify if the code is correct and not expired"""
     if email not in verification_codes:
         return False
-    
+
     stored_data = verification_codes[email]
-    
+
     # Check if code is expired
     if datetime.now(timezone.utc) > stored_data["expires_at"]:
         del verification_codes[email]
         return False
-    
+
     # Check if code matches
     if stored_data["code"] != code:
         return False
-    
+
     # Code is valid, remove it
     del verification_codes[email]
     return True
@@ -104,7 +104,7 @@ async def verify_code(email: str, code: str) -> bool:
 async def send_password_reset_email(email: str) -> Optional[str]:
     """Send password reset code to email"""
     code = generate_verification_code()
-    
+
     subject = "کد بازیابی رمز عبور NovaRoom"
     body = f"""
 سلام،
@@ -120,17 +120,17 @@ async def send_password_reset_email(email: str) -> Optional[str]:
 با احترام،
 تیم NovaRoom
     """
-    
+
     success = await send_email_async(email, subject, body)
-    
+
     if success:
         # Store code with expiration time (10 minutes)
         password_reset_codes[email] = {
             "code": code,
-            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10)
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
         }
         return code
-    
+
     return None
 
 
@@ -138,18 +138,18 @@ async def verify_reset_code(email: str, code: str) -> bool:
     """Verify if the password reset code is correct and not expired"""
     if email not in password_reset_codes:
         return False
-    
+
     stored_data = password_reset_codes[email]
-    
+
     # Check if code is expired
     if datetime.now(timezone.utc) > stored_data["expires_at"]:
         del password_reset_codes[email]
         return False
-    
+
     # Check if code matches
     if stored_data["code"] != code:
         return False
-    
+
     # Don't delete yet - will be deleted after password is actually reset
     return True
 
