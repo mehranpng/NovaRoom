@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 
 export function useDarkMode() {
-  // Initialize from sessionStorage or default to light mode
+  // Initialize from localStorage or default to light mode
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
-    const stored = sessionStorage.getItem('darkMode');
+    const stored = localStorage.getItem('darkMode');
     return stored === 'true';
   });
 
@@ -15,8 +15,8 @@ export function useDarkMode() {
     } else {
       document.documentElement.classList.remove('dark-mode');
     }
-    // Save preference to sessionStorage
-    sessionStorage.setItem('darkMode', String(isDarkMode));
+    // Save preference to localStorage
+    localStorage.setItem('darkMode', String(isDarkMode));
   }, [isDarkMode]);
 
   const toggleDarkMode = () => {

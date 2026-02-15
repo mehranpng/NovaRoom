@@ -1,4 +1,4 @@
-import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark } from 'lucide-react';
+import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';
@@ -6,7 +6,6 @@ import { VerifiedBadge } from './VerifiedBadge';
 import { cx } from '../utils/cx';
 import { EmptyState } from './EmptyState';
 import { ChatListSkeleton } from './ChatListSkeleton';
-import { DarkModeToggle } from './DarkModeToggle';
 import { useDarkMode } from '../hooks/useDarkMode';
 
 interface ChatListProps {
@@ -173,14 +172,20 @@ export function ChatList({
         };
     };
 
-    // Separate saved messages chat from regular chats
     const savedMessagesId = `saved_messages_${currentUser.chatId}`;
-    const savedMessagesChat = chats.find(c => c.id === savedMessagesId);
-    const regularChats = chats.filter(c => c.id !== savedMessagesId);
 
-    const filteredChats = regularChats.filter((chat) => {
-        const contact = getContact(chat);
+    const filteredChats = chats.filter((chat) => {
+        const isSavedMessages = chat.id === savedMessagesId;
+        
         if (!searchQuery) return true;
+        
+        // Check saved messages
+        if (isSavedMessages) {
+            return 'پیام‌های ذخیره شده'.includes(searchQuery) || 'saved'.includes(searchQuery.toLowerCase());
+        }
+        
+        // Check regular contacts
+        const contact = getContact(chat);
         return (
             contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             contact.username.toLowerCase().includes(searchQuery.toLowerCase())
@@ -191,9 +196,6 @@ export function ChatList({
 
     // Check if we should show AI chat in search results
     const showAIChat = !searchQuery || 'novaroom ai'.includes(searchQuery.toLowerCase()) || 'دستیار'.includes(searchQuery);
-    
-    // Check if we should show saved messages in search results
-    const showSavedMessages = savedMessagesChat && (!searchQuery || 'پیام‌های ذخیره شده'.includes(searchQuery) || 'saved'.includes(searchQuery.toLowerCase()));
 
     return (
         <div className="chat-list">
@@ -206,8 +208,6 @@ export function ChatList({
                     <h1 className="chat-list__title">NovaRoom</h1>
                 </div>
                 <div className="chat-list__header-actions">
-                    <DarkModeToggle isDarkMode={isDarkMode} onToggle={toggleDarkMode} />
-                    
                     <button className="icon-btn" onClick={onNewChatClick}>
                         <MessageSquarePlus size={20} />
                     </button>
@@ -231,6 +231,14 @@ export function ChatList({
                                 <button className="popover__item" onClick={() => { setMenuOpen(false); onOpenSavedMessages(); }} type="button">
                                     <Bookmark size={16} />
                                     پیام‌های ذخیره شده
+                                </button>
+                                <button 
+                                    className="popover__item" 
+                                    onClick={() => { toggleDarkMode(); }} 
+                                    type="button"
+                                >
+                                    {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
+                                    {isDarkMode ? 'حالت روشن' : 'حالت تاریک'}
                                 </button>
                                 <button className="popover__item popover__item--danger" onClick={() => { setMenuOpen(false); onLogout(); }} type="button">
                                     <LogOut size={16} />
@@ -260,7 +268,7 @@ export function ChatList({
 
             {/* Chat List */}
             <div className="chat-list__items">
-                {/* AI Chat - Always pinned at top - show even during loading */}
+                {/* AI Chat - Always pinned at top */}
                 {showAIChat && (
                     <button
                         onClick={onOpenAIChat}
@@ -296,37 +304,10 @@ export function ChatList({
                     </button>
                 )}
 
-                {/* Saved Messages - Show only if it has messages */}
-                {showSavedMessages && savedMessagesChat && (
-                    <button
-                        onClick={() => onSelectChat(savedMessagesChat.id)}
-                        className={cx('chat-list__item', activeChatId === savedMessagesChat.id && 'chat-list__item--active')}
-                    >
-                        <Avatar name="" size="md" savedMessages={true} />
-                        <div className="chat-list__item-content">
-                            <div className="chat-list__item-row">
-                                <span className="chat-list__item-name">
-                                    پیام‌های ذخیره شده
-                                </span>
-                                {savedMessagesChat.lastMessage && (
-                                    <span className="chat-list__item-time">
-                                        {formatTime(savedMessagesChat.lastMessage.timestamp)}
-                                    </span>
-                                )}
-                            </div>
-                            <div className="chat-list__item-preview">
-                                <p className="chat-list__item-text">
-                                    {savedMessagesChat.lastMessage?.text || 'پیام‌های ذخیره شده شما'}
-                                </p>
-                            </div>
-                        </div>
-                    </button>
-                )}
-
-                {/* Regular chats */}
+                {/* Regular chats (including saved messages) */}
                 {loading ? (
                     <ChatListSkeleton />
-                ) : regularChats.length === 0 ? (
+                ) : chats.length === 0 ? (
                     isMobile && !hasActiveChat ? <EmptyState /> : null
                 ) : filteredChats.length === 0 ? (
                     <div className="chat-list__empty">
@@ -335,9 +316,40 @@ export function ChatList({
                     </div>
                 ) : (
                     filteredChats.map((chat) => {
-                        const contact = getContact(chat);
+                        const isSavedMessages = chat.id === savedMessagesId;
                         const isActive = activeChatId === chat.id;
                         const isMine = chat.lastMessage?.senderId === currentUser.chatId;
+
+                        if (isSavedMessages) {
+                            return (
+                                <button
+                                    key={chat.id}
+                                    onClick={() => onSelectChat(chat.id)}
+                                    className={cx('chat-list__item', isActive && 'chat-list__item--active')}
+                                >
+                                    <Avatar name="" size="md" savedMessages={true} />
+                                    <div className="chat-list__item-content">
+                                        <div className="chat-list__item-row">
+                                            <span className="chat-list__item-name">
+                                                پیام‌های ذخیره شده
+                                            </span>
+                                            {chat.lastMessage && (
+                                                <span className="chat-list__item-time">
+                                                    {formatTime(chat.lastMessage.timestamp)}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="chat-list__item-preview">
+                                            <p className="chat-list__item-text">
+                                                {chat.lastMessage?.text || 'پیام‌های ذخیره شده شما'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </button>
+                            );
+                        }
+
+                        const contact = getContact(chat);
 
                         return (
                             <button
