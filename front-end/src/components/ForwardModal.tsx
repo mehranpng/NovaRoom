@@ -21,7 +21,7 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward,
     // Build saved messages chat object
     const savedMessagesChat = {
         id: `saved_messages_${currentUserId}`,
-        name: 'پیام\u200cهای ذخیره شده',
+        name: 'پیام‌های ذخیره شده',
         username: 'saved',
         online: false,
         verified: false,
@@ -58,10 +58,9 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward,
                     <Search size={18} />
                     <input
                         type="text"
-                        placeholder="جستجو در گفتگو\u200cها..."
+                        placeholder="جستجو در گفتگو‌ها..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        autoFocus
                     />
                 </div>
 
