@@ -69,7 +69,7 @@ active_connections: Dict[str, List[WebSocket]] = {}
 security = HTTPBearer()
 
 # Valid emojis for reactions
-VALID_REACTIONS = ["👍", "👎", "🤣", "❤️", "💔", "😐", "😭"]
+VALID_REACTIONS = ['❤️', '😂', '😮', '😢', '🙏', '👍', '🔥']
 
 
 def utc_now() -> datetime:
@@ -187,7 +187,6 @@ class PasswordResetVerifyRequest(BaseModel):
 
 
 class ReactionRequest(BaseModel):
-    messageId: str
     emoji: str
 
 
@@ -812,13 +811,14 @@ async def get_messages(
     ]
 
 
-@app.post("/messages/{message_id}/react")
-async def toggle_reaction(
+@app.post("/chats/{chat_id}/messages/{message_id}/react")
+async def add_reaction(
+    chat_id: str,
     message_id: str,
     req: ReactionRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    """Add or remove a reaction from a message"""
+    """Add a reaction to a message"""
     user_id = current_user["chatId"]
     emoji = req.emoji
 
@@ -831,29 +831,35 @@ async def toggle_reaction(
     if not oid:
         raise HTTPException(status_code=400, detail="Invalid message ID")
 
-    msg = await cl_messages.find_one({"_id": oid})
+    msg = await cl_messages.find_one({"_id": oid, "chatId": chat_id})
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
 
-    chat_id = msg.get("chatId")
     reactions = msg.get("reactions", [])
 
     # Find user's existing reaction
     user_reaction = next((r for r in reactions if r.get("userId") == user_id), None)
 
     if user_reaction:
-        # User already has a reaction
-        if user_reaction.get("emoji") == emoji:
-            # Same emoji - remove it
-            reactions = [r for r in reactions if r.get("userId") != user_id]
-        else:
-            # Different emoji - replace it
-            for r in reactions:
-                if r.get("userId") == user_id:
-                    r["emoji"] = emoji
+        # User already has a reaction - replace it with new emoji
+        for r in reactions:
+            if r.get("userId") == user_id:
+                r["emoji"] = emoji
     else:
         # Add new reaction
         reactions.append({"userId": user_id, "emoji": emoji})
+
+    # Aggregate reactions by emoji and count
+    reaction_counts = {}
+    for r in reactions:
+        e = r.get("emoji")
+        reaction_counts[e] = reaction_counts.get(e, 0) + 1
+
+    # Convert to array format with count
+    aggregated_reactions = [
+        {"emoji": emoji, "count": count, "userId": user_id}
+        for emoji, count in reaction_counts.items()
+    ]
 
     # Update message
     await cl_messages.update_one({"_id": oid}, {"$set": {"reactions": reactions}})
@@ -878,11 +884,76 @@ async def toggle_reaction(
                 "type": "reaction_updated",
                 "chatId": chat_id,
                 "messageId": message_id,
-                "reactions": reactions,
+                "reactions": aggregated_reactions,
             },
         )
 
-    return {"reactions": reactions}
+    return {"reactions": aggregated_reactions}
+
+
+@app.delete("/chats/{chat_id}/messages/{message_id}/react")
+async def remove_reaction(
+    chat_id: str,
+    message_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Remove user's reaction from a message"""
+    user_id = current_user["chatId"]
+
+    # Get message
+    oid = await try_object_id(message_id)
+    if not oid:
+        raise HTTPException(status_code=400, detail="Invalid message ID")
+
+    msg = await cl_messages.find_one({"_id": oid, "chatId": chat_id})
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    reactions = msg.get("reactions", [])
+
+    # Remove user's reaction
+    reactions = [r for r in reactions if r.get("userId") != user_id]
+
+    # Aggregate reactions by emoji and count
+    reaction_counts = {}
+    for r in reactions:
+        e = r.get("emoji")
+        reaction_counts[e] = reaction_counts.get(e, 0) + 1
+
+    # Convert to array format with count
+    aggregated_reactions = [
+        {"emoji": emoji, "count": count, "userId": user_id}
+        for emoji, count in reaction_counts.items()
+    ]
+
+    # Update message
+    await cl_messages.update_one({"_id": oid}, {"$set": {"reactions": reactions}})
+
+    # Broadcast to participants
+    saved_chat_id = get_saved_messages_id(user_id)
+    is_saved = chat_id == saved_chat_id
+
+    participants = [user_id] if is_saved else []
+    if not is_saved:
+        participants_doc = await cl_chats.find_one(
+            {"_id": chat_id}, {"participants": 1}
+        )
+        participants = (
+            participants_doc.get("participants", []) if participants_doc else []
+        )
+
+    if participants:
+        await broadcast(
+            participants,
+            {
+                "type": "reaction_updated",
+                "chatId": chat_id,
+                "messageId": message_id,
+                "reactions": aggregated_reactions,
+            },
+        )
+
+    return {"reactions": aggregated_reactions}
 
 
 async def safe_send(user_id: str, message: dict):
