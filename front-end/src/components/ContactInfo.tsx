@@ -11,6 +11,7 @@ interface ContactInfoProps {
 
 export function ContactInfo({ user, onBack }: ContactInfoProps) {
     const [copied, setCopied] = useState(false);
+    const [copiedInvite, setCopiedInvite] = useState(false);
 
     // Reset when switching contacts
     useEffect(() => {
@@ -44,6 +45,14 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
         setTimeout(() => setCopied(false), 1500);
     };
 
+    const handleCopyInvite = () => {
+        const invite = (user as any).inviteLink;
+        if (!invite) return;
+        navigator.clipboard.writeText(String(invite)).catch(() => { });
+        setCopiedInvite(true);
+        setTimeout(() => setCopiedInvite(false), 1500);
+    };
+
     return (
         <div className="contact-info">
             <div className="contact-info__header">
@@ -75,7 +84,17 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
                             <Users size={16} /> وضعیت اعضا
                         </div>
                         <div className="contact-info__bio">{onlineCount} آنلاین • {offlineCount} آفلاین</div>
-                        <div className="contact-info__mono" style={{ marginTop: 8 }}>{(user as any).inviteLink}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }}>
+                            <div className="contact-info__mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{(user as any).inviteLink}</div>
+                            <button
+                                type="button"
+                                className="icon-btn"
+                                aria-label="Copy invite link"
+                                onClick={handleCopyInvite}
+                            >
+                                {copiedInvite ? <Check size={18} /> : <Copy size={18} />}
+                            </button>
+                        </div>
                     </div>
                 )}
 
