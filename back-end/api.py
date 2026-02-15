@@ -1049,7 +1049,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         {"_id": chat_id_target}, {"participants": 1}
                     )
                     participants = (
-                        participants_doc.get("participants", []) if participants_doc else []
+                        participants_doc.get("participants", [])
+                        if participants_doc
+                        else []
                     )
 
                 if participants:
@@ -1104,7 +1106,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 if not is_saved:
                     await cl_chats.update_one(
                         {"_id": chat_id_target, "lastMessage.id": message_id},
-                        {"$set": {"lastMessage.text": new_text, "updatedAt": utc_now()}},
+                        {
+                            "$set": {
+                                "lastMessage.text": new_text,
+                                "updatedAt": utc_now(),
+                            }
+                        },
                     )
 
                 participants = [chat_id] if is_saved else []
@@ -1113,7 +1120,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         {"_id": chat_id_target}, {"participants": 1}
                     )
                     participants = (
-                        participants_doc.get("participants", []) if participants_doc else []
+                        participants_doc.get("participants", [])
+                        if participants_doc
+                        else []
                     )
 
                 payload = {
@@ -1170,7 +1179,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         {"_id": chat_id_target}, {"participants": 1}
                     )
                     participants = (
-                        participants_doc.get("participants", []) if participants_doc else []
+                        participants_doc.get("participants", [])
+                        if participants_doc
+                        else []
                     )
 
                 out_last = None
