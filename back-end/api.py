@@ -68,6 +68,9 @@ active_connections: Dict[str, List[WebSocket]] = {}
 
 security = HTTPBearer()
 
+# Valid emojis for reactions
+VALID_REACTIONS = ["👍", "👎", "🤣", "❤️", "💔", "😐", "😭"]
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -181,6 +184,11 @@ class PasswordResetVerifyRequest(BaseModel):
     email: str
     code: str
     new_password: str
+
+
+class ReactionRequest(BaseModel):
+    messageId: str
+    emoji: str
 
 
 async def create_access_token(data: dict) -> str:
@@ -752,6 +760,7 @@ async def get_messages(
                 "seen": True,
                 "replyTo": m.get("replyTo"),
                 "edited": bool(m.get("editedAt")),
+                "reactions": m.get("reactions", []),
             }
             for m in msgs
         ]
@@ -797,9 +806,83 @@ async def get_messages(
             "seen": compute_seen(m),
             "replyTo": m.get("replyTo"),
             "edited": bool(m.get("editedAt")),
+            "reactions": m.get("reactions", []),
         }
         for m in msgs
     ]
+
+
+@app.post("/messages/{message_id}/react")
+async def toggle_reaction(
+    message_id: str,
+    req: ReactionRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Add or remove a reaction from a message"""
+    user_id = current_user["chatId"]
+    emoji = req.emoji
+
+    # Validate emoji
+    if emoji not in VALID_REACTIONS:
+        raise HTTPException(status_code=400, detail="Invalid emoji")
+
+    # Get message
+    oid = await try_object_id(message_id)
+    if not oid:
+        raise HTTPException(status_code=400, detail="Invalid message ID")
+
+    msg = await cl_messages.find_one({"_id": oid})
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    chat_id = msg.get("chatId")
+    reactions = msg.get("reactions", [])
+
+    # Find user's existing reaction
+    user_reaction = next((r for r in reactions if r.get("userId") == user_id), None)
+
+    if user_reaction:
+        # User already has a reaction
+        if user_reaction.get("emoji") == emoji:
+            # Same emoji - remove it
+            reactions = [r for r in reactions if r.get("userId") != user_id]
+        else:
+            # Different emoji - replace it
+            for r in reactions:
+                if r.get("userId") == user_id:
+                    r["emoji"] = emoji
+    else:
+        # Add new reaction
+        reactions.append({"userId": user_id, "emoji": emoji})
+
+    # Update message
+    await cl_messages.update_one({"_id": oid}, {"$set": {"reactions": reactions}})
+
+    # Broadcast to participants
+    saved_chat_id = get_saved_messages_id(user_id)
+    is_saved = chat_id == saved_chat_id
+
+    participants = [user_id] if is_saved else []
+    if not is_saved:
+        participants_doc = await cl_chats.find_one(
+            {"_id": chat_id}, {"participants": 1}
+        )
+        participants = (
+            participants_doc.get("participants", []) if participants_doc else []
+        )
+
+    if participants:
+        await broadcast(
+            participants,
+            {
+                "type": "reaction_updated",
+                "chatId": chat_id,
+                "messageId": message_id,
+                "reactions": reactions,
+            },
+        )
+
+    return {"reactions": reactions}
 
 
 async def safe_send(user_id: str, message: dict):
@@ -940,6 +1023,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     "timestamp": utc_now(),
                     "seenBy": [chat_id],
                     "replyTo": reply_to,
+                    "reactions": [],
                 }
 
                 result = await cl_messages.insert_one(message_doc)
@@ -981,6 +1065,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "seen": False,
                             "replyTo": reply_to,
                             "edited": False,
+                            "reactions": [],
                         },
                     }
 
@@ -1043,6 +1128,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         "seen": False,
                         "replyTo": msg.get("replyTo"),
                         "edited": True,
+                        "reactions": msg.get("reactions", []),
                     },
                 }
 
