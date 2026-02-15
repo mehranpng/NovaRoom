@@ -1,4 +1,4 @@
-import { ArrowLeft, Copy, Check, Pencil, X, Save } from 'lucide-react';
+import { ArrowLeft, Copy, Check, Pencil, X, Save, Calendar } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
@@ -194,6 +194,21 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                             </button>
                         </div>
                     </div>
+
+                    {/* Registration Date */}
+                    {user.registrationDate && (
+                        <div className="profile__chat-id-card" style={{ marginTop: 12 }}>
+                            <div className="profile__chat-id-row">
+                                <div>
+                                    <p className="profile__field-label">تاریخ عضویت</p>
+                                    <p className="profile__chat-id-value" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <Calendar size={16} style={{ opacity: 0.7 }} />
+                                        {user.registrationDate}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Editable Fields */}
                     {/* Name */}

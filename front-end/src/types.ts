@@ -6,6 +6,7 @@ export interface User {
     avatar: string;
     online: boolean;
     verified?: boolean;
+    registrationDate?: string;
 }
 
 export interface MessageReply {

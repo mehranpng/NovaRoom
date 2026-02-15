@@ -1,4 +1,4 @@
-import { ArrowLeft, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Copy, Check, Calendar } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
@@ -74,6 +74,16 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
                         </button>
                     </div>
                 </div>
+
+                {user.registrationDate && (
+                    <div className="contact-info__card">
+                        <div className="contact-info__label">تاریخ عضویت</div>
+                        <div className="contact-info__mono" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Calendar size={16} style={{ opacity: 0.7 }} />
+                            {user.registrationDate}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
