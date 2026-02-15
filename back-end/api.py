@@ -31,6 +31,7 @@ from email_service import (
     verify_reset_code,
     clear_reset_code,
 )
+from api_reaction_helper import aggregate_reactions
 
 load_dotenv()
 
@@ -759,7 +760,7 @@ async def get_messages(
                 "seen": True,
                 "replyTo": m.get("replyTo"),
                 "edited": bool(m.get("editedAt")),
-                "reactions": m.get("reactions", []),
+                "reactions": aggregate_reactions(m.get("reactions", [])),
             }
             for m in msgs
         ]
@@ -805,7 +806,7 @@ async def get_messages(
             "seen": compute_seen(m),
             "replyTo": m.get("replyTo"),
             "edited": bool(m.get("editedAt")),
-            "reactions": m.get("reactions", []),
+            "reactions": aggregate_reactions(m.get("reactions", [])),
         }
         for m in msgs
     ]
@@ -818,7 +819,7 @@ async def add_reaction(
     req: ReactionRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    """Add a reaction to a message"""
+    """Add or toggle a reaction to a message"""
     user_id = current_user["chatId"]
     emoji = req.emoji
 
@@ -841,28 +842,23 @@ async def add_reaction(
     user_reaction = next((r for r in reactions if r.get("userId") == user_id), None)
 
     if user_reaction:
-        # User already has a reaction - replace it with new emoji
-        for r in reactions:
-            if r.get("userId") == user_id:
-                r["emoji"] = emoji
+        if user_reaction.get("emoji") == emoji:
+            # Same emoji - remove it (toggle off)
+            reactions = [r for r in reactions if r.get("userId") != user_id]
+        else:
+            # Different emoji - replace it
+            for r in reactions:
+                if r.get("userId") == user_id:
+                    r["emoji"] = emoji
     else:
         # Add new reaction
         reactions.append({"userId": user_id, "emoji": emoji})
 
-    # Aggregate reactions by emoji and count
-    reaction_counts = {}
-    for r in reactions:
-        e = r.get("emoji")
-        reaction_counts[e] = reaction_counts.get(e, 0) + 1
-
-    # Convert to array format with count
-    aggregated_reactions = [
-        {"emoji": emoji, "count": count, "userId": user_id}
-        for emoji, count in reaction_counts.items()
-    ]
-
-    # Update message
+    # Update message with raw reactions
     await cl_messages.update_one({"_id": oid}, {"$set": {"reactions": reactions}})
+
+    # Aggregate for broadcast
+    aggregated_reactions = aggregate_reactions(reactions)
 
     # Broadcast to participants
     saved_chat_id = get_saved_messages_id(user_id)
@@ -914,20 +910,11 @@ async def remove_reaction(
     # Remove user's reaction
     reactions = [r for r in reactions if r.get("userId") != user_id]
 
-    # Aggregate reactions by emoji and count
-    reaction_counts = {}
-    for r in reactions:
-        e = r.get("emoji")
-        reaction_counts[e] = reaction_counts.get(e, 0) + 1
-
-    # Convert to array format with count
-    aggregated_reactions = [
-        {"emoji": emoji, "count": count, "userId": user_id}
-        for emoji, count in reaction_counts.items()
-    ]
-
     # Update message
     await cl_messages.update_one({"_id": oid}, {"$set": {"reactions": reactions}})
+
+    # Aggregate for broadcast
+    aggregated_reactions = aggregate_reactions(reactions)
 
     # Broadcast to participants
     saved_chat_id = get_saved_messages_id(user_id)
@@ -1208,7 +1195,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         "seen": False,
                         "replyTo": msg.get("replyTo"),
                         "edited": True,
-                        "reactions": msg.get("reactions", []),
+                        "reactions": aggregate_reactions(msg.get("reactions", [])),
                     },
                 }
 
