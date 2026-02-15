@@ -191,6 +191,11 @@ class ReactionRequest(BaseModel):
     emoji: str
 
 
+class ForwardMessageRequest(BaseModel):
+    messageId: str
+    targetChatId: str
+
+
 async def create_access_token(data: dict) -> str:
     to_encode = data.copy()
     expire = utc_now() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
@@ -761,6 +766,7 @@ async def get_messages(
                 "replyTo": m.get("replyTo"),
                 "edited": bool(m.get("editedAt")),
                 "reactions": aggregate_reactions(m.get("reactions", [])),
+                "forwardedFrom": m.get("forwardedFrom"),
             }
             for m in msgs
         ]
@@ -807,6 +813,7 @@ async def get_messages(
             "replyTo": m.get("replyTo"),
             "edited": bool(m.get("editedAt")),
             "reactions": aggregate_reactions(m.get("reactions", [])),
+            "forwardedFrom": m.get("forwardedFrom"),
         }
         for m in msgs
     ]
@@ -941,6 +948,128 @@ async def remove_reaction(
         )
 
     return {"reactions": aggregated_reactions}
+
+
+@app.post("/messages/forward")
+async def forward_message(
+    req: ForwardMessageRequest, current_user: dict = Depends(get_current_user)
+):
+    """Forward a message to another chat"""
+    user_id = current_user["chatId"]
+    message_id = req.messageId
+    target_chat_id = req.targetChatId
+
+    # Get original message
+    oid = await try_object_id(message_id)
+    if not oid:
+        raise HTTPException(status_code=400, detail="Invalid message ID")
+
+    original_msg = await cl_messages.find_one({"_id": oid})
+    if not original_msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    # Check if user has access to the original message
+    original_chat_id = original_msg.get("chatId")
+    saved_chat_id = get_saved_messages_id(user_id)
+    
+    # For saved messages, only the owner can forward
+    if original_chat_id == saved_chat_id:
+        pass  # User can forward their own saved messages
+    else:
+        # For regular chats, check if user is a participant
+        chat_doc = await cl_chats.find_one({"_id": original_chat_id})
+        if not chat_doc:
+            raise HTTPException(status_code=404, detail="Original chat not found")
+        
+        participants = chat_doc.get("participants", [])
+        if user_id not in participants:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Check if target chat exists or is saved messages
+    is_target_saved = target_chat_id == get_saved_messages_id(user_id)
+    
+    if not is_target_saved:
+        target_chat = await cl_chats.find_one({"_id": target_chat_id})
+        if not target_chat:
+            raise HTTPException(status_code=404, detail="Target chat not found")
+        
+        target_participants = target_chat.get("participants", [])
+        if user_id not in target_participants:
+            raise HTTPException(status_code=403, detail="Not authorized to send to this chat")
+
+    # Get original sender info
+    original_sender_id = original_msg.get("senderId")
+    original_sender = await cl_users.find_one({"chatId": original_sender_id})
+    
+    forwarded_from_info = {
+        "senderId": original_sender_id,
+        "senderName": original_sender["profile"]["name"] if original_sender else "Unknown",
+        "senderUsername": original_sender["profile"]["username"] if original_sender else "",
+    }
+
+    # Create forwarded message
+    forwarded_msg = {
+        "chatId": target_chat_id,
+        "senderId": user_id,
+        "text": original_msg.get("text", ""),
+        "timestamp": utc_now(),
+        "seenBy": [user_id],
+        "replyTo": None,  # Forwarded messages don't preserve replies
+        "reactions": [],
+        "forwardedFrom": forwarded_from_info,
+    }
+
+    result = await cl_messages.insert_one(forwarded_msg)
+    msg_id = str(result.inserted_id)
+
+    last_msg = {
+        "id": msg_id,
+        "text": forwarded_msg["text"],
+        "senderId": user_id,
+        "timestamp": forwarded_msg["timestamp"],
+    }
+
+    # Update chat document (only for non-saved chats)
+    if not is_target_saved:
+        await cl_chats.update_one(
+            {"_id": target_chat_id},
+            {"$set": {"lastMessage": last_msg, "updatedAt": utc_now()}},
+        )
+
+    # Broadcast to participants
+    participants_to_notify = [user_id] if is_target_saved else []
+    if not is_target_saved:
+        target_chat_doc = await cl_chats.find_one(
+            {"_id": target_chat_id}, {"participants": 1}
+        )
+        participants_to_notify = (
+            target_chat_doc.get("participants", []) if target_chat_doc else []
+        )
+
+    if participants_to_notify:
+        msg_payload = {
+            "type": "new_message",
+            "chatId": target_chat_id,
+            "message": {
+                "id": msg_id,
+                "chatId": target_chat_id,
+                "senderId": user_id,
+                "text": forwarded_msg["text"],
+                "timestamp": dt_to_epoch_ms(forwarded_msg["timestamp"]),
+                "seen": False,
+                "replyTo": None,
+                "edited": False,
+                "reactions": [],
+                "forwardedFrom": forwarded_from_info,
+            },
+        }
+        await broadcast(participants_to_notify, msg_payload)
+
+    return {
+        "success": True,
+        "messageId": msg_id,
+        "chatId": target_chat_id,
+    }
 
 
 async def safe_send(user_id: str, message: dict):
