@@ -463,6 +463,20 @@ export function App() {
         deleteViaWS(activeChatId, messageId);
     }, [activeChatId, deleteViaWS]);
 
+    const handleDeleteAIMessage = useCallback(async (messageId: string) => {
+        try {
+            await apiFetch(`/ai/messages/${encodeURIComponent(messageId)}`, {
+                method: 'DELETE',
+            });
+            
+            // Remove message from UI
+            setAIMessages(prev => prev.filter(m => m.id !== messageId));
+        } catch (error) {
+            console.error('Failed to delete AI message:', error);
+            alert('حذف پیام با خطا مواجه شد');
+        }
+    }, []);
+
     const handleUserSelectedFromModal = useCallback((user: User) => {
         setNewChatModalOpen(false);
 
@@ -691,9 +705,12 @@ export function App() {
                             messages={aiMessages}
                             currentUserId={currentUser!.chatId}
                             onSendMessage={handleSendAIMessage}
+                            onDeleteMessage={handleDeleteAIMessage}
                             onBack={handleBack}
                             loading={aiLoading}
                             isTyping={aiTyping}
+                            chats={chats}
+                            onSelectChat={handleSelectChat}
                         />
                     ) : view === 'chatRoom' && (activeChat || pendingUser || isSavedMessagesActive) ? (
                         <ChatRoom
