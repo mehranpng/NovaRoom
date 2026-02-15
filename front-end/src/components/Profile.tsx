@@ -9,7 +9,7 @@ import { apiFetch } from '../config/api';
 interface ProfileProps {
     user: User;
     onBack: () => void;
-    onUpdateProfile: (updates: Partial<Pick<User, 'name' | 'username' | 'bio' | 'avatar'>>) => void;
+    onUpdateProfile: (updates: Partial<Pick<User, 'name' | 'username' | 'bio' | 'avatar' | 'birthday'>>) => void;
 }
 
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
@@ -21,6 +21,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
     const [bio, setBio] = useState(user.bio);
     const [copiedField, setCopiedField] = useState<string | null>(null);
     const [avatar, setAvatar] = useState(user.avatar);
+    const [birthday, setBirthday] = useState(user.birthday || '');
 
     const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
     const [usernameHint, setUsernameHint] = useState<string>('');
@@ -115,6 +116,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
             username: trimmedUsername,
             bio: bio.trim(),
             avatar,
+            birthday: birthday || undefined,
         });
         setIsEditing(false);
     };
@@ -124,6 +126,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
         setUsername(user.username);
         setBio(user.bio);
         setAvatar(user.avatar);
+        setBirthday(user.birthday || '');
         setIsEditing(false);
         setUsernameStatus('idle');
         setUsernameHint('');
@@ -301,6 +304,27 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                                 >
                                     {copiedField === 'username' ? <Check size={14} /> : <Copy size={14} />}
                                 </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Birthday */}
+                    <div className="profile__field-group">
+                        <label className="profile__field-label">تاریخ تولد</label>
+                        {isEditing ? (
+                            <input
+                                type="date"
+                                value={birthday}
+                                onChange={(e) => setBirthday(e.target.value)}
+                                className="profile__field-input"
+                            />
+                        ) : (
+                            <div className="profile__field-static">
+                                <p>{user.birthday ? new Date(user.birthday).toLocaleDateString('fa-IR', {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric',
+                                }) : 'ثبت نشده'}</p>
                             </div>
                         )}
                     </div>

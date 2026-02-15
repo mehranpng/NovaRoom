@@ -33,6 +33,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    const [birthday, setBirthday] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -258,7 +259,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
         try {
             const data = await apiFetch('/auth/register/complete', {
                 method: 'POST',
-                body: JSON.stringify({ email, name, username: username.trim(), password }),
+                body: JSON.stringify({ email, name, username: username.trim(), password, birthday: birthday || undefined }),
             });
 
             // Clear sessionStorage
@@ -463,6 +464,21 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                                     {usernameHint}
                                 </small>
                             )}
+                        </div>
+
+                        <div className="form-group">
+                            <label>
+                                <UserIcon size={16} />
+                                تاریخ تولد (اختیاری)
+                            </label>
+                            <input
+                                type="date"
+                                value={birthday}
+                                onChange={(e) => {
+                                    setBirthday(e.target.value);
+                                    setError('');
+                                }}
+                            />
                         </div>
 
                         <div className="form-group">
