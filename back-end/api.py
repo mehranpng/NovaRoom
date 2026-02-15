@@ -211,6 +211,10 @@ def get_chat_id_for_two(part1: str, part2: str) -> str:
     return f"chat_{sorted_ids[0]}_{sorted_ids[1]}"
 
 
+def get_saved_messages_id(user_id: str) -> str:
+    return f"saved_messages_{user_id}"
+
+
 @app.on_event("startup")
 async def startup_db():
     await cl_users.create_index("chatId", unique=True)
@@ -576,8 +580,51 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
         await cl_chats.find({"participants": my_id}).sort("updatedAt", -1).to_list(50)
     )
 
+    # Check if user has saved messages
+    saved_chat_id = get_saved_messages_id(my_id)
+    saved_count = await cl_messages.count_documents({"chatId": saved_chat_id})
+
+    result = []
+
+    # Add saved messages chat if it has messages
+    if saved_count > 0:
+        saved_msg = (
+            await cl_messages.find({"chatId": saved_chat_id})
+            .sort("timestamp", -1)
+            .limit(1)
+            .to_list(1)
+        )
+
+        saved_last_msg = None
+        if saved_msg:
+            doc = saved_msg[0]
+            saved_last_msg = {
+                "id": str(doc["_id"]),
+                "text": doc.get("text", ""),
+                "senderId": doc.get("senderId"),
+                "timestamp": doc.get("timestamp"),
+            }
+
+        result.append(
+            {
+                "id": saved_chat_id,
+                "participantIds": [my_id],
+                "otherUser": {
+                    "chatId": "saved",
+                    "name": "پیام‌های ذخیره شده",
+                    "avatar": "",
+                    "username": "saved",
+                    "bio": "",
+                    "online": False,
+                    "verified": False,
+                },
+                "lastMessage": saved_last_msg,
+                "unreadCount": 0,
+            }
+        )
+
     if not chats:
-        return []
+        return result
 
     chat_ids = [c["_id"] for c in chats]
 
@@ -613,7 +660,6 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
     for r in unread_rows:
         unread_map[str(r.get("_id"))] = int(r.get("count", 0))
 
-    result = []
     for chat in chats:
         other_id = next(
             (pid for pid in chat.get("participants", []) if pid != my_id), None
@@ -660,6 +706,11 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
 async def delete_chat(chat_id: str, current_user: dict = Depends(get_current_user)):
     my_id = current_user["chatId"]
 
+    # Prevent deleting saved messages via normal delete endpoint
+    saved_chat_id = get_saved_messages_id(my_id)
+    if chat_id == saved_chat_id:
+        raise HTTPException(status_code=403, detail="Cannot delete saved messages")
+
     chat = await cl_chats.find_one({"_id": chat_id})
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -678,6 +729,32 @@ async def get_messages(
     chat_id: str, limit: int = 50, current_user: dict = Depends(get_current_user)
 ):
     current_user_id = current_user["chatId"]
+
+    # Check if this is saved messages
+    saved_chat_id = get_saved_messages_id(current_user_id)
+    if chat_id == saved_chat_id:
+        # For saved messages, don't mark as seen (no seenBy logic needed)
+        msgs = (
+            await cl_messages.find({"chatId": chat_id})
+            .sort("timestamp", -1)
+            .limit(limit)
+            .to_list(limit)
+        )
+        msgs.reverse()
+
+        return [
+            {
+                "id": str(m["_id"]),
+                "chatId": m["chatId"],
+                "senderId": m["senderId"],
+                "text": m.get("text", ""),
+                "timestamp": dt_to_epoch_ms(m.get("timestamp")),
+                "seen": True,
+                "replyTo": m.get("replyTo"),
+                "edited": bool(m.get("editedAt")),
+            }
+            for m in msgs
+        ]
 
     # Mark messages as seen by the current user.
     await cl_messages.update_many(
@@ -838,6 +915,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 if not chat_id_target or not isinstance(text, str) or not text.strip():
                     continue
 
+                # Check if this is saved messages
+                saved_chat_id = get_saved_messages_id(chat_id)
+                is_saved = chat_id_target == saved_chat_id
+
                 reply_to = None
                 if reply_to_id:
                     oid = await try_object_id(reply_to_id)
@@ -871,18 +952,21 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     "timestamp": message_doc["timestamp"],
                 }
 
-                await cl_chats.update_one(
-                    {"_id": chat_id_target},
-                    {"$set": {"lastMessage": last_msg, "updatedAt": utc_now()}},
-                )
+                # Only update chat document for normal chats (not saved messages)
+                if not is_saved:
+                    await cl_chats.update_one(
+                        {"_id": chat_id_target},
+                        {"$set": {"lastMessage": last_msg, "updatedAt": utc_now()}},
+                    )
 
-                participants_doc = await cl_chats.find_one(
-                    {"_id": chat_id_target}, {"participants": 1}
-                )
-
-                participants = (
-                    participants_doc.get("participants", []) if participants_doc else []
-                )
+                participants = [chat_id] if is_saved else []
+                if not is_saved:
+                    participants_doc = await cl_chats.find_one(
+                        {"_id": chat_id_target}, {"participants": 1}
+                    )
+                    participants = (
+                        participants_doc.get("participants", []) if participants_doc else []
+                    )
 
                 if participants:
                     msg_payload = {
@@ -929,17 +1013,23 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 )
 
                 # Update lastMessage text if it points to this message.
-                await cl_chats.update_one(
-                    {"_id": chat_id_target, "lastMessage.id": message_id},
-                    {"$set": {"lastMessage.text": new_text, "updatedAt": utc_now()}},
-                )
+                saved_chat_id = get_saved_messages_id(chat_id)
+                is_saved = chat_id_target == saved_chat_id
 
-                participants_doc = await cl_chats.find_one(
-                    {"_id": chat_id_target}, {"participants": 1}
-                )
-                participants = (
-                    participants_doc.get("participants", []) if participants_doc else []
-                )
+                if not is_saved:
+                    await cl_chats.update_one(
+                        {"_id": chat_id_target, "lastMessage.id": message_id},
+                        {"$set": {"lastMessage.text": new_text, "updatedAt": utc_now()}},
+                    )
+
+                participants = [chat_id] if is_saved else []
+                if not is_saved:
+                    participants_doc = await cl_chats.find_one(
+                        {"_id": chat_id_target}, {"participants": 1}
+                    )
+                    participants = (
+                        participants_doc.get("participants", []) if participants_doc else []
+                    )
 
                 payload = {
                     "type": "message_edited",
@@ -977,18 +1067,25 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 await cl_messages.delete_one({"_id": oid})
 
                 # Rebuild lastMessage if needed.
-                last_msg = await build_last_message(chat_id_target)
-                await cl_chats.update_one(
-                    {"_id": chat_id_target},
-                    {"$set": {"lastMessage": last_msg, "updatedAt": utc_now()}},
-                )
+                saved_chat_id = get_saved_messages_id(chat_id)
+                is_saved = chat_id_target == saved_chat_id
 
-                participants_doc = await cl_chats.find_one(
-                    {"_id": chat_id_target}, {"participants": 1}
-                )
-                participants = (
-                    participants_doc.get("participants", []) if participants_doc else []
-                )
+                last_msg = None
+                if not is_saved:
+                    last_msg = await build_last_message(chat_id_target)
+                    await cl_chats.update_one(
+                        {"_id": chat_id_target},
+                        {"$set": {"lastMessage": last_msg, "updatedAt": utc_now()}},
+                    )
+
+                participants = [chat_id] if is_saved else []
+                if not is_saved:
+                    participants_doc = await cl_chats.find_one(
+                        {"_id": chat_id_target}, {"participants": 1}
+                    )
+                    participants = (
+                        participants_doc.get("participants", []) if participants_doc else []
+                    )
 
                 out_last = None
                 if last_msg:
@@ -1010,6 +1107,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
             elif data.get("type") == "seen":
                 chat_id_target = data.get("chatId")
                 if chat_id_target:
+                    # Skip seen logic for saved messages
+                    saved_chat_id = get_saved_messages_id(chat_id)
+                    if chat_id_target == saved_chat_id:
+                        continue
+
                     await cl_messages.update_many(
                         {"chatId": chat_id_target, "seenBy": {"$ne": chat_id}},
                         {"$addToSet": {"seenBy": chat_id}},

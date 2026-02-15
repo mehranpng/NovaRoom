@@ -1,4 +1,4 @@
-import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut } from 'lucide-react';
+import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';
@@ -18,6 +18,7 @@ interface ChatListProps {
     onNewChatClick: () => void;
     onLogout: () => void;
     onOpenAIChat: () => void;
+    onOpenSavedMessages: () => void;
     loading?: boolean;
 }
 
@@ -127,6 +128,7 @@ export function ChatList({
     onNewChatClick,
     onLogout,
     onOpenAIChat,
+    onOpenSavedMessages,
     loading = false,
 }: ChatListProps) {
     const [searchQuery, setSearchQuery] = useState('');
@@ -171,7 +173,12 @@ export function ChatList({
         };
     };
 
-    const filteredChats = chats.filter((chat) => {
+    // Separate saved messages chat from regular chats
+    const savedMessagesId = `saved_messages_${currentUser.chatId}`;
+    const savedMessagesChat = chats.find(c => c.id === savedMessagesId);
+    const regularChats = chats.filter(c => c.id !== savedMessagesId);
+
+    const filteredChats = regularChats.filter((chat) => {
         const contact = getContact(chat);
         if (!searchQuery) return true;
         return (
@@ -184,6 +191,9 @@ export function ChatList({
 
     // Check if we should show AI chat in search results
     const showAIChat = !searchQuery || 'novaroom ai'.includes(searchQuery.toLowerCase()) || 'دستیار'.includes(searchQuery);
+    
+    // Check if we should show saved messages in search results
+    const showSavedMessages = savedMessagesChat && (!searchQuery || 'پیام‌های ذخیره شده'.includes(searchQuery) || 'saved'.includes(searchQuery.toLowerCase()));
 
     return (
         <div className="chat-list">
@@ -217,6 +227,10 @@ export function ChatList({
                                 <button className="popover__item" onClick={() => { setMenuOpen(false); onOpenProfile(); }} type="button">
                                     <UserIcon size={16} />
                                     پروفایل
+                                </button>
+                                <button className="popover__item" onClick={() => { setMenuOpen(false); onOpenSavedMessages(); }} type="button">
+                                    <Bookmark size={16} />
+                                    پیام‌های ذخیره شده
                                 </button>
                                 <button className="popover__item popover__item--danger" onClick={() => { setMenuOpen(false); onLogout(); }} type="button">
                                     <LogOut size={16} />
@@ -282,10 +296,50 @@ export function ChatList({
                     </button>
                 )}
 
+                {/* Saved Messages - Show only if it has messages */}
+                {showSavedMessages && savedMessagesChat && (
+                    <button
+                        onClick={() => onSelectChat(savedMessagesChat.id)}
+                        className={cx('chat-list__item', activeChatId === savedMessagesChat.id && 'chat-list__item--active')}
+                    >
+                        <div
+                            style={{
+                                width: '48px',
+                                height: '48px',
+                                borderRadius: '50%',
+                                backgroundColor: 'var(--primary)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                            }}
+                        >
+                            <Bookmark size={24} color="white" />
+                        </div>
+                        <div className="chat-list__item-content">
+                            <div className="chat-list__item-row">
+                                <span className="chat-list__item-name">
+                                    پیام‌های ذخیره شده
+                                </span>
+                                {savedMessagesChat.lastMessage && (
+                                    <span className="chat-list__item-time">
+                                        {formatTime(savedMessagesChat.lastMessage.timestamp)}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="chat-list__item-preview">
+                                <p className="chat-list__item-text">
+                                    {savedMessagesChat.lastMessage?.text || 'پیام‌های ذخیره شده شما'}
+                                </p>
+                            </div>
+                        </div>
+                    </button>
+                )}
+
                 {/* Regular chats */}
                 {loading ? (
                     <ChatListSkeleton />
-                ) : chats.length === 0 ? (
+                ) : regularChats.length === 0 ? (
                     isMobile && !hasActiveChat ? <EmptyState /> : null
                 ) : filteredChats.length === 0 ? (
                     <div className="chat-list__empty">

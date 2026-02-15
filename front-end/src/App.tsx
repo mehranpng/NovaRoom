@@ -370,6 +370,19 @@ export function App() {
         if (!currentUser) return;
         const text = payload.text;
 
+        // Check if this is saved messages chat
+        const savedMessagesId = `saved_messages_${currentUser.chatId}`;
+        if (activeChatId === savedMessagesId) {
+            // Send message to saved messages
+            const success = sendViaWS(savedMessagesId, text, payload.replyToId);
+            if (!success) {
+                console.warn('WebSocket not connected');
+            }
+            // Reload chats to update the saved messages in the list
+            loadChats(false);
+            return;
+        }
+
         // If we are in a "pending" chat (selected from search), create the chat now
         // (only on first message) then send.
         if (!activeChatId && pendingUser) {
@@ -508,6 +521,12 @@ export function App() {
         setView('chatRoom');
     };
 
+    const handleOpenSavedMessages = useCallback(() => {
+        if (!currentUser) return;
+        const savedMessagesId = `saved_messages_${currentUser.chatId}`;
+        handleSelectChat(savedMessagesId);
+    }, [currentUser, handleSelectChat]);
+
     const handleSendAIMessage = useCallback((text: string) => {
         if (!currentUser) return;
 
@@ -539,6 +558,20 @@ export function App() {
         const chat = chats.find(c => c.id === activeChatId);
         if (!chat || !currentUser) {
             return { chatId: '', name: 'Unknown', username: '', bio: '', avatar: '', online: false, verified: false };
+        }
+
+        // Check if this is saved messages
+        const savedMessagesId = `saved_messages_${currentUser.chatId}`;
+        if (chat.id === savedMessagesId) {
+            return {
+                chatId: 'saved',
+                name: 'پیام‌های ذخیره شده',
+                username: 'saved',
+                bio: '',
+                avatar: '',
+                online: false,
+                verified: false,
+            };
         }
 
         if (chat.otherUser) {
@@ -612,6 +645,7 @@ export function App() {
                         onNewChatClick={() => setNewChatModalOpen(true)}
                         onLogout={handleLogout}
                         onOpenAIChat={handleOpenAIChat}
+                        onOpenSavedMessages={handleOpenSavedMessages}
                         loading={isInitialChatsLoad}
                     />
                 </div>
