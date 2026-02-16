@@ -1,5 +1,3 @@
-import { Copy, Pencil, Reply, Trash2 } from 'lucide-react';
-
 interface ReactionPickerProps {
     messageId: string;
     currentReaction?: string;
@@ -10,7 +8,7 @@ interface ReactionPickerProps {
 
 const EMOJIS = ['👍', '👎', '🤣', '😢', '❤️', '💔', '😐'];
 
-export function ReactionPicker({ messageId, currentReaction, onReact, onDeleteReaction, onClose }: ReactionPickerProps) {
+export function ReactionPicker({ messageId, currentReaction, onReact, onDeleteReaction }: ReactionPickerProps) {
     return (
         <div className="reaction-picker">
             <div className="reaction-picker__emojis">

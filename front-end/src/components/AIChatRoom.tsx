@@ -46,7 +46,6 @@ export function AIChatRoom({
     messages,
     currentUserId,
     onSendMessage,
-    onDeleteMessage,
     onBack,
     loading = false,
     isTyping = false,
