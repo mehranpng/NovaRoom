@@ -1,13 +1,13 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
-import { API_BASE_URL } from "../config/config";
-import { User, Message, MessageReaction } from "../types";
-import Avatar from "./Avatar";
-import VerifiedBadge from "./VerifiedBadge";
-import ReactionPicker from "./ReactionPicker";
-import FileUpload from "./FileUpload";
-import FileMessage from "./FileMessage";
-import ForwardModal from "./ForwardModal";
-import ChatMessagesSkeleton from "./ChatMessagesSkeleton";
+import React, { useEffect, useState, useRef } from "react";
+import { API_BASE_URL } from "../config/api";
+import type { User, Message } from "../types";
+import { Avatar } from "./Avatar";
+import { VerifiedBadge } from "./VerifiedBadge";
+import { ReactionPicker } from "./ReactionPicker";
+import { FileUpload } from "./FileUpload";
+import { FileMessage } from "./FileMessage";
+import { ForwardModal } from "./ForwardModal";
+import { ChatMessagesSkeleton } from "./ChatMessagesSkeleton";
 import "./OfficialChannel.css";
 
 interface OfficialChannelMessage extends Message {
@@ -372,11 +372,9 @@ const OfficialChannel: React.FC<OfficialChannelProps> = ({
         </button>
         <div className="channel-info">
           <Avatar
-            src="/ch.png"
-            alt="کانال رسمی"
-            size={40}
+            name=""
+            size="md"
             online={false}
-            verified={true}
           />
           <div className="channel-details">
             <div className="channel-name-container">
@@ -407,11 +405,9 @@ const OfficialChannel: React.FC<OfficialChannelProps> = ({
               >
                 {!isMine && message.senderInfo && (
                   <Avatar
-                    src={message.senderInfo.avatar}
-                    alt={message.senderInfo.name}
-                    size={32}
+                    name={message.senderInfo.name}
+                    size="sm"
                     online={false}
-                    verified={message.senderInfo.verified}
                   />
                 )}
                 <div className="message-content">
@@ -590,7 +586,7 @@ const OfficialChannel: React.FC<OfficialChannelProps> = ({
       {showReactionPicker && (
         <div className="reaction-picker-overlay">
           <ReactionPicker
-            onSelect={(emoji) => handleReaction(showReactionPicker, emoji)}
+            onSelect={(emoji: string) => handleReaction(showReactionPicker, emoji)}
             onClose={() => setShowReactionPicker(null)}
           />
         </div>
