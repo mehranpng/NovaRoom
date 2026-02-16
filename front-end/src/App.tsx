@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import type { Message, View, User, Chat, ChatLastMessage } from './types';
+import type { Message, View, User, Chat, ChatLastMessage, FileMetadata } from './types';
 import { apiFetch } from './config/api';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useAIWebSocket } from './hooks/useAIWebSocket';
@@ -384,7 +384,7 @@ export function App() {
         loadChats(false);
     }, [loadChats, sendSeen, messagesLoadedOnce, currentUser]);
 
-    const handleSendMessage = useCallback(async (payload: { text: string; replyToId?: string; editMessageId?: string }) => {
+    const handleSendMessage = useCallback(async (payload: { text: string; replyToId?: string; editMessageId?: string; file?: FileMetadata }) => {
         if (!currentUser) return;
         const text = payload.text;
 
@@ -392,7 +392,7 @@ export function App() {
         const savedMessagesId = `saved_messages_${currentUser.chatId}`;
         if (activeChatId === savedMessagesId) {
             // Send message to saved messages
-            const success = sendViaWS(savedMessagesId, text, payload.replyToId);
+            const success = sendViaWS(savedMessagesId, text, payload.replyToId, payload.file);
             if (!success) {
                 console.warn('WebSocket not connected');
             }
@@ -429,7 +429,7 @@ export function App() {
                 setPendingUser(null);
                 setView('chatRoom');
 
-                const success = sendViaWS(createdChatId, text, payload.replyToId);
+                const success = sendViaWS(createdChatId, text, payload.replyToId, payload.file);
                 if (!success) {
                     console.warn('WebSocket not connected');
                 }
@@ -452,7 +452,7 @@ export function App() {
             return;
         }
 
-        const success = sendViaWS(activeChatId, text, payload.replyToId);
+        const success = sendViaWS(activeChatId, text, payload.replyToId, payload.file);
         if (!success) {
             console.warn('WebSocket not connected');
         }
