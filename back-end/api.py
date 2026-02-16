@@ -73,6 +73,7 @@ cl_users = db["users"]
 cl_chats = db["chats"]
 cl_messages = db["messages"]
 cl_ai_messages = db["ai_messages"]
+cl_official_ch = db["official_ch"]  # Official channel messages
 
 # Store active connections (multiple tabs/devices per user)
 active_connections: Dict[str, List[WebSocket]] = {}
@@ -81,6 +82,9 @@ security = HTTPBearer()
 
 # Valid emojis for reactions
 VALID_REACTIONS = ["👍", "👎", "🤣", "😢", "❤️", "💔", "😐"]
+
+# Official channel ID
+OFFICIAL_CH_ID = "official_ch"
 
 
 def utc_now() -> datetime:
@@ -207,6 +211,16 @@ class ForwardMessageRequest(BaseModel):
     targetChatId: str
 
 
+class OfficialChSendRequest(BaseModel):
+    text: str
+    replyToId: Optional[str] = None
+    file: Optional[dict] = None
+
+
+class OfficialChEditRequest(BaseModel):
+    text: str
+
+
 async def create_access_token(data: dict) -> str:
     to_encode = data.copy()
     expire = utc_now() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
@@ -250,6 +264,329 @@ async def startup_db():
     await cl_messages.create_index([("chatId", 1), ("timestamp", -1)])
     await cl_ai_messages.create_index("userId")
     await cl_ai_messages.create_index([("userId", 1), ("timestamp", -1)])
+    await cl_official_ch.create_index([("timestamp", -1)])
+
+
+# ==================== OFFICIAL CHANNEL ENDPOINTS ====================
+
+@app.get("/official-ch/info")
+async def get_official_ch_info(current_user: dict = Depends(get_current_user)):
+    """Get official channel info including message count and last message"""
+    total_messages = await cl_official_ch.count_documents({})
+    
+    last_msg_doc = await cl_official_ch.find_one(
+        {}, sort=[("timestamp", -1)]
+    )
+    
+    last_message = None
+    if last_msg_doc:
+        last_message = {
+            "id": str(last_msg_doc["_id"]),
+            "text": last_msg_doc.get("text", ""),
+            "senderId": last_msg_doc.get("sender_id"),
+            "timestamp": dt_to_epoch_ms(last_msg_doc.get("timestamp")),
+        }
+    
+    return {
+        "id": OFFICIAL_CH_ID,
+        "name": "کانال رسمی نوا روم",
+        "avatar": "/avatars/ch.png",
+        "verified": True,
+        "totalMessages": total_messages,
+        "lastMessage": last_message,
+    }
+
+
+@app.get("/official-ch/messages")
+async def get_official_ch_messages(
+    limit: int = 50, current_user: dict = Depends(get_current_user)
+):
+    """Get official channel messages with sender info"""
+    msgs = (
+        await cl_official_ch.find({})
+        .sort("timestamp", -1)
+        .limit(limit)
+        .to_list(limit)
+    )
+    msgs.reverse()
+
+    # Get unique sender IDs
+    sender_ids = list(set(m.get("sender_id") for m in msgs if m.get("sender_id")))
+    
+    # Fetch sender info in one query
+    senders = await cl_users.find({"chatId": {"$in": sender_ids}}).to_list(
+        len(sender_ids) or 1
+    )
+    sender_by_id = {u["chatId"]: u for u in senders}
+
+    result = []
+    for m in msgs:
+        sender_id = m.get("sender_id")
+        sender = sender_by_id.get(sender_id)
+        
+        sender_info = None
+        if sender:
+            sender_info = {
+                "chatId": sender["chatId"],
+                "name": sender["profile"]["name"],
+                "username": sender["profile"]["username"],
+                "avatar": sender["profile"]["avatar"],
+                "verified": bool(sender.get("verified", False)),
+            }
+        
+        result.append({
+            "id": str(m["_id"]),
+            "senderId": sender_id,
+            "senderInfo": sender_info,
+            "text": m.get("text", ""),
+            "timestamp": dt_to_epoch_ms(m.get("timestamp")),
+            "edited": bool(m.get("editedAt")),
+            "reactions": aggregate_reactions(m.get("reactions", [])),
+            "replyTo": m.get("replyTo"),
+            "file": m.get("file"),
+        })
+    
+    return result
+
+
+@app.post("/official-ch/send")
+async def send_official_ch_message(
+    req: OfficialChSendRequest, current_user: dict = Depends(get_current_user)
+):
+    """Send message to official channel (verified users only)"""
+    user_id = current_user["chatId"]
+    
+    # Check if user is verified
+    if not current_user.get("verified", False):
+        raise HTTPException(
+            status_code=403, detail="Only verified users can send messages"
+        )
+    
+    if not req.text.strip() and not req.file:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    
+    # Handle reply
+    reply_to = None
+    if req.replyToId:
+        oid = await try_object_id(req.replyToId)
+        if oid:
+            base = await cl_official_ch.find_one({"_id": oid})
+            if base:
+                reply_to = {
+                    "id": str(base["_id"]),
+                    "senderId": base.get("sender_id"),
+                    "text": base.get("text", ""),
+                }
+    
+    message_doc = {
+        "sender_id": user_id,
+        "text": req.text,
+        "timestamp": utc_now(),
+        "reactions": [],
+        "replyTo": reply_to,
+    }
+    
+    if req.file:
+        message_doc["file"] = req.file
+    
+    result = await cl_official_ch.insert_one(message_doc)
+    msg_id = str(result.inserted_id)
+    
+    # Get sender info for broadcast
+    sender_info = {
+        "chatId": user_id,
+        "name": current_user["profile"]["name"],
+        "username": current_user["profile"]["username"],
+        "avatar": current_user["profile"]["avatar"],
+        "verified": True,
+    }
+    
+    # Broadcast to all connected users
+    all_users = await cl_users.find({}).to_list(None)
+    user_ids = [u["chatId"] for u in all_users]
+    
+    await broadcast(
+        user_ids,
+        {
+            "type": "official_ch_message",
+            "message": {
+                "id": msg_id,
+                "senderId": user_id,
+                "senderInfo": sender_info,
+                "text": req.text,
+                "timestamp": dt_to_epoch_ms(message_doc["timestamp"]),
+                "edited": False,
+                "reactions": [],
+                "replyTo": reply_to,
+                "file": req.file,
+            },
+        },
+    )
+    
+    return {"success": True, "messageId": msg_id}
+
+
+@app.put("/official-ch/edit/{message_id}")
+async def edit_official_ch_message(
+    message_id: str,
+    req: OfficialChEditRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Edit a message in official channel (only message sender)"""
+    user_id = current_user["chatId"]
+    
+    if not req.text.strip():
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    
+    oid = await try_object_id(message_id)
+    if not oid:
+        raise HTTPException(status_code=400, detail="Invalid message ID")
+    
+    msg = await cl_official_ch.find_one({"_id": oid})
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    # Only sender can edit
+    if msg.get("sender_id") != user_id:
+        raise HTTPException(status_code=403, detail="Only sender can edit message")
+    
+    await cl_official_ch.update_one(
+        {"_id": oid},
+        {"$set": {"text": req.text, "editedAt": utc_now()}},
+    )
+    
+    # Get sender info
+    sender_info = {
+        "chatId": user_id,
+        "name": current_user["profile"]["name"],
+        "username": current_user["profile"]["username"],
+        "avatar": current_user["profile"]["avatar"],
+        "verified": bool(current_user.get("verified", False)),
+    }
+    
+    # Broadcast to all users
+    all_users = await cl_users.find({}).to_list(None)
+    user_ids = [u["chatId"] for u in all_users]
+    
+    await broadcast(
+        user_ids,
+        {
+            "type": "official_ch_edited",
+            "message": {
+                "id": message_id,
+                "senderId": user_id,
+                "senderInfo": sender_info,
+                "text": req.text,
+                "timestamp": dt_to_epoch_ms(msg.get("timestamp")),
+                "edited": True,
+                "reactions": aggregate_reactions(msg.get("reactions", [])),
+                "replyTo": msg.get("replyTo"),
+                "file": msg.get("file"),
+            },
+        },
+    )
+    
+    return {"success": True}
+
+
+@app.delete("/official-ch/delete/{message_id}")
+async def delete_official_ch_message(
+    message_id: str, current_user: dict = Depends(get_current_user)
+):
+    """Delete a message from official channel (any verified user)"""
+    user_id = current_user["chatId"]
+    
+    # Check if user is verified
+    if not current_user.get("verified", False):
+        raise HTTPException(
+            status_code=403, detail="Only verified users can delete messages"
+        )
+    
+    oid = await try_object_id(message_id)
+    if not oid:
+        raise HTTPException(status_code=400, detail="Invalid message ID")
+    
+    msg = await cl_official_ch.find_one({"_id": oid})
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    # Delete associated file if present
+    file_data = msg.get("file")
+    if file_data and file_data.get("fileId"):
+        await delete_file(file_data["fileId"])
+    
+    await cl_official_ch.delete_one({"_id": oid})
+    
+    # Broadcast to all users
+    all_users = await cl_users.find({}).to_list(None)
+    user_ids = [u["chatId"] for u in all_users]
+    
+    await broadcast(
+        user_ids,
+        {
+            "type": "official_ch_deleted",
+            "messageId": message_id,
+        },
+    )
+    
+    return {"success": True}
+
+
+@app.post("/official-ch/react/{message_id}")
+async def react_official_ch_message(
+    message_id: str,
+    req: ReactionRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Add or toggle reaction on official channel message (all users)"""
+    user_id = current_user["chatId"]
+    emoji = req.emoji
+    
+    if emoji not in VALID_REACTIONS:
+        raise HTTPException(status_code=400, detail="Invalid emoji")
+    
+    oid = await try_object_id(message_id)
+    if not oid:
+        raise HTTPException(status_code=400, detail="Invalid message ID")
+    
+    msg = await cl_official_ch.find_one({"_id": oid})
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    reactions = msg.get("reactions", [])
+    user_reaction = next((r for r in reactions if r.get("userId") == user_id), None)
+    
+    if user_reaction:
+        if user_reaction.get("emoji") == emoji:
+            reactions = [r for r in reactions if r.get("userId") != user_id]
+        else:
+            for r in reactions:
+                if r.get("userId") == user_id:
+                    r["emoji"] = emoji
+    else:
+        reactions.append({"userId": user_id, "emoji": emoji})
+    
+    await cl_official_ch.update_one({"_id": oid}, {"$set": {"reactions": reactions}})
+    
+    aggregated_reactions = aggregate_reactions(reactions)
+    
+    # Broadcast to all users
+    all_users = await cl_users.find({}).to_list(None)
+    user_ids = [u["chatId"] for u in all_users]
+    
+    await broadcast(
+        user_ids,
+        {
+            "type": "official_ch_reaction",
+            "messageId": message_id,
+            "reactions": aggregated_reactions,
+        },
+    )
+    
+    return {"reactions": aggregated_reactions}
+
+
+# ==================== END OFFICIAL CHANNEL ENDPOINTS ====================
 
 
 @app.post("/auth/register/email")
@@ -1033,12 +1370,12 @@ async def remove_reaction(
 async def forward_message(
     req: ForwardMessageRequest, current_user: dict = Depends(get_current_user)
 ):
-    """Forward a message to another chat (supports both regular and AI messages)"""
+    """Forward a message to another chat (supports regular, AI, and official channel messages)"""
     user_id = current_user["chatId"]
     message_id = req.messageId
     target_chat_id = req.targetChatId
 
-    # Get original message - check both collections
+    # Get original message - check all collections
     oid = await try_object_id(message_id)
     if not oid:
         raise HTTPException(status_code=400, detail="Invalid message ID")
@@ -1046,11 +1383,17 @@ async def forward_message(
     # Try to find in regular messages first
     original_msg = await cl_messages.find_one({"_id": oid})
     is_ai_message = False
+    is_official_ch = False
 
     # If not found, try AI messages
     if not original_msg:
         original_msg = await cl_ai_messages.find_one({"_id": oid})
         is_ai_message = True
+
+    # If still not found, try official channel
+    if not original_msg:
+        original_msg = await cl_official_ch.find_one({"_id": oid})
+        is_official_ch = True
 
     if not original_msg:
         raise HTTPException(status_code=404, detail="Message not found")
@@ -1060,6 +1403,9 @@ async def forward_message(
         # For AI messages, check if it belongs to the user
         if original_msg.get("userId") != user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
+    elif is_official_ch:
+        # All users can forward from official channel
+        pass
     else:
         original_chat_id = original_msg.get("chatId")
         saved_chat_id = get_saved_messages_id(user_id)
@@ -1077,8 +1423,14 @@ async def forward_message(
             if user_id not in participants:
                 raise HTTPException(status_code=403, detail="Not authorized")
 
-    # Check if target chat exists or is saved messages
+    # Check if target chat exists or is saved messages or official channel
     is_target_saved = target_chat_id == get_saved_messages_id(user_id)
+    is_target_official_ch = target_chat_id == OFFICIAL_CH_ID
+
+    if is_target_official_ch:
+        raise HTTPException(
+            status_code=403, detail="Cannot forward messages to official channel"
+        )
 
     if not is_target_saved:
         target_chat = await cl_chats.find_one({"_id": target_chat_id})
@@ -1101,6 +1453,23 @@ async def forward_message(
             "username": "novaroom_ai",
         }
         message_text = original_msg.get("content", "")
+    elif is_official_ch:
+        # For official channel messages
+        original_sender_id = original_msg.get("sender_id")
+        original_sender = await cl_users.find_one({"chatId": original_sender_id})
+        
+        forwarded_from_info = {
+            "originalSenderId": original_sender_id,
+            "name": (
+                original_sender["profile"]["name"] if original_sender else "Unknown"
+            ),
+            "username": (
+                original_sender["profile"]["username"] if original_sender else ""
+            ),
+            "fromChannel": "کانال رسمی نوا روم",
+        }
+        message_text = original_msg.get("text", "")
+        file_data = original_msg.get("file")
     else:
         original_sender_id = original_msg.get("senderId")
         original_sender = await cl_users.find_one({"chatId": original_sender_id})
