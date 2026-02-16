@@ -1,4 +1,4 @@
-import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun } from 'lucide-react';
+import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, Megaphone } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';
@@ -18,6 +18,7 @@ interface ChatListProps {
     onLogout: () => void;
     onOpenAIChat: () => void;
     onOpenSavedMessages: () => void;
+    onOpenOfficialChannel?: () => void;
     loading?: boolean;
 }
 
@@ -135,6 +136,7 @@ export function ChatList({
     onLogout,
     onOpenAIChat,
     onOpenSavedMessages,
+    onOpenOfficialChannel,
     loading = false,
 }: ChatListProps) {
     const [searchQuery, setSearchQuery] = useState('');
@@ -214,6 +216,9 @@ export function ChatList({
 
     // Check if we should show AI chat in search results
     const showAIChat = !searchQuery || 'novaroom ai'.includes(searchQuery.toLowerCase()) || 'دستیار'.includes(searchQuery);
+
+    // Check if we should show Official Channel in search results
+    const showOfficialChannel = !searchQuery || 'کانال رسمی'.includes(searchQuery) || 'official'.includes(searchQuery.toLowerCase()) || 'channel'.includes(searchQuery.toLowerCase());
 
     return (
         <div className="chat-list">
@@ -316,6 +321,45 @@ export function ChatList({
                             <div className="chat-list__item-preview">
                                 <p className="chat-list__item-text">
                                     دستیار هوشمند شما
+                                </p>
+                            </div>
+                        </div>
+                    </button>
+                )}
+
+                {/* Official Channel - Pinned below AI */}
+                {showOfficialChannel && onOpenOfficialChannel && (
+                    <button
+                        onClick={onOpenOfficialChannel}
+                        className="chat-list__item chat-list__item--channel"
+                    >
+                        <div
+                            style={{
+                                width: '48px',
+                                height: '48px',
+                                borderRadius: '50%',
+                                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                            }}
+                        >
+                            <Megaphone size={24} color="white" />
+                        </div>
+                        <div className="chat-list__item-content">
+                            <div className="chat-list__item-row">
+                                <span
+                                    className="chat-list__item-name"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                                >
+                                    کانال رسمی نوا روم
+                                    <VerifiedBadge size={14} />
+                                </span>
+                            </div>
+                            <div className="chat-list__item-preview">
+                                <p className="chat-list__item-text">
+                                    اخبار و اطلاعیه‌ها
                                 </p>
                             </div>
                         </div>
