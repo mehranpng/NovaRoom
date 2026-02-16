@@ -5,9 +5,12 @@ from fastapi import (
     Depends,
     HTTPException,
     Query,
+    UploadFile,
+    File as FastAPIFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from datetime import datetime, timedelta, timezone
 import jwt
@@ -32,6 +35,13 @@ from email_service import (
     clear_reset_code,
 )
 from api_reaction_helper import aggregate_reactions
+from file_service import (
+    save_uploaded_file,
+    delete_file,
+    validate_file_access,
+    get_file_path,
+    MAX_FILE_SIZE,
+)
 
 load_dotenv()
 
@@ -739,6 +749,13 @@ async def delete_chat(chat_id: str, current_user: dict = Depends(get_current_use
     if my_id not in participants:
         raise HTTPException(status_code=403, detail="Not allowed")
 
+    # Delete associated files
+    messages = await cl_messages.find({"chatId": chat_id}).to_list(None)
+    for msg in messages:
+        file_data = msg.get("file")
+        if file_data and file_data.get("fileId"):
+            await delete_file(file_data["fileId"])
+
     await cl_messages.delete_many({"chatId": chat_id})
     await cl_chats.delete_one({"_id": chat_id})
     return {"message": "Chat deleted"}
@@ -774,6 +791,7 @@ async def get_messages(
                 "edited": bool(m.get("editedAt")),
                 "reactions": aggregate_reactions(m.get("reactions", [])),
                 "forwardedFrom": m.get("forwardedFrom"),
+                "file": m.get("file"),
             }
             for m in msgs
         ]
@@ -821,9 +839,64 @@ async def get_messages(
             "edited": bool(m.get("editedAt")),
             "reactions": aggregate_reactions(m.get("reactions", [])),
             "forwardedFrom": m.get("forwardedFrom"),
+            "file": m.get("file"),
         }
         for m in msgs
     ]
+
+
+# File upload endpoint
+@app.post("/files/upload")
+async def upload_file(
+    file: UploadFile = FastAPIFile(...),
+    current_user: dict = Depends(get_current_user),
+):
+    """Upload a file (max 3MB)"""
+    # Read file content
+    file_content = await file.read()
+    
+    # Validate size
+    if len(file_content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File size exceeds maximum allowed size of {MAX_FILE_SIZE / (1024*1024)}MB"
+        )
+    
+    try:
+        # Save file and get metadata
+        file_metadata = await save_uploaded_file(file_content, file.filename or "unnamed")
+        
+        return {
+            "success": True,
+            "file": file_metadata
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"File upload error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to upload file")
+
+
+# File download endpoint
+@app.get("/files/{file_id}")
+async def download_file(
+    file_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Download a file"""
+    # Validate file exists
+    if not validate_file_access(file_id):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Get file path
+    file_path = get_file_path(file_id)
+    
+    # Return file
+    return FileResponse(
+        path=str(file_path),
+        filename=file_id,
+        media_type="application/octet-stream"
+    )
 
 
 @app.post("/chats/{chat_id}/messages/{message_id}/react")
@@ -1019,7 +1092,8 @@ async def forward_message(
                 status_code=403, detail="Not authorized to send to this chat"
             )
 
-    # Get original sender info
+    # Get original sender info and file data
+    file_data = None
     if is_ai_message:
         # For AI messages, the sender is AI
         forwarded_from_info = {
@@ -1038,6 +1112,7 @@ async def forward_message(
             "username": original_sender["profile"]["username"] if original_sender else "",
         }
         message_text = original_msg.get("text", "")
+        file_data = original_msg.get("file")
 
     # Create forwarded message
     forwarded_msg = {
@@ -1050,6 +1125,10 @@ async def forward_message(
         "reactions": [],
         "forwardedFrom": forwarded_from_info,
     }
+    
+    # Add file data if present
+    if file_data:
+        forwarded_msg["file"] = file_data
 
     result = await cl_messages.insert_one(forwarded_msg)
     msg_id = str(result.inserted_id)
@@ -1093,6 +1172,7 @@ async def forward_message(
                 "edited": False,
                 "reactions": [],
                 "forwardedFrom": forwarded_from_info,
+                "file": file_data,
             },
         }
         await broadcast(participants_to_notify, msg_payload)
@@ -1211,10 +1291,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
             if data.get("type") == "message":
                 chat_id_target = data.get("chatId")
-                text = data.get("text")
+                text = data.get("text", "")
                 reply_to_id = data.get("replyToId")
+                file_data = data.get("file")  # File metadata from upload endpoint
 
-                if not chat_id_target or not isinstance(text, str) or not text.strip():
+                # Allow empty text if file is present
+                if not chat_id_target or (not text.strip() and not file_data):
                     continue
 
                 # Check if this is saved messages
@@ -1244,13 +1326,17 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     "replyTo": reply_to,
                     "reactions": [],
                 }
+                
+                # Add file data if present
+                if file_data:
+                    message_doc["file"] = file_data
 
                 result = await cl_messages.insert_one(message_doc)
                 msg_id = str(result.inserted_id)
 
                 last_msg = {
                     "id": msg_id,
-                    "text": text,
+                    "text": text if text else "[File]",
                     "senderId": chat_id,
                     "timestamp": message_doc["timestamp"],
                 }
@@ -1287,6 +1373,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "replyTo": reply_to,
                             "edited": False,
                             "reactions": [],
+                            "file": file_data,
                         },
                     }
 
@@ -1357,6 +1444,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         "replyTo": msg.get("replyTo"),
                         "edited": True,
                         "reactions": aggregate_reactions(msg.get("reactions", [])),
+                        "file": msg.get("file"),
                     },
                 }
 
@@ -1377,6 +1465,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 msg = await cl_messages.find_one({"_id": oid, "chatId": chat_id_target})
                 if not msg or msg.get("senderId") != chat_id:
                     continue
+
+                # Delete associated file if present
+                file_data = msg.get("file")
+                if file_data and file_data.get("fileId"):
+                    await delete_file(file_data["fileId"])
 
                 await cl_messages.delete_one({"_id": oid})
 
