@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, Bookmark, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X, Forward } from 'lucide-react';
-import type { Message, MessageReply as MessageReplyType, User, Chat } from '../types';
+import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { apiFetch } from '../config/api';
@@ -8,13 +8,16 @@ import { ContactInfo } from './ContactInfo';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
 import { ReactionPicker } from './ReactionPicker';
 import { ForwardModal } from './ForwardModal';
+import { FileUpload } from './FileUpload';
+import { FileMessage } from './FileMessage';
+import './FileComponents.css';
 
 interface ChatRoomProps {
     chatId: string;
     contact: User;
     messages: Message[];
     currentUserId: string;
-    onSendMessage: (payload: { text: string; replyToId?: string; editMessageId?: string }) => void;
+    onSendMessage: (payload: { text: string; replyToId?: string; editMessageId?: string; file?: FileMetadata }) => void;
     onDeleteMessage: (messageId: string) => void;
     onBack: () => void;
     onCloseChat: () => void;
@@ -100,6 +103,7 @@ export function ChatRoom({
     onSelectChat,
 }: ChatRoomProps) {
     const [text, setText] = useState('');
+    const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
     const [chatMenuOpen, setChatMenuOpen] = useState(false);
     const [confirmDeleteChat, setConfirmDeleteChat] = useState(false);
     const [confirmDeleteMsg, setConfirmDeleteMsg] = useState<string | null>(null);
@@ -164,6 +168,9 @@ export function ChatRoom({
     // Check if this is saved messages
     const isSavedMessages = contact.chatId === 'saved';
     const canDeleteChat = chatId !== 'pending' && !isSavedMessages;
+
+    // Get token from localStorage
+    const token = localStorage.getItem('token') || '';
 
     const scrollToBottom = (smooth = false) => {
         const container = messagesContainerRef.current;
@@ -372,6 +379,10 @@ export function ChatRoom({
         setMsgMenu(null);
     };
 
+    const handleFileUploaded = (file: FileMetadata) => {
+        setUploadedFile(file);
+    };
+
     // Close menus when clicking outside
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
@@ -426,6 +437,7 @@ export function ChatRoom({
         setMsgMenu(null);
         setReactionMenu(null);
         setText('');
+        setUploadedFile(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
 
@@ -511,15 +523,17 @@ export function ChatRoom({
 
     const submit = () => {
         const t = text.trim();
-        if (!t) return;
+        if (!t && !uploadedFile) return;
 
         onSendMessage({
-            text: t,
+            text: t || '',
             replyToId: replyTo?.id,
             editMessageId: editingId ?? undefined,
+            file: uploadedFile ?? undefined,
         });
 
         setText('');
+        setUploadedFile(null);
         setReplyTo(null);
         setEditingId(null);
         requestAnimationFrame(() => scrollToBottom(true));
@@ -955,7 +969,9 @@ export function ChatRoom({
                                                 </div>
                                             )}
 
-                                            <div className="message-text">{m.text}</div>
+                                            {m.text && <div className="message-text">{m.text}</div>}
+
+                                            {m.file && <FileMessage file={m.file} token={token} />}
 
                                             {m.reactions && m.reactions.length > 0 && (
                                                 <div className="message-reactions">
@@ -1157,7 +1173,25 @@ export function ChatRoom({
                     </div>
                 )}
 
+                {uploadedFile && (
+                    <div className="chat-room__reply-edit-box">
+                        <div style={{ minWidth: 0 }}>
+                            <div className="chat-room__reply-edit-box__title">فایل آپلود شده</div>
+                            <div className="chat-room__reply-edit-box__text">{uploadedFile.fileName}</div>
+                        </div>
+                        <button
+                            type="button"
+                            className="icon-btn"
+                            aria-label="Remove file"
+                            onClick={() => setUploadedFile(null)}
+                        >
+                            <X size={18} />
+                        </button>
+                    </div>
+                )}
+
                 <div className="chat-room__input-wrapper">
+                    <FileUpload token={token} onFileUploaded={handleFileUploaded} />
                     <textarea
                         ref={textareaRef}
                         className="chat-room__text-input"
@@ -1182,12 +1216,12 @@ export function ChatRoom({
                     />
                     <button
                         className={
-                            text.trim()
+                            text.trim() || uploadedFile
                                 ? 'chat-room__send-btn chat-room__send-btn--active'
                                 : 'chat-room__send-btn chat-room__send-btn--disabled'
                         }
                         onClick={submit}
-                        disabled={!text.trim()}
+                        disabled={!text.trim() && !uploadedFile}
                         aria-label="Send"
                         type="button"
                     >
