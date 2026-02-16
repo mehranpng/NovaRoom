@@ -27,6 +27,14 @@ export interface ForwardedFrom {
     username?: string;
 }
 
+export interface FileMetadata {
+    fileId: string;
+    fileName: string;
+    fileSize: number;
+    mimeType: string;
+    uploadedAt: string;
+}
+
 export interface Message {
     id: string;
     chatId: string;
@@ -38,6 +46,7 @@ export interface Message {
     edited?: boolean;
     reactions?: MessageReaction[];
     forwardedFrom?: ForwardedFrom;
+    file?: FileMetadata;
 }
 
 export interface ChatLastMessage {
