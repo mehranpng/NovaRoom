@@ -1021,7 +1021,12 @@ export function ChatRoom({
                 >
                     <button 
                         className="popover__item" 
-                        onClick={() => openReactionMenu(activeMsg.id, msgMenuRef.current!)} 
+                        onClick={() => {
+                            const msgElement = messageElsRef.current.get(activeMsg.id);
+                            if (msgElement) {
+                                openReactionMenu(activeMsg.id, msgElement);
+                            }
+                        }} 
                         type="button"
                     >
                         <Smile size={16} />
