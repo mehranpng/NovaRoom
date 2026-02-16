@@ -468,7 +468,7 @@ export function App() {
             await apiFetch(`/ai/messages/${encodeURIComponent(messageId)}`, {
                 method: 'DELETE',
             });
-            
+
             // Remove message from UI
             setAIMessages(prev => prev.filter(m => m.id !== messageId));
         } catch (error) {

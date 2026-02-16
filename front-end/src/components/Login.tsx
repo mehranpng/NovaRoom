@@ -21,9 +21,9 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
     // Farsi error messages
     const getErrorMessage = (err: any): string => {
         const message = err.message || '';
-        
+
         // Authentication errors
-        if (message.includes('401') || message.includes('Unauthorized') || 
+        if (message.includes('401') || message.includes('Unauthorized') ||
             message.includes('Invalid credentials') || message.includes('incorrect')) {
             return 'ایمیل یا رمز عبور نامعتبر است';
         }
@@ -33,12 +33,12 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
         if (message.includes('Invalid email')) {
             return 'فرمت ایمیل نامعتبر است';
         }
-        
+
         // Network errors
         if (message.includes('Network') || message.includes('fetch')) {
             return 'خطا در ارتباط با سرور. لطفاً دوباره تلاش کنید';
         }
-        
+
         // Generic errors
         if (message.includes('400')) {
             return 'درخواست نامعتبر است';
@@ -46,7 +46,7 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
         if (message.includes('500')) {
             return 'خطای سرور. لطفاً بعداً تلاش کنید';
         }
-        
+
         return 'ایمیل یا رمز عبور نامعتبر است';
     };
 
@@ -90,7 +90,7 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
             <div className="login-page__dark-toggle">
                 <DarkModeToggle isDarkMode={isDarkMode} onToggle={toggleDarkMode} />
             </div>
-            
+
             <div className="login-container">
                 <div className="login-header">
                     <LogIn size={48} strokeWidth={1.5} className="login-header-icon" />
