@@ -684,7 +684,9 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                     "verified": (
                         bool(other_user.get("verified", False)) if other_user else False
                     ),
-                    "registrationDate": other_user.get("registrationDate") if other_user else None,
+                    "registrationDate": (
+                        other_user.get("registrationDate") if other_user else None
+                    ),
                 },
                 "lastMessage": last_msg,
                 "unreadCount": unread_map.get(chat["_id"], 0),
@@ -854,22 +856,21 @@ async def upload_file(
     """Upload a file (max 3MB)"""
     # Read file content
     file_content = await file.read()
-    
+
     # Validate size
     if len(file_content) > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=413,
-            detail=f"File size exceeds maximum allowed size of {MAX_FILE_SIZE / (1024*1024)}MB"
+            detail=f"File size exceeds maximum allowed size of {MAX_FILE_SIZE / (1024*1024)}MB",
         )
-    
+
     try:
         # Save file and get metadata
-        file_metadata = await save_uploaded_file(file_content, file.filename or "unnamed")
-        
-        return {
-            "success": True,
-            "file": file_metadata
-        }
+        file_metadata = await save_uploaded_file(
+            file_content, file.filename or "unnamed"
+        )
+
+        return {"success": True, "file": file_metadata}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -887,15 +888,13 @@ async def download_file(
     # Validate file exists
     if not validate_file_access(file_id):
         raise HTTPException(status_code=404, detail="File not found")
-    
+
     # Get file path
     file_path = get_file_path(file_id)
-    
+
     # Return file
     return FileResponse(
-        path=str(file_path),
-        filename=file_id,
-        media_type="application/octet-stream"
+        path=str(file_path), filename=file_id, media_type="application/octet-stream"
     )
 
 
@@ -1047,12 +1046,12 @@ async def forward_message(
     # Try to find in regular messages first
     original_msg = await cl_messages.find_one({"_id": oid})
     is_ai_message = False
-    
+
     # If not found, try AI messages
     if not original_msg:
         original_msg = await cl_ai_messages.find_one({"_id": oid})
         is_ai_message = True
-    
+
     if not original_msg:
         raise HTTPException(status_code=404, detail="Message not found")
 
@@ -1108,8 +1107,12 @@ async def forward_message(
 
         forwarded_from_info = {
             "originalSenderId": original_sender_id,
-            "name": original_sender["profile"]["name"] if original_sender else "Unknown",
-            "username": original_sender["profile"]["username"] if original_sender else "",
+            "name": (
+                original_sender["profile"]["name"] if original_sender else "Unknown"
+            ),
+            "username": (
+                original_sender["profile"]["username"] if original_sender else ""
+            ),
         }
         message_text = original_msg.get("text", "")
         file_data = original_msg.get("file")
@@ -1125,7 +1128,7 @@ async def forward_message(
         "reactions": [],
         "forwardedFrom": forwarded_from_info,
     }
-    
+
     # Add file data if present
     if file_data:
         forwarded_msg["file"] = file_data
@@ -1326,7 +1329,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     "replyTo": reply_to,
                     "reactions": [],
                 }
-                
+
                 # Add file data if present
                 if file_data:
                     message_doc["file"] = file_data
