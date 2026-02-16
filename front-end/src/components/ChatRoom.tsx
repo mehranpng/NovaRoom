@@ -555,9 +555,9 @@ export function ChatRoom({
         // Check if there's enough space below the message
         const spaceBelow = roomRect.height - (r.bottom - roomRect.top);
         
-        // If not enough space below, position menu above the message
+        // If not enough space below, position menu above the message, aligned to its bottom edge
         if (spaceBelow < menuHeight + 16) {
-            top = (r.top - roomRect.top) - menuHeight;
+            top = (r.bottom - roomRect.top) - menuHeight;
             // Ensure menu doesn't go above header
             top = Math.max(64, top);
         } else {
@@ -592,8 +592,8 @@ export function ChatRoom({
         const spaceBelow = roomRect.height - (r.bottom - roomRect.top);
         
         if (spaceBelow < pickerHeight + 16) {
-            // Position above message
-            top = (r.top - roomRect.top) - pickerHeight;
+            // Position above message, aligned to its bottom edge
+            top = (r.bottom - roomRect.top) - pickerHeight;
             top = Math.max(64, top);
         } else {
             // Position below message
