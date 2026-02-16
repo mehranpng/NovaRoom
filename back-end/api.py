@@ -68,7 +68,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 7
 
 client = AsyncIOMotorClient(os.getenv("MONGO_DB"))
-db = client["Messenger"]
+db = client["Messenger2"]
 cl_users = db["users"]
 cl_chats = db["chats"]
 cl_messages = db["messages"]
