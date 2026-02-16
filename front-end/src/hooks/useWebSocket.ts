@@ -1,6 +1,7 @@
 // useWebSocket.ts
 import { useEffect, useRef, useCallback } from 'react';
 import { API_BASE_URL } from '../config/api';
+import type { FileMetadata } from '../types';
 
 interface UseWebSocketProps {
     token: string | null;
@@ -14,7 +15,7 @@ interface UseWebSocketProps {
 }
 
 type OutgoingEvent =
-    | { type: 'message'; chatId: string; text: string; replyToId?: string }
+    | { type: 'message'; chatId: string; text: string; replyToId?: string; file?: FileMetadata }
     | { type: 'edit_message'; chatId: string; messageId: string; text: string }
     | { type: 'delete_message'; chatId: string; messageId: string }
     | { type: 'seen'; chatId: string }
@@ -158,9 +159,9 @@ export function useWebSocket({
     );
 
     const sendMessage = useCallback(
-        (chatId: string, text: string, replyToId?: string) => {
-            if (!chatId || !text.trim()) return false;
-            return send({ type: 'message', chatId, text, replyToId });
+        (chatId: string, text: string, replyToId?: string, file?: FileMetadata) => {
+            if (!chatId || (!text.trim() && !file)) return false;
+            return send({ type: 'message', chatId, text, replyToId, file });
         },
         [send]
     );
