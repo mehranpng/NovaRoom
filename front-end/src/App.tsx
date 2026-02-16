@@ -7,6 +7,7 @@ import { useAIWebSocket } from './hooks/useAIWebSocket';
 import { ChatList } from './components/ChatList';
 import { ChatRoom } from './components/ChatRoom';
 import { AIChatRoom } from './components/AIChatRoom';
+import OfficialChannel from './components/OfficialChannel';
 import { Profile } from './components/Profile';
 import { EmptyState } from './components/EmptyState';
 import { Login } from './components/Login';
@@ -41,6 +42,9 @@ export function App() {
     const [aiMessages, setAIMessages] = useState<Message[]>([]);
     const [aiLoading, setAILoading] = useState(true);
     const [aiTyping, setAITyping] = useState(false);
+
+    // Official Channel state
+    const [showOfficialChannel, setShowOfficialChannel] = useState(false);
 
     // Track if this is the initial load (show skeleton only once)
     const [isInitialChatsLoad, setIsInitialChatsLoad] = useState(true);
@@ -154,6 +158,7 @@ export function App() {
         setIsInitialChatsLoad(true);
         setMessagesLoadedOnce({});
         setShowAIChat(false);
+        setShowOfficialChannel(false);
         setAIMessages([]);
         navigate('/login', { replace: true });
     }, [navigate]);
@@ -300,14 +305,14 @@ export function App() {
     }, []);
 
     // WebSocket initialization
-    const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen } = useWebSocket({
+    const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen, ws } = useWebSocket({
         token: localStorage.getItem('token'),
         onNewMessage: handleNewMessage,
         onMessageEdited: handleMessageEdited,
         onMessageDeleted: handleMessageDeleted,
         onUserStatusChange: handleUserStatusChange,
         onMessagesSeen: handleMessagesSeen,
-        onReactionUpdated: handleReactionUpdated  // ← ADD THIS LINE
+        onReactionUpdated: handleReactionUpdated
     });
 
 
@@ -351,6 +356,7 @@ export function App() {
     const handleSelectChat = useCallback(async (chatId: string) => {
         setPendingUser(null);
         setShowAIChat(false);
+        setShowOfficialChannel(false);
         setActiveChatId(chatId);
         setView('chatRoom');
 
@@ -510,6 +516,7 @@ export function App() {
         setPendingUser(user);
         setActiveChatId(null);
         setShowAIChat(false);
+        setShowOfficialChannel(false);
         setView('chatRoom');
     }, [currentUser?.chatId, handleSelectChat]);
 
@@ -518,6 +525,7 @@ export function App() {
         setView('chatList');
         setPendingUser(null);
         setShowAIChat(false);
+        setShowOfficialChannel(false);
         // Clear active chat when going back so messages don't get marked as seen
         setActiveChatId(null);
     };
@@ -526,6 +534,7 @@ export function App() {
         setActiveChatId(null);
         setPendingUser(null);
         setShowAIChat(false);
+        setShowOfficialChannel(false);
         setView('chatRoom');
     };
 
@@ -542,6 +551,7 @@ export function App() {
         setActiveChatId(null);
         setPendingUser(null);
         setShowAIChat(false);
+        setShowOfficialChannel(false);
         setView('chatList');
         loadChats(false);
     };
@@ -550,6 +560,15 @@ export function App() {
         setActiveChatId(null);
         setPendingUser(null);
         setShowAIChat(true);
+        setShowOfficialChannel(false);
+        setView('chatRoom');
+    };
+
+    const handleOpenOfficialChannel = () => {
+        setActiveChatId(null);
+        setPendingUser(null);
+        setShowAIChat(false);
+        setShowOfficialChannel(true);
         setView('chatRoom');
     };
 
@@ -680,6 +699,7 @@ export function App() {
                         onLogout={handleLogout}
                         onOpenAIChat={handleOpenAIChat}
                         onOpenSavedMessages={handleOpenSavedMessages}
+                        onOpenOfficialChannel={handleOpenOfficialChannel}
                         loading={isInitialChatsLoad}
                     />
                 </div>
@@ -700,7 +720,14 @@ export function App() {
 
             {view !== 'profile' && (
                 <div className={cx('app__main', view === 'chatList' && 'app__main--hidden-mobile')}>
-                    {view === 'chatRoom' && showAIChat ? (
+                    {view === 'chatRoom' && showOfficialChannel ? (
+                        <OfficialChannel
+                            currentUser={currentUser!}
+                            token={localStorage.getItem('token')!}
+                            onBack={handleBack}
+                            ws={ws}
+                        />
+                    ) : view === 'chatRoom' && showAIChat ? (
                         <AIChatRoom
                             messages={aiMessages}
                             currentUserId={currentUser!.chatId}
