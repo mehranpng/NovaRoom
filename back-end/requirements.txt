@@ -7,3 +7,5 @@ PyJWT
 python-dotenv
 jdatetime
 openai
+python-multipart
+aiofiles
