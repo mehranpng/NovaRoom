@@ -26,9 +26,14 @@ export const getHeaders = (includeAuth = true) => {
 };
 
 export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+    const baseHeaders = isFormData
+        ? Object.fromEntries(Object.entries(getHeaders()).filter(([k]) => k.toLowerCase() !== 'content-type'))
+        : getHeaders();
+
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
-        headers: { ...getHeaders(), ...options.headers },
+        headers: { ...baseHeaders, ...options.headers },
     });
 
     if (!response.ok) {

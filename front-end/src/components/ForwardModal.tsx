@@ -106,7 +106,7 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward,
                                     }}
                                     type="button"
                                 >
-                                    <Avatar name={user.name || user.username} size="md" online={user.online} />
+                                    <Avatar name={user.name || user.username} size="md" online={user.online} src={user.avatar} />
                                     <div className="user-item-info">
                                         <div className="user-name" style={{ fontFamily: 'Vazir, sans-serif', display: 'flex', alignItems: 'center', gap: 4 }}>
                                             {user.name}

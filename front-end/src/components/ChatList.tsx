@@ -226,7 +226,7 @@ export function ChatList({
             <div className="chat-list__header">
                 <div className="chat-list__header-left">
                     <button onClick={onOpenProfile}>
-                        <Avatar name={currentUser.name} size="sm" online={true} />
+                        <Avatar name={currentUser.name} size="sm" online={true} src={currentUser.avatar} />
                     </button>
                     <h1 className="chat-list__title">NovaRoom</h1>
                 </div>
@@ -425,7 +425,7 @@ export function ChatList({
                                 onClick={() => onSelectChat(chat.id)}
                                 className={cx('chat-list__item', isActive && 'chat-list__item--active')}
                             >
-                                <Avatar name={contact.name} size="md" online={contact.online} />
+                                <Avatar name={contact.name} size="md" online={contact.online} src={contact.avatar} />
                                 <div className="chat-list__item-content">
                                     <div className="chat-list__item-row">
                                         <span

@@ -159,6 +159,7 @@ class ProfileUpdate(BaseModel):
     name: Optional[str] = None
     username: Optional[str] = None
     bio: Optional[str] = None
+    avatar: Optional[str] = None
 
 
 class UserSearchResult(BaseModel):
@@ -174,6 +175,14 @@ class UserSearchResult(BaseModel):
 
 class ChatCreateRequest(BaseModel):
     targetChatId: str
+
+
+class GroupCreateRequest(BaseModel):
+    name: str
+
+
+class GroupJoinRequest(BaseModel):
+    inviteCode: str
 
 
 class RegisterEmailRequest(BaseModel):
@@ -251,6 +260,26 @@ def get_chat_id_for_two(part1: str, part2: str) -> str:
 
 def get_saved_messages_id(user_id: str) -> str:
     return f"saved_messages_{user_id}"
+
+
+def build_group_invite_link(invite_code: str) -> str:
+    return f"novaroom://group/{invite_code}"
+
+
+def normalize_group_invite_code(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+
+    deep_link = re.search(r"group/([a-zA-Z0-9]+)", raw)
+    if deep_link and deep_link.group(1):
+        return deep_link.group(1)
+
+    query_link = re.search(r"groupInvite=([a-zA-Z0-9]+)", raw)
+    if query_link and query_link.group(1):
+        return query_link.group(1)
+
+    return raw
 
 
 @app.on_event("startup")
@@ -827,11 +856,36 @@ async def update_profile(
     if updates.bio is not None:
         update_data["profile.bio"] = updates.bio
 
+    if updates.avatar is not None:
+        avatar_value = str(updates.avatar).strip()
+        update_data["profile.avatar"] = avatar_value
+
     if update_data:
         await cl_users.update_one(
             {"chatId": current_user["chatId"]}, {"$set": update_data}
         )
     return {"message": "Profile updated"}
+
+
+@app.get("/profile/groups")
+async def get_profile_groups(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["chatId"]
+    groups = (
+        await cl_chats.find({"chatType": "group", "createdBy": user_id})
+        .sort("updatedAt", -1)
+        .to_list(100)
+    )
+
+    return [
+        {
+            "chatId": g["_id"],
+            "name": g.get("groupName", "گروه"),
+            "inviteCode": g.get("inviteCode", ""),
+            "inviteLink": build_group_invite_link(g.get("inviteCode", "")),
+        }
+        for g in groups
+        if g.get("inviteCode")
+    ]
 
 
 @app.get("/users/username-available")
@@ -938,6 +992,65 @@ async def create_or_get_chat(
     return {"chatId": chat_id, "participants": new_chat["participants"]}
 
 
+@app.post("/groups")
+async def create_group(req: GroupCreateRequest, current_user: dict = Depends(get_current_user)):
+    name = (req.name or "").strip()
+    if len(name) < 3:
+        raise HTTPException(status_code=400, detail="Group name must be at least 3 characters")
+    if len(name) > 64:
+        raise HTTPException(status_code=400, detail="Group name is too long")
+
+    creator_id = current_user["chatId"]
+    chat_id = f"grp_{uuid.uuid4().hex[:16]}"
+    invite_code = uuid.uuid4().hex[:12]
+    now = utc_now()
+
+    new_group = {
+        "_id": chat_id,
+        "participants": [creator_id],
+        "createdAt": now,
+        "updatedAt": now,
+        "lastMessage": None,
+        "chatType": "group",
+        "groupName": name,
+        "groupAvatar": "",
+        "inviteCode": invite_code,
+        "createdBy": creator_id,
+    }
+
+    await cl_chats.insert_one(new_group)
+
+    return {
+        "chatId": chat_id,
+        "name": name,
+        "inviteCode": invite_code,
+        "inviteLink": build_group_invite_link(invite_code),
+    }
+
+
+@app.post("/groups/join")
+async def join_group(req: GroupJoinRequest, current_user: dict = Depends(get_current_user)):
+    invite_code = normalize_group_invite_code(req.inviteCode)
+    if not invite_code:
+        raise HTTPException(status_code=400, detail="Invite code is required")
+
+    group_chat = await cl_chats.find_one({"inviteCode": invite_code, "chatType": "group"})
+    if not group_chat:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    user_id = current_user["chatId"]
+    await cl_chats.update_one(
+        {"_id": group_chat["_id"]},
+        {"$addToSet": {"participants": user_id}, "$set": {"updatedAt": utc_now()}},
+    )
+
+    return {
+        "chatId": group_chat["_id"],
+        "name": group_chat.get("groupName", "گروه بدون نام"),
+        "inviteLink": build_group_invite_link(invite_code),
+    }
+
+
 @app.get("/chats")
 async def get_chat_list(current_user: dict = Depends(get_current_user)):
     my_id = current_user["chatId"]
@@ -989,10 +1102,9 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
         unread_map[str(r.get("_id"))] = int(r.get("count", 0))
 
     for chat in chats:
-        other_id = next(
-            (pid for pid in chat.get("participants", []) if pid != my_id), None
-        )
-        other_user = user_by_id.get(other_id) if other_id else None
+        is_group = chat.get("chatType") == "group"
+        other_id = next((pid for pid in chat.get("participants", []) if pid != my_id), None)
+        other_user = user_by_id.get(other_id) if (other_id and not is_group) else None
 
         last_msg = chat.get("lastMessage")
         if isinstance(last_msg, dict) and last_msg.get("timestamp") is not None:
@@ -1005,25 +1117,17 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
             {
                 "id": chat["_id"],
                 "participantIds": chat.get("participants", []),
+                "chatType": "group" if is_group else "direct",
                 "otherUser": {
-                    "chatId": (
-                        other_user.get("chatId") if other_user else (other_id or "")
-                    ),
-                    "name": other_user["profile"]["name"] if other_user else "Unknown",
-                    "avatar": other_user["profile"]["avatar"] if other_user else "",
-                    "username": (
-                        other_user["profile"]["username"]
-                        if other_user
-                        else (other_id or "")
-                    ),
-                    "bio": other_user["profile"]["bio"] if other_user else "",
-                    "online": other_user.get("online", False) if other_user else False,
-                    "verified": (
-                        bool(other_user.get("verified", False)) if other_user else False
-                    ),
-                    "registrationDate": (
-                        other_user.get("registrationDate") if other_user else None
-                    ),
+                    "chatId": (chat["_id"] if is_group else (other_user.get("chatId") if other_user else (other_id or ""))),
+                    "name": (chat.get("groupName") or "گروه") if is_group else (other_user["profile"]["name"] if other_user else "Unknown"),
+                    "avatar": (chat.get("groupAvatar") or "") if is_group else (other_user["profile"]["avatar"] if other_user else ""),
+                    "username": (f"group_{chat['_id']}") if is_group else (other_user["profile"]["username"] if other_user else (other_id or "")),
+                    "bio": ("گروه" if is_group else (other_user["profile"]["bio"] if other_user else "")),
+                    "online": False if is_group else (other_user.get("online", False) if other_user else False),
+                    "verified": False if is_group else (bool(other_user.get("verified", False)) if other_user else False),
+                    "registrationDate": None if is_group else (other_user.get("registrationDate") if other_user else None),
+                    "isGroup": is_group,
                 },
                 "lastMessage": last_msg,
                 "unreadCount": unread_map.get(chat["_id"], 0),
@@ -1069,6 +1173,30 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
         )
 
     return result
+
+
+@app.get("/chats/{chat_id}/stats")
+async def get_chat_stats(chat_id: str, current_user: dict = Depends(get_current_user)):
+    my_id = current_user["chatId"]
+    chat = await cl_chats.find_one({"_id": chat_id})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    participants = chat.get("participants", [])
+    if my_id not in participants:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    total_members = len(participants)
+    online_members = await cl_users.count_documents(
+        {"chatId": {"$in": participants}, "online": True}
+    )
+
+    return {
+        "chatId": chat_id,
+        "chatType": chat.get("chatType", "direct"),
+        "totalMembers": total_members,
+        "onlineMembers": online_members,
+    }
 
 
 @app.delete("/chats/{chat_id}")
@@ -1135,14 +1263,16 @@ async def get_messages(
             for m in msgs
         ]
 
+    chat_doc = await cl_chats.find_one({"_id": chat_id}, {"participants": 1})
+    participants: List[str] = chat_doc.get("participants", []) if chat_doc else []
+    if current_user_id not in participants:
+        raise HTTPException(status_code=403, detail="Not allowed")
+
     # Mark messages as seen by the current user.
     await cl_messages.update_many(
         {"chatId": chat_id, "seenBy": {"$ne": current_user_id}},
         {"$addToSet": {"seenBy": current_user_id}},
     )
-
-    chat_doc = await cl_chats.find_one({"_id": chat_id}, {"participants": 1})
-    participants: List[str] = chat_doc.get("participants", []) if chat_doc else []
 
     msgs = (
         await cl_messages.find({"chatId": chat_id})
@@ -1675,6 +1805,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 saved_chat_id = get_saved_messages_id(chat_id)
                 is_saved = chat_id_target == saved_chat_id
 
+                if not is_saved:
+                    chat_doc = await cl_chats.find_one({"_id": chat_id_target}, {"participants": 1})
+                    participants = chat_doc.get("participants", []) if chat_doc else []
+                    if chat_id not in participants:
+                        continue
+
                 reply_to = None
                 if reply_to_id:
                     oid = await try_object_id(reply_to_id)
@@ -1772,15 +1908,19 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 if not msg or msg.get("senderId") != chat_id:
                     continue
 
+                saved_chat_id = get_saved_messages_id(chat_id)
+                is_saved = chat_id_target == saved_chat_id
+                if not is_saved:
+                    chat_doc = await cl_chats.find_one({"_id": chat_id_target}, {"participants": 1})
+                    if not chat_doc or chat_id not in chat_doc.get("participants", []):
+                        continue
+
                 await cl_messages.update_one(
                     {"_id": oid},
                     {"$set": {"text": new_text, "editedAt": utc_now()}},
                 )
 
                 # Update lastMessage text if it points to this message.
-                saved_chat_id = get_saved_messages_id(chat_id)
-                is_saved = chat_id_target == saved_chat_id
-
                 if not is_saved:
                     await cl_chats.update_one(
                         {"_id": chat_id_target, "lastMessage.id": message_id},
@@ -1838,6 +1978,13 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 if not msg or msg.get("senderId") != chat_id:
                     continue
 
+                saved_chat_id = get_saved_messages_id(chat_id)
+                is_saved = chat_id_target == saved_chat_id
+                if not is_saved:
+                    chat_doc = await cl_chats.find_one({"_id": chat_id_target}, {"participants": 1})
+                    if not chat_doc or chat_id not in chat_doc.get("participants", []):
+                        continue
+
                 # Delete associated file if present
                 file_data = msg.get("file")
                 if file_data and file_data.get("fileId"):
@@ -1846,9 +1993,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 await cl_messages.delete_one({"_id": oid})
 
                 # Rebuild lastMessage if needed.
-                saved_chat_id = get_saved_messages_id(chat_id)
-                is_saved = chat_id_target == saved_chat_id
-
                 last_msg = None
                 if not is_saved:
                     last_msg = await build_last_message(chat_id_target)
@@ -1893,14 +2037,17 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     if chat_id_target == saved_chat_id:
                         continue
 
+                    chat_doc = await cl_chats.find_one(
+                        {"_id": chat_id_target}, {"participants": 1}
+                    )
+                    if not chat_doc or chat_id not in chat_doc.get("participants", []):
+                        continue
+
                     await cl_messages.update_many(
                         {"chatId": chat_id_target, "seenBy": {"$ne": chat_id}},
                         {"$addToSet": {"seenBy": chat_id}},
                     )
 
-                    chat_doc = await cl_chats.find_one(
-                        {"_id": chat_id_target}, {"participants": 1}
-                    )
                     if chat_doc:
                         participants = chat_doc.get("participants", [])
                         await broadcast(
