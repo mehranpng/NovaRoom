@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X, Forward } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X, Forward, Users, Search } from 'lucide-react';
 import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -102,6 +102,12 @@ export function ChatRoom({
     chats,
     onSelectChat,
 }: ChatRoomProps) {
+    const currentChat = useMemo(
+        () => chats.find((c) => c.id === chatId) || null,
+        [chats, chatId]
+    );
+    const isGroupChat = currentChat?.chatType === 'group';
+
     const [text, setText] = useState('');
     const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
     const [chatMenuOpen, setChatMenuOpen] = useState(false);
@@ -141,11 +147,71 @@ export function ChatRoom({
 
     const [newMsgCount, setNewMsgCount] = useState(0);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
+    const [chatStats, setChatStats] = useState<{ totalMembers: number; onlineMembers: number } | null>(null);
+    const [groupMembers, setGroupMembers] = useState<Record<string, { name: string; username: string; avatar: string; bio: string; chatId: string; verified?: boolean }>>({});
+    const [viewingMemberId, setViewingMemberId] = useState<string | null>(null);
+    const [showMembersList, setShowMembersList] = useState(false);
+    const [memberSearch, setMemberSearch] = useState('');
     const isAtBottomRef = useRef(true);
 
     const prevLenRef = useRef(0);
     const initialScrollDoneRef = useRef(false);
     const lastChatIdRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        if (!isGroupChat) {
+            setChatStats(null);
+            return;
+        }
+
+        let cancelled = false;
+        const loadStats = async () => {
+            try {
+                const stats = await apiFetch(`/chats/${encodeURIComponent(chatId)}/stats`);
+                if (!cancelled) {
+                    setChatStats({
+                        totalMembers: Number(stats?.totalMembers || 0),
+                        onlineMembers: Number(stats?.onlineMembers || 0),
+                    });
+                }
+            } catch {
+                if (!cancelled) setChatStats(null);
+            }
+        };
+
+        loadStats();
+        const timer = window.setInterval(loadStats, 15000);
+        return () => {
+            cancelled = true;
+            window.clearInterval(timer);
+        };
+    }, [chatId, isGroupChat]);
+
+    // Fetch group members for name/avatar display
+    useEffect(() => {
+        if (!isGroupChat) {
+            setGroupMembers({});
+            return;
+        }
+        let cancelled = false;
+        const loadMembers = async () => {
+            try {
+                const members = await apiFetch(`/chats/${encodeURIComponent(chatId)}/members`);
+                if (!cancelled && Array.isArray(members)) {
+                    const map: Record<string, any> = {};
+                    members.forEach((m: any) => {
+                        const id = m.chatId || m.userId || m.username || '';
+                        if (id) map[id] = m;
+                    });
+                    setGroupMembers(map);
+                }
+            } catch {
+                // ignore
+            }
+        };
+        loadMembers();
+        return () => { cancelled = true; };
+    }, [chatId, isGroupChat]);
 
     const swipeRef = useRef<{
         id: string | null;
@@ -665,6 +731,149 @@ export function ChatRoom({
         );
     }
 
+    if (viewingMemberId) {
+        const memberData = groupMembers[viewingMemberId];
+        const memberUser: any = memberData ? {
+            chatId: memberData.chatId || viewingMemberId,
+            name: memberData.name || viewingMemberId,
+            username: memberData.username || '',
+            avatar: memberData.avatar || '',
+            bio: memberData.bio || '',
+            online: false,
+            verified: memberData.verified || false,
+        } : {
+            chatId: viewingMemberId,
+            name: viewingMemberId,
+            username: '',
+            avatar: '',
+            bio: '',
+            online: false,
+        };
+        return (
+            <ContactInfo
+                user={memberUser}
+                onBack={() => setViewingMemberId(null)}
+            />
+        );
+    }
+
+
+    // Members list view (Telegram-style)
+    if (showMembersList) {
+        const membersList = Object.values(groupMembers);
+        const filtered = memberSearch.trim()
+            ? membersList.filter(m =>
+                m.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
+                m.username.toLowerCase().includes(memberSearch.toLowerCase())
+              )
+            : membersList;
+        const onlineCount = membersList.filter(m => (m as any).online).length;
+        const isInviteLink = (s: string) => s.startsWith('senoroom://') || s.startsWith('novaroom://');
+        const inviteLink = contact.username && isInviteLink(contact.username) ? contact.username : null;
+
+        return (
+            <div className="contact-info">
+                {/* Header */}
+                <div className="contact-info__header">
+                    <button className="contact-info__back" onClick={() => setShowMembersList(false)} type="button">
+                        <ArrowLeft size={20} />
+                    </button>
+                    <div className="contact-info__title">اطلاعات گروه</div>
+                    <div className="contact-info__spacer" />
+                </div>
+
+                <div className="contact-info__content">
+                    {/* Group avatar + name */}
+                    <div className="contact-info__avatar">
+                        <Avatar name={contact.name} size="xl" online={false} src={contact.avatar} />
+                        <div className="contact-info__name" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            {contact.name}
+                        </div>
+                        <div className="contact-info__status chat-room__contact-status--online" style={{ color: '#22c55e' }}>
+                            {membersList.length} عضو • {onlineCount} آنلاین
+                        </div>
+                    </div>
+
+                    {/* Invite link card */}
+                    {inviteLink && (
+                        <div className="contact-info__card">
+                            <div className="contact-info__label">لینک دعوت</div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                <div className="contact-info__mono" style={{ fontSize: 13, wordBreak: 'break-all', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <Users size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
+                                    {inviteLink}
+                                </div>
+                                <button
+                                    type="button"
+                                    className="icon-btn"
+                                    style={{ flexShrink: 0 }}
+                                    onClick={() => navigator.clipboard.writeText(inviteLink).catch(() => {})}
+                                >
+                                    <Copy size={18} />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Search */}
+                    <div className="contact-info__card" style={{ padding: '8px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Search size={15} style={{ opacity: 0.5, flexShrink: 0 }} />
+                            <input
+                                type="text"
+                                placeholder="جستجو در اعضا..."
+                                value={memberSearch}
+                                onChange={e => setMemberSearch(e.target.value)}
+                                style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, fontSize: 14, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', direction: 'rtl' }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Members label */}
+                    <div style={{ padding: '8px 4px 4px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'Vazir, sans-serif' }}>
+                        اعضا ({membersList.length})
+                    </div>
+
+                    {/* Members list */}
+                    <div className="contact-info__card" style={{ padding: 0, overflow: 'hidden' }}>
+                        {filtered.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)', fontSize: 14 }}>عضوی یافت نشد</div>
+                        ) : (
+                            filtered.map((member, idx) => (
+                                <div
+                                    key={member.chatId}
+                                    onClick={() => { setShowMembersList(false); setViewingMemberId(member.chatId); }}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 12,
+                                        padding: '10px 16px',
+                                        cursor: 'pointer',
+                                        borderTop: idx > 0 ? '1px solid var(--border-primary)' : 'none',
+                                        transition: 'background 0.15s',
+                                    }}
+                                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+                                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                >
+                                    <Avatar name={member.name} size="md" online={(member as any).online} src={member.avatar} />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>
+                                            {member.name}
+                                            {member.verified && <VerifiedBadge size={14} />}
+                                        </div>
+                                        <div style={{ fontSize: 13, color: (member as any).online ? '#22c55e' : 'var(--text-secondary)', marginTop: 2 }}>
+                                            {(member as any).online ? 'آنلاین' : member.username ? `@${member.username}` : 'آفلاین'}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     const activeMsg = msgMenu ? messages.find((mm) => mm.id === msgMenu.id) : null;
     const activeMsgIsMine = activeMsg ? activeMsg.senderId === currentUserId : false;
     const activeMsgIsForwarded = activeMsg?.forwardedFrom ? true : false;
@@ -687,12 +896,20 @@ export function ChatRoom({
 
                 <button
                     className="chat-room__header-clickable chat-room__header-clickable--full"
-                    onClick={() => !isSavedMessages && setShowContactInfo(true)}
+                    onClick={() => {
+                        if (isSavedMessages) return;
+                        if (isGroupChat) {
+                            setMemberSearch('');
+                            setShowMembersList(true);
+                        } else {
+                            setShowContactInfo(true);
+                        }
+                    }}
                     aria-label={isSavedMessages ? "" : "Open contact info"}
                     type="button"
                     style={isSavedMessages ? { cursor: 'default' } : undefined}
                 >
-                    <Avatar name={contact.name} size="sm" online={contact.online} savedMessages={isSavedMessages} />
+                    <Avatar name={contact.name} size="sm" online={contact.online} savedMessages={isSavedMessages} src={contact.avatar} />
                     <div className="chat-room__header-info">
                         <div
                             className="chat-room__contact-name"
@@ -704,12 +921,16 @@ export function ChatRoom({
                         {!isSavedMessages && (
                             <div
                                 className={
-                                    contact.online
+                                    isGroupChat || contact.online
                                         ? 'chat-room__contact-status chat-room__contact-status--online'
                                         : 'chat-room__contact-status'
                                 }
                             >
-                                {contact.online ? 'آنلاین' : 'آفلاین'}
+                                {isGroupChat
+                                    ? `${chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0} عضو • ${chatStats?.onlineMembers ?? 0} آنلاین`
+                                    : contact.online
+                                        ? 'آنلاین'
+                                        : 'آفلاین'}
                             </div>
                         )}
                     </div>
@@ -773,7 +994,9 @@ export function ChatRoom({
                                     )}
 
                                     <div
-                                        className={isMine ? 'message-row message-row--mine' : 'message-row message-row--theirs'}
+                                        className={isMine 
+                                            ? 'message-row message-row--mine' 
+                                            : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`}
                                         onPointerDown={(e) => {
                                             // Mouse-only here; mobile uses touch handlers below for compatibility.
                                             if (e.pointerType !== 'mouse') return;
@@ -900,6 +1123,26 @@ export function ChatRoom({
                                             swipeRef.current.pointerId = null;
                                         }}
                                     >
+                                        {/* Group: small avatar on left side, only for first/single message in a group */}
+                                        {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--last') && (() => {
+                                            const sender = groupMembers[m.senderId];
+                                            const senderName = sender?.name || m.senderId || 'ناشناس';
+                                            const senderAvatar = sender?.avatar || '';
+                                            return (
+                                                <div
+                                                    style={{
+                                                        position: 'absolute',
+                                                        left: 0,
+                                                        bottom: 0,
+                                                        cursor: 'pointer',
+                                                        zIndex: 1,
+                                                    }}
+                                                    onClick={(e) => { e.stopPropagation(); setViewingMemberId(m.senderId); }}
+                                                >
+                                                    <Avatar name={senderName} size="sm" online={false} src={senderAvatar} />
+                                                </div>
+                                            );
+                                        })()}
                                         <div
                                             ref={(el) => {
                                                 if (!el) {
@@ -929,6 +1172,31 @@ export function ChatRoom({
                                                 boxShadow: isHighlighted ? '0 0 0 3px rgba(245, 158, 11, 0.4)' : undefined,
                                             }}
                                         >
+                                            {/* Group sender name inside bubble - Telegram style */}
+                                            {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--first') && (() => {
+                                                const sender = groupMembers[m.senderId];
+                                                const senderName = sender?.name || m.senderId || 'ناشناس';
+                                                // Generate a consistent color based on sender ID
+                                                const colors = ['#E91E63','#9C27B0','#673AB7','#3F51B5','#2196F3','#00BCD4','#009688','#4CAF50','#FF5722','#FF9800'];
+                                                const colorIdx = m.senderId ? Math.abs(m.senderId.split('').reduce((a,c) => a + c.charCodeAt(0), 0)) % colors.length : 0;
+                                                return (
+                                                    <div
+                                                        onClick={(e) => { e.stopPropagation(); setViewingMemberId(m.senderId); }}
+                                                        style={{
+                                                            fontSize: 13,
+                                                            fontWeight: 700,
+                                                            color: colors[colorIdx],
+                                                            marginBottom: 3,
+                                                            cursor: 'pointer',
+                                                            fontFamily: 'Vazir, sans-serif',
+                                                            lineHeight: '1.2',
+                                                        }}
+                                                    >
+                                                        {senderName}
+                                                    </div>
+                                                );
+                                            })()}
+
                                             {m.forwardedFrom && (
                                                 <div
                                                     style={{

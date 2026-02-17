@@ -213,7 +213,9 @@ export function ChatList({
     const hasActiveChat = Boolean(activeChatId);
 
     // Check if we should show AI chat in search results
-    const showAIChat = !searchQuery || 'novaroom ai'.includes(searchQuery.toLowerCase()) || 'دستیار'.includes(searchQuery);
+    const showAIChat = !searchQuery || 'Senoroom ai'.includes(searchQuery.toLowerCase()) || 'دستیار'.includes(searchQuery);
+
+    // Check if we should show Official Channel in search results
 
     return (
         <div className="chat-list">
@@ -221,9 +223,9 @@ export function ChatList({
             <div className="chat-list__header">
                 <div className="chat-list__header-left">
                     <button onClick={onOpenProfile}>
-                        <Avatar name={currentUser.name} size="sm" online={true} />
+                        <Avatar name={currentUser.name} size="sm" online={true} src={currentUser.avatar} />
                     </button>
-                    <h1 className="chat-list__title">NovaRoom</h1>
+                    <h1 className="chat-list__title">Senoroom</h1>
                 </div>
                 <div className="chat-list__header-actions">
                     <button className="icon-btn" onClick={onNewChatClick}>
@@ -294,7 +296,7 @@ export function ChatList({
                     >
                         <img
                             src="/avatars/ai.png"
-                            alt="NovaRoom AI"
+                            alt="Senoroom AI"
                             style={{
                                 width: '48px',
                                 height: '48px',
@@ -309,7 +311,7 @@ export function ChatList({
                                     className="chat-list__item-name"
                                     style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                                 >
-                                    NovaRoom AI
+                                    Senoroom AI
                                     <VerifiedBadge size={14} />
                                 </span>
                             </div>
@@ -321,6 +323,8 @@ export function ChatList({
                         </div>
                     </button>
                 )}
+
+
 
                 {/* All chats (including saved messages) - sorted by timestamp */}
                 {loading ? (
@@ -381,7 +385,7 @@ export function ChatList({
                                 onClick={() => onSelectChat(chat.id)}
                                 className={cx('chat-list__item', isActive && 'chat-list__item--active')}
                             >
-                                <Avatar name={contact.name} size="md" online={contact.online} />
+                                <Avatar name={contact.name} size="md" online={contact.online} src={contact.avatar} />
                                 <div className="chat-list__item-content">
                                     <div className="chat-list__item-row">
                                         <span

@@ -230,5 +230,12 @@ export function useWebSocket({
         return () => window.clearInterval(interval);
     }, [token, send]);
 
-    return { sendMessage, editMessage, deleteMessage, sendSeen, isConnected: isConnectedRef.current };
+    return { 
+        sendMessage, 
+        editMessage, 
+        deleteMessage, 
+        sendSeen, 
+        isConnected: isConnectedRef.current,
+        ws: socketRef.current
+    };
 }

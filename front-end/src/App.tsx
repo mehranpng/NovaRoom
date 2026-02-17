@@ -13,6 +13,8 @@ import { Login } from './components/Login';
 import { Register } from './components/Register';
 import { ForgotPassword } from './components/ForgotPassword';
 import { NewChatModal } from './components/NewChatModal';
+import { MiniMusicPlayer } from './components/MiniMusicPlayer';
+import { MusicPlayerProvider } from './contexts/MusicPlayerContext';
 import { cx } from './utils/cx';
 import './App.css';
 
@@ -307,7 +309,7 @@ export function App() {
         onMessageDeleted: handleMessageDeleted,
         onUserStatusChange: handleUserStatusChange,
         onMessagesSeen: handleMessagesSeen,
-        onReactionUpdated: handleReactionUpdated  // ← ADD THIS LINE
+        onReactionUpdated: handleReactionUpdated
     });
 
 
@@ -513,6 +515,56 @@ export function App() {
         setView('chatRoom');
     }, [currentUser?.chatId, handleSelectChat]);
 
+
+    const handleCreateGroup = useCallback(async (groupName: string) => {
+        try {
+            await apiFetch('/groups', {
+                method: 'POST',
+                body: JSON.stringify({ name: groupName }),
+            });
+            await loadChats(false);
+            setNewChatModalOpen(false);
+        } catch (error) {
+            console.error(error);
+            alert('ساخت گروه با خطا مواجه شد');
+        }
+    }, [loadChats]);
+
+    const handleJoinGroup = useCallback(async (inviteCode: string) => {
+        try {
+            const res = await apiFetch('/groups/join', {
+                method: 'POST',
+                body: JSON.stringify({ inviteCode }),
+            });
+
+            await loadChats(false);
+            setNewChatModalOpen(false);
+
+            if (res?.chatId) {
+                handleSelectChat(res.chatId);
+            }
+        } catch (error) {
+            console.error(error);
+            alert('عضویت در گروه انجام نشد');
+        }
+    }, [loadChats, handleSelectChat]);
+
+
+    useEffect(() => {
+        if (!isAuthenticated) return;
+
+        const url = new URL(window.location.href);
+        const inviteParam = url.searchParams.get('groupInvite');
+        const pathMatch = url.pathname.match(/\/group\/([a-zA-Z0-9]+)/);
+        const code = (inviteParam || pathMatch?.[1] || '').trim();
+
+        if (!code) return;
+
+        handleJoinGroup(code);
+        url.searchParams.delete('groupInvite');
+        window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+    }, [isAuthenticated, handleJoinGroup]);
+
     const handleOpenProfile = () => setView('profile');
     const handleBack = () => {
         setView('chatList');
@@ -552,6 +604,7 @@ export function App() {
         setShowAIChat(true);
         setView('chatRoom');
     };
+
 
     const handleOpenSavedMessages = useCallback(() => {
         if (!currentUser) return;
@@ -667,77 +720,82 @@ export function App() {
     const isSavedMessagesActive = currentUser && activeChatId === `saved_messages_${currentUser.chatId}`;
 
     return (
-        <div className="app">
-            {view !== 'profile' && (
-                <div className={cx('app__sidebar', view === 'chatRoom' && 'app__sidebar--hidden-mobile')}>
-                    <ChatList
-                        chats={chats}
-                        currentUser={currentUser!}
-                        activeChatId={activeChatId}
-                        onSelectChat={handleSelectChat}
-                        onOpenProfile={handleOpenProfile}
-                        onNewChatClick={() => setNewChatModalOpen(true)}
-                        onLogout={handleLogout}
-                        onOpenAIChat={handleOpenAIChat}
-                        onOpenSavedMessages={handleOpenSavedMessages}
-                        loading={isInitialChatsLoad}
-                    />
-                </div>
-            )}
-
-            {view === 'profile' && currentUser && (
-                <div className="app__main">
-                    <Profile
-                        user={currentUser}
-                        onBack={handleBack}
-                        onUpdateProfile={async (u) => {
-                            await apiFetch('/profile/me', { method: 'PATCH', body: JSON.stringify(u) });
-                            setCurrentUser(prev => (prev ? { ...prev, ...u } : null));
-                        }}
-                    />
-                </div>
-            )}
-
-            {view !== 'profile' && (
-                <div className={cx('app__main', view === 'chatList' && 'app__main--hidden-mobile')}>
-                    {view === 'chatRoom' && showAIChat ? (
-                        <AIChatRoom
-                            messages={aiMessages}
-                            currentUserId={currentUser!.chatId}
-                            onSendMessage={handleSendAIMessage}
-                            onDeleteMessage={handleDeleteAIMessage}
-                            onBack={handleBack}
-                            loading={aiLoading}
-                            isTyping={aiTyping}
+        <MusicPlayerProvider>
+            <MiniMusicPlayer />
+            <div className="app">
+                {view !== 'profile' && (
+                    <div className={cx('app__sidebar', view === 'chatRoom' && 'app__sidebar--hidden-mobile')}>
+                        <ChatList
                             chats={chats}
+                            currentUser={currentUser!}
+                            activeChatId={activeChatId}
                             onSelectChat={handleSelectChat}
+                            onOpenProfile={handleOpenProfile}
+                            onNewChatClick={() => setNewChatModalOpen(true)}
+                            onLogout={handleLogout}
+                            onOpenAIChat={handleOpenAIChat}
+                            onOpenSavedMessages={handleOpenSavedMessages}
+                            loading={isInitialChatsLoad}
                         />
-                    ) : view === 'chatRoom' && (activeChat || pendingUser || isSavedMessagesActive) ? (
-                        <ChatRoom
-                            chatId={activeChatId || 'pending'}
-                            contact={getActiveContact()}
-                            messages={activeMessages}
-                            currentUserId={currentUser!.chatId}
-                            onSendMessage={handleSendMessage}
-                            onDeleteMessage={handleDeleteMessage}
-                            onBack={handleBack}
-                            onCloseChat={handleCloseChat}
-                            onChatDeleted={handleChatDeleted}
-                            loading={activeMessagesLoading}
-                            chats={chats}
-                            onSelectChat={handleSelectChat}
-                        />
-                    ) : (
-                        <EmptyState />
-                    )}
-                </div>
-            )}
+                    </div>
+                )}
 
-            <NewChatModal
-                isOpen={newChatModalOpen}
-                onClose={() => setNewChatModalOpen(false)}
-                onUserSelected={handleUserSelectedFromModal}
-            />
-        </div>
+                {view === 'profile' && currentUser && (
+                    <div className="app__main">
+                        <Profile
+                            user={currentUser}
+                            onBack={handleBack}
+                            onUpdateProfile={async (u) => {
+                                await apiFetch('/profile/me', { method: 'PATCH', body: JSON.stringify(u) });
+                                setCurrentUser(prev => (prev ? { ...prev, ...u } : null));
+                            }}
+                        />
+                    </div>
+                )}
+
+                {view !== 'profile' && (
+                    <div className={cx('app__main', view === 'chatList' && 'app__main--hidden-mobile')}>
+                        {view === 'chatRoom' && showAIChat ? (
+                            <AIChatRoom
+                                messages={aiMessages}
+                                currentUserId={currentUser!.chatId}
+                                onSendMessage={handleSendAIMessage}
+                                onDeleteMessage={handleDeleteAIMessage}
+                                onBack={handleBack}
+                                loading={aiLoading}
+                                isTyping={aiTyping}
+                                chats={chats}
+                                onSelectChat={handleSelectChat}
+                            />
+                        ) : view === 'chatRoom' && (activeChat || pendingUser || isSavedMessagesActive) ? (
+                            <ChatRoom
+                                chatId={activeChatId || 'pending'}
+                                contact={getActiveContact()}
+                                messages={activeMessages}
+                                currentUserId={currentUser!.chatId}
+                                onSendMessage={handleSendMessage}
+                                onDeleteMessage={handleDeleteMessage}
+                                onBack={handleBack}
+                                onCloseChat={handleCloseChat}
+                                onChatDeleted={handleChatDeleted}
+                                loading={activeMessagesLoading}
+                                chats={chats}
+                                onSelectChat={handleSelectChat}
+                            />
+                        ) : (
+                            <EmptyState />
+                        )}
+                    </div>
+                )}
+
+                <NewChatModal
+                    isOpen={newChatModalOpen}
+                    onClose={() => setNewChatModalOpen(false)}
+                    onUserSelected={handleUserSelectedFromModal}
+                    onCreateGroup={handleCreateGroup}
+                    onJoinGroup={handleJoinGroup}
+                />
+            </div>
+        </MusicPlayerProvider>
     );
 }

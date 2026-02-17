@@ -1,8 +1,9 @@
 import type { FileMetadata } from '../types';
 import { formatFileSize, getFileIcon, isImageFile } from '../utils/fileUtils';
-import { Download } from 'lucide-react';
+import { Download, Play, Pause } from 'lucide-react';
 import { API_BASE_URL } from '../config/api';
 import { useState, useEffect } from 'react';
+import { useMusicPlayer } from '../contexts/MusicPlayerContext';
 
 interface FileMessageProps {
     file: FileMetadata;
@@ -13,8 +14,15 @@ export function FileMessage({ file, token }: FileMessageProps) {
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [imageLoading, setImageLoading] = useState(false);
     const [imageError, setImageError] = useState(false);
+    const [audioUrl, setAudioUrl] = useState<string | null>(null);
+    const [audioLoading, setAudioLoading] = useState(false);
+    const [audioError, setAudioError] = useState(false);
     
+    const musicPlayer = useMusicPlayer();
     const isImage = isImageFile(file.mimeType);
+    const isAudio = (file.mimeType || '').startsWith('audio/');
+    const isCurrentTrack = musicPlayer.track?.fileId === file.fileId;
+    const isThisPlaying = isCurrentTrack && musicPlayer.isPlaying;
 
     // Load image with Authorization header
     useEffect(() => {
@@ -65,6 +73,49 @@ export function FileMessage({ file, token }: FileMessageProps) {
             }
         };
     }, [file.fileId, token, isImage]);
+
+    useEffect(() => {
+        if (!isAudio) return;
+
+        let objectUrl: string | null = null;
+        let cancelled = false;
+
+        const loadAudio = async () => {
+            try {
+                setAudioLoading(true);
+                setAudioError(false);
+                const response = await fetch(`${API_BASE_URL}/files/${file.fileId}`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to load audio');
+                }
+
+                const blob = await response.blob();
+                if (!cancelled) {
+                    objectUrl = window.URL.createObjectURL(blob);
+                    setAudioUrl(objectUrl);
+                }
+            } catch (error) {
+                console.error('Failed to load audio:', error);
+                if (!cancelled) setAudioError(true);
+            } finally {
+                if (!cancelled) setAudioLoading(false);
+            }
+        };
+
+        loadAudio();
+
+        return () => {
+            cancelled = true;
+            if (objectUrl) {
+                window.URL.revokeObjectURL(objectUrl);
+            }
+        };
+    }, [file.fileId, isAudio, token]);
 
     const handleDownload = async () => {
         try {
@@ -119,6 +170,46 @@ export function FileMessage({ file, token }: FileMessageProps) {
                             <Download size={20} />
                         </button>
                     </div>
+                </div>
+            ) : isAudio ? (
+                <div className="file-audio-card" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', minWidth: 200 }}>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (audioUrl) {
+                                musicPlayer.playTrack({ fileId: file.fileId, fileName: file.fileName, audioUrl, mimeType: file.mimeType });
+                            }
+                        }}
+                        disabled={audioLoading || audioError || !audioUrl}
+                        style={{
+                            width: 40, height: 40,
+                            borderRadius: '50%',
+                            background: isThisPlaying ? '#2F80ED' : 'rgba(47,128,237,0.12)',
+                            border: 'none',
+                            cursor: (audioLoading || audioError || !audioUrl) ? 'default' : 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: isThisPlaying ? '#fff' : '#2F80ED',
+                            flexShrink: 0,
+                            transition: 'background 0.2s',
+                        }}
+                        type="button"
+                    >
+                        {audioLoading ? (
+                            <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #2F80ED', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
+                        ) : isThisPlaying ? <Pause size={18} /> : <Play size={18} />}
+                    </button>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🎵 {file.fileName}</div>
+                        {audioError && <div style={{ fontSize: 11, color: '#e55' }}>پخش ممکن نشد</div>}
+                        {isCurrentTrack && musicPlayer.duration > 0 && (
+                            <div style={{ fontSize: 11, color: '#888' }}>
+                                {Math.floor(musicPlayer.currentTime / 60)}:{Math.floor(musicPlayer.currentTime % 60).toString().padStart(2,'0')} / {Math.floor(musicPlayer.duration / 60)}:{Math.floor(musicPlayer.duration % 60).toString().padStart(2,'0')}
+                            </div>
+                        )}
+                    </div>
+                    <button onClick={handleDownload} className="file-download-btn" type="button">
+                        <Download size={18} />
+                    </button>
                 </div>
             ) : (
                 <div className="file-attachment" onClick={handleDownload}>
