@@ -375,6 +375,7 @@ const OfficialChannel: React.FC<OfficialChannelProps> = ({
             name=""
             size="md"
             online={false}
+            src={channelInfo?.avatar || ''}
           />
           <div className="channel-details">
             <div className="channel-name-container">
@@ -408,6 +409,7 @@ const OfficialChannel: React.FC<OfficialChannelProps> = ({
                     name={message.senderInfo.name}
                     size="sm"
                     online={false}
+                    src={message.senderInfo.avatar}
                   />
                 )}
                 <div className="message-content">
@@ -457,7 +459,7 @@ const OfficialChannel: React.FC<OfficialChannelProps> = ({
                         </div>
                       )}
 
-                      {message.file && <FileMessage file={message.file} />}
+                      {message.file && <FileMessage file={message.file} token={token} />}
 
                       {message.text && (
                         <div className="message-text">{message.text}</div>
@@ -500,50 +502,52 @@ const OfficialChannel: React.FC<OfficialChannelProps> = ({
       </div>
 
       {/* Input Area */}
-      <div className="official-channel-input">
-        {replyTo && (
-          <div className="reply-preview">
-            <span>پاسخ به: {replyTo.text}</span>
-            <button onClick={() => setReplyTo(null)}>×</button>
-          </div>
-        )}
+      {currentUser.verified ? (
+        <div className="official-channel-input">
+          {replyTo && (
+            <div className="reply-preview">
+              <span>پاسخ به: {replyTo.text}</span>
+              <button onClick={() => setReplyTo(null)}>×</button>
+            </div>
+          )}
 
-        {selectedFile && (
-          <div className="file-preview">
-            <span>{selectedFile.fileName}</span>
-            <button onClick={() => setSelectedFile(null)}>×</button>
-          </div>
-        )}
+          {selectedFile && (
+            <div className="file-preview">
+              <span>{selectedFile.fileName}</span>
+              <button onClick={() => setSelectedFile(null)}>×</button>
+            </div>
+          )}
 
-        <div className="input-row">
-          <FileUpload onFileSelect={handleFileSelect} disabled={uploadingFile} />
-          <textarea
-            ref={inputRef}
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            placeholder={
-              currentUser.verified
-                ? "پیام خود را بنویسید..."
-                : "فقط کاربران تایید شده می‌توانند پیام ارسال کنند"
-            }
-            disabled={!currentUser.verified || sending}
-            rows={1}
-          />
-          <button
-            onClick={handleSend}
-            disabled={!currentUser.verified || sending || uploadingFile}
-            className="send-button"
-          >
-            {sending ? "در حال ارسال..." : "ارسال"}
-          </button>
+          <div className="input-row">
+            <FileUpload onFileSelect={handleFileSelect} disabled={uploadingFile} />
+            <textarea
+              ref={inputRef}
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="پیام خود را بنویسید..."
+              disabled={sending}
+              rows={1}
+            />
+            <button
+              onClick={handleSend}
+              disabled={sending || uploadingFile}
+              className="send-button"
+            >
+              {sending ? "در حال ارسال..." : "ارسال"}
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="official-channel-readonly-notice">
+          این کانال فقط برای کاربران تایید شده قابل ارسال پیام است.
+        </div>
+      )}
 
       {/* Context Menu */}
       {contextMenu && (

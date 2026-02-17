@@ -1,15 +1,22 @@
-import { ArrowLeft, Copy, Check, Pencil, X, Save, Calendar } from 'lucide-react';
+import { ArrowLeft, Copy, Check, Pencil, X, Save, Calendar, Upload, Trash2, Link2, Users } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { cx } from '../utils/cx';
-import { apiFetch } from '../config/api';
+import { API_BASE_URL, apiFetch } from '../config/api';
 
 interface ProfileProps {
     user: User;
     onBack: () => void;
-    onUpdateProfile: (updates: Partial<Pick<User, 'name' | 'username' | 'bio'>>) => void;
+    onUpdateProfile: (updates: Partial<Pick<User, 'name' | 'username' | 'bio' | 'avatar'>>) => Promise<void> | void;
+}
+
+interface OwnedGroup {
+    chatId: string;
+    name: string;
+    inviteCode: string;
+    inviteLink: string;
 }
 
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
@@ -20,6 +27,8 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
     const [username, setUsername] = useState(user.username);
     const [bio, setBio] = useState(user.bio);
     const [copiedField, setCopiedField] = useState<string | null>(null);
+    const [updatingAvatar, setUpdatingAvatar] = useState(false);
+    const [ownedGroups, setOwnedGroups] = useState<OwnedGroup[]>([]);
 
     const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
     const [usernameHint, setUsernameHint] = useState<string>('');
@@ -117,6 +126,54 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
         setIsEditing(false);
     };
 
+    useEffect(() => {
+        const loadOwnedGroups = async () => {
+            try {
+                const groups = await apiFetch('/profile/groups');
+                setOwnedGroups(Array.isArray(groups) ? groups : []);
+            } catch (e) {
+                console.error('Failed to load profile groups', e);
+            }
+        };
+
+        loadOwnedGroups();
+    }, []);
+
+    const updateAvatar = async (avatarValue: string) => {
+        try {
+            setUpdatingAvatar(true);
+            await onUpdateProfile({ avatar: avatarValue });
+        } finally {
+            setUpdatingAvatar(false);
+        }
+    };
+
+    const handleAvatarUpload = async (file: File) => {
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const upload = await apiFetch('/files/upload', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!upload?.file?.fileId) {
+                alert('آپلود تصویر پروفایل موفق نبود');
+                return;
+            }
+
+            await updateAvatar(upload.file.fileId);
+        } catch (error) {
+            console.error(error);
+            alert('خطا در آپلود تصویر پروفایل');
+        }
+    };
+
+    const handleAvatarRemove = async () => {
+        await updateAvatar('');
+    };
+
     const handleCancel = () => {
         setName(user.name);
         setUsername(user.username);
@@ -160,7 +217,35 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
             <div className="profile__content">
                 {/* Avatar & Name Section */}
                 <div className="profile__avatar-section">
-                    <Avatar name={user.name} size="xl" online={true} />
+                    <Avatar name={user.name} size="xl" online={true} src={user.avatar ? `${API_BASE_URL}/files/${user.avatar}` : ''} />
+                    <div className="profile__avatar-actions">
+                        <label className="profile__avatar-btn" aria-disabled={updatingAvatar}>
+                            <Upload size={14} />
+                            عکس پروفایل
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                        handleAvatarUpload(file);
+                                        e.currentTarget.value = '';
+                                    }
+                                }}
+                                disabled={updatingAvatar}
+                                hidden
+                            />
+                        </label>
+                        <button
+                            type="button"
+                            className="profile__avatar-btn profile__avatar-btn--danger"
+                            onClick={handleAvatarRemove}
+                            disabled={updatingAvatar || !user.avatar}
+                        >
+                            <Trash2 size={14} />
+                            حذف عکس
+                        </button>
+                    </div>
                     <h2
                         className="profile__name"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
@@ -316,6 +401,33 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                         <p>
                             شناسه چت شما یکتا بوده و قابل تغییر نیست. نام کاربری خود را با دیگران به اشتراک بگذارید تا بتوانند شما را پیدا کرده و پیام بدهند.
                         </p>
+                    </div>
+
+                    <div className="profile__groups-card">
+                        <div className="profile__groups-title">
+                            <Users size={16} />
+                            گروه‌های ساخته‌شده توسط شما
+                        </div>
+                        {ownedGroups.length === 0 ? (
+                            <p className="profile__groups-empty">هنوز گروهی نساخته‌اید.</p>
+                        ) : (
+                            ownedGroups.map((group) => (
+                                <div className="profile__group-item" key={group.chatId}>
+                                    <div>
+                                        <p className="profile__group-name">{group.name}</p>
+                                        <p className="profile__group-code">کد دعوت: {group.inviteCode}</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="profile__group-copy"
+                                        onClick={() => handleCopy(group.inviteLink, `group-${group.chatId}`)}
+                                    >
+                                        <Link2 size={14} />
+                                        {copiedField === `group-${group.chatId}` ? 'کپی شد' : 'کپی لینک'}
+                                    </button>
+                                </div>
+                            ))
+                        )}
                     </div>
                 </div>
             </div>

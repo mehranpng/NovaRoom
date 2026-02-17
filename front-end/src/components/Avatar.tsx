@@ -1,4 +1,5 @@
 import { Bookmark } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { cx } from '../utils/cx';
 
 interface AvatarProps {
@@ -6,6 +7,7 @@ interface AvatarProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   online?: boolean;
   savedMessages?: boolean;
+  src?: string;
 }
 
 function getColorIndex(name: string): number {
@@ -39,7 +41,57 @@ const iconSizeMap = {
   xl: 40,
 };
 
-export function Avatar({ name, size = 'md', online, savedMessages = false }: AvatarProps) {
+export function Avatar({ name, size = 'md', online, savedMessages = false, src = '' }: AvatarProps) {
+  const [resolvedSrc, setResolvedSrc] = useState<string>('');
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+
+    const loadSrc = async () => {
+      if (!src) {
+        setResolvedSrc('');
+        return;
+      }
+
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setResolvedSrc(src);
+        return;
+      }
+
+      try {
+        const response = await fetch(src, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          setResolvedSrc(src);
+          return;
+        }
+
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (!cancelled) {
+          setResolvedSrc(objectUrl);
+        }
+      } catch {
+        setResolvedSrc(src);
+      }
+    };
+
+    loadSrc();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [src]);
+
   if (savedMessages) {
     return (
       <div className={cx('avatar', `avatar--${size}`)}>
@@ -58,9 +110,13 @@ export function Avatar({ name, size = 'md', online, savedMessages = false }: Ava
 
   return (
     <div className={cx('avatar', `avatar--${size}`)}>
-      <div className={cx('avatar__circle', `avatar-color-${getColorIndex(name)}`)}>
-        {getInitials(name)}
-      </div>
+      {resolvedSrc ? (
+        <img src={resolvedSrc} alt={name} className="avatar__image" loading="lazy" />
+      ) : (
+        <div className={cx('avatar__circle', `avatar-color-${getColorIndex(name)}`)}>
+          {getInitials(name)}
+        </div>
+      )}
       {online !== undefined && (
         <span
           className={cx(

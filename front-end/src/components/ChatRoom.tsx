@@ -692,7 +692,7 @@ export function ChatRoom({
                     type="button"
                     style={isSavedMessages ? { cursor: 'default' } : undefined}
                 >
-                    <Avatar name={contact.name} size="sm" online={contact.online} savedMessages={isSavedMessages} />
+                    <Avatar name={contact.name} size="sm" online={contact.online} savedMessages={isSavedMessages} src={contact.avatar} />
                     <div className="chat-room__header-info">
                         <div
                             className="chat-room__contact-name"
