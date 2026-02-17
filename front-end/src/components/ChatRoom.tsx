@@ -102,6 +102,12 @@ export function ChatRoom({
     chats,
     onSelectChat,
 }: ChatRoomProps) {
+    const currentChat = useMemo(
+        () => chats.find((c) => c.id === chatId) || null,
+        [chats, chatId]
+    );
+    const isGroupChat = currentChat?.chatType === 'group';
+
     const [text, setText] = useState('');
     const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
     const [chatMenuOpen, setChatMenuOpen] = useState(false);
@@ -141,11 +147,41 @@ export function ChatRoom({
 
     const [newMsgCount, setNewMsgCount] = useState(0);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
+    const [chatStats, setChatStats] = useState<{ totalMembers: number; onlineMembers: number } | null>(null);
     const isAtBottomRef = useRef(true);
 
     const prevLenRef = useRef(0);
     const initialScrollDoneRef = useRef(false);
     const lastChatIdRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        if (!isGroupChat) {
+            setChatStats(null);
+            return;
+        }
+
+        let cancelled = false;
+        const loadStats = async () => {
+            try {
+                const stats = await apiFetch(`/chats/${encodeURIComponent(chatId)}/stats`);
+                if (!cancelled) {
+                    setChatStats({
+                        totalMembers: Number(stats?.totalMembers || 0),
+                        onlineMembers: Number(stats?.onlineMembers || 0),
+                    });
+                }
+            } catch {
+                if (!cancelled) setChatStats(null);
+            }
+        };
+
+        loadStats();
+        const timer = window.setInterval(loadStats, 15000);
+        return () => {
+            cancelled = true;
+            window.clearInterval(timer);
+        };
+    }, [chatId, isGroupChat]);
 
     const swipeRef = useRef<{
         id: string | null;
@@ -704,12 +740,16 @@ export function ChatRoom({
                         {!isSavedMessages && (
                             <div
                                 className={
-                                    contact.online
+                                    isGroupChat || contact.online
                                         ? 'chat-room__contact-status chat-room__contact-status--online'
                                         : 'chat-room__contact-status'
                                 }
                             >
-                                {contact.online ? 'آنلاین' : 'آفلاین'}
+                                {isGroupChat
+                                    ? `${chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0} عضو • ${chatStats?.onlineMembers ?? 0} آنلاین`
+                                    : contact.online
+                                        ? 'آنلاین'
+                                        : 'آفلاین'}
                             </div>
                         )}
                     </div>

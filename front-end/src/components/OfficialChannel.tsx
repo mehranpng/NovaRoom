@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import { SendHorizontal } from "lucide-react";
 import { API_BASE_URL } from "../config/api";
 import type { User, Message } from "../types";
 import { Avatar } from "./Avatar";
@@ -382,9 +383,6 @@ const OfficialChannel: React.FC<OfficialChannelProps> = ({
               <h2>کانال رسمی نوا روم</h2>
               <VerifiedBadge />
             </div>
-            <span className="channel-members">
-              {channelInfo?.totalMessages || 0} پیام
-            </span>
           </div>
         </div>
       </div>

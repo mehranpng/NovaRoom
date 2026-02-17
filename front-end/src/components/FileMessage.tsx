@@ -13,8 +13,12 @@ export function FileMessage({ file, token }: FileMessageProps) {
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [imageLoading, setImageLoading] = useState(false);
     const [imageError, setImageError] = useState(false);
+    const [audioUrl, setAudioUrl] = useState<string | null>(null);
+    const [audioLoading, setAudioLoading] = useState(false);
+    const [audioError, setAudioError] = useState(false);
     
     const isImage = isImageFile(file.mimeType);
+    const isAudio = (file.mimeType || '').startsWith('audio/');
 
     // Load image with Authorization header
     useEffect(() => {
@@ -65,6 +69,49 @@ export function FileMessage({ file, token }: FileMessageProps) {
             }
         };
     }, [file.fileId, token, isImage]);
+
+    useEffect(() => {
+        if (!isAudio) return;
+
+        let objectUrl: string | null = null;
+        let cancelled = false;
+
+        const loadAudio = async () => {
+            try {
+                setAudioLoading(true);
+                setAudioError(false);
+                const response = await fetch(`${API_BASE_URL}/files/${file.fileId}`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to load audio');
+                }
+
+                const blob = await response.blob();
+                if (!cancelled) {
+                    objectUrl = window.URL.createObjectURL(blob);
+                    setAudioUrl(objectUrl);
+                }
+            } catch (error) {
+                console.error('Failed to load audio:', error);
+                if (!cancelled) setAudioError(true);
+            } finally {
+                if (!cancelled) setAudioLoading(false);
+            }
+        };
+
+        loadAudio();
+
+        return () => {
+            cancelled = true;
+            if (objectUrl) {
+                window.URL.revokeObjectURL(objectUrl);
+            }
+        };
+    }, [file.fileId, isAudio, token]);
 
     const handleDownload = async () => {
         try {
@@ -119,6 +166,22 @@ export function FileMessage({ file, token }: FileMessageProps) {
                             <Download size={20} />
                         </button>
                     </div>
+                </div>
+            ) : isAudio ? (
+                <div className="file-audio-card">
+                    <div className="file-audio-title">🎵 {file.fileName}</div>
+                    {audioLoading ? (
+                        <div className="file-size">در حال آماده‌سازی پخش...</div>
+                    ) : audioError || !audioUrl ? (
+                        <div className="file-size">پخش موزیک ممکن نشد</div>
+                    ) : (
+                        <audio controls preload="metadata" className="file-audio-player">
+                            <source src={audioUrl} type={file.mimeType} />
+                        </audio>
+                    )}
+                    <button onClick={handleDownload} className="file-download-btn" type="button">
+                        <Download size={18} />
+                    </button>
                 </div>
             ) : (
                 <div className="file-attachment" onClick={handleDownload}>

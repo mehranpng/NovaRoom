@@ -1159,6 +1159,30 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
     return result
 
 
+@app.get("/chats/{chat_id}/stats")
+async def get_chat_stats(chat_id: str, current_user: dict = Depends(get_current_user)):
+    my_id = current_user["chatId"]
+    chat = await cl_chats.find_one({"_id": chat_id})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    participants = chat.get("participants", [])
+    if my_id not in participants:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    total_members = len(participants)
+    online_members = await cl_users.count_documents(
+        {"chatId": {"$in": participants}, "online": True}
+    )
+
+    return {
+        "chatId": chat_id,
+        "chatType": chat.get("chatType", "direct"),
+        "totalMembers": total_members,
+        "onlineMembers": online_members,
+    }
+
+
 @app.delete("/chats/{chat_id}")
 async def delete_chat(chat_id: str, current_user: dict = Depends(get_current_user)):
     my_id = current_user["chatId"]
