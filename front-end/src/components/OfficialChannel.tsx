@@ -375,6 +375,7 @@ const OfficialChannel: React.FC<OfficialChannelProps> = ({
             name=""
             size="md"
             online={false}
+            src={channelInfo?.avatar || ''}
           />
           <div className="channel-details">
             <div className="channel-name-container">
@@ -408,6 +409,7 @@ const OfficialChannel: React.FC<OfficialChannelProps> = ({
                     name={message.senderInfo.name}
                     size="sm"
                     online={false}
+                    src={message.senderInfo.avatar}
                   />
                 )}
                 <div className="message-content">
@@ -457,7 +459,7 @@ const OfficialChannel: React.FC<OfficialChannelProps> = ({
                         </div>
                       )}
 
-                      {message.file && <FileMessage file={message.file} />}
+                      {message.file && <FileMessage file={message.file} token={token} />}
 
                       {message.text && (
                         <div className="message-text">{message.text}</div>

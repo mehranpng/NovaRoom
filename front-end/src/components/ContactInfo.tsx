@@ -39,7 +39,7 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
 
             <div className="contact-info__content">
                 <div className="contact-info__avatar">
-                    <Avatar name={user.name} size="xl" online={user.online} />
+                    <Avatar name={user.name} size="xl" online={user.online} src={user.avatar} />
                     <div
                         className="contact-info__name"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}

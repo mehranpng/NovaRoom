@@ -159,6 +159,7 @@ class ProfileUpdate(BaseModel):
     name: Optional[str] = None
     username: Optional[str] = None
     bio: Optional[str] = None
+    avatar: Optional[str] = None
 
 
 class UserSearchResult(BaseModel):
@@ -839,11 +840,36 @@ async def update_profile(
     if updates.bio is not None:
         update_data["profile.bio"] = updates.bio
 
+    if updates.avatar is not None:
+        avatar_value = str(updates.avatar).strip()
+        update_data["profile.avatar"] = avatar_value
+
     if update_data:
         await cl_users.update_one(
             {"chatId": current_user["chatId"]}, {"$set": update_data}
         )
     return {"message": "Profile updated"}
+
+
+@app.get("/profile/groups")
+async def get_profile_groups(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["chatId"]
+    groups = (
+        await cl_chats.find({"chatType": "group", "createdBy": user_id})
+        .sort("updatedAt", -1)
+        .to_list(100)
+    )
+
+    return [
+        {
+            "chatId": g["_id"],
+            "name": g.get("groupName", "گروه"),
+            "inviteCode": g.get("inviteCode", ""),
+            "inviteLink": build_group_invite_link(g.get("inviteCode", "")),
+        }
+        for g in groups
+        if g.get("inviteCode")
+    ]
 
 
 @app.get("/users/username-available")
