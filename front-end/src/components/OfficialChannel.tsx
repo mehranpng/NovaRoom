@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { Copy, Forward, SendHorizontal, SmilePlus } from "lucide-react";
+import { SendHorizontal } from "lucide-react";
 import { API_BASE_URL } from "../config/api";
 import type { User, Message } from "../types";
 import { Avatar } from "./Avatar";
@@ -564,14 +564,10 @@ const OfficialChannel: React.FC<OfficialChannelProps> = ({
             />
             <button
               onClick={handleSend}
-              disabled={sending || uploadingFile || (!inputText.trim() && !selectedFile)}
-              className={
-                sending || uploadingFile || (!inputText.trim() && !selectedFile)
-                  ? "chat-room__send-btn chat-room__send-btn--disabled"
-                  : "chat-room__send-btn chat-room__send-btn--active"
-              }
+              disabled={sending || uploadingFile}
+              className="send-button"
             >
-              <SendHorizontal size={18} />
+              {sending ? "در حال ارسال..." : "ارسال"}
             </button>
           </div>
         </div>
