@@ -520,6 +520,56 @@ export function App() {
         setView('chatRoom');
     }, [currentUser?.chatId, handleSelectChat]);
 
+
+    const handleCreateGroup = useCallback(async (groupName: string) => {
+        try {
+            await apiFetch('/groups', {
+                method: 'POST',
+                body: JSON.stringify({ name: groupName }),
+            });
+            await loadChats(false);
+            setNewChatModalOpen(false);
+        } catch (error) {
+            console.error(error);
+            alert('ساخت گروه با خطا مواجه شد');
+        }
+    }, [loadChats]);
+
+    const handleJoinGroup = useCallback(async (inviteCode: string) => {
+        try {
+            const res = await apiFetch('/groups/join', {
+                method: 'POST',
+                body: JSON.stringify({ inviteCode }),
+            });
+
+            await loadChats(false);
+            setNewChatModalOpen(false);
+
+            if (res?.chatId) {
+                handleSelectChat(res.chatId);
+            }
+        } catch (error) {
+            console.error(error);
+            alert('عضویت در گروه انجام نشد');
+        }
+    }, [loadChats, handleSelectChat]);
+
+
+    useEffect(() => {
+        if (!isAuthenticated) return;
+
+        const url = new URL(window.location.href);
+        const inviteParam = url.searchParams.get('groupInvite');
+        const pathMatch = url.pathname.match(/\/group\/([a-zA-Z0-9]+)/);
+        const code = (inviteParam || pathMatch?.[1] || '').trim();
+
+        if (!code) return;
+
+        handleJoinGroup(code);
+        url.searchParams.delete('groupInvite');
+        window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+    }, [isAuthenticated, handleJoinGroup]);
+
     const handleOpenProfile = () => setView('profile');
     const handleBack = () => {
         setView('chatList');
@@ -764,6 +814,8 @@ export function App() {
                 isOpen={newChatModalOpen}
                 onClose={() => setNewChatModalOpen(false)}
                 onUserSelected={handleUserSelectedFromModal}
+                onCreateGroup={handleCreateGroup}
+                onJoinGroup={handleJoinGroup}
             />
         </div>
     );

@@ -61,6 +61,7 @@ export interface Chat {
     otherUser: any;
     id: string;
     participantIds: string[];
+    chatType?: 'direct' | 'group';
     lastMessage?: ChatLastMessage | null;
     unreadCount: number;
 }
