@@ -265,3 +265,34 @@
 .file-image-overlay .file-download-btn:hover {
   background: rgba(0, 0, 0, 0.8);
 }
+
+.file-audio-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  max-width: 320px;
+}
+
+.message-bubble--mine .file-audio-card {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.file-audio-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  direction: ltr;
+  text-align: left;
+}
+
+.message-bubble--mine .file-audio-title {
+  color: rgba(255,255,255,0.95);
+}
+
+.file-audio-player {
+  width: 100%;
+  height: 36px;
+}
