@@ -266,22 +266,6 @@ def build_group_invite_link(invite_code: str) -> str:
     return f"novaroom://group/{invite_code}"
 
 
-def normalize_group_invite_code(value: str) -> str:
-    raw = (value or "").strip()
-    if not raw:
-        return ""
-
-    deep_link = re.search(r"group/([a-zA-Z0-9]+)", raw)
-    if deep_link and deep_link.group(1):
-        return deep_link.group(1)
-
-    query_link = re.search(r"groupInvite=([a-zA-Z0-9]+)", raw)
-    if query_link and query_link.group(1):
-        return query_link.group(1)
-
-    return raw
-
-
 @app.on_event("startup")
 async def startup_db():
     await cl_users.create_index("chatId", unique=True)
@@ -1030,7 +1014,7 @@ async def create_group(req: GroupCreateRequest, current_user: dict = Depends(get
 
 @app.post("/groups/join")
 async def join_group(req: GroupJoinRequest, current_user: dict = Depends(get_current_user)):
-    invite_code = normalize_group_invite_code(req.inviteCode)
+    invite_code = (req.inviteCode or "").strip()
     if not invite_code:
         raise HTTPException(status_code=400, detail="Invite code is required")
 

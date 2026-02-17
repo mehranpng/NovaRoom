@@ -174,7 +174,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
                                             }
                                         }}
                                     >
-                                        <Avatar name={user.name} size="md" online={user.online} src={user.avatar} />
+                                        <Avatar name={user.name} size="md" online={user.online} />
                                         <div style={{ flex: 1 }}>
                                             <div
                                                 className="user-name"
