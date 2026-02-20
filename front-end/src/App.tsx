@@ -518,12 +518,12 @@ export function App() {
 
     const handleCreateGroup = useCallback(async (groupName: string) => {
         try {
-            await apiFetch('/groups', {
+            const res = await apiFetch('/groups', {
                 method: 'POST',
                 body: JSON.stringify({ name: groupName }),
             });
             await loadChats(false);
-            setNewChatModalOpen(false);
+            return res; // Return the response to NewChatModal to show the link!
         } catch (error) {
             console.error(error);
             alert('ساخت گروه با خطا مواجه شد');
