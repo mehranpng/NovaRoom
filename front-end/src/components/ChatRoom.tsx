@@ -125,7 +125,6 @@ export function ChatRoom({
 
     const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number }>(null);
     const [reactionMenu, setReactionMenu] = useState<null | { id: string; top: number; left: number }>(null);
-    const [showReactionUsers, setShowReactionUsers] = useState(false);
 
     const menuRef = useRef<HTMLDivElement | null>(null);
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
@@ -469,7 +468,6 @@ export function ChatRoom({
             setChatMenuOpen(false);
             setMsgMenu(null);
             setReactionMenu(null);
-            setShowReactionUsers(false);
         };
 
         document.addEventListener('mousedown', onDocClick);
@@ -495,7 +493,6 @@ export function ChatRoom({
         setEditingId(null);
         setMsgMenu(null);
         setReactionMenu(null);
-        setShowReactionUsers(false);
         setText('');
         setUploadedFile(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -646,7 +643,6 @@ export function ChatRoom({
 
         setMsgMenu({ id: messageId, top, left: finalLeft });
         setReactionMenu(null);
-        setShowReactionUsers(false);
     };
 
     const openReactionMenu = (messageId: string, targetEl: HTMLElement) => {
@@ -675,7 +671,6 @@ export function ChatRoom({
         const finalLeft = Math.max(12, Math.min(left, maxLeft));
 
         setReactionMenu({ id: messageId, top, left: finalLeft });
-        setShowReactionUsers(false);
         setMsgMenu(null);
     };
 
@@ -867,7 +862,8 @@ export function ChatRoom({
         r.userIds && Array.isArray(r.userIds) && r.userIds.includes(currentUserId)
     );
 
-    const reactionUsersList: { userId: string; emoji: string; name: string }[] = [];
+    // Build reaction users list with member data
+    const reactionUsersList: { userId: string; emoji: string; name: string; avatar: string; verified: boolean }[] = [];
     if (reactionMsg?.reactions && reactionMsg.reactions.length > 0) {
         reactionMsg.reactions.forEach((r: any) => {
             const ids: string[] = r.userIds || [];
@@ -877,6 +873,8 @@ export function ChatRoom({
                     userId: uid,
                     emoji: r.emoji,
                     name: member?.name || uid,
+                    avatar: member?.avatar || '',
+                    verified: member?.verified || false,
                 });
             });
         });
@@ -957,16 +955,8 @@ export function ChatRoom({
                         {chatMenuOpen && canDeleteChat && (
                             <div className="popover popover--mini popover--right">
                                 {isGroupChat ? (
-                                    isVerifiedUser ? (
-                                        <button
-                                            className="popover__item popover__item--danger"
-                                            onClick={() => { setConfirmDeleteChat(true); setChatMenuOpen(false); }}
-                                            type="button"
-                                        >
-                                            <Trash2 size={16} />
-                                            حذف گروه
-                                        </button>
-                                    ) : (
+                                    <>
+                                        {/* خروج از گروه — همه کاربران گروه */}
                                         <button
                                             className="popover__item popover__item--danger"
                                             onClick={() => { setConfirmLeaveGroup(true); setChatMenuOpen(false); }}
@@ -975,7 +965,18 @@ export function ChatRoom({
                                             <LogOut size={16} />
                                             خروج از گروه
                                         </button>
-                                    )
+                                        {/* حذف گروه — فقط verified */}
+                                        {isVerifiedUser && (
+                                            <button
+                                                className="popover__item popover__item--danger"
+                                                onClick={() => { setConfirmDeleteChat(true); setChatMenuOpen(false); }}
+                                                type="button"
+                                            >
+                                                <Trash2 size={16} />
+                                                حذف گروه
+                                            </button>
+                                        )}
+                                    </>
                                 ) : (
                                     <button
                                         className="popover__item popover__item--danger"
@@ -1287,11 +1288,12 @@ export function ChatRoom({
                     <ReactionPicker
                         messageId={reactionMsg.id}
                         currentReaction={myReaction?.emoji}
-                        onReact={(id, emoji) => { handleReact(id, emoji); setShowReactionUsers(false); }}
-                        onDeleteReaction={(id) => { handleDeleteReaction(id); setShowReactionUsers(false); }}
-                        onClose={() => { setReactionMenu(null); setShowReactionUsers(false); }}
+                        onReact={(id, emoji) => handleReact(id, emoji)}
+                        onDeleteReaction={(id) => handleDeleteReaction(id)}
+                        onClose={() => setReactionMenu(null)}
                     />
 
+                    {/* باکس واکنش‌دهندگان — همیشه باز، بدون نیاز به کلیک */}
                     {reactionUsersList.length > 0 && (
                         <div
                             style={{
@@ -1300,41 +1302,56 @@ export function ChatRoom({
                                 border: '1px solid var(--border-primary)',
                                 borderRadius: 12,
                                 overflow: 'hidden',
-                                minWidth: 200,
+                                minWidth: 220,
                                 boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
                             }}
                         >
+                            {/* هدر */}
                             <div
                                 style={{
-                                    padding: '8px 12px',
-                                    fontSize: 12,
+                                    padding: '7px 12px',
+                                    fontSize: 11,
+                                    fontWeight: 600,
                                     color: 'var(--text-secondary)',
                                     borderBottom: '1px solid var(--border-primary)',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
+                                    fontFamily: 'Vazir, sans-serif',
                                 }}
-                                onClick={() => setShowReactionUsers(v => !v)}
                             >
-                                <span>واکنش‌دهندگان ({reactionUsersList.length})</span>
-                                <span style={{ fontSize: 10 }}>{showReactionUsers ? '▲' : '▼'}</span>
+                                واکنش‌دهندگان ({reactionUsersList.length})
                             </div>
-                            {showReactionUsers && reactionUsersList.map((ru, i) => (
+
+                            {/* لیست کاربران */}
+                            {reactionUsersList.map((ru, i) => (
                                 <div
                                     key={i}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setReactionMenu(null);
+                                        setViewingMemberId(ru.userId);
+                                    }}
                                     style={{
                                         display: 'flex',
                                         alignItems: 'center',
-                                        gap: 8,
-                                        padding: '7px 12px',
+                                        gap: 10,
+                                        padding: '8px 12px',
                                         borderTop: i > 0 ? '1px solid var(--border-primary)' : 'none',
-                                        fontSize: 13,
-                                        color: 'var(--text-primary)',
+                                        cursor: 'pointer',
+                                        transition: 'background 0.12s',
                                     }}
+                                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary, rgba(0,0,0,0.04))')}
+                                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                                 >
-                                    <span style={{ fontSize: 16 }}>{ru.emoji}</span>
-                                    <span>{ru.name}</span>
+                                    {/* آواتار */}
+                                    <Avatar name={ru.name} size="xs" online={false} src={ru.avatar} />
+                                    {/* اسم + تیک آبی */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
+                                        <span style={{ fontSize: 13, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {ru.name}
+                                        </span>
+                                        {ru.verified && <VerifiedBadge size={13} />}
+                                    </div>
+                                    {/* ایموجی */}
+                                    <span style={{ fontSize: 18, flexShrink: 0 }}>{ru.emoji}</span>
                                 </div>
                             ))}
                         </div>
