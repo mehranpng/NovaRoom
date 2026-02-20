@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X, Forward, Users, Search } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X, Forward, Users, Search, LogOut } from 'lucide-react';
 import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -17,6 +17,7 @@ interface ChatRoomProps {
     contact: User;
     messages: Message[];
     currentUserId: string;
+    currentUser?: User | null;
     onSendMessage: (payload: { text: string; replyToId?: string; editMessageId?: string; file?: FileMetadata }) => void;
     onDeleteMessage: (messageId: string) => void;
     onBack: () => void;
@@ -36,7 +37,6 @@ function normalizeTs(ts: any): number {
         return Number.isFinite(n) ? n : Date.now();
     }
     if (typeof ts === 'number') {
-        // Support seconds timestamps too
         return ts < 1_000_000_000_000 ? ts * 1000 : ts;
     }
     if (ts instanceof Date) return ts.getTime();
@@ -74,8 +74,8 @@ function formatDayLabel(ts: any) {
     const thatDay = iranDayNumber(ts);
     const diffDays = today - thatDay;
 
-    if (diffDays === 0) return 'امروز';
-    if (diffDays === 1) return 'دیروز';
+    if (diffDays === 0) return '\u0627\u0645\u0631\u0648\u0632';
+    if (diffDays === 1) return '\u062f\u06cc\u0631\u0648\u0632';
 
     const d = iranShiftedDate(ts);
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
@@ -93,6 +93,7 @@ export function ChatRoom({
     contact,
     messages,
     currentUserId,
+    currentUser,
     onSendMessage,
     onDeleteMessage,
     onBack,
@@ -107,11 +108,13 @@ export function ChatRoom({
         [chats, chatId]
     );
     const isGroupChat = currentChat?.chatType === 'group';
+    const isVerifiedUser = Boolean(currentUser?.verified);
 
     const [text, setText] = useState('');
     const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
     const [chatMenuOpen, setChatMenuOpen] = useState(false);
     const [confirmDeleteChat, setConfirmDeleteChat] = useState(false);
+    const [confirmLeaveGroup, setConfirmLeaveGroup] = useState(false);
     const [confirmDeleteMsg, setConfirmDeleteMsg] = useState<string | null>(null);
     const [showContactInfo, setShowContactInfo] = useState(false);
     const [forwardModalOpen, setForwardModalOpen] = useState(false);
@@ -122,12 +125,15 @@ export function ChatRoom({
 
     const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number }>(null);
     const [reactionMenu, setReactionMenu] = useState<null | { id: string; top: number; left: number }>(null);
+    // show reaction users list below the emoji picker
+    const [showReactionUsers, setShowReactionUsers] = useState(false);
 
     const menuRef = useRef<HTMLDivElement | null>(null);
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
     const reactionMenuRef = useRef<HTMLDivElement | null>(null);
     const confirmDeleteChatRef = useRef<HTMLDivElement | null>(null);
     const confirmDeleteMsgRef = useRef<HTMLDivElement | null>(null);
+    const confirmLeaveGroupRef = useRef<HTMLDivElement | null>(null);
 
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -187,7 +193,6 @@ export function ChatRoom({
         };
     }, [chatId, isGroupChat]);
 
-    // Fetch group members for name/avatar display
     useEffect(() => {
         if (!isGroupChat) {
             setGroupMembers({});
@@ -231,11 +236,9 @@ export function ChatRoom({
         blockClickUntil: 0,
     });
 
-    // Check if this is saved messages
     const isSavedMessages = contact.chatId === 'saved';
     const canDeleteChat = chatId !== 'pending' && !isSavedMessages;
 
-    // Get token from localStorage
     const token = localStorage.getItem('token') || '';
 
     const scrollToBottom = (smooth = false) => {
@@ -245,8 +248,6 @@ export function ChatRoom({
             container.scrollTo({ top, behavior: smooth ? 'smooth' : 'auto' });
             return;
         }
-
-        // Fallback (should be rare): if container is not available, scroll the end marker.
         const el = messagesEndRef.current;
         if (!el) return;
         el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
@@ -259,25 +260,18 @@ export function ChatRoom({
         return distanceFromBottom < 120;
     };
 
-    // Auto-resize textarea based on content
     const resizeTextarea = () => {
         const textarea = textareaRef.current;
         if (!textarea) return;
-        
-        // Reset height to auto to get the correct scrollHeight
         textarea.style.height = 'auto';
-        
-        // Set height based on scrollHeight, with min and max constraints
         const newHeight = Math.min(Math.max(textarea.scrollHeight, 44), 200);
         textarea.style.height = `${newHeight}px`;
     };
 
-    // Resize on text change
     useEffect(() => {
         resizeTextarea();
     }, [text]);
 
-    // Keep input just above mobile keyboard (iOS/Android browsers) by using VisualViewport.
     useEffect(() => {
         const room = roomRef.current;
         if (!room) return;
@@ -298,7 +292,6 @@ export function ChatRoom({
             const keyboard = Math.max(0, window.innerHeight - vv.height - offsetTop);
             el.style.setProperty('--keyboard-offset', `${Math.round(keyboard)}px`);
 
-            // If the user is already at the bottom, keep it pinned when keyboard shows/hides.
             if (isAtBottomRef.current) {
                 if (raf) cancelAnimationFrame(raf);
                 raf = requestAnimationFrame(() => scrollToBottom(false));
@@ -340,7 +333,6 @@ export function ChatRoom({
 
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-        // Start highlight timer only when the target has actually reached the viewport.
         if (highlightRafRef.current) cancelAnimationFrame(highlightRafRef.current);
         const startedAt = performance.now();
 
@@ -396,7 +388,6 @@ export function ChatRoom({
     const handleReact = async (messageId: string, emoji: string) => {
         setReactionMenu(null);
         setMsgMenu(null);
-        
         try {
             await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, {
                 method: 'POST',
@@ -410,7 +401,6 @@ export function ChatRoom({
     const handleDeleteReaction = async (messageId: string) => {
         setReactionMenu(null);
         setMsgMenu(null);
-        
         try {
             await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, {
                 method: 'DELETE',
@@ -422,7 +412,6 @@ export function ChatRoom({
 
     const handleForwardMessage = async (targetChatId: string) => {
         if (!forwardingMessageId) return;
-        
         try {
             await apiFetch('/messages/forward', {
                 method: 'POST',
@@ -435,7 +424,7 @@ export function ChatRoom({
             setForwardingMessageId(null);
         } catch (error) {
             console.error('Failed to forward message:', error);
-            alert('فوروارد پیام با خطا مواجه شد');
+            alert('\u0641\u0648\u0631\u0648\u0627\u0631\u062f \u067e\u06cc\u0627\u0645 \u0628\u0627 \u062e\u0637\u0627 \u0645\u0648\u0627\u062c\u0647 \u0634\u062f');
         }
     };
 
@@ -449,15 +438,13 @@ export function ChatRoom({
         setUploadedFile(file);
     };
 
-    // Close menus when clicking outside
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
             const target = e.target as Node;
             if (menuRef.current && menuRef.current.contains(target)) return;
             if (msgMenuRef.current && msgMenuRef.current.contains(target)) return;
             if (reactionMenuRef.current && reactionMenuRef.current.contains(target)) return;
-            
-            // Close modals if clicking on backdrop (overlay)
+
             if (confirmDeleteChatRef.current) {
                 const modal = confirmDeleteChatRef.current.querySelector('.chat-room-confirm-modal');
                 if (modal && !modal.contains(target)) {
@@ -472,10 +459,18 @@ export function ChatRoom({
                     return;
                 }
             }
-            
+            if (confirmLeaveGroupRef.current) {
+                const modal = confirmLeaveGroupRef.current.querySelector('.chat-room-confirm-modal');
+                if (modal && !modal.contains(target)) {
+                    setConfirmLeaveGroup(false);
+                    return;
+                }
+            }
+
             setChatMenuOpen(false);
             setMsgMenu(null);
             setReactionMenu(null);
+            setShowReactionUsers(false);
         };
 
         document.addEventListener('mousedown', onDocClick);
@@ -489,7 +484,6 @@ export function ChatRoom({
         };
     }, []);
 
-    // Reset per-chat scroll state
     useEffect(() => {
         if (lastChatIdRef.current === chatId) return;
         lastChatIdRef.current = chatId;
@@ -502,20 +496,18 @@ export function ChatRoom({
         setEditingId(null);
         setMsgMenu(null);
         setReactionMenu(null);
+        setShowReactionUsers(false);
         setText('');
         setUploadedFile(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
 
-    // When a chat opens / changes, attempt to scroll to bottom
     useEffect(() => {
         const raf = requestAnimationFrame(() => scrollToBottom(false));
         return () => cancelAnimationFrame(raf);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
 
-    // When messages change, scroll to bottom on first load of this chat.
-    // After that, keep pinned only if user is near bottom; otherwise show a "jump" button with count.
     useEffect(() => {
         const container = messagesContainerRef.current;
         if (!container) {
@@ -561,7 +553,6 @@ export function ChatRoom({
             setNewMsgCount(0);
             setShowScrollBtn(false);
         } else {
-            // Show scroll button when user scrolls up
             const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
             setShowScrollBtn(distanceFromBottom > 300);
         }
@@ -613,7 +604,19 @@ export function ChatRoom({
             if (onChatDeleted) onChatDeleted(chatId);
             else onBack();
         } catch (e) {
-            alert('حذف گفتگو با خطا مواجه شد');
+            alert('\u062d\u0630\u0641 \u06af\u0641\u062a\u06af\u0648 \u0628\u0627 \u062e\u0637\u0627 \u0645\u0648\u0627\u062c\u0647 \u0634\u062f');
+        }
+    };
+
+    const doLeaveGroup = async () => {
+        try {
+            await apiFetch(`/groups/${encodeURIComponent(chatId)}/leave`, { method: 'POST' });
+            setConfirmLeaveGroup(false);
+            setChatMenuOpen(false);
+            if (onChatDeleted) onChatDeleted(chatId);
+            else onBack();
+        } catch (e) {
+            alert('\u062e\u0631\u0648\u062c \u0627\u0632 \u06af\u0631\u0648\u0647 \u0628\u0627 \u062e\u0637\u0627 \u0645\u0648\u0627\u062c\u0647 \u0634\u062f');
         }
     };
 
@@ -624,33 +627,27 @@ export function ChatRoom({
         const roomRect = room.getBoundingClientRect();
         const r = targetEl.getBoundingClientRect();
 
-        // Menu dimensions (approximate)
-        const menuHeight = 220; // approximate height for 5 items
+        const menuHeight = 220;
         const menuWidth = 180;
 
-        // Calculate initial position relative to message bubble
         let top = r.top - roomRect.top;
         const left = r.left - roomRect.left;
 
-        // Check if there's enough space below the message
         const spaceBelow = roomRect.height - (r.bottom - roomRect.top);
-        
-        // If not enough space below, position menu above the message, aligned to its bottom edge
+
         if (spaceBelow < menuHeight + 16) {
             top = (r.bottom - roomRect.top) - menuHeight;
-            // Ensure menu doesn't go above header
             top = Math.max(64, top);
         } else {
-            // Position below message
             top = r.bottom - roomRect.top;
         }
 
-        // Ensure menu stays within horizontal bounds
         const maxLeft = roomRect.width - menuWidth - 16;
         const finalLeft = Math.max(12, Math.min(left, maxLeft));
 
         setMsgMenu({ id: messageId, top, left: finalLeft });
         setReactionMenu(null);
+        setShowReactionUsers(false);
     };
 
     const openReactionMenu = (messageId: string, targetEl: HTMLElement) => {
@@ -660,31 +657,26 @@ export function ChatRoom({
         const roomRect = room.getBoundingClientRect();
         const r = targetEl.getBoundingClientRect();
 
-        // Reaction picker dimensions (approximate)
         const pickerHeight = 200;
         const pickerWidth = 320;
 
-        // Calculate initial position
         let top = r.top - roomRect.top;
         const left = r.left - roomRect.left;
 
-        // Check if there's enough space below
         const spaceBelow = roomRect.height - (r.bottom - roomRect.top);
-        
+
         if (spaceBelow < pickerHeight + 16) {
-            // Position above message, aligned to its bottom edge
             top = (r.bottom - roomRect.top) - pickerHeight;
             top = Math.max(64, top);
         } else {
-            // Position below message
             top = r.bottom - roomRect.top;
         }
 
-        // Ensure picker stays within horizontal bounds
         const maxLeft = roomRect.width - pickerWidth - 16;
         const finalLeft = Math.max(12, Math.min(left, maxLeft));
 
         setReactionMenu({ id: messageId, top, left: finalLeft });
+        setShowReactionUsers(false);
         setMsgMenu(null);
     };
 
@@ -757,8 +749,6 @@ export function ChatRoom({
         );
     }
 
-
-    // Members list view (Telegram-style)
     if (showMembersList) {
         const membersList = Object.values(groupMembers);
         const filtered = memberSearch.trim()
@@ -768,36 +758,33 @@ export function ChatRoom({
               )
             : membersList;
         const onlineCount = membersList.filter(m => (m as any).online).length;
-        const isInviteLink = (s: string) => s.startsWith('novaroom://') || s.startsWith('novaroom://');
+        const isInviteLink = (s: string) => s.startsWith('novaroom://') || s.startsWith('senoroom://');
         const inviteLink = contact.username && isInviteLink(contact.username) ? contact.username : null;
 
         return (
             <div className="contact-info">
-                {/* Header */}
                 <div className="contact-info__header">
                     <button className="contact-info__back" onClick={() => setShowMembersList(false)} type="button">
                         <ArrowLeft size={20} />
                     </button>
-                    <div className="contact-info__title">اطلاعات گروه</div>
+                    <div className="contact-info__title">\u0627\u0637\u0644\u0627\u0639\u0627\u062a \u06af\u0631\u0648\u0647</div>
                     <div className="contact-info__spacer" />
                 </div>
 
                 <div className="contact-info__content">
-                    {/* Group avatar + name */}
                     <div className="contact-info__avatar">
                         <Avatar name={contact.name} size="xl" online={false} src={contact.avatar} />
                         <div className="contact-info__name" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                             {contact.name}
                         </div>
                         <div className="contact-info__status chat-room__contact-status--online" style={{ color: '#22c55e' }}>
-                            {membersList.length} عضو • {onlineCount} آنلاین
+                            {membersList.length} \u0639\u0636\u0648 \u2022 {onlineCount} \u0622\u0646\u0644\u0627\u06cc\u0646
                         </div>
                     </div>
 
-                    {/* Invite link card */}
                     {inviteLink && (
                         <div className="contact-info__card">
-                            <div className="contact-info__label">لینک دعوت</div>
+                            <div className="contact-info__label">\u0644\u06cc\u0646\u06a9 \u062f\u0639\u0648\u062a</div>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                                 <div className="contact-info__mono" style={{ fontSize: 13, wordBreak: 'break-all', display: 'flex', alignItems: 'center', gap: 6 }}>
                                     <Users size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
@@ -815,13 +802,12 @@ export function ChatRoom({
                         </div>
                     )}
 
-                    {/* Search */}
                     <div className="contact-info__card" style={{ padding: '8px 12px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Search size={15} style={{ opacity: 0.5, flexShrink: 0 }} />
                             <input
                                 type="text"
-                                placeholder="جستجو در اعضا..."
+                                placeholder="\u062c\u0633\u062a\u062c\u0648 \u062f\u0631 \u0627\u0639\u0636\u0627..."
                                 value={memberSearch}
                                 onChange={e => setMemberSearch(e.target.value)}
                                 style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, fontSize: 14, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', direction: 'rtl' }}
@@ -829,15 +815,13 @@ export function ChatRoom({
                         </div>
                     </div>
 
-                    {/* Members label */}
                     <div style={{ padding: '8px 4px 4px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'Vazir, sans-serif' }}>
-                        اعضا ({membersList.length})
+                        \u0627\u0639\u0636\u0627 ({membersList.length})
                     </div>
 
-                    {/* Members list */}
                     <div className="contact-info__card" style={{ padding: 0, overflow: 'hidden' }}>
                         {filtered.length === 0 ? (
-                            <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)', fontSize: 14 }}>عضوی یافت نشد</div>
+                            <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)', fontSize: 14 }}>\u0639\u0636\u0648\u06cc \u06cc\u0627\u0641\u062a \u0646\u0634\u062f</div>
                         ) : (
                             filtered.map((member, idx) => (
                                 <div
@@ -862,7 +846,7 @@ export function ChatRoom({
                                             {member.verified && <VerifiedBadge size={14} />}
                                         </div>
                                         <div style={{ fontSize: 13, color: (member as any).online ? '#22c55e' : 'var(--text-secondary)', marginTop: 2 }}>
-                                            {(member as any).online ? 'آنلاین' : member.username ? `@${member.username}` : 'آفلاین'}
+                                            {(member as any).online ? '\u0622\u0646\u0644\u0627\u06cc\u0646' : member.username ? `@${member.username}` : '\u0622\u0641\u0644\u0627\u06cc\u0646'}
                                         </div>
                                     </div>
                                 </div>
@@ -877,11 +861,29 @@ export function ChatRoom({
     const activeMsg = msgMenu ? messages.find((mm) => mm.id === msgMenu.id) : null;
     const activeMsgIsMine = activeMsg ? activeMsg.senderId === currentUserId : false;
     const activeMsgIsForwarded = activeMsg?.forwardedFrom ? true : false;
+    // verified users can delete any message
+    const canDeleteActiveMsg = activeMsgIsMine || (isGroupChat && isVerifiedUser);
 
     const reactionMsg = reactionMenu ? messages.find((mm) => mm.id === reactionMenu.id) : null;
-    const myReaction = reactionMsg?.reactions?.find((r: any) => 
+    const myReaction = reactionMsg?.reactions?.find((r: any) =>
         r.userIds && Array.isArray(r.userIds) && r.userIds.includes(currentUserId)
     );
+
+    // Build flat list of users+emoji for the reaction users panel
+    const reactionUsersList: { userId: string; emoji: string; name: string }[] = [];
+    if (reactionMsg?.reactions && reactionMsg.reactions.length > 0) {
+        reactionMsg.reactions.forEach((r: any) => {
+            const ids: string[] = r.userIds || [];
+            ids.forEach((uid) => {
+                const member = groupMembers[uid];
+                reactionUsersList.push({
+                    userId: uid,
+                    emoji: r.emoji,
+                    name: member?.name || uid,
+                });
+            });
+        });
+    }
 
     return (
         <div className="chat-room" style={{ position: 'relative' }} ref={roomRef}>
@@ -905,11 +907,18 @@ export function ChatRoom({
                             setShowContactInfo(true);
                         }
                     }}
-                    aria-label={isSavedMessages ? "" : "Open contact info"}
+                    aria-label={isSavedMessages ? '' : 'Open contact info'}
                     type="button"
                     style={isSavedMessages ? { cursor: 'default' } : undefined}
                 >
-                    <Avatar name={contact.name} size="sm" online={contact.online} savedMessages={isSavedMessages} src={contact.avatar} />
+                    {/* For groups, hide the online dot by passing online=false */}
+                    <Avatar
+                        name={contact.name}
+                        size="sm"
+                        online={isGroupChat ? false : contact.online}
+                        savedMessages={isSavedMessages}
+                        src={contact.avatar}
+                    />
                     <div className="chat-room__header-info">
                         <div
                             className="chat-room__contact-name"
@@ -927,10 +936,10 @@ export function ChatRoom({
                                 }
                             >
                                 {isGroupChat
-                                    ? `${chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0} عضو • ${chatStats?.onlineMembers ?? 0} آنلاین`
+                                    ? `${chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0} \u0639\u0636\u0648 \u2022 ${chatStats?.onlineMembers ?? 0} \u0622\u0646\u0644\u0627\u06cc\u0646`
                                     : contact.online
-                                        ? 'آنلاین'
-                                        : 'آفلاین'}
+                                        ? '\u0622\u0646\u0644\u0627\u06cc\u0646'
+                                        : '\u0622\u0641\u0644\u0627\u06cc\u0646'}
                             </div>
                         )}
                     </div>
@@ -951,17 +960,48 @@ export function ChatRoom({
 
                         {chatMenuOpen && canDeleteChat && (
                             <div className="popover popover--mini popover--right">
-                                <button
-                                    className="popover__item popover__item--danger"
-                                    onClick={() => {
-                                        setConfirmDeleteChat(true);
-                                        setChatMenuOpen(false);
-                                    }}
-                                    type="button"
-                                >
-                                    <Trash2 size={16} />
-                                    حذف گفتگو
-                                </button>
+                                {isGroupChat ? (
+                                    isVerifiedUser ? (
+                                        // verified: delete group
+                                        <button
+                                            className="popover__item popover__item--danger"
+                                            onClick={() => {
+                                                setConfirmDeleteChat(true);
+                                                setChatMenuOpen(false);
+                                            }}
+                                            type="button"
+                                        >
+                                            <Trash2 size={16} />
+                                            \u062d\u0630\u0641 \u06af\u0631\u0648\u0647
+                                        </button>
+                                    ) : (
+                                        // regular user: leave group
+                                        <button
+                                            className="popover__item popover__item--danger"
+                                            onClick={() => {
+                                                setConfirmLeaveGroup(true);
+                                                setChatMenuOpen(false);
+                                            }}
+                                            type="button"
+                                        >
+                                            <LogOut size={16} />
+                                            \u062e\u0631\u0648\u062c \u0627\u0632 \u06af\u0631\u0648\u0647
+                                        </button>
+                                    )
+                                ) : (
+                                    // direct chat: delete
+                                    <button
+                                        className="popover__item popover__item--danger"
+                                        onClick={() => {
+                                            setConfirmDeleteChat(true);
+                                            setChatMenuOpen(false);
+                                        }}
+                                        type="button"
+                                    >
+                                        <Trash2 size={16} />
+                                        \u062d\u0630\u0641 \u06af\u0641\u062a\u06af\u0648
+                                    </button>
+                                )}
                             </div>
                         )}
                     </div>
@@ -994,11 +1034,10 @@ export function ChatRoom({
                                     )}
 
                                     <div
-                                        className={isMine 
-                                            ? 'message-row message-row--mine' 
+                                        className={isMine
+                                            ? 'message-row message-row--mine'
                                             : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`}
                                         onPointerDown={(e) => {
-                                            // Mouse-only here; mobile uses touch handlers below for compatibility.
                                             if (e.pointerType !== 'mouse') return;
                                             if (e.button !== 0) return;
                                             swipeRef.current = {
@@ -1020,18 +1059,12 @@ export function ChatRoom({
 
                                             if (!swipeRef.current.captured) {
                                                 if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy)) return;
-                                                if (dx <= 0) return; // left-to-right only
-
+                                                if (dx <= 0) return;
                                                 swipeRef.current.captured = true;
-                                                try {
-                                                    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                                                } catch {
-                                                    // ignore
-                                                }
+                                                try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
                                             }
 
                                             if (!swipeRef.current.captured) return;
-
                                             e.preventDefault();
                                             const x = Math.max(0, Math.min(72, dx));
                                             setDragState({ id: m.id, x, active: true });
@@ -1046,13 +1079,9 @@ export function ChatRoom({
                                             if (swipeRef.current.captured) {
                                                 swipeRef.current.blockClickUntil = Date.now() + 280;
                                             }
-
-                                            if (dx > 60 && Math.abs(dx) > Math.abs(dy)) {
-                                                beginReply(m);
-                                            }
+                                            if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
 
                                             resetDrag(m.id);
-
                                             swipeRef.current.active = false;
                                             swipeRef.current.captured = false;
                                             swipeRef.current.pointerId = null;
@@ -1085,12 +1114,11 @@ export function ChatRoom({
 
                                             if (!swipeRef.current.captured) {
                                                 if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy)) return;
-                                                if (dx <= 0) return; // left-to-right only
+                                                if (dx <= 0) return;
                                                 swipeRef.current.captured = true;
                                             }
 
                                             if (!swipeRef.current.captured) return;
-                                            // Try to prevent vertical scrolling while swiping.
                                             e.preventDefault();
                                             const x = Math.max(0, Math.min(72, dx));
                                             setDragState({ id: m.id, x, active: true });
@@ -1104,13 +1132,9 @@ export function ChatRoom({
                                             if (swipeRef.current.captured) {
                                                 swipeRef.current.blockClickUntil = Date.now() + 280;
                                             }
-
-                                            if (dx > 60 && Math.abs(dx) > Math.abs(dy)) {
-                                                beginReply(m);
-                                            }
+                                            if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
 
                                             resetDrag(m.id);
-
                                             swipeRef.current.active = false;
                                             swipeRef.current.captured = false;
                                             swipeRef.current.pointerId = null;
@@ -1123,20 +1147,13 @@ export function ChatRoom({
                                             swipeRef.current.pointerId = null;
                                         }}
                                     >
-                                        {/* Group: small avatar on left side, only for first/single message in a group */}
                                         {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--last') && (() => {
                                             const sender = groupMembers[m.senderId];
-                                            const senderName = sender?.name || m.senderId || 'ناشناس';
+                                            const senderName = sender?.name || m.senderId || '\u0646\u0627\u0634\u0646\u0627\u0633';
                                             const senderAvatar = sender?.avatar || '';
                                             return (
                                                 <div
-                                                    style={{
-                                                        position: 'absolute',
-                                                        left: 0,
-                                                        bottom: 0,
-                                                        cursor: 'pointer',
-                                                        zIndex: 1,
-                                                    }}
+                                                    style={{ position: 'absolute', left: 0, bottom: 0, cursor: 'pointer', zIndex: 1 }}
                                                     onClick={(e) => { e.stopPropagation(); setViewingMemberId(m.senderId); }}
                                                 >
                                                     <Avatar name={senderName} size="sm" online={false} src={senderAvatar} />
@@ -1145,10 +1162,7 @@ export function ChatRoom({
                                         })()}
                                         <div
                                             ref={(el) => {
-                                                if (!el) {
-                                                    messageElsRef.current.delete(m.id);
-                                                    return;
-                                                }
+                                                if (!el) { messageElsRef.current.delete(m.id); return; }
                                                 messageElsRef.current.set(m.id, el);
                                             }}
                                             className={
@@ -1172,25 +1186,15 @@ export function ChatRoom({
                                                 boxShadow: isHighlighted ? '0 0 0 3px rgba(245, 158, 11, 0.4)' : undefined,
                                             }}
                                         >
-                                            {/* Group sender name inside bubble - Telegram style */}
                                             {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--first') && (() => {
                                                 const sender = groupMembers[m.senderId];
-                                                const senderName = sender?.name || m.senderId || 'ناشناس';
-                                                // Generate a consistent color based on sender ID
+                                                const senderName = sender?.name || m.senderId || '\u0646\u0627\u0634\u0646\u0627\u0633';
                                                 const colors = ['#E91E63','#9C27B0','#673AB7','#3F51B5','#2196F3','#00BCD4','#009688','#4CAF50','#FF5722','#FF9800'];
                                                 const colorIdx = m.senderId ? Math.abs(m.senderId.split('').reduce((a,c) => a + c.charCodeAt(0), 0)) % colors.length : 0;
                                                 return (
                                                     <div
                                                         onClick={(e) => { e.stopPropagation(); setViewingMemberId(m.senderId); }}
-                                                        style={{
-                                                            fontSize: 13,
-                                                            fontWeight: 700,
-                                                            color: colors[colorIdx],
-                                                            marginBottom: 3,
-                                                            cursor: 'pointer',
-                                                            fontFamily: 'Vazir, sans-serif',
-                                                            lineHeight: '1.2',
-                                                        }}
+                                                        style={{ fontSize: 13, fontWeight: 700, color: colors[colorIdx], marginBottom: 3, cursor: 'pointer', fontFamily: 'Vazir, sans-serif', lineHeight: '1.2' }}
                                                     >
                                                         {senderName}
                                                     </div>
@@ -1198,63 +1202,39 @@ export function ChatRoom({
                                             })()}
 
                                             {m.forwardedFrom && (
-                                                <div
-                                                    style={{
-                                                        fontSize: 11,
-                                                        opacity: 0.7,
-                                                        marginBottom: 4,
-                                                        fontStyle: 'italic',
-                                                        fontFamily: 'Vazir, sans-serif',
-                                                    }}
-                                                >
-                                                    فوروارد شده از: {m.forwardedFrom.name || m.forwardedFrom.username || 'ناشناس'}
+                                                <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4, fontStyle: 'italic', fontFamily: 'Vazir, sans-serif' }}>
+                                                    \u0641\u0648\u0631\u0648\u0627\u0631\u062f \u0634\u062f\u0647 \u0627\u0632: {m.forwardedFrom.name || m.forwardedFrom.username || '\u0646\u0627\u0634\u0646\u0627\u0633'}
                                                 </div>
                                             )}
 
                                             {m.replyTo && (
                                                 <div
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        scrollToMessage(m.replyTo!.id);
-                                                    }}
+                                                    onClick={(e) => { e.stopPropagation(); scrollToMessage(m.replyTo!.id); }}
                                                     role="button"
                                                     tabIndex={0}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') scrollToMessage(m.replyTo!.id);
-                                                    }}
+                                                    onKeyDown={(e) => { if (e.key === 'Enter') scrollToMessage(m.replyTo!.id); }}
                                                     className="message-reply-box"
-                                                    style={{
-                                                        marginBottom: 6,
-                                                        padding: '6px 10px',
-                                                        borderRadius: 12,
-                                                        cursor: 'pointer',
-                                                    }}
+                                                    style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}
                                                 >
-                                                    <div className="message-reply-box__label">پاسخ</div>
-                                                    <div className="message-reply-box__text">
-                                                        {m.replyTo.text}
-                                                    </div>
+                                                    <div className="message-reply-box__label">\u067e\u0627\u0633\u062e</div>
+                                                    <div className="message-reply-box__text">{m.replyTo.text}</div>
                                                 </div>
                                             )}
 
                                             {m.text && <div className="message-text">{m.text}</div>}
-
                                             {m.file && <FileMessage file={m.file} token={token} />}
 
                                             {m.reactions && m.reactions.length > 0 && (
                                                 <div className="message-reactions">
                                                     {m.reactions.map((reaction: any, idx: number) => {
-                                                        // Check if current user has reacted with this emoji
                                                         const userIds = reaction.userIds || [];
                                                         const isMyReaction = userIds.includes(currentUserId);
-                                                        
                                                         return (
                                                             <button
                                                                 key={idx}
                                                                 className={isMyReaction ? 'message-reaction message-reaction--active' : 'message-reaction'}
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    // Toggle: if I already reacted with this emoji, remove it; otherwise add it
                                                                     if (isMyReaction) {
                                                                         handleDeleteReaction(m.id);
                                                                     } else {
@@ -1276,13 +1256,11 @@ export function ChatRoom({
                                             <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
                                                 <span className="message-time">{formatMessageTime(m.timestamp)}</span>
                                                 {m.edited && (
-                                                    <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>
-                                                        ویرایش شده
-                                                    </span>
+                                                    <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>\u0648\u06cc\u0631\u0627\u06cc\u0634 \u0634\u062f\u0647</span>
                                                 )}
                                                 {isMine && (
                                                     <span className={m.seen ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
-                                                        {m.seen ? '✓✓' : '✓'}
+                                                        {m.seen ? '\u2713\u2713' : '\u2713'}
                                                     </span>
                                                 )}
                                             </div>
@@ -1296,6 +1274,7 @@ export function ChatRoom({
                 </div>
             </div>
 
+            {/* Message context menu */}
             {msgMenu && activeMsg && (
                 <div
                     ref={msgMenuRef}
@@ -1303,69 +1282,111 @@ export function ChatRoom({
                     style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
                     onClick={(e) => e.stopPropagation()}
                 >
-                    <button 
-                        className="popover__item" 
+                    <button
+                        className="popover__item"
                         onClick={() => {
                             const msgElement = messageElsRef.current.get(activeMsg.id);
-                            if (msgElement) {
-                                openReactionMenu(activeMsg.id, msgElement);
-                            }
-                        }} 
+                            if (msgElement) openReactionMenu(activeMsg.id, msgElement);
+                        }}
                         type="button"
                     >
                         <Smile size={16} />
-                        واکنش
+                        \u0648\u0627\u06a9\u0646\u0634
                     </button>
                     <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button">
                         <Reply size={16} />
-                        پاسخ
+                        \u067e\u0627\u0633\u062e
                     </button>
                     <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button">
                         <Forward size={16} />
-                        فوروارد
+                        \u0641\u0648\u0631\u0648\u0627\u0631\u062f
                     </button>
                     {activeMsgIsMine && !activeMsgIsForwarded && (
                         <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button">
                             <Pencil size={16} />
-                            ویرایش
+                            \u0648\u06cc\u0631\u0627\u06cc\u0634
                         </button>
                     )}
                     <button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button">
                         <Copy size={16} />
-                        کپی
+                        \u06a9\u067e\u06cc
                     </button>
-                    {activeMsgIsMine && (
+                    {canDeleteActiveMsg && (
                         <button
                             className="popover__item popover__item--danger"
                             onClick={() => doDeleteMessage(activeMsg.id)}
                             type="button"
                         >
                             <Trash2 size={16} />
-                            حذف
+                            \u062d\u0630\u0641
                         </button>
                     )}
                 </div>
             )}
 
+            {/* Reaction picker + users list */}
             {reactionMenu && reactionMsg && (
                 <div
                     ref={reactionMenuRef}
-                    style={{ 
-                        top: reactionMenu.top, 
-                        left: reactionMenu.left, 
-                        right: 'auto', 
-                        position: 'absolute', 
-                        zIndex: 50 
-                    }}
+                    style={{ top: reactionMenu.top, left: reactionMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
                     onClick={(e) => e.stopPropagation()}
                 >
                     <ReactionPicker
                         messageId={reactionMsg.id}
                         currentReaction={myReaction?.emoji}
-                        onReact={handleReact}
-                        onDeleteReaction={handleDeleteReaction}
-                        onClose={() => setReactionMenu(null)}
+                        onReact={(id, emoji) => { handleReact(id, emoji); setShowReactionUsers(false); }}
+                        onDeleteReaction={(id) => { handleDeleteReaction(id); setShowReactionUsers(false); }}
+                        onClose={() => { setReactionMenu(null); setShowReactionUsers(false); }}
                     />
+
+                    {/* Reaction users list — only shown if there are reactions and toggled */}
+                    {reactionUsersList.length > 0 && (
+                        <div
+                            style={{
+                                marginTop: 6,
+                                background: 'var(--bg-secondary)',
+                                border: '1px solid var(--border-primary)',
+                                borderRadius: 12,
+                                overflow: 'hidden',
+                                minWidth: 200,
+                                boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                            }}
+                        >
+                            <div
+                                style={{
+                                    padding: '8px 12px',
+                                    fontSize: 12,
+                                    color: 'var(--text-secondary)',
+                                    borderBottom: '1px solid var(--border-primary)',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                }}
+                                onClick={() => setShowReactionUsers(v => !v)}
+                            >
+                                <span>\u0648\u0627\u06a9\u0646\u0634\u200c\u062f\u0647\u0646\u062f\u06af\u0627\u0646 ({reactionUsersList.length})</span>
+                                <span style={{ fontSize: 10 }}>{showReactionUsers ? '\u25b2' : '\u25bc'}</span>
+                            </div>
+                            {showReactionUsers && reactionUsersList.map((ru, i) => (
+                                <div
+                                    key={i}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                        padding: '7px 12px',
+                                        borderTop: i > 0 ? '1px solid var(--border-primary)' : 'none',
+                                        fontSize: 13,
+                                        color: 'var(--text-primary)',
+                                    }}
+                                >
+                                    <span style={{ fontSize: 16 }}>{ru.emoji}</span>
+                                    <span>{ru.name}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -1399,15 +1420,7 @@ export function ChatRoom({
                     {newMsgCount > 0 && (
                         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                             <span style={{ fontVariantNumeric: 'tabular-nums' }}>{newMsgCount}</span>
-                            <span
-                                style={{
-                                    width: 6,
-                                    height: 6,
-                                    borderRadius: 999,
-                                    background: '#2F80ED',
-                                    marginTop: 4,
-                                }}
-                            />
+                            <span style={{ width: 6, height: 6, borderRadius: 999, background: '#2F80ED', marginTop: 4 }} />
                         </span>
                     )}
                 </button>
@@ -1418,23 +1431,17 @@ export function ChatRoom({
                     <div className="chat-room__reply-edit-box">
                         <div style={{ minWidth: 0 }}>
                             <div className="chat-room__reply-edit-box__title">
-                                {editingId ? 'در حال ویرایش' : 'در حال پاسخ'}
+                                {editingId ? '\u062f\u0631 \u062d\u0627\u0644 \u0648\u06cc\u0631\u0627\u06cc\u0634' : '\u062f\u0631 \u062d\u0627\u0644 \u067e\u0627\u0633\u062e'}
                             </div>
                             {!editingId && replyTo && (
-                                <div className="chat-room__reply-edit-box__text">
-                                    {replyTo.text}
-                                </div>
+                                <div className="chat-room__reply-edit-box__text">{replyTo.text}</div>
                             )}
                         </div>
                         <button
                             type="button"
                             className="icon-btn"
                             aria-label="Cancel"
-                            onClick={() => {
-                                setReplyTo(null);
-                                setEditingId(null);
-                                setText('');
-                            }}
+                            onClick={() => { setReplyTo(null); setEditingId(null); setText(''); }}
                         >
                             <X size={18} />
                         </button>
@@ -1444,15 +1451,10 @@ export function ChatRoom({
                 {uploadedFile && (
                     <div className="chat-room__reply-edit-box">
                         <div style={{ minWidth: 0 }}>
-                            <div className="chat-room__reply-edit-box__title">فایل آپلود شده</div>
+                            <div className="chat-room__reply-edit-box__title">\u0641\u0627\u06cc\u0644 \u0622\u067e\u0644\u0648\u062f \u0634\u062f\u0647</div>
                             <div className="chat-room__reply-edit-box__text">{uploadedFile.fileName}</div>
                         </div>
-                        <button
-                            type="button"
-                            className="icon-btn"
-                            aria-label="Remove file"
-                            onClick={() => setUploadedFile(null)}
-                        >
+                        <button type="button" className="icon-btn" aria-label="Remove file" onClick={() => setUploadedFile(null)}>
                             <X size={18} />
                         </button>
                     </div>
@@ -1463,22 +1465,19 @@ export function ChatRoom({
                     <textarea
                         ref={textareaRef}
                         className="chat-room__text-input"
-                        placeholder="پیام..."
+                        placeholder="\u067e\u06cc\u0627\u0645..."
                         value={text}
                         onChange={(e) => setText(e.target.value)}
                         onFocus={() => {
-                            // On mobile, do NOT force-scroll the whole view; just keep the bottom pinned if needed.
                             setTimeout(() => {
                                 if (computeNearBottom()) scrollToBottom(false);
                             }, 80);
                         }}
                         onKeyDown={(e) => {
-                            // Ctrl+Enter or Cmd+Enter to send message
                             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                                 e.preventDefault();
                                 submit();
                             }
-                            // Just Enter alone allows new line (default textarea behavior)
                         }}
                         rows={1}
                     />
@@ -1507,35 +1506,49 @@ export function ChatRoom({
                 onSelectChat={onSelectChat}
             />
 
+            {/* Confirm delete chat (direct) or group (verified) */}
             {confirmDeleteChat && (
                 <div className="chat-room-modal-overlay" ref={confirmDeleteChatRef}>
                     <div className="chat-room-confirm-modal">
-                        <h3 className="chat-room-confirm-modal__title">گفتگو حذف شود؟</h3>
-                        <p className="chat-room-confirm-modal__text">این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.</p>
+                        <h3 className="chat-room-confirm-modal__title">
+                            {isGroupChat ? '\u06af\u0631\u0648\u0647 \u062d\u0630\u0641 \u0634\u0648\u062f\u061f' : '\u06af\u0641\u062a\u06af\u0648 \u062d\u0630\u0641 \u0634\u0648\u062f\u061f'}
+                        </h3>
+                        <p className="chat-room-confirm-modal__text">
+                            {isGroupChat
+                                ? '\u06af\u0631\u0648\u0647 \u0648 \u062a\u0645\u0627\u0645 \u067e\u06cc\u0627\u0645\u200c\u0647\u0627 \u0628\u0631\u0627\u06cc \u0647\u0645\u0647 \u062d\u0630\u0641 \u062e\u0648\u0627\u0647\u062f \u0634\u062f.'
+                                : '\u0627\u06cc\u0646 \u0639\u0645\u0644 \u06af\u0641\u062a\u06af\u0648 \u0648 \u062a\u0645\u0627\u0645 \u067e\u06cc\u0627\u0645\u200c\u0647\u0627 \u0631\u0627 \u0628\u0631\u0627\u06cc \u0647\u0631 \u062f\u0648 \u06a9\u0627\u0631\u0628\u0631 \u062d\u0630\u0641 \u062e\u0648\u0627\u0647\u062f \u06a9\u0631\u062f.'}
+                        </p>
                         <div className="chat-room-confirm-modal__actions">
-                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteChat(false)} type="button">
-                                لغو
-                            </button>
-                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doDeleteChat} type="button">
-                                حذف
-                            </button>
+                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteChat(false)} type="button">\u0644\u063a\u0648</button>
+                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doDeleteChat} type="button">\u062d\u0630\u0641</button>
                         </div>
                     </div>
                 </div>
             )}
 
+            {/* Confirm leave group */}
+            {confirmLeaveGroup && (
+                <div className="chat-room-modal-overlay" ref={confirmLeaveGroupRef}>
+                    <div className="chat-room-confirm-modal">
+                        <h3 className="chat-room-confirm-modal__title">\u062e\u0631\u0648\u062c \u0627\u0632 \u06af\u0631\u0648\u0647\u061f</h3>
+                        <p className="chat-room-confirm-modal__text">\u0622\u06cc\u0627 \u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u06cc\u062f \u0627\u0632 \u06af\u0631\u0648\u0647 \u062e\u0627\u0631\u062c \u0634\u0648\u06cc\u062f\u061f \u06af\u0631\u0648\u0647 \u0628\u0631\u0627\u06cc \u0634\u0645\u0627 \u062d\u0630\u0641 \u062e\u0648\u0627\u0647\u062f \u0634\u062f.</p>
+                        <div className="chat-room-confirm-modal__actions">
+                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmLeaveGroup(false)} type="button">\u0644\u063a\u0648</button>
+                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doLeaveGroup} type="button">\u062e\u0631\u0648\u062c</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Confirm delete message */}
             {confirmDeleteMsg && (
                 <div className="chat-room-modal-overlay" ref={confirmDeleteMsgRef}>
                     <div className="chat-room-confirm-modal">
-                        <h3 className="chat-room-confirm-modal__title">این پیام حذف شود؟</h3>
-                        <p className="chat-room-confirm-modal__text">این عمل پیام را برای هر دو کاربر حذف خواهد کرد.</p>
+                        <h3 className="chat-room-confirm-modal__title">\u0627\u06cc\u0646 \u067e\u06cc\u0627\u0645 \u062d\u0630\u0641 \u0634\u0648\u062f\u061f</h3>
+                        <p className="chat-room-confirm-modal__text">\u0627\u06cc\u0646 \u0639\u0645\u0644 \u067e\u06cc\u0627\u0645 \u0631\u0627 \u0628\u0631\u0627\u06cc \u0647\u0631 \u062f\u0648 \u06a9\u0627\u0631\u0628\u0631 \u062d\u0630\u0641 \u062e\u0648\u0627\u0647\u062f \u06a9\u0631\u062f.</p>
                         <div className="chat-room-confirm-modal__actions">
-                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteMsg(null)} type="button">
-                                لغو
-                            </button>
-                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={confirmDeleteMessage} type="button">
-                                حذف
-                            </button>
+                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteMsg(null)} type="button">\u0644\u063a\u0648</button>
+                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={confirmDeleteMessage} type="button">\u062d\u0630\u0641</button>
                         </div>
                     </div>
                 </div>
