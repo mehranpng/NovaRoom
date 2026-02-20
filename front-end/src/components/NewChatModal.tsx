@@ -292,7 +292,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
                             <LinkIcon size={16} />
                             <input
                                 type="text"
-                                placeholder="senoroom://group/INVITE_CODE"
+                                placeholder="novaroom://group/INVITE_CODE"
                                 value={inviteInput}
                                 onChange={(e) => setInviteInput(e.target.value)}
                                 onKeyDown={(e) => {

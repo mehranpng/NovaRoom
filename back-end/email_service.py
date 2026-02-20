@@ -51,11 +51,11 @@ async def send_verification_email(email: str) -> Optional[str]:
     """Send verification code to email and store it temporarily"""
     code = generate_verification_code()
 
-    subject = "کد تأیید ثبت‌نام SenoRoom"
+    subject = "کد تأیید ثبت‌نام NovaRoom"
     body = f"""
 سلام،
 
-کد تأیید شما برای ثبت‌نام در SenoRoom:
+کد تأیید شما برای ثبت‌نام در NovaRoom:
 
 {code}
 
@@ -64,7 +64,7 @@ async def send_verification_email(email: str) -> Optional[str]:
 اگر شما درخواست ثبت‌نام نکرده‌اید، این ایمیل را نادیده بگیرید.
 
 با احترام،
-تیم SenoRoom
+تیم NovaRoom
     """
 
     success = await send_email_async(email, subject, body)
@@ -105,7 +105,7 @@ async def send_password_reset_email(email: str) -> Optional[str]:
     """Send password reset code to email"""
     code = generate_verification_code()
 
-    subject = "کد بازیابی رمز عبور SenoRoom"
+    subject = "کد بازیابی رمز عبور NovaRoom"
     body = f"""
 سلام،
 
@@ -118,7 +118,7 @@ async def send_password_reset_email(email: str) -> Optional[str]:
 اگر شما درخواست بازیابی رمز عبور نکرده‌اید، این ایمیل را نادیده بگیرید و رمز عبور خود را تغییر دهید.
 
 با احترام،
-تیم SenoRoom
+تیم NovaRoom
     """
 
     success = await send_email_async(email, subject, body)

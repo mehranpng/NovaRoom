@@ -192,16 +192,16 @@ export function ChatList({
     const filteredChats = sortedChats.filter((chat) => {
         // Don't filter if no search query
         if (!searchQuery) return true;
-        
+
         // Check if it's saved messages
         if (chat.id === savedMessagesId) {
             return (
-                'پیام‌های ذخیره شده'.includes(searchQuery) || 
+                'پیام‌های ذخیره شده'.includes(searchQuery) ||
                 'saved'.includes(searchQuery.toLowerCase()) ||
                 'ذخیره'.includes(searchQuery)
             );
         }
-        
+
         // Search in regular chats
         const contact = getContact(chat);
         return (
@@ -213,7 +213,7 @@ export function ChatList({
     const hasActiveChat = Boolean(activeChatId);
 
     // Check if we should show AI chat in search results
-    const showAIChat = !searchQuery || 'Senoroom ai'.includes(searchQuery.toLowerCase()) || 'دستیار'.includes(searchQuery);
+    const showAIChat = !searchQuery || 'NovaRoom AI'.includes(searchQuery.toLowerCase()) || 'دستیار'.includes(searchQuery);
 
     // Check if we should show Official Channel in search results
 
@@ -225,7 +225,7 @@ export function ChatList({
                     <button onClick={onOpenProfile}>
                         <Avatar name={currentUser.name} size="sm" online={true} src={currentUser.avatar} />
                     </button>
-                    <h1 className="chat-list__title">Senoroom</h1>
+                    <h1 className="chat-list__title">NovaRoom</h1>
                 </div>
                 <div className="chat-list__header-actions">
                     <button className="icon-btn" onClick={onNewChatClick}>
@@ -252,9 +252,9 @@ export function ChatList({
                                     <Bookmark size={16} />
                                     پیام‌های ذخیره شده
                                 </button>
-                                <button 
-                                    className="popover__item" 
-                                    onClick={() => { setMenuOpen(false); toggleDarkMode(); }} 
+                                <button
+                                    className="popover__item"
+                                    onClick={() => { setMenuOpen(false); toggleDarkMode(); }}
                                     type="button"
                                 >
                                     {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
@@ -296,7 +296,7 @@ export function ChatList({
                     >
                         <img
                             src="/avatars/ai.png"
-                            alt="Senoroom AI"
+                            alt="NovaRoom AI"
                             style={{
                                 width: '48px',
                                 height: '48px',
@@ -311,7 +311,7 @@ export function ChatList({
                                     className="chat-list__item-name"
                                     style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                                 >
-                                    Senoroom AI
+                                    NovaRoom AI
                                     <VerifiedBadge size={14} />
                                 </span>
                             </div>
@@ -340,7 +340,7 @@ export function ChatList({
                     filteredChats.map((chat) => {
                         const isActive = activeChatId === chat.id;
                         const isSaved = chat.id === savedMessagesId;
-                        
+
                         if (isSaved) {
                             // Render Saved Messages
                             return (
@@ -373,7 +373,7 @@ export function ChatList({
                                 </button>
                             );
                         }
-                        
+
                         // Render Regular Chat
                         const isMine = chat.lastMessage?.senderId === currentUser.chatId;
                         const contact = getContact(chat);

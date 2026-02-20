@@ -261,7 +261,7 @@ def get_saved_messages_id(user_id: str) -> str:
 
 
 def build_group_invite_link(invite_code: str) -> str:
-    return f"senoroom://group/{invite_code}"
+    return f"novaroom://group/{invite_code}"
 
 @app.on_event("startup")
 async def startup_db():
@@ -1251,8 +1251,8 @@ async def forward_message(
         # For AI messages, the sender is AI
         forwarded_from_info = {
             "originalSenderId": "ai",
-            "name": "Senoroom AI",
-            "username": "Senoroom_ai",
+            "name": "NovaRoom AI",
+            "username": "novaroom_ai",
         }
         message_text = original_msg.get("content", "")
     else:

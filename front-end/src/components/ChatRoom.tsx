@@ -768,7 +768,7 @@ export function ChatRoom({
               )
             : membersList;
         const onlineCount = membersList.filter(m => (m as any).online).length;
-        const isInviteLink = (s: string) => s.startsWith('senoroom://') || s.startsWith('novaroom://');
+        const isInviteLink = (s: string) => s.startsWith('novaroom://') || s.startsWith('novaroom://');
         const inviteLink = contact.username && isInviteLink(contact.username) ? contact.username : null;
 
         return (
