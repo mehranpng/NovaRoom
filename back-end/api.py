@@ -179,6 +179,11 @@ class GroupCreateRequest(BaseModel):
     name: str
 
 
+class GroupUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    avatar: Optional[str] = None
+
+
 class GroupJoinRequest(BaseModel):
     inviteCode: str
 
@@ -655,6 +660,9 @@ async def create_or_get_chat(
 
 @app.post("/groups")
 async def create_group(req: GroupCreateRequest, current_user: dict = Depends(get_current_user)):
+    if not bool(current_user.get("verified", False)):
+        raise HTTPException(status_code=403, detail="Only verified users can create groups")
+
     name = (req.name or "").strip()
     if len(name) < 3:
         raise HTTPException(status_code=400, detail="Group name must be at least 3 characters")
@@ -710,6 +718,83 @@ async def join_group(req: GroupJoinRequest, current_user: dict = Depends(get_cur
         "name": group_chat.get("groupName", "گروه بدون نام"),
         "inviteLink": build_group_invite_link(invite_code),
     }
+
+
+@app.post("/groups/{chat_id}/leave")
+async def leave_group(chat_id: str, current_user: dict = Depends(get_current_user)):
+    my_id = current_user["chatId"]
+
+    chat = await cl_chats.find_one({"_id": chat_id})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    if chat.get("chatType") != "group":
+        raise HTTPException(status_code=400, detail="Not a group chat")
+
+    participants = chat.get("participants", [])
+    if my_id not in participants:
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    await cl_chats.update_one(
+        {"_id": chat_id},
+        {"$pull": {"participants": my_id}, "$set": {"updatedAt": utc_now()}},
+    )
+
+    # If no members left, clean up the group.
+    updated = await cl_chats.find_one({"_id": chat_id}, {"participants": 1})
+    remaining = (updated or {}).get("participants", []) or []
+    if not remaining:
+        messages = await cl_messages.find({"chatId": chat_id}).to_list(None)
+        for msg in messages:
+            file_data = msg.get("file")
+            if file_data and file_data.get("fileId"):
+                await delete_file(file_data["fileId"])
+
+        await cl_messages.delete_many({"chatId": chat_id})
+        await cl_chats.delete_one({"_id": chat_id})
+        return {"message": "Group deleted (no members left)"}
+
+    return {"message": "Left group"}
+
+
+@app.put("/groups/{chat_id}")
+async def update_group(chat_id: str, req: GroupUpdateRequest, current_user: dict = Depends(get_current_user)):
+    if not bool(current_user.get("verified", False)):
+        raise HTTPException(status_code=403, detail="Only verified users can update groups")
+
+    my_id = current_user["chatId"]
+
+    chat = await cl_chats.find_one({"_id": chat_id})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    if chat.get("chatType") != "group":
+        raise HTTPException(status_code=400, detail="Not a group chat")
+
+    if my_id not in (chat.get("participants", []) or []):
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    update_data = {}
+
+    if req.name is not None:
+        name = (req.name or "").strip()
+        if len(name) < 3:
+            raise HTTPException(status_code=400, detail="Group name must be at least 3 characters")
+        if len(name) > 64:
+            raise HTTPException(status_code=400, detail="Group name is too long")
+        update_data["groupName"] = name
+
+    if req.avatar is not None:
+        update_data["groupAvatar"] = str(req.avatar).strip()
+
+    if not update_data:
+        return {"message": "No changes"}
+
+    update_data["updatedAt"] = utc_now()
+
+    await cl_chats.update_one({"_id": chat_id}, {"$set": update_data})
+
+    return {"message": "Group updated"}
 
 
 @app.get("/chats")
@@ -903,6 +988,10 @@ async def delete_chat(chat_id: str, current_user: dict = Depends(get_current_use
     participants = chat.get("participants", [])
     if my_id not in participants:
         raise HTTPException(status_code=403, detail="Not allowed")
+
+    # For groups, only verified users can delete the whole group.
+    if chat.get("chatType") == "group" and not bool(current_user.get("verified", False)):
+        raise HTTPException(status_code=403, detail="Only verified users can delete groups")
 
     # Delete associated files
     messages = await cl_messages.find({"chatId": chat_id}).to_list(None)
@@ -1630,8 +1719,13 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     continue
 
                 msg = await cl_messages.find_one({"_id": oid, "chatId": chat_id_target})
-                if not msg or msg.get("senderId") != chat_id:
+                if not msg:
                     continue
+
+                if msg.get("senderId") != chat_id:
+                    requester = await cl_users.find_one({"chatId": chat_id}, {"verified": 1})
+                    if not requester or not bool(requester.get("verified", False)):
+                        continue
 
                 saved_chat_id = get_saved_messages_id(chat_id)
                 is_saved = chat_id_target == saved_chat_id
