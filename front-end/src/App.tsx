@@ -773,6 +773,7 @@ export function App() {
                                 contact={getActiveContact()}
                                 messages={activeMessages}
                                 currentUserId={currentUser!.chatId}
+                                currentUser={currentUser}
                                 onSendMessage={handleSendMessage}
                                 onDeleteMessage={handleDeleteMessage}
                                 onBack={handleBack}
