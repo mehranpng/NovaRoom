@@ -74,8 +74,8 @@ function formatDayLabel(ts: any) {
     const thatDay = iranDayNumber(ts);
     const diffDays = today - thatDay;
 
-    if (diffDays === 0) return '\u0627\u0645\u0631\u0648\u0632';
-    if (diffDays === 1) return '\u062f\u06cc\u0631\u0648\u0632';
+    if (diffDays === 0) return 'امروز';
+    if (diffDays === 1) return 'دیروز';
 
     const d = iranShiftedDate(ts);
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
@@ -125,7 +125,6 @@ export function ChatRoom({
 
     const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number }>(null);
     const [reactionMenu, setReactionMenu] = useState<null | { id: string; top: number; left: number }>(null);
-    // show reaction users list below the emoji picker
     const [showReactionUsers, setShowReactionUsers] = useState(false);
 
     const menuRef = useRef<HTMLDivElement | null>(null);
@@ -424,7 +423,7 @@ export function ChatRoom({
             setForwardingMessageId(null);
         } catch (error) {
             console.error('Failed to forward message:', error);
-            alert('\u0641\u0648\u0631\u0648\u0627\u0631\u062f \u067e\u06cc\u0627\u0645 \u0628\u0627 \u062e\u0637\u0627 \u0645\u0648\u0627\u062c\u0647 \u0634\u062f');
+            alert('فوروارد پیام با خطا مواجه شد');
         }
     };
 
@@ -604,7 +603,7 @@ export function ChatRoom({
             if (onChatDeleted) onChatDeleted(chatId);
             else onBack();
         } catch (e) {
-            alert('\u062d\u0630\u0641 \u06af\u0641\u062a\u06af\u0648 \u0628\u0627 \u062e\u0637\u0627 \u0645\u0648\u0627\u062c\u0647 \u0634\u062f');
+            alert('حذف گفتگو با خطا مواجه شد');
         }
     };
 
@@ -616,7 +615,7 @@ export function ChatRoom({
             if (onChatDeleted) onChatDeleted(chatId);
             else onBack();
         } catch (e) {
-            alert('\u062e\u0631\u0648\u062c \u0627\u0632 \u06af\u0631\u0648\u0647 \u0628\u0627 \u062e\u0637\u0627 \u0645\u0648\u0627\u062c\u0647 \u0634\u062f');
+            alert('خروج از گروه با خطا مواجه شد');
         }
     };
 
@@ -767,7 +766,7 @@ export function ChatRoom({
                     <button className="contact-info__back" onClick={() => setShowMembersList(false)} type="button">
                         <ArrowLeft size={20} />
                     </button>
-                    <div className="contact-info__title">\u0627\u0637\u0644\u0627\u0639\u0627\u062a \u06af\u0631\u0648\u0647</div>
+                    <div className="contact-info__title">اطلاعات گروه</div>
                     <div className="contact-info__spacer" />
                 </div>
 
@@ -778,13 +777,13 @@ export function ChatRoom({
                             {contact.name}
                         </div>
                         <div className="contact-info__status chat-room__contact-status--online" style={{ color: '#22c55e' }}>
-                            {membersList.length} \u0639\u0636\u0648 \u2022 {onlineCount} \u0622\u0646\u0644\u0627\u06cc\u0646
+                            {membersList.length} عضو • {onlineCount} آنلاین
                         </div>
                     </div>
 
                     {inviteLink && (
                         <div className="contact-info__card">
-                            <div className="contact-info__label">\u0644\u06cc\u0646\u06a9 \u062f\u0639\u0648\u062a</div>
+                            <div className="contact-info__label">لینک دعوت</div>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                                 <div className="contact-info__mono" style={{ fontSize: 13, wordBreak: 'break-all', display: 'flex', alignItems: 'center', gap: 6 }}>
                                     <Users size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
@@ -807,7 +806,7 @@ export function ChatRoom({
                             <Search size={15} style={{ opacity: 0.5, flexShrink: 0 }} />
                             <input
                                 type="text"
-                                placeholder="\u062c\u0633\u062a\u062c\u0648 \u062f\u0631 \u0627\u0639\u0636\u0627..."
+                                placeholder="جستجو در اعضا..."
                                 value={memberSearch}
                                 onChange={e => setMemberSearch(e.target.value)}
                                 style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, fontSize: 14, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', direction: 'rtl' }}
@@ -816,12 +815,12 @@ export function ChatRoom({
                     </div>
 
                     <div style={{ padding: '8px 4px 4px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'Vazir, sans-serif' }}>
-                        \u0627\u0639\u0636\u0627 ({membersList.length})
+                        اعضا ({membersList.length})
                     </div>
 
                     <div className="contact-info__card" style={{ padding: 0, overflow: 'hidden' }}>
                         {filtered.length === 0 ? (
-                            <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)', fontSize: 14 }}>\u0639\u0636\u0648\u06cc \u06cc\u0627\u0641\u062a \u0646\u0634\u062f</div>
+                            <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)', fontSize: 14 }}>عضوی یافت نشد</div>
                         ) : (
                             filtered.map((member, idx) => (
                                 <div
@@ -846,7 +845,7 @@ export function ChatRoom({
                                             {member.verified && <VerifiedBadge size={14} />}
                                         </div>
                                         <div style={{ fontSize: 13, color: (member as any).online ? '#22c55e' : 'var(--text-secondary)', marginTop: 2 }}>
-                                            {(member as any).online ? '\u0622\u0646\u0644\u0627\u06cc\u0646' : member.username ? `@${member.username}` : '\u0622\u0641\u0644\u0627\u06cc\u0646'}
+                                            {(member as any).online ? 'آنلاین' : member.username ? `@${member.username}` : 'آفلاین'}
                                         </div>
                                     </div>
                                 </div>
@@ -861,7 +860,6 @@ export function ChatRoom({
     const activeMsg = msgMenu ? messages.find((mm) => mm.id === msgMenu.id) : null;
     const activeMsgIsMine = activeMsg ? activeMsg.senderId === currentUserId : false;
     const activeMsgIsForwarded = activeMsg?.forwardedFrom ? true : false;
-    // verified users can delete any message
     const canDeleteActiveMsg = activeMsgIsMine || (isGroupChat && isVerifiedUser);
 
     const reactionMsg = reactionMenu ? messages.find((mm) => mm.id === reactionMenu.id) : null;
@@ -869,7 +867,6 @@ export function ChatRoom({
         r.userIds && Array.isArray(r.userIds) && r.userIds.includes(currentUserId)
     );
 
-    // Build flat list of users+emoji for the reaction users panel
     const reactionUsersList: { userId: string; emoji: string; name: string }[] = [];
     if (reactionMsg?.reactions && reactionMsg.reactions.length > 0) {
         reactionMsg.reactions.forEach((r: any) => {
@@ -911,7 +908,6 @@ export function ChatRoom({
                     type="button"
                     style={isSavedMessages ? { cursor: 'default' } : undefined}
                 >
-                    {/* For groups, hide the online dot by passing online=false */}
                     <Avatar
                         name={contact.name}
                         size="sm"
@@ -936,10 +932,10 @@ export function ChatRoom({
                                 }
                             >
                                 {isGroupChat
-                                    ? `${chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0} \u0639\u0636\u0648 \u2022 ${chatStats?.onlineMembers ?? 0} \u0622\u0646\u0644\u0627\u06cc\u0646`
+                                    ? `${chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0} عضو • ${chatStats?.onlineMembers ?? 0} آنلاین`
                                     : contact.online
-                                        ? '\u0622\u0646\u0644\u0627\u06cc\u0646'
-                                        : '\u0622\u0641\u0644\u0627\u06cc\u0646'}
+                                        ? 'آنلاین'
+                                        : 'آفلاین'}
                             </div>
                         )}
                     </div>
@@ -962,44 +958,32 @@ export function ChatRoom({
                             <div className="popover popover--mini popover--right">
                                 {isGroupChat ? (
                                     isVerifiedUser ? (
-                                        // verified: delete group
                                         <button
                                             className="popover__item popover__item--danger"
-                                            onClick={() => {
-                                                setConfirmDeleteChat(true);
-                                                setChatMenuOpen(false);
-                                            }}
+                                            onClick={() => { setConfirmDeleteChat(true); setChatMenuOpen(false); }}
                                             type="button"
                                         >
                                             <Trash2 size={16} />
-                                            \u062d\u0630\u0641 \u06af\u0631\u0648\u0647
+                                            حذف گروه
                                         </button>
                                     ) : (
-                                        // regular user: leave group
                                         <button
                                             className="popover__item popover__item--danger"
-                                            onClick={() => {
-                                                setConfirmLeaveGroup(true);
-                                                setChatMenuOpen(false);
-                                            }}
+                                            onClick={() => { setConfirmLeaveGroup(true); setChatMenuOpen(false); }}
                                             type="button"
                                         >
                                             <LogOut size={16} />
-                                            \u062e\u0631\u0648\u062c \u0627\u0632 \u06af\u0631\u0648\u0647
+                                            خروج از گروه
                                         </button>
                                     )
                                 ) : (
-                                    // direct chat: delete
                                     <button
                                         className="popover__item popover__item--danger"
-                                        onClick={() => {
-                                            setConfirmDeleteChat(true);
-                                            setChatMenuOpen(false);
-                                        }}
+                                        onClick={() => { setConfirmDeleteChat(true); setChatMenuOpen(false); }}
                                         type="button"
                                     >
                                         <Trash2 size={16} />
-                                        \u062d\u0630\u0641 \u06af\u0641\u062a\u06af\u0648
+                                        حذف گفتگو
                                     </button>
                                 )}
                             </div>
@@ -1012,9 +996,7 @@ export function ChatRoom({
                 className="chat-room__messages"
                 ref={messagesContainerRef}
                 onScroll={onMessagesScroll}
-                style={{
-                    overflowX: dragState.active ? 'hidden' : 'auto'
-                }}
+                style={{ overflowX: dragState.active ? 'hidden' : 'auto' }}
             >
                 <div className="chat-room__messages-inner">
                     {loading ? (
@@ -1041,46 +1023,33 @@ export function ChatRoom({
                                             if (e.pointerType !== 'mouse') return;
                                             if (e.button !== 0) return;
                                             swipeRef.current = {
-                                                id: m.id,
-                                                startX: e.clientX,
-                                                startY: e.clientY,
-                                                active: true,
-                                                captured: false,
-                                                pointerId: e.pointerId,
+                                                id: m.id, startX: e.clientX, startY: e.clientY,
+                                                active: true, captured: false, pointerId: e.pointerId,
                                                 blockClickUntil: swipeRef.current.blockClickUntil,
                                             };
                                         }}
                                         onPointerMove={(e) => {
                                             if (e.pointerType !== 'mouse') return;
                                             if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
-
                                             const dx = e.clientX - swipeRef.current.startX;
                                             const dy = e.clientY - swipeRef.current.startY;
-
                                             if (!swipeRef.current.captured) {
                                                 if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy)) return;
                                                 if (dx <= 0) return;
                                                 swipeRef.current.captured = true;
                                                 try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
                                             }
-
                                             if (!swipeRef.current.captured) return;
                                             e.preventDefault();
-                                            const x = Math.max(0, Math.min(72, dx));
-                                            setDragState({ id: m.id, x, active: true });
+                                            setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
                                         }}
                                         onPointerUp={(e) => {
                                             if (e.pointerType !== 'mouse') return;
                                             if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
-
                                             const dx = e.clientX - swipeRef.current.startX;
                                             const dy = e.clientY - swipeRef.current.startY;
-
-                                            if (swipeRef.current.captured) {
-                                                swipeRef.current.blockClickUntil = Date.now() + 280;
-                                            }
+                                            if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
                                             if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
-
                                             resetDrag(m.id);
                                             swipeRef.current.active = false;
                                             swipeRef.current.captured = false;
@@ -1097,12 +1066,8 @@ export function ChatRoom({
                                         onTouchStart={(e) => {
                                             const t = e.touches[0];
                                             swipeRef.current = {
-                                                id: m.id,
-                                                startX: t.clientX,
-                                                startY: t.clientY,
-                                                active: true,
-                                                captured: false,
-                                                pointerId: null,
+                                                id: m.id, startX: t.clientX, startY: t.clientY,
+                                                active: true, captured: false, pointerId: null,
                                                 blockClickUntil: swipeRef.current.blockClickUntil,
                                             };
                                         }}
@@ -1111,29 +1076,22 @@ export function ChatRoom({
                                             const t = e.touches[0];
                                             const dx = t.clientX - swipeRef.current.startX;
                                             const dy = t.clientY - swipeRef.current.startY;
-
                                             if (!swipeRef.current.captured) {
                                                 if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy)) return;
                                                 if (dx <= 0) return;
                                                 swipeRef.current.captured = true;
                                             }
-
                                             if (!swipeRef.current.captured) return;
                                             e.preventDefault();
-                                            const x = Math.max(0, Math.min(72, dx));
-                                            setDragState({ id: m.id, x, active: true });
+                                            setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
                                         }}
                                         onTouchEnd={(e) => {
                                             if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
                                             const t = e.changedTouches[0];
                                             const dx = t.clientX - swipeRef.current.startX;
                                             const dy = t.clientY - swipeRef.current.startY;
-
-                                            if (swipeRef.current.captured) {
-                                                swipeRef.current.blockClickUntil = Date.now() + 280;
-                                            }
+                                            if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
                                             if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
-
                                             resetDrag(m.id);
                                             swipeRef.current.active = false;
                                             swipeRef.current.captured = false;
@@ -1149,7 +1107,7 @@ export function ChatRoom({
                                     >
                                         {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--last') && (() => {
                                             const sender = groupMembers[m.senderId];
-                                            const senderName = sender?.name || m.senderId || '\u0646\u0627\u0634\u0646\u0627\u0633';
+                                            const senderName = sender?.name || m.senderId || 'ناشناس';
                                             const senderAvatar = sender?.avatar || '';
                                             return (
                                                 <div
@@ -1188,7 +1146,7 @@ export function ChatRoom({
                                         >
                                             {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--first') && (() => {
                                                 const sender = groupMembers[m.senderId];
-                                                const senderName = sender?.name || m.senderId || '\u0646\u0627\u0634\u0646\u0627\u0633';
+                                                const senderName = sender?.name || m.senderId || 'ناشناس';
                                                 const colors = ['#E91E63','#9C27B0','#673AB7','#3F51B5','#2196F3','#00BCD4','#009688','#4CAF50','#FF5722','#FF9800'];
                                                 const colorIdx = m.senderId ? Math.abs(m.senderId.split('').reduce((a,c) => a + c.charCodeAt(0), 0)) % colors.length : 0;
                                                 return (
@@ -1203,7 +1161,7 @@ export function ChatRoom({
 
                                             {m.forwardedFrom && (
                                                 <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4, fontStyle: 'italic', fontFamily: 'Vazir, sans-serif' }}>
-                                                    \u0641\u0648\u0631\u0648\u0627\u0631\u062f \u0634\u062f\u0647 \u0627\u0632: {m.forwardedFrom.name || m.forwardedFrom.username || '\u0646\u0627\u0634\u0646\u0627\u0633'}
+                                                    فوروارد شده از: {m.forwardedFrom.name || m.forwardedFrom.username || 'ناشناس'}
                                                 </div>
                                             )}
 
@@ -1216,7 +1174,7 @@ export function ChatRoom({
                                                     className="message-reply-box"
                                                     style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}
                                                 >
-                                                    <div className="message-reply-box__label">\u067e\u0627\u0633\u062e</div>
+                                                    <div className="message-reply-box__label">پاسخ</div>
                                                     <div className="message-reply-box__text">{m.replyTo.text}</div>
                                                 </div>
                                             )}
@@ -1235,11 +1193,8 @@ export function ChatRoom({
                                                                 className={isMyReaction ? 'message-reaction message-reaction--active' : 'message-reaction'}
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    if (isMyReaction) {
-                                                                        handleDeleteReaction(m.id);
-                                                                    } else {
-                                                                        handleReact(m.id, reaction.emoji);
-                                                                    }
+                                                                    if (isMyReaction) handleDeleteReaction(m.id);
+                                                                    else handleReact(m.id, reaction.emoji);
                                                                 }}
                                                                 type="button"
                                                             >
@@ -1256,11 +1211,11 @@ export function ChatRoom({
                                             <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
                                                 <span className="message-time">{formatMessageTime(m.timestamp)}</span>
                                                 {m.edited && (
-                                                    <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>\u0648\u06cc\u0631\u0627\u06cc\u0634 \u0634\u062f\u0647</span>
+                                                    <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>ویرایش شده</span>
                                                 )}
                                                 {isMine && (
                                                     <span className={m.seen ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
-                                                        {m.seen ? '\u2713\u2713' : '\u2713'}
+                                                        {m.seen ? '✓✓' : '✓'}
                                                     </span>
                                                 )}
                                             </div>
@@ -1274,7 +1229,6 @@ export function ChatRoom({
                 </div>
             </div>
 
-            {/* Message context menu */}
             {msgMenu && activeMsg && (
                 <div
                     ref={msgMenuRef}
@@ -1291,25 +1245,25 @@ export function ChatRoom({
                         type="button"
                     >
                         <Smile size={16} />
-                        \u0648\u0627\u06a9\u0646\u0634
+                        واکنش
                     </button>
                     <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button">
                         <Reply size={16} />
-                        \u067e\u0627\u0633\u062e
+                        پاسخ
                     </button>
                     <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button">
                         <Forward size={16} />
-                        \u0641\u0648\u0631\u0648\u0627\u0631\u062f
+                        فوروارد
                     </button>
                     {activeMsgIsMine && !activeMsgIsForwarded && (
                         <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button">
                             <Pencil size={16} />
-                            \u0648\u06cc\u0631\u0627\u06cc\u0634
+                            ویرایش
                         </button>
                     )}
                     <button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button">
                         <Copy size={16} />
-                        \u06a9\u067e\u06cc
+                        کپی
                     </button>
                     {canDeleteActiveMsg && (
                         <button
@@ -1318,13 +1272,12 @@ export function ChatRoom({
                             type="button"
                         >
                             <Trash2 size={16} />
-                            \u062d\u0630\u0641
+                            حذف
                         </button>
                     )}
                 </div>
             )}
 
-            {/* Reaction picker + users list */}
             {reactionMenu && reactionMsg && (
                 <div
                     ref={reactionMenuRef}
@@ -1339,7 +1292,6 @@ export function ChatRoom({
                         onClose={() => { setReactionMenu(null); setShowReactionUsers(false); }}
                     />
 
-                    {/* Reaction users list — only shown if there are reactions and toggled */}
                     {reactionUsersList.length > 0 && (
                         <div
                             style={{
@@ -1365,8 +1317,8 @@ export function ChatRoom({
                                 }}
                                 onClick={() => setShowReactionUsers(v => !v)}
                             >
-                                <span>\u0648\u0627\u06a9\u0646\u0634\u200c\u062f\u0647\u0646\u062f\u06af\u0627\u0646 ({reactionUsersList.length})</span>
-                                <span style={{ fontSize: 10 }}>{showReactionUsers ? '\u25b2' : '\u25bc'}</span>
+                                <span>واکنش‌دهندگان ({reactionUsersList.length})</span>
+                                <span style={{ fontSize: 10 }}>{showReactionUsers ? '▲' : '▼'}</span>
                             </div>
                             {showReactionUsers && reactionUsersList.map((ru, i) => (
                                 <div
@@ -1431,7 +1383,7 @@ export function ChatRoom({
                     <div className="chat-room__reply-edit-box">
                         <div style={{ minWidth: 0 }}>
                             <div className="chat-room__reply-edit-box__title">
-                                {editingId ? '\u062f\u0631 \u062d\u0627\u0644 \u0648\u06cc\u0631\u0627\u06cc\u0634' : '\u062f\u0631 \u062d\u0627\u0644 \u067e\u0627\u0633\u062e'}
+                                {editingId ? 'در حال ویرایش' : 'در حال پاسخ'}
                             </div>
                             {!editingId && replyTo && (
                                 <div className="chat-room__reply-edit-box__text">{replyTo.text}</div>
@@ -1451,7 +1403,7 @@ export function ChatRoom({
                 {uploadedFile && (
                     <div className="chat-room__reply-edit-box">
                         <div style={{ minWidth: 0 }}>
-                            <div className="chat-room__reply-edit-box__title">\u0641\u0627\u06cc\u0644 \u0622\u067e\u0644\u0648\u062f \u0634\u062f\u0647</div>
+                            <div className="chat-room__reply-edit-box__title">فایل آپلود شده</div>
                             <div className="chat-room__reply-edit-box__text">{uploadedFile.fileName}</div>
                         </div>
                         <button type="button" className="icon-btn" aria-label="Remove file" onClick={() => setUploadedFile(null)}>
@@ -1465,7 +1417,7 @@ export function ChatRoom({
                     <textarea
                         ref={textareaRef}
                         className="chat-room__text-input"
-                        placeholder="\u067e\u06cc\u0627\u0645..."
+                        placeholder="پیام..."
                         value={text}
                         onChange={(e) => setText(e.target.value)}
                         onFocus={() => {
@@ -1506,49 +1458,46 @@ export function ChatRoom({
                 onSelectChat={onSelectChat}
             />
 
-            {/* Confirm delete chat (direct) or group (verified) */}
             {confirmDeleteChat && (
                 <div className="chat-room-modal-overlay" ref={confirmDeleteChatRef}>
                     <div className="chat-room-confirm-modal">
                         <h3 className="chat-room-confirm-modal__title">
-                            {isGroupChat ? '\u06af\u0631\u0648\u0647 \u062d\u0630\u0641 \u0634\u0648\u062f\u061f' : '\u06af\u0641\u062a\u06af\u0648 \u062d\u0630\u0641 \u0634\u0648\u062f\u061f'}
+                            {isGroupChat ? 'گروه حذف شود؟' : 'گفتگو حذف شود؟'}
                         </h3>
                         <p className="chat-room-confirm-modal__text">
                             {isGroupChat
-                                ? '\u06af\u0631\u0648\u0647 \u0648 \u062a\u0645\u0627\u0645 \u067e\u06cc\u0627\u0645\u200c\u0647\u0627 \u0628\u0631\u0627\u06cc \u0647\u0645\u0647 \u062d\u0630\u0641 \u062e\u0648\u0627\u0647\u062f \u0634\u062f.'
-                                : '\u0627\u06cc\u0646 \u0639\u0645\u0644 \u06af\u0641\u062a\u06af\u0648 \u0648 \u062a\u0645\u0627\u0645 \u067e\u06cc\u0627\u0645\u200c\u0647\u0627 \u0631\u0627 \u0628\u0631\u0627\u06cc \u0647\u0631 \u062f\u0648 \u06a9\u0627\u0631\u0628\u0631 \u062d\u0630\u0641 \u062e\u0648\u0627\u0647\u062f \u06a9\u0631\u062f.'}
+                                ? 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.'
+                                : 'این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'}
                         </p>
                         <div className="chat-room-confirm-modal__actions">
-                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteChat(false)} type="button">\u0644\u063a\u0648</button>
-                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doDeleteChat} type="button">\u062d\u0630\u0641</button>
+                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteChat(false)} type="button">لغو</button>
+                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doDeleteChat} type="button">حذف</button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Confirm leave group */}
             {confirmLeaveGroup && (
                 <div className="chat-room-modal-overlay" ref={confirmLeaveGroupRef}>
                     <div className="chat-room-confirm-modal">
-                        <h3 className="chat-room-confirm-modal__title">\u062e\u0631\u0648\u062c \u0627\u0632 \u06af\u0631\u0648\u0647\u061f</h3>
-                        <p className="chat-room-confirm-modal__text">\u0622\u06cc\u0627 \u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u06cc\u062f \u0627\u0632 \u06af\u0631\u0648\u0647 \u062e\u0627\u0631\u062c \u0634\u0648\u06cc\u062f\u061f \u06af\u0631\u0648\u0647 \u0628\u0631\u0627\u06cc \u0634\u0645\u0627 \u062d\u0630\u0641 \u062e\u0648\u0627\u0647\u062f \u0634\u062f.</p>
+                        <h3 className="chat-room-confirm-modal__title">خروج از گروه؟</h3>
+                        <p className="chat-room-confirm-modal__text">آیا می‌خواهید از گروه خارج شوید؟ گروه برای شما حذف خواهد شد.</p>
                         <div className="chat-room-confirm-modal__actions">
-                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmLeaveGroup(false)} type="button">\u0644\u063a\u0648</button>
-                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doLeaveGroup} type="button">\u062e\u0631\u0648\u062c</button>
+                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmLeaveGroup(false)} type="button">لغو</button>
+                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doLeaveGroup} type="button">خروج</button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Confirm delete message */}
             {confirmDeleteMsg && (
                 <div className="chat-room-modal-overlay" ref={confirmDeleteMsgRef}>
                     <div className="chat-room-confirm-modal">
-                        <h3 className="chat-room-confirm-modal__title">\u0627\u06cc\u0646 \u067e\u06cc\u0627\u0645 \u062d\u0630\u0641 \u0634\u0648\u062f\u061f</h3>
-                        <p className="chat-room-confirm-modal__text">\u0627\u06cc\u0646 \u0639\u0645\u0644 \u067e\u06cc\u0627\u0645 \u0631\u0627 \u0628\u0631\u0627\u06cc \u0647\u0631 \u062f\u0648 \u06a9\u0627\u0631\u0628\u0631 \u062d\u0630\u0641 \u062e\u0648\u0627\u0647\u062f \u06a9\u0631\u062f.</p>
+                        <h3 className="chat-room-confirm-modal__title">این پیام حذف شود؟</h3>
+                        <p className="chat-room-confirm-modal__text">این عمل پیام را برای هر دو کاربر حذف خواهد کرد.</p>
                         <div className="chat-room-confirm-modal__actions">
-                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteMsg(null)} type="button">\u0644\u063a\u0648</button>
-                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={confirmDeleteMessage} type="button">\u062d\u0630\u0641</button>
+                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteMsg(null)} type="button">لغو</button>
+                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={confirmDeleteMessage} type="button">حذف</button>
                         </div>
                     </div>
                 </div>
