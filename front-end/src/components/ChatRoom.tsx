@@ -86,6 +86,13 @@ function bubbleShape(prevSameSender: boolean, nextSameSender: boolean) {
     return 'msg-shape--last';
 }
 
+/** هر مقداری غیر از false / 0 / "false" / null / undefined رو verified حساب می‌کنیم */
+function resolveVerified(val: any): boolean {
+    if (val === null || val === undefined) return false;
+    if (val === false || val === 0 || val === 'false' || val === '0') return false;
+    return true;
+}
+
 export function ChatRoom({
     chatId,
     contact,
@@ -106,8 +113,7 @@ export function ChatRoom({
         [chats, chatId]
     );
     const isGroupChat = currentChat?.chatType === 'group';
-    // verified: هم boolean true و هم مقادیر truthy مثل 1 یا "true" رو قبول می‌کنیم
-    const isVerifiedUser = currentUser?.verified === true || (currentUser?.verified as any) === 1 || (currentUser?.verified as any) === 'true';
+    const isVerifiedUser = resolveVerified(currentUser?.verified);
 
     const [text, setText] = useState('');
     const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
@@ -597,12 +603,11 @@ export function ChatRoom({
                                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
                                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                                 >
-                                    {/* بدون dot آنلاین در لیست اعضا */}
                                     <Avatar name={member.name} size="md" src={member.avatar} />
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>
                                             {member.name}
-                                            {member.verified && <VerifiedBadge size={14} />}
+                                            {resolveVerified(member.verified) && <VerifiedBadge size={14} />}
                                         </div>
                                         <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
                                             {member.username ? `@${member.username}` : ''}
@@ -637,7 +642,7 @@ export function ChatRoom({
                     emoji: r.emoji,
                     name: member?.name || uid,
                     avatar: member?.avatar || '',
-                    verified: member?.verified || false,
+                    verified: resolveVerified(member?.verified),
                 });
             });
         });
@@ -660,7 +665,6 @@ export function ChatRoom({
                     type="button"
                     style={isSavedMessages ? { cursor: 'default' } : undefined}
                 >
-                    {/* در گروه dot نشون داده نمیشه — فقط در چت دو نفره */}
                     <Avatar
                         name={contact.name}
                         size="sm"
@@ -671,7 +675,7 @@ export function ChatRoom({
                     <div className="chat-room__header-info">
                         <div className="chat-room__contact-name" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                             {contact.name}
-                            {!isSavedMessages && contact.verified ? <VerifiedBadge size={14} /> : null}
+                            {!isSavedMessages && resolveVerified(contact.verified) ? <VerifiedBadge size={14} /> : null}
                         </div>
                         {!isSavedMessages && (
                             <div className={isGroupChat || contact.online ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
@@ -709,7 +713,7 @@ export function ChatRoom({
                                             <LogOut size={16} />
                                             خروج از گروه
                                         </button>
-                                        {/* حذف گروه — فقط verified */}
+                                        {/* حذف گروه — فقط verified (هر نوع truthy value) */}
                                         {isVerifiedUser && (
                                             <button
                                                 className="popover__item popover__item--danger"
@@ -816,14 +820,12 @@ export function ChatRoom({
                                             swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
                                         }}
                                     >
-                                        {/* آواتار کنار پیام در گروه — بدون dot */}
                                         {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--last') && (() => {
                                             const sender = groupMembers[m.senderId];
                                             const senderName = sender?.name || m.senderId || 'ناشناس';
                                             return (
                                                 <div style={{ position: 'absolute', left: 0, bottom: 0, cursor: 'pointer', zIndex: 1 }}
                                                     onClick={(e) => { e.stopPropagation(); setViewingMemberId(m.senderId); }}>
-                                                    {/* online پاس نمیشه → dot نمایش داده نمیشه */}
                                                     <Avatar name={senderName} size="sm" src={sender?.avatar || ''} />
                                                 </div>
                                             );
@@ -958,7 +960,6 @@ export function ChatRoom({
                                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary, rgba(0,0,0,0.04))')}
                                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                                 >
-                                    {/* آواتار گرد — بدون dot آفلاین */}
                                     <div style={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
                                         <Avatar name={ru.name} size="xs" src={ru.avatar} />
                                     </div>
