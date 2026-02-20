@@ -28,7 +28,7 @@ interface ChatRoomProps {
     onSelectChat?: (chatId: string) => void;
 }
 
-const IRAN_OFFSET_MS = 210 * 60 * 1000; // +03:30
+const IRAN_OFFSET_MS = 210 * 60 * 1000;
 
 function normalizeTs(ts: any): number {
     if (ts == null) return Date.now();
@@ -73,10 +73,8 @@ function formatDayLabel(ts: any) {
     const today = iranDayNumber(Date.now());
     const thatDay = iranDayNumber(ts);
     const diffDays = today - thatDay;
-
     if (diffDays === 0) return 'امروز';
     if (diffDays === 1) return 'دیروز';
-
     const d = iranShiftedDate(ts);
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
@@ -108,7 +106,8 @@ export function ChatRoom({
         [chats, chatId]
     );
     const isGroupChat = currentChat?.chatType === 'group';
-    const isVerifiedUser = Boolean(currentUser?.verified);
+    // verified: هم boolean true و هم مقادیر truthy مثل 1 یا "true" رو قبول می‌کنیم
+    const isVerifiedUser = currentUser?.verified === true || (currentUser?.verified as any) === 1 || (currentUser?.verified as any) === 'true';
 
     const [text, setText] = useState('');
     const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
@@ -167,7 +166,6 @@ export function ChatRoom({
             setChatStats(null);
             return;
         }
-
         let cancelled = false;
         const loadStats = async () => {
             try {
@@ -182,20 +180,13 @@ export function ChatRoom({
                 if (!cancelled) setChatStats(null);
             }
         };
-
         loadStats();
         const timer = window.setInterval(loadStats, 15000);
-        return () => {
-            cancelled = true;
-            window.clearInterval(timer);
-        };
+        return () => { cancelled = true; window.clearInterval(timer); };
     }, [chatId, isGroupChat]);
 
     useEffect(() => {
-        if (!isGroupChat) {
-            setGroupMembers({});
-            return;
-        }
+        if (!isGroupChat) { setGroupMembers({}); return; }
         let cancelled = false;
         const loadMembers = async () => {
             try {
@@ -208,99 +199,66 @@ export function ChatRoom({
                     });
                     setGroupMembers(map);
                 }
-            } catch {
-                // ignore
-            }
+            } catch { /* ignore */ }
         };
         loadMembers();
         return () => { cancelled = true; };
     }, [chatId, isGroupChat]);
 
     const swipeRef = useRef<{
-        id: string | null;
-        startX: number;
-        startY: number;
-        active: boolean;
-        captured: boolean;
-        pointerId: number | null;
-        blockClickUntil: number;
-    }>({
-        id: null,
-        startX: 0,
-        startY: 0,
-        active: false,
-        captured: false,
-        pointerId: null,
-        blockClickUntil: 0,
-    });
+        id: string | null; startX: number; startY: number;
+        active: boolean; captured: boolean; pointerId: number | null; blockClickUntil: number;
+    }>({ id: null, startX: 0, startY: 0, active: false, captured: false, pointerId: null, blockClickUntil: 0 });
 
     const isSavedMessages = contact.chatId === 'saved';
     const canDeleteChat = chatId !== 'pending' && !isSavedMessages;
-
     const token = localStorage.getItem('token') || '';
 
     const scrollToBottom = (smooth = false) => {
         const container = messagesContainerRef.current;
         if (container) {
-            const top = Math.max(0, container.scrollHeight - container.clientHeight);
-            container.scrollTo({ top, behavior: smooth ? 'smooth' : 'auto' });
+            container.scrollTo({ top: Math.max(0, container.scrollHeight - container.clientHeight), behavior: smooth ? 'smooth' : 'auto' });
             return;
         }
-        const el = messagesEndRef.current;
-        if (!el) return;
-        el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
+        messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
     };
 
     const computeNearBottom = () => {
         const container = messagesContainerRef.current;
         if (!container) return true;
-        const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-        return distanceFromBottom < 120;
+        return container.scrollHeight - container.scrollTop - container.clientHeight < 120;
     };
 
     const resizeTextarea = () => {
         const textarea = textareaRef.current;
         if (!textarea) return;
         textarea.style.height = 'auto';
-        const newHeight = Math.min(Math.max(textarea.scrollHeight, 44), 200);
-        textarea.style.height = `${newHeight}px`;
+        textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 44), 200)}px`;
     };
 
-    useEffect(() => {
-        resizeTextarea();
-    }, [text]);
+    useEffect(() => { resizeTextarea(); }, [text]);
 
     useEffect(() => {
         const room = roomRef.current;
         if (!room) return;
-
         const vv = (window as any).visualViewport as VisualViewport | undefined;
-        if (!vv) {
-            room.style.setProperty('--keyboard-offset', '0px');
-            return;
-        }
-
+        if (!vv) { room.style.setProperty('--keyboard-offset', '0px'); return; }
         let raf: number | null = null;
-
         const update = () => {
             const el = roomRef.current;
             if (!el) return;
-
             const offsetTop = typeof vv.offsetTop === 'number' ? vv.offsetTop : 0;
             const keyboard = Math.max(0, window.innerHeight - vv.height - offsetTop);
             el.style.setProperty('--keyboard-offset', `${Math.round(keyboard)}px`);
-
             if (isAtBottomRef.current) {
                 if (raf) cancelAnimationFrame(raf);
                 raf = requestAnimationFrame(() => scrollToBottom(false));
             }
         };
-
         update();
         vv.addEventListener('resize', update);
         vv.addEventListener('scroll', update);
         window.addEventListener('orientationchange', update);
-
         return () => {
             vv.removeEventListener('resize', update);
             vv.removeEventListener('scroll', update);
@@ -313,9 +271,7 @@ export function ChatRoom({
 
     const resetDrag = (messageId: string) => {
         setDragState({ id: messageId, x: 0, active: false });
-        window.setTimeout(() => {
-            setDragState((s) => (s.id === messageId ? { id: null, x: 0, active: false } : s));
-        }, 140);
+        window.setTimeout(() => setDragState((s) => (s.id === messageId ? { id: null, x: 0, active: false } : s)), 140);
     };
 
     const startHighlight = (messageId: string) => {
@@ -328,35 +284,24 @@ export function ChatRoom({
         const el = messageElsRef.current.get(messageId);
         const container = messagesContainerRef.current;
         if (!el || !container) return;
-
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
         if (highlightRafRef.current) cancelAnimationFrame(highlightRafRef.current);
         const startedAt = performance.now();
-
         const check = () => {
             const target = messageElsRef.current.get(messageId);
             const cont = messagesContainerRef.current;
             if (!target || !cont) return;
-
             const cr = cont.getBoundingClientRect();
             const tr = target.getBoundingClientRect();
-
-            const targetCenter = (tr.top + tr.bottom) / 2;
-            const containerCenter = (cr.top + cr.bottom) / 2;
-
             const isVisible = tr.bottom > cr.top + 24 && tr.top < cr.bottom - 24;
-            const nearCenter = Math.abs(targetCenter - containerCenter) < 120;
-
+            const nearCenter = Math.abs((tr.top + tr.bottom) / 2 - (cr.top + cr.bottom) / 2) < 120;
             if ((isVisible && nearCenter) || performance.now() - startedAt > 3000) {
                 startHighlight(messageId);
                 highlightRafRef.current = null;
                 return;
             }
-
             highlightRafRef.current = requestAnimationFrame(check);
         };
-
         highlightRafRef.current = requestAnimationFrame(check);
     };
 
@@ -368,60 +313,37 @@ export function ChatRoom({
             } else {
                 const ta = document.createElement('textarea');
                 ta.value = value;
-                ta.style.position = 'fixed';
-                ta.style.left = '-9999px';
-                ta.style.top = '0';
+                ta.style.cssText = 'position:fixed;left:-9999px;top:0';
                 document.body.appendChild(ta);
-                ta.focus();
-                ta.select();
+                ta.focus(); ta.select();
                 document.execCommand('copy');
                 document.body.removeChild(ta);
             }
-        } catch {
-            // ignore
-        }
+        } catch { /* ignore */ }
         setMsgMenu(null);
     };
 
     const handleReact = async (messageId: string, emoji: string) => {
-        setReactionMenu(null);
-        setMsgMenu(null);
+        setReactionMenu(null); setMsgMenu(null);
         try {
-            await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, {
-                method: 'POST',
-                body: JSON.stringify({ emoji }),
-            });
-        } catch (error) {
-            console.error('Failed to react:', error);
-        }
+            await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, { method: 'POST', body: JSON.stringify({ emoji }) });
+        } catch (e) { console.error('Failed to react:', e); }
     };
 
     const handleDeleteReaction = async (messageId: string) => {
-        setReactionMenu(null);
-        setMsgMenu(null);
+        setReactionMenu(null); setMsgMenu(null);
         try {
-            await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, {
-                method: 'DELETE',
-            });
-        } catch (error) {
-            console.error('Failed to delete reaction:', error);
-        }
+            await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, { method: 'DELETE' });
+        } catch (e) { console.error('Failed to delete reaction:', e); }
     };
 
     const handleForwardMessage = async (targetChatId: string) => {
         if (!forwardingMessageId) return;
         try {
-            await apiFetch('/messages/forward', {
-                method: 'POST',
-                body: JSON.stringify({
-                    sourceChatId: chatId,
-                    messageId: forwardingMessageId,
-                    targetChatId,
-                }),
-            });
+            await apiFetch('/messages/forward', { method: 'POST', body: JSON.stringify({ sourceChatId: chatId, messageId: forwardingMessageId, targetChatId }) });
             setForwardingMessageId(null);
-        } catch (error) {
-            console.error('Failed to forward message:', error);
+        } catch (e) {
+            console.error('Failed to forward:', e);
             alert('فوروارد پیام با خطا مواجه شد');
         }
     };
@@ -432,44 +354,30 @@ export function ChatRoom({
         setMsgMenu(null);
     };
 
-    const handleFileUploaded = (file: FileMetadata) => {
-        setUploadedFile(file);
-    };
+    const handleFileUploaded = (file: FileMetadata) => setUploadedFile(file);
 
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
             const target = e.target as Node;
-            if (menuRef.current && menuRef.current.contains(target)) return;
-            if (msgMenuRef.current && msgMenuRef.current.contains(target)) return;
-            if (reactionMenuRef.current && reactionMenuRef.current.contains(target)) return;
-
+            if (menuRef.current?.contains(target)) return;
+            if (msgMenuRef.current?.contains(target)) return;
+            if (reactionMenuRef.current?.contains(target)) return;
             if (confirmDeleteChatRef.current) {
                 const modal = confirmDeleteChatRef.current.querySelector('.chat-room-confirm-modal');
-                if (modal && !modal.contains(target)) {
-                    setConfirmDeleteChat(false);
-                    return;
-                }
+                if (modal && !modal.contains(target)) { setConfirmDeleteChat(false); return; }
             }
             if (confirmDeleteMsgRef.current) {
                 const modal = confirmDeleteMsgRef.current.querySelector('.chat-room-confirm-modal');
-                if (modal && !modal.contains(target)) {
-                    setConfirmDeleteMsg(null);
-                    return;
-                }
+                if (modal && !modal.contains(target)) { setConfirmDeleteMsg(null); return; }
             }
             if (confirmLeaveGroupRef.current) {
                 const modal = confirmLeaveGroupRef.current.querySelector('.chat-room-confirm-modal');
-                if (modal && !modal.contains(target)) {
-                    setConfirmLeaveGroup(false);
-                    return;
-                }
+                if (modal && !modal.contains(target)) { setConfirmLeaveGroup(false); return; }
             }
-
             setChatMenuOpen(false);
             setMsgMenu(null);
             setReactionMenu(null);
         };
-
         document.addEventListener('mousedown', onDocClick);
         return () => document.removeEventListener('mousedown', onDocClick);
     }, []);
@@ -486,15 +394,11 @@ export function ChatRoom({
         lastChatIdRef.current = chatId;
         initialScrollDoneRef.current = false;
         prevLenRef.current = messages.length;
-        setNewMsgCount(0);
-        setShowScrollBtn(false);
+        setNewMsgCount(0); setShowScrollBtn(false);
         isAtBottomRef.current = true;
-        setReplyTo(null);
-        setEditingId(null);
-        setMsgMenu(null);
-        setReactionMenu(null);
-        setText('');
-        setUploadedFile(null);
+        setReplyTo(null); setEditingId(null);
+        setMsgMenu(null); setReactionMenu(null);
+        setText(''); setUploadedFile(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
 
@@ -506,14 +410,9 @@ export function ChatRoom({
 
     useEffect(() => {
         const container = messagesContainerRef.current;
-        if (!container) {
-            prevLenRef.current = messages.length;
-            return;
-        }
-
+        if (!container) { prevLenRef.current = messages.length; return; }
         const nearBottom = computeNearBottom();
         isAtBottomRef.current = nearBottom;
-
         if (!initialScrollDoneRef.current) {
             if (messages.length > 0) {
                 const raf = requestAnimationFrame(() => scrollToBottom(false));
@@ -524,7 +423,6 @@ export function ChatRoom({
             prevLenRef.current = messages.length;
             return;
         }
-
         const added = messages.length - prevLenRef.current;
         if (added > 0) {
             if (nearBottom) {
@@ -534,7 +432,6 @@ export function ChatRoom({
             }
             setNewMsgCount((c) => c + added);
         }
-
         prevLenRef.current = messages.length;
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [messages.length, chatId]);
@@ -542,105 +439,55 @@ export function ChatRoom({
     const onMessagesScroll = () => {
         const container = messagesContainerRef.current;
         if (!container) return;
-
         const nearBottom = computeNearBottom();
         isAtBottomRef.current = nearBottom;
-        if (nearBottom) {
-            setNewMsgCount(0);
-            setShowScrollBtn(false);
-        } else {
-            const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-            setShowScrollBtn(distanceFromBottom > 300);
-        }
+        if (nearBottom) { setNewMsgCount(0); setShowScrollBtn(false); }
+        else setShowScrollBtn(container.scrollHeight - container.scrollTop - container.clientHeight > 300);
     };
 
-    const items = useMemo(() => {
-        return messages.map((m, idx) => {
-            const prev = idx > 0 ? messages[idx - 1] : null;
-            const next = idx < messages.length - 1 ? messages[idx + 1] : null;
-
-            const isMine = m.senderId === currentUserId;
-            const prevSameSender = prev ? prev.senderId === m.senderId : false;
-            const nextSameSender = next ? next.senderId === m.senderId : false;
-
-            const dayBreak = !prev || !sameDay(prev.timestamp, m.timestamp);
-
-            return {
-                m,
-                isMine,
-                dayBreak,
-                shape: bubbleShape(prevSameSender, nextSameSender),
-            };
-        });
-    }, [messages, currentUserId]);
+    const items = useMemo(() => messages.map((m, idx) => {
+        const prev = idx > 0 ? messages[idx - 1] : null;
+        const next = idx < messages.length - 1 ? messages[idx + 1] : null;
+        const isMine = m.senderId === currentUserId;
+        const prevSameSender = prev ? prev.senderId === m.senderId : false;
+        const nextSameSender = next ? next.senderId === m.senderId : false;
+        const dayBreak = !prev || !sameDay(prev.timestamp, m.timestamp);
+        return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender) };
+    }), [messages, currentUserId]);
 
     const submit = () => {
         const t = text.trim();
         if (!t && !uploadedFile) return;
-
-        onSendMessage({
-            text: t || '',
-            replyToId: replyTo?.id,
-            editMessageId: editingId ?? undefined,
-            file: uploadedFile ?? undefined,
-        });
-
-        setText('');
-        setUploadedFile(null);
-        setReplyTo(null);
-        setEditingId(null);
+        onSendMessage({ text: t || '', replyToId: replyTo?.id, editMessageId: editingId ?? undefined, file: uploadedFile ?? undefined });
+        setText(''); setUploadedFile(null); setReplyTo(null); setEditingId(null);
         requestAnimationFrame(() => scrollToBottom(true));
     };
 
     const doDeleteChat = async () => {
         try {
             await apiFetch(`/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
-            setConfirmDeleteChat(false);
-            setChatMenuOpen(false);
-            if (onChatDeleted) onChatDeleted(chatId);
-            else onBack();
-        } catch (e) {
-            alert('حذف گفتگو با خطا مواجه شد');
-        }
+            setConfirmDeleteChat(false); setChatMenuOpen(false);
+            if (onChatDeleted) onChatDeleted(chatId); else onBack();
+        } catch { alert('حذف گفتگو با خطا مواجه شد'); }
     };
 
     const doLeaveGroup = async () => {
         try {
             await apiFetch(`/groups/${encodeURIComponent(chatId)}/leave`, { method: 'POST' });
-            setConfirmLeaveGroup(false);
-            setChatMenuOpen(false);
-            if (onChatDeleted) onChatDeleted(chatId);
-            else onBack();
-        } catch (e) {
-            alert('خروج از گروه با خطا مواجه شد');
-        }
+            setConfirmLeaveGroup(false); setChatMenuOpen(false);
+            if (onChatDeleted) onChatDeleted(chatId); else onBack();
+        } catch { alert('خروج از گروه با خطا مواجه شد'); }
     };
 
     const openMessageMenu = (messageId: string, targetEl: HTMLElement) => {
         const room = roomRef.current;
         if (!room) return;
-
         const roomRect = room.getBoundingClientRect();
         const r = targetEl.getBoundingClientRect();
-
-        const menuHeight = 220;
-        const menuWidth = 180;
-
-        let top = r.top - roomRect.top;
-        const left = r.left - roomRect.left;
-
+        const menuHeight = 220; const menuWidth = 180;
         const spaceBelow = roomRect.height - (r.bottom - roomRect.top);
-
-        if (spaceBelow < menuHeight + 16) {
-            top = (r.bottom - roomRect.top) - menuHeight;
-            top = Math.max(64, top);
-        } else {
-            top = r.bottom - roomRect.top;
-        }
-
-        const maxLeft = roomRect.width - menuWidth - 16;
-        const finalLeft = Math.max(12, Math.min(left, maxLeft));
-
+        let top = spaceBelow < menuHeight + 16 ? Math.max(64, (r.bottom - roomRect.top) - menuHeight) : r.bottom - roomRect.top;
+        const finalLeft = Math.max(12, Math.min(r.left - roomRect.left, roomRect.width - menuWidth - 16));
         setMsgMenu({ id: messageId, top, left: finalLeft });
         setReactionMenu(null);
     };
@@ -648,108 +495,55 @@ export function ChatRoom({
     const openReactionMenu = (messageId: string, targetEl: HTMLElement) => {
         const room = roomRef.current;
         if (!room) return;
-
         const roomRect = room.getBoundingClientRect();
         const r = targetEl.getBoundingClientRect();
-
-        const pickerHeight = 200;
-        const pickerWidth = 320;
-
-        let top = r.top - roomRect.top;
-        const left = r.left - roomRect.left;
-
+        const pickerHeight = 200; const pickerWidth = 320;
         const spaceBelow = roomRect.height - (r.bottom - roomRect.top);
-
-        if (spaceBelow < pickerHeight + 16) {
-            top = (r.bottom - roomRect.top) - pickerHeight;
-            top = Math.max(64, top);
-        } else {
-            top = r.bottom - roomRect.top;
-        }
-
-        const maxLeft = roomRect.width - pickerWidth - 16;
-        const finalLeft = Math.max(12, Math.min(left, maxLeft));
-
+        let top = spaceBelow < pickerHeight + 16 ? Math.max(64, (r.bottom - roomRect.top) - pickerHeight) : r.bottom - roomRect.top;
+        const finalLeft = Math.max(12, Math.min(r.left - roomRect.left, roomRect.width - pickerWidth - 16));
         setReactionMenu({ id: messageId, top, left: finalLeft });
         setMsgMenu(null);
     };
 
     const beginReply = (m: Message) => {
-        const rt: MessageReplyType = { id: m.id, senderId: m.senderId, text: m.text };
-        setReplyTo({ id: rt.id, senderId: rt.senderId, text: rt.text });
-        setEditingId(null);
-        setMsgMenu(null);
-        setReactionMenu(null);
+        setReplyTo({ id: m.id, senderId: m.senderId, text: m.text });
+        setEditingId(null); setMsgMenu(null); setReactionMenu(null);
         setTimeout(() => textareaRef.current?.focus(), 0);
     };
 
     const beginEdit = (m: Message) => {
-        setEditingId(m.id);
-        setReplyTo(null);
-        setText(m.text);
-        setMsgMenu(null);
-        setReactionMenu(null);
+        setEditingId(m.id); setReplyTo(null); setText(m.text);
+        setMsgMenu(null); setReactionMenu(null);
         setTimeout(() => textareaRef.current?.focus(), 0);
     };
 
     const doDeleteMessage = (messageId: string) => {
-        setMsgMenu(null);
-        setReactionMenu(null);
+        setMsgMenu(null); setReactionMenu(null);
         setConfirmDeleteMsg(messageId);
     };
 
     const confirmDeleteMessage = () => {
-        if (confirmDeleteMsg) {
-            onDeleteMessage(confirmDeleteMsg);
-            setConfirmDeleteMsg(null);
-        }
+        if (confirmDeleteMsg) { onDeleteMessage(confirmDeleteMsg); setConfirmDeleteMsg(null); }
     };
 
     if (showContactInfo) {
         return (
-            <ContactInfo
-                user={contact}
-                onBack={() => {
-                    setShowContactInfo(false);
-                    requestAnimationFrame(() => scrollToBottom(false));
-                }}
-            />
+            <ContactInfo user={contact} onBack={() => { setShowContactInfo(false); requestAnimationFrame(() => scrollToBottom(false)); }} />
         );
     }
 
     if (viewingMemberId) {
         const memberData = groupMembers[viewingMemberId];
-        const memberUser: any = memberData ? {
-            chatId: memberData.chatId || viewingMemberId,
-            name: memberData.name || viewingMemberId,
-            username: memberData.username || '',
-            avatar: memberData.avatar || '',
-            bio: memberData.bio || '',
-            online: false,
-            verified: memberData.verified || false,
-        } : {
-            chatId: viewingMemberId,
-            name: viewingMemberId,
-            username: '',
-            avatar: '',
-            bio: '',
-            online: false,
-        };
-        return (
-            <ContactInfo
-                user={memberUser}
-                onBack={() => setViewingMemberId(null)}
-            />
-        );
+        const memberUser: any = memberData
+            ? { chatId: memberData.chatId || viewingMemberId, name: memberData.name || viewingMemberId, username: memberData.username || '', avatar: memberData.avatar || '', bio: memberData.bio || '', online: false, verified: memberData.verified || false }
+            : { chatId: viewingMemberId, name: viewingMemberId, username: '', avatar: '', bio: '', online: false };
+        return <ContactInfo user={memberUser} onBack={() => setViewingMemberId(null)} />;
     }
 
     if (showMembersList) {
         const membersList = Object.values(groupMembers);
         const filtered = memberSearch.trim()
-            ? membersList.filter(m =>
-                m.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
-                m.username.toLowerCase().includes(memberSearch.toLowerCase())
-              )
+            ? membersList.filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()) || m.username.toLowerCase().includes(memberSearch.toLowerCase()))
             : membersList;
         const onlineCount = membersList.filter(m => (m as any).online).length;
         const isInviteLink = (s: string) => s.startsWith('novaroom://') || s.startsWith('senoroom://');
@@ -758,24 +552,18 @@ export function ChatRoom({
         return (
             <div className="contact-info">
                 <div className="contact-info__header">
-                    <button className="contact-info__back" onClick={() => setShowMembersList(false)} type="button">
-                        <ArrowLeft size={20} />
-                    </button>
+                    <button className="contact-info__back" onClick={() => setShowMembersList(false)} type="button"><ArrowLeft size={20} /></button>
                     <div className="contact-info__title">اطلاعات گروه</div>
                     <div className="contact-info__spacer" />
                 </div>
-
                 <div className="contact-info__content">
                     <div className="contact-info__avatar">
-                        <Avatar name={contact.name} size="xl" online={false} src={contact.avatar} />
-                        <div className="contact-info__name" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                            {contact.name}
-                        </div>
+                        <Avatar name={contact.name} size="xl" src={contact.avatar} />
+                        <div className="contact-info__name" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{contact.name}</div>
                         <div className="contact-info__status chat-room__contact-status--online" style={{ color: '#22c55e' }}>
                             {membersList.length} عضو • {onlineCount} آنلاین
                         </div>
                     </div>
-
                     {inviteLink && (
                         <div className="contact-info__card">
                             <div className="contact-info__label">لینک دعوت</div>
@@ -784,63 +572,40 @@ export function ChatRoom({
                                     <Users size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
                                     {inviteLink}
                                 </div>
-                                <button
-                                    type="button"
-                                    className="icon-btn"
-                                    style={{ flexShrink: 0 }}
-                                    onClick={() => navigator.clipboard.writeText(inviteLink).catch(() => {})}
-                                >
+                                <button type="button" className="icon-btn" style={{ flexShrink: 0 }} onClick={() => navigator.clipboard.writeText(inviteLink).catch(() => {})}>
                                     <Copy size={18} />
                                 </button>
                             </div>
                         </div>
                     )}
-
                     <div className="contact-info__card" style={{ padding: '8px 12px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Search size={15} style={{ opacity: 0.5, flexShrink: 0 }} />
-                            <input
-                                type="text"
-                                placeholder="جستجو در اعضا..."
-                                value={memberSearch}
-                                onChange={e => setMemberSearch(e.target.value)}
-                                style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, fontSize: 14, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', direction: 'rtl' }}
-                            />
+                            <input type="text" placeholder="جستجو در اعضا..." value={memberSearch} onChange={e => setMemberSearch(e.target.value)}
+                                style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, fontSize: 14, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', direction: 'rtl' }} />
                         </div>
                     </div>
-
-                    <div style={{ padding: '8px 4px 4px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'Vazir, sans-serif' }}>
-                        اعضا ({membersList.length})
-                    </div>
-
+                    <div style={{ padding: '8px 4px 4px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'Vazir, sans-serif' }}>اعضا ({membersList.length})</div>
                     <div className="contact-info__card" style={{ padding: 0, overflow: 'hidden' }}>
                         {filtered.length === 0 ? (
                             <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)', fontSize: 14 }}>عضوی یافت نشد</div>
                         ) : (
                             filtered.map((member, idx) => (
-                                <div
-                                    key={member.chatId}
+                                <div key={member.chatId}
                                     onClick={() => { setShowMembersList(false); setViewingMemberId(member.chatId); }}
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 12,
-                                        padding: '10px 16px',
-                                        cursor: 'pointer',
-                                        borderTop: idx > 0 ? '1px solid var(--border-primary)' : 'none',
-                                        transition: 'background 0.15s',
-                                    }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer', borderTop: idx > 0 ? '1px solid var(--border-primary)' : 'none', transition: 'background 0.15s' }}
                                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
                                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                                 >
-                                    <Avatar name={member.name} size="md" online={(member as any).online} src={member.avatar} />
+                                    {/* بدون dot آنلاین در لیست اعضا */}
+                                    <Avatar name={member.name} size="md" src={member.avatar} />
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>
                                             {member.name}
                                             {member.verified && <VerifiedBadge size={14} />}
                                         </div>
-                                        <div style={{ fontSize: 13, color: (member as any).online ? '#22c55e' : 'var(--text-secondary)', marginTop: 2 }}>
-                                            {(member as any).online ? 'آنلاین' : member.username ? `@${member.username}` : 'آفلاین'}
+                                        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
+                                            {member.username ? `@${member.username}` : ''}
                                         </div>
                                     </div>
                                 </div>
@@ -862,12 +627,10 @@ export function ChatRoom({
         r.userIds && Array.isArray(r.userIds) && r.userIds.includes(currentUserId)
     );
 
-    // Build reaction users list with member data
     const reactionUsersList: { userId: string; emoji: string; name: string; avatar: string; verified: boolean }[] = [];
     if (reactionMsg?.reactions && reactionMsg.reactions.length > 0) {
         reactionMsg.reactions.forEach((r: any) => {
-            const ids: string[] = r.userIds || [];
-            ids.forEach((uid) => {
+            (r.userIds || []).forEach((uid: string) => {
                 const member = groupMembers[uid];
                 reactionUsersList.push({
                     userId: uid,
@@ -883,57 +646,38 @@ export function ChatRoom({
     return (
         <div className="chat-room" style={{ position: 'relative' }} ref={roomRef}>
             <div className="chat-room__header">
-                <button className="chat-room__back-btn" onClick={onBack} aria-label="Back" type="button">
-                    <ArrowLeft size={20} />
-                </button>
-
-                <button className="icon-btn chat-room__close-btn" onClick={onCloseChat} aria-label="Back to empty" type="button">
-                    <ArrowLeft size={20} />
-                </button>
+                <button className="chat-room__back-btn" onClick={onBack} aria-label="Back" type="button"><ArrowLeft size={20} /></button>
+                <button className="icon-btn chat-room__close-btn" onClick={onCloseChat} aria-label="Back to empty" type="button"><ArrowLeft size={20} /></button>
 
                 <button
                     className="chat-room__header-clickable chat-room__header-clickable--full"
                     onClick={() => {
                         if (isSavedMessages) return;
-                        if (isGroupChat) {
-                            setMemberSearch('');
-                            setShowMembersList(true);
-                        } else {
-                            setShowContactInfo(true);
-                        }
+                        if (isGroupChat) { setMemberSearch(''); setShowMembersList(true); }
+                        else setShowContactInfo(true);
                     }}
                     aria-label={isSavedMessages ? '' : 'Open contact info'}
                     type="button"
                     style={isSavedMessages ? { cursor: 'default' } : undefined}
                 >
+                    {/* در گروه dot نشون داده نمیشه — فقط در چت دو نفره */}
                     <Avatar
                         name={contact.name}
                         size="sm"
-                        online={isGroupChat ? false : contact.online}
+                        online={isGroupChat || isSavedMessages ? undefined : contact.online}
                         savedMessages={isSavedMessages}
                         src={contact.avatar}
                     />
                     <div className="chat-room__header-info">
-                        <div
-                            className="chat-room__contact-name"
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                        >
+                        <div className="chat-room__contact-name" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                             {contact.name}
                             {!isSavedMessages && contact.verified ? <VerifiedBadge size={14} /> : null}
                         </div>
                         {!isSavedMessages && (
-                            <div
-                                className={
-                                    isGroupChat || contact.online
-                                        ? 'chat-room__contact-status chat-room__contact-status--online'
-                                        : 'chat-room__contact-status'
-                                }
-                            >
+                            <div className={isGroupChat || contact.online ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
                                 {isGroupChat
                                     ? `${chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0} عضو • ${chatStats?.onlineMembers ?? 0} آنلاین`
-                                    : contact.online
-                                        ? 'آنلاین'
-                                        : 'آفلاین'}
+                                    : contact.online ? 'آنلاین' : 'آفلاین'}
                             </div>
                         )}
                     </div>
@@ -956,7 +700,7 @@ export function ChatRoom({
                             <div className="popover popover--mini popover--right">
                                 {isGroupChat ? (
                                     <>
-                                        {/* خروج از گروه — همه کاربران گروه */}
+                                        {/* خروج از گروه — همه کاربران */}
                                         <button
                                             className="popover__item popover__item--danger"
                                             onClick={() => { setConfirmLeaveGroup(true); setChatMenuOpen(false); }}
@@ -993,21 +737,14 @@ export function ChatRoom({
                 )}
             </div>
 
-            <div
-                className="chat-room__messages"
-                ref={messagesContainerRef}
-                onScroll={onMessagesScroll}
-                style={{ overflowX: dragState.active ? 'hidden' : 'auto' }}
-            >
+            <div className="chat-room__messages" ref={messagesContainerRef} onScroll={onMessagesScroll}
+                style={{ overflowX: dragState.active ? 'hidden' : 'auto' }}>
                 <div className="chat-room__messages-inner">
-                    {loading ? (
-                        <ChatMessagesSkeleton />
-                    ) : (
+                    {loading ? <ChatMessagesSkeleton /> : (
                         items.map(({ m, isMine, dayBreak, shape }) => {
                             const isHighlighted = highlightId === m.id;
                             const dragX = dragState.id === m.id ? dragState.x : 0;
                             const dragActive = dragState.id === m.id ? dragState.active : false;
-
                             return (
                                 <div key={m.id}>
                                     {dayBreak && (
@@ -1015,62 +752,41 @@ export function ChatRoom({
                                             <div className="chat-room__date-label">{formatDayLabel(m.timestamp)}</div>
                                         </div>
                                     )}
-
                                     <div
-                                        className={isMine
-                                            ? 'message-row message-row--mine'
-                                            : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`}
+                                        className={isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`}
                                         onPointerDown={(e) => {
-                                            if (e.pointerType !== 'mouse') return;
-                                            if (e.button !== 0) return;
-                                            swipeRef.current = {
-                                                id: m.id, startX: e.clientX, startY: e.clientY,
-                                                active: true, captured: false, pointerId: e.pointerId,
-                                                blockClickUntil: swipeRef.current.blockClickUntil,
-                                            };
+                                            if (e.pointerType !== 'mouse' || e.button !== 0) return;
+                                            swipeRef.current = { id: m.id, startX: e.clientX, startY: e.clientY, active: true, captured: false, pointerId: e.pointerId, blockClickUntil: swipeRef.current.blockClickUntil };
                                         }}
                                         onPointerMove={(e) => {
-                                            if (e.pointerType !== 'mouse') return;
-                                            if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                            if (e.pointerType !== 'mouse' || !swipeRef.current.active || swipeRef.current.id !== m.id) return;
                                             const dx = e.clientX - swipeRef.current.startX;
                                             const dy = e.clientY - swipeRef.current.startY;
                                             if (!swipeRef.current.captured) {
-                                                if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy)) return;
-                                                if (dx <= 0) return;
+                                                if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
                                                 swipeRef.current.captured = true;
                                                 try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
                                             }
-                                            if (!swipeRef.current.captured) return;
                                             e.preventDefault();
                                             setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
                                         }}
                                         onPointerUp={(e) => {
-                                            if (e.pointerType !== 'mouse') return;
-                                            if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                            if (e.pointerType !== 'mouse' || !swipeRef.current.active || swipeRef.current.id !== m.id) return;
                                             const dx = e.clientX - swipeRef.current.startX;
                                             const dy = e.clientY - swipeRef.current.startY;
                                             if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
                                             if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
                                             resetDrag(m.id);
-                                            swipeRef.current.active = false;
-                                            swipeRef.current.captured = false;
-                                            swipeRef.current.pointerId = null;
+                                            swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
                                         }}
                                         onPointerCancel={(e) => {
-                                            if (e.pointerType !== 'mouse') return;
-                                            if (swipeRef.current.id !== m.id) return;
+                                            if (e.pointerType !== 'mouse' || swipeRef.current.id !== m.id) return;
                                             resetDrag(m.id);
-                                            swipeRef.current.active = false;
-                                            swipeRef.current.captured = false;
-                                            swipeRef.current.pointerId = null;
+                                            swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
                                         }}
                                         onTouchStart={(e) => {
                                             const t = e.touches[0];
-                                            swipeRef.current = {
-                                                id: m.id, startX: t.clientX, startY: t.clientY,
-                                                active: true, captured: false, pointerId: null,
-                                                blockClickUntil: swipeRef.current.blockClickUntil,
-                                            };
+                                            swipeRef.current = { id: m.id, startX: t.clientX, startY: t.clientY, active: true, captured: false, pointerId: null, blockClickUntil: swipeRef.current.blockClickUntil };
                                         }}
                                         onTouchMove={(e) => {
                                             if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
@@ -1078,11 +794,9 @@ export function ChatRoom({
                                             const dx = t.clientX - swipeRef.current.startX;
                                             const dy = t.clientY - swipeRef.current.startY;
                                             if (!swipeRef.current.captured) {
-                                                if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy)) return;
-                                                if (dx <= 0) return;
+                                                if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
                                                 swipeRef.current.captured = true;
                                             }
-                                            if (!swipeRef.current.captured) return;
                                             e.preventDefault();
                                             setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
                                         }}
@@ -1094,50 +808,33 @@ export function ChatRoom({
                                             if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
                                             if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
                                             resetDrag(m.id);
-                                            swipeRef.current.active = false;
-                                            swipeRef.current.captured = false;
-                                            swipeRef.current.pointerId = null;
+                                            swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
                                         }}
                                         onTouchCancel={() => {
                                             if (swipeRef.current.id !== m.id) return;
                                             resetDrag(m.id);
-                                            swipeRef.current.active = false;
-                                            swipeRef.current.captured = false;
-                                            swipeRef.current.pointerId = null;
+                                            swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
                                         }}
                                     >
+                                        {/* آواتار کنار پیام در گروه — بدون dot */}
                                         {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--last') && (() => {
                                             const sender = groupMembers[m.senderId];
                                             const senderName = sender?.name || m.senderId || 'ناشناس';
-                                            const senderAvatar = sender?.avatar || '';
                                             return (
-                                                <div
-                                                    style={{ position: 'absolute', left: 0, bottom: 0, cursor: 'pointer', zIndex: 1 }}
-                                                    onClick={(e) => { e.stopPropagation(); setViewingMemberId(m.senderId); }}
-                                                >
-                                                    <Avatar name={senderName} size="sm" online={false} src={senderAvatar} />
+                                                <div style={{ position: 'absolute', left: 0, bottom: 0, cursor: 'pointer', zIndex: 1 }}
+                                                    onClick={(e) => { e.stopPropagation(); setViewingMemberId(m.senderId); }}>
+                                                    {/* online پاس نمیشه → dot نمایش داده نمیشه */}
+                                                    <Avatar name={senderName} size="sm" src={sender?.avatar || ''} />
                                                 </div>
                                             );
                                         })()}
+
                                         <div
-                                            ref={(el) => {
-                                                if (!el) { messageElsRef.current.delete(m.id); return; }
-                                                messageElsRef.current.set(m.id, el);
-                                            }}
-                                            className={
-                                                isMine
-                                                    ? `message-bubble message-bubble--mine ${shape}`
-                                                    : `message-bubble message-bubble--theirs ${shape}`
-                                            }
-                                            onClick={(e) => {
-                                                if (Date.now() < swipeRef.current.blockClickUntil) return;
-                                                openMessageMenu(m.id, e.currentTarget);
-                                            }}
-                                            role="button"
-                                            tabIndex={0}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') openMessageMenu(m.id, e.currentTarget as any);
-                                            }}
+                                            ref={(el) => { if (!el) { messageElsRef.current.delete(m.id); return; } messageElsRef.current.set(m.id, el); }}
+                                            className={isMine ? `message-bubble message-bubble--mine ${shape}` : `message-bubble message-bubble--theirs ${shape}`}
+                                            onClick={(e) => { if (Date.now() < swipeRef.current.blockClickUntil) return; openMessageMenu(m.id, e.currentTarget); }}
+                                            role="button" tabIndex={0}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') openMessageMenu(m.id, e.currentTarget as any); }}
                                             style={{
                                                 cursor: 'pointer',
                                                 transform: `translateX(${dragX}px)`,
@@ -1149,12 +846,10 @@ export function ChatRoom({
                                                 const sender = groupMembers[m.senderId];
                                                 const senderName = sender?.name || m.senderId || 'ناشناس';
                                                 const colors = ['#E91E63','#9C27B0','#673AB7','#3F51B5','#2196F3','#00BCD4','#009688','#4CAF50','#FF5722','#FF9800'];
-                                                const colorIdx = m.senderId ? Math.abs(m.senderId.split('').reduce((a,c) => a + c.charCodeAt(0), 0)) % colors.length : 0;
+                                                const colorIdx = m.senderId ? Math.abs(m.senderId.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % colors.length : 0;
                                                 return (
-                                                    <div
-                                                        onClick={(e) => { e.stopPropagation(); setViewingMemberId(m.senderId); }}
-                                                        style={{ fontSize: 13, fontWeight: 700, color: colors[colorIdx], marginBottom: 3, cursor: 'pointer', fontFamily: 'Vazir, sans-serif', lineHeight: '1.2' }}
-                                                    >
+                                                    <div onClick={(e) => { e.stopPropagation(); setViewingMemberId(m.senderId); }}
+                                                        style={{ fontSize: 13, fontWeight: 700, color: colors[colorIdx], marginBottom: 3, cursor: 'pointer', fontFamily: 'Vazir, sans-serif', lineHeight: '1.2' }}>
                                                         {senderName}
                                                     </div>
                                                 );
@@ -1167,14 +862,11 @@ export function ChatRoom({
                                             )}
 
                                             {m.replyTo && (
-                                                <div
-                                                    onClick={(e) => { e.stopPropagation(); scrollToMessage(m.replyTo!.id); }}
-                                                    role="button"
-                                                    tabIndex={0}
+                                                <div onClick={(e) => { e.stopPropagation(); scrollToMessage(m.replyTo!.id); }}
+                                                    role="button" tabIndex={0}
                                                     onKeyDown={(e) => { if (e.key === 'Enter') scrollToMessage(m.replyTo!.id); }}
                                                     className="message-reply-box"
-                                                    style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}
-                                                >
+                                                    style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
                                                     <div className="message-reply-box__label">پاسخ</div>
                                                     <div className="message-reply-box__text">{m.replyTo.text}</div>
                                                 </div>
@@ -1189,20 +881,13 @@ export function ChatRoom({
                                                         const userIds = reaction.userIds || [];
                                                         const isMyReaction = userIds.includes(currentUserId);
                                                         return (
-                                                            <button
-                                                                key={idx}
+                                                            <button key={idx}
                                                                 className={isMyReaction ? 'message-reaction message-reaction--active' : 'message-reaction'}
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    if (isMyReaction) handleDeleteReaction(m.id);
-                                                                    else handleReact(m.id, reaction.emoji);
-                                                                }}
+                                                                onClick={(e) => { e.stopPropagation(); if (isMyReaction) handleDeleteReaction(m.id); else handleReact(m.id, reaction.emoji); }}
                                                                 type="button"
                                                             >
                                                                 <span className="message-reaction__emoji">{reaction.emoji}</span>
-                                                                {reaction.count > 1 && (
-                                                                    <span className="message-reaction__count">{reaction.count}</span>
-                                                                )}
+                                                                {reaction.count > 1 && <span className="message-reaction__count">{reaction.count}</span>}
                                                             </button>
                                                         );
                                                     })}
@@ -1211,9 +896,7 @@ export function ChatRoom({
 
                                             <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
                                                 <span className="message-time">{formatMessageTime(m.timestamp)}</span>
-                                                {m.edited && (
-                                                    <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>ویرایش شده</span>
-                                                )}
+                                                {m.edited && <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>ویرایش شده</span>}
                                                 {isMine && (
                                                     <span className={m.seen ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
                                                         {m.seen ? '✓✓' : '✓'}
@@ -1231,60 +914,30 @@ export function ChatRoom({
             </div>
 
             {msgMenu && activeMsg && (
-                <div
-                    ref={msgMenuRef}
-                    className="popover popover--mini"
+                <div ref={msgMenuRef} className="popover popover--mini"
                     style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <button
-                        className="popover__item"
-                        onClick={() => {
-                            const msgElement = messageElsRef.current.get(activeMsg.id);
-                            if (msgElement) openReactionMenu(activeMsg.id, msgElement);
-                        }}
-                        type="button"
-                    >
-                        <Smile size={16} />
-                        واکنش
+                    onClick={(e) => e.stopPropagation()}>
+                    <button className="popover__item" onClick={() => { const el = messageElsRef.current.get(activeMsg.id); if (el) openReactionMenu(activeMsg.id, el); }} type="button">
+                        <Smile size={16} />واکنش
                     </button>
-                    <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button">
-                        <Reply size={16} />
-                        پاسخ
-                    </button>
-                    <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button">
-                        <Forward size={16} />
-                        فوروارد
-                    </button>
+                    <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><Reply size={16} />پاسخ</button>
+                    <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><Forward size={16} />فوروارد</button>
                     {activeMsgIsMine && !activeMsgIsForwarded && (
-                        <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button">
-                            <Pencil size={16} />
-                            ویرایش
-                        </button>
+                        <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
                     )}
-                    <button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button">
-                        <Copy size={16} />
-                        کپی
-                    </button>
+                    <button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><Copy size={16} />کپی</button>
                     {canDeleteActiveMsg && (
-                        <button
-                            className="popover__item popover__item--danger"
-                            onClick={() => doDeleteMessage(activeMsg.id)}
-                            type="button"
-                        >
-                            <Trash2 size={16} />
-                            حذف
+                        <button className="popover__item popover__item--danger" onClick={() => doDeleteMessage(activeMsg.id)} type="button">
+                            <Trash2 size={16} />حذف
                         </button>
                     )}
                 </div>
             )}
 
             {reactionMenu && reactionMsg && (
-                <div
-                    ref={reactionMenuRef}
+                <div ref={reactionMenuRef}
                     style={{ top: reactionMenu.top, left: reactionMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
-                    onClick={(e) => e.stopPropagation()}
-                >
+                    onClick={(e) => e.stopPropagation()}>
                     <ReactionPicker
                         messageId={reactionMsg.id}
                         currentReaction={myReaction?.emoji}
@@ -1293,64 +946,28 @@ export function ChatRoom({
                         onClose={() => setReactionMenu(null)}
                     />
 
-                    {/* باکس واکنش‌دهندگان — همیشه باز، بدون نیاز به کلیک */}
                     {reactionUsersList.length > 0 && (
-                        <div
-                            style={{
-                                marginTop: 6,
-                                background: 'var(--bg-secondary)',
-                                border: '1px solid var(--border-primary)',
-                                borderRadius: 12,
-                                overflow: 'hidden',
-                                minWidth: 220,
-                                boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-                            }}
-                        >
-                            {/* هدر */}
-                            <div
-                                style={{
-                                    padding: '7px 12px',
-                                    fontSize: 11,
-                                    fontWeight: 600,
-                                    color: 'var(--text-secondary)',
-                                    borderBottom: '1px solid var(--border-primary)',
-                                    fontFamily: 'Vazir, sans-serif',
-                                }}
-                            >
+                        <div style={{ marginTop: 6, background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 12, overflow: 'hidden', minWidth: 220, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+                            <div style={{ padding: '7px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)', fontFamily: 'Vazir, sans-serif' }}>
                                 واکنش‌دهندگان ({reactionUsersList.length})
                             </div>
-
-                            {/* لیست کاربران */}
                             {reactionUsersList.map((ru, i) => (
-                                <div
-                                    key={i}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setReactionMenu(null);
-                                        setViewingMemberId(ru.userId);
-                                    }}
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 10,
-                                        padding: '8px 12px',
-                                        borderTop: i > 0 ? '1px solid var(--border-primary)' : 'none',
-                                        cursor: 'pointer',
-                                        transition: 'background 0.12s',
-                                    }}
+                                <div key={i}
+                                    onClick={(e) => { e.stopPropagation(); setReactionMenu(null); setViewingMemberId(ru.userId); }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderTop: i > 0 ? '1px solid var(--border-primary)' : 'none', cursor: 'pointer', transition: 'background 0.12s' }}
                                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary, rgba(0,0,0,0.04))')}
                                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                                 >
-                                    {/* آواتار */}
-                                    <Avatar name={ru.name} size="xs" online={false} src={ru.avatar} />
-                                    {/* اسم + تیک آبی */}
+                                    {/* آواتار گرد — بدون dot آفلاین */}
+                                    <div style={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
+                                        <Avatar name={ru.name} size="xs" src={ru.avatar} />
+                                    </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
                                         <span style={{ fontSize: 13, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                             {ru.name}
                                         </span>
                                         {ru.verified && <VerifiedBadge size={13} />}
                                     </div>
-                                    {/* ایموجی */}
                                     <span style={{ fontSize: 18, flexShrink: 0 }}>{ru.emoji}</span>
                                 </div>
                             ))}
@@ -1360,31 +977,9 @@ export function ChatRoom({
             )}
 
             {(newMsgCount > 0 || showScrollBtn) && (
-                <button
-                    type="button"
-                    aria-label="Jump to latest messages"
-                    onClick={() => {
-                        scrollToBottom(true);
-                        setNewMsgCount(0);
-                        setShowScrollBtn(false);
-                    }}
-                    style={{
-                        position: 'absolute',
-                        right: 16,
-                        bottom: 96,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        padding: newMsgCount > 0 ? '8px 10px' : '10px',
-                        borderRadius: 999,
-                        border: '1px solid rgba(0,0,0,0.12)',
-                        background: '#fff',
-                        boxShadow: '0 6px 20px rgba(0,0,0,0.10)',
-                        cursor: 'pointer',
-                        fontSize: 12,
-                        lineHeight: '12px',
-                    }}
-                >
+                <button type="button" aria-label="Jump to latest messages"
+                    onClick={() => { scrollToBottom(true); setNewMsgCount(0); setShowScrollBtn(false); }}
+                    style={{ position: 'absolute', right: 16, bottom: 96, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid rgba(0,0,0,0.12)', background: '#fff', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px' }}>
                     <ArrowDown size={16} />
                     {newMsgCount > 0 && (
                         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -1399,92 +994,48 @@ export function ChatRoom({
                 {(replyTo || editingId) && (
                     <div className="chat-room__reply-edit-box">
                         <div style={{ minWidth: 0 }}>
-                            <div className="chat-room__reply-edit-box__title">
-                                {editingId ? 'در حال ویرایش' : 'در حال پاسخ'}
-                            </div>
-                            {!editingId && replyTo && (
-                                <div className="chat-room__reply-edit-box__text">{replyTo.text}</div>
-                            )}
+                            <div className="chat-room__reply-edit-box__title">{editingId ? 'در حال ویرایش' : 'در حال پاسخ'}</div>
+                            {!editingId && replyTo && <div className="chat-room__reply-edit-box__text">{replyTo.text}</div>}
                         </div>
-                        <button
-                            type="button"
-                            className="icon-btn"
-                            aria-label="Cancel"
-                            onClick={() => { setReplyTo(null); setEditingId(null); setText(''); }}
-                        >
+                        <button type="button" className="icon-btn" aria-label="Cancel" onClick={() => { setReplyTo(null); setEditingId(null); setText(''); }}>
                             <X size={18} />
                         </button>
                     </div>
                 )}
-
                 {uploadedFile && (
                     <div className="chat-room__reply-edit-box">
                         <div style={{ minWidth: 0 }}>
                             <div className="chat-room__reply-edit-box__title">فایل آپلود شده</div>
                             <div className="chat-room__reply-edit-box__text">{uploadedFile.fileName}</div>
                         </div>
-                        <button type="button" className="icon-btn" aria-label="Remove file" onClick={() => setUploadedFile(null)}>
-                            <X size={18} />
-                        </button>
+                        <button type="button" className="icon-btn" aria-label="Remove file" onClick={() => setUploadedFile(null)}><X size={18} /></button>
                     </div>
                 )}
-
                 <div className="chat-room__input-wrapper">
                     <FileUpload token={token} onFileUploaded={handleFileUploaded} />
-                    <textarea
-                        ref={textareaRef}
-                        className="chat-room__text-input"
-                        placeholder="پیام..."
-                        value={text}
-                        onChange={(e) => setText(e.target.value)}
-                        onFocus={() => {
-                            setTimeout(() => {
-                                if (computeNearBottom()) scrollToBottom(false);
-                            }, 80);
-                        }}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                                e.preventDefault();
-                                submit();
-                            }
-                        }}
+                    <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
+                        value={text} onChange={(e) => setText(e.target.value)}
+                        onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }}
                         rows={1}
                     />
                     <button
-                        className={
-                            text.trim() || uploadedFile
-                                ? 'chat-room__send-btn chat-room__send-btn--active'
-                                : 'chat-room__send-btn chat-room__send-btn--disabled'
-                        }
-                        onClick={submit}
-                        disabled={!text.trim() && !uploadedFile}
-                        aria-label="Send"
-                        type="button"
-                    >
+                        className={text.trim() || uploadedFile ? 'chat-room__send-btn chat-room__send-btn--active' : 'chat-room__send-btn chat-room__send-btn--disabled'}
+                        onClick={submit} disabled={!text.trim() && !uploadedFile} aria-label="Send" type="button">
                         <SendHorizontal size={18} />
                     </button>
                 </div>
             </div>
 
-            <ForwardModal
-                isOpen={forwardModalOpen}
-                chats={chats}
-                currentUserId={currentUserId}
-                onClose={() => setForwardModalOpen(false)}
-                onForward={handleForwardMessage}
-                onSelectChat={onSelectChat}
-            />
+            <ForwardModal isOpen={forwardModalOpen} chats={chats} currentUserId={currentUserId}
+                onClose={() => setForwardModalOpen(false)} onForward={handleForwardMessage} onSelectChat={onSelectChat} />
 
             {confirmDeleteChat && (
                 <div className="chat-room-modal-overlay" ref={confirmDeleteChatRef}>
                     <div className="chat-room-confirm-modal">
-                        <h3 className="chat-room-confirm-modal__title">
-                            {isGroupChat ? 'گروه حذف شود؟' : 'گفتگو حذف شود؟'}
-                        </h3>
+                        <h3 className="chat-room-confirm-modal__title">{isGroupChat ? 'گروه حذف شود؟' : 'گفتگو حذف شود؟'}</h3>
                         <p className="chat-room-confirm-modal__text">
-                            {isGroupChat
-                                ? 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.'
-                                : 'این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'}
+                            {isGroupChat ? 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.' : 'این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'}
                         </p>
                         <div className="chat-room-confirm-modal__actions">
                             <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteChat(false)} type="button">لغو</button>

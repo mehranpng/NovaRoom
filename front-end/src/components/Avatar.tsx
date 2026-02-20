@@ -5,7 +5,7 @@ import { API_BASE_URL } from '../config/api';
 
 interface AvatarProps {
   name: string;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   online?: boolean;
   savedMessages?: boolean;
   src?: string;
@@ -28,8 +28,8 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-const sizeMap = { sm: 40, md: 48, lg: 64, xl: 80 };
-const iconSizeMap = { sm: 20, md: 24, lg: 32, xl: 40 };
+const sizeMap = { xs: 28, sm: 40, md: 48, lg: 64, xl: 80 };
+const iconSizeMap = { xs: 14, sm: 20, md: 24, lg: 32, xl: 40 };
 
 // Global cache: src key → blob URL
 const avatarCache = new Map<string, string>();
@@ -39,12 +39,9 @@ const avatarFetching = new Map<string, Promise<string>>();
 function resolveAvatarUrl(src: string): string {
   if (!src) return '';
 
-  // Already a blob URL (already fetched)
   if (src.startsWith('blob:')) return src;
 
-  // Already a full URL (http/https) → use as-is (auth header will be added)
   if (src.startsWith('http://') || src.startsWith('https://')) {
-    // If the full URL doesn't include /files/ and looks like it points to our API, fix it
     if (
       API_BASE_URL &&
       src.startsWith(API_BASE_URL) &&
@@ -57,12 +54,10 @@ function resolveAvatarUrl(src: string): string {
     return src;
   }
 
-  // Relative path starting with / → prepend API base
   if (src.startsWith('/')) {
     return `${API_BASE_URL}${src}`;
   }
 
-  // Raw file ID or filename (e.g. "abc123.jpg" or "uuid-here") → wrap in /files/
   return `${API_BASE_URL}/files/${src}`;
 }
 
@@ -129,12 +124,14 @@ export function Avatar({ name, size = 'md', online, savedMessages = false, src =
     return () => { cancelled = true; };
   }, [src]);
 
+  const px = sizeMap[size];
+
   if (savedMessages) {
     return (
       <div className={cx('avatar', `avatar--${size}`)}>
         <div
           className="avatar__circle avatar__circle--saved"
-          style={{ width: `${sizeMap[size]}px`, height: `${sizeMap[size]}px` }}
+          style={{ width: `${px}px`, height: `${px}px` }}
         >
           <Bookmark size={iconSizeMap[size]} color="white" fill="white" />
         </div>
@@ -143,21 +140,29 @@ export function Avatar({ name, size = 'md', online, savedMessages = false, src =
   }
 
   return (
-    <div className={cx('avatar', `avatar--${size}`)}>
+    <div
+      className={cx('avatar', `avatar--${size}`)}
+      style={{ width: `${px}px`, height: `${px}px`, flexShrink: 0 }}
+    >
       {resolvedSrc ? (
-        <img src={resolvedSrc} alt={name} className="avatar__image" loading="lazy" />
+        <img
+          src={resolvedSrc}
+          alt={name}
+          className="avatar__image"
+          loading="lazy"
+          style={{ width: `${px}px`, height: `${px}px`, borderRadius: '50%', objectFit: 'cover', display: 'block' }}
+        />
       ) : (
-        <div className={cx('avatar__circle', `avatar-color-${getColorIndex(name)}`)}>
+        <div
+          className={cx('avatar__circle', `avatar-color-${getColorIndex(name)}`)}
+          style={{ width: `${px}px`, height: `${px}px`, fontSize: size === 'xs' ? 11 : undefined }}
+        >
           {getInitials(name)}
         </div>
       )}
-      {online !== undefined && (
-        <span
-          className={cx(
-            'avatar__status',
-            online ? 'avatar__status--online' : 'avatar__status--offline'
-          )}
-        />
+      {/* dot status فقط زمانی رندر می‌شه که online صریحاً true یا false پاس شده باشه */}
+      {online === true && (
+        <span className="avatar__status avatar__status--online" />
       )}
     </div>
   );
