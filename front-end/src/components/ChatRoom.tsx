@@ -93,6 +93,16 @@ function resolveVerified(val: any): boolean {
     return true;
 }
 
+type GroupMember = {
+    name: string;
+    username: string;
+    avatar: string;
+    bio: string;
+    chatId: string;
+    verified?: boolean;
+    online?: boolean;
+};
+
 export function ChatRoom({
     chatId,
     contact,
@@ -157,7 +167,7 @@ export function ChatRoom({
     const [newMsgCount, setNewMsgCount] = useState(0);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     const [chatStats, setChatStats] = useState<{ totalMembers: number; onlineMembers: number } | null>(null);
-    const [groupMembers, setGroupMembers] = useState<Record<string, { name: string; username: string; avatar: string; bio: string; chatId: string; verified?: boolean }>>({});
+    const [groupMembers, setGroupMembers] = useState<Record<string, GroupMember>>({});
     const [viewingMemberId, setViewingMemberId] = useState<string | null>(null);
     const [showMembersList, setShowMembersList] = useState(false);
     const [memberSearch, setMemberSearch] = useState('');
@@ -198,17 +208,27 @@ export function ChatRoom({
             try {
                 const members = await apiFetch(`/chats/${encodeURIComponent(chatId)}/members`);
                 if (!cancelled && Array.isArray(members)) {
-                    const map: Record<string, any> = {};
+                    const map: Record<string, GroupMember> = {};
                     members.forEach((m: any) => {
                         const id = m.chatId || m.userId || m.username || '';
-                        if (id) map[id] = m;
+                        if (id) map[id] = {
+                            name: m.name || '',
+                            username: m.username || '',
+                            avatar: m.avatar || '',
+                            bio: m.bio || '',
+                            chatId: id,
+                            verified: m.verified,
+                            online: Boolean(m.online),
+                        };
                     });
                     setGroupMembers(map);
                 }
             } catch { /* ignore */ }
         };
         loadMembers();
-        return () => { cancelled = true; };
+        // به روز کردن وضعیت آنلاین هر 15 ثانیه یکبار
+        const timer = window.setInterval(loadMembers, 15000);
+        return () => { cancelled = true; window.clearInterval(timer); };
     }, [chatId, isGroupChat]);
 
     const swipeRef = useRef<{
@@ -541,7 +561,7 @@ export function ChatRoom({
     if (viewingMemberId) {
         const memberData = groupMembers[viewingMemberId];
         const memberUser: any = memberData
-            ? { chatId: memberData.chatId || viewingMemberId, name: memberData.name || viewingMemberId, username: memberData.username || '', avatar: memberData.avatar || '', bio: memberData.bio || '', online: false, verified: memberData.verified || false }
+            ? { chatId: memberData.chatId || viewingMemberId, name: memberData.name || viewingMemberId, username: memberData.username || '', avatar: memberData.avatar || '', bio: memberData.bio || '', online: memberData.online ?? false, verified: memberData.verified || false }
             : { chatId: viewingMemberId, name: viewingMemberId, username: '', avatar: '', bio: '', online: false };
         return <ContactInfo user={memberUser} onBack={() => setViewingMemberId(null)} />;
     }
@@ -551,7 +571,13 @@ export function ChatRoom({
         const filtered = memberSearch.trim()
             ? membersList.filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()) || m.username.toLowerCase().includes(memberSearch.toLowerCase()))
             : membersList;
-        const onlineCount = membersList.filter(m => (m as any).online).length;
+        // آنلاین‌ها اول نمایش داده شون
+        const sortedFiltered = [...filtered].sort((a, b) => {
+            if (a.online && !b.online) return -1;
+            if (!a.online && b.online) return 1;
+            return 0;
+        });
+        const onlineCount = membersList.filter(m => m.online).length;
         const isInviteLink = (s: string) => s.startsWith('novaroom://') || s.startsWith('senoroom://');
         const inviteLink = contact.username && isInviteLink(contact.username) ? contact.username : null;
 
@@ -593,24 +619,31 @@ export function ChatRoom({
                     </div>
                     <div style={{ padding: '8px 4px 4px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'Vazir, sans-serif' }}>اعضا ({membersList.length})</div>
                     <div className="contact-info__card" style={{ padding: 0, overflow: 'hidden' }}>
-                        {filtered.length === 0 ? (
+                        {sortedFiltered.length === 0 ? (
                             <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)', fontSize: 14 }}>عضوی یافت نشد</div>
                         ) : (
-                            filtered.map((member, idx) => (
+                            sortedFiltered.map((member, idx) => (
                                 <div key={member.chatId}
                                     onClick={() => { setShowMembersList(false); setViewingMemberId(member.chatId); }}
                                     style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer', borderTop: idx > 0 ? '1px solid var(--border-primary)' : 'none', transition: 'background 0.15s' }}
                                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
                                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                                 >
-                                    <Avatar name={member.name} size="md" src={member.avatar} />
+                                    {/* آواتار با dot آنلاین — فقط در همین لیست */}
+                                    <Avatar name={member.name} size="md" src={member.avatar} online={member.online} />
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>
                                             {member.name}
                                             {resolveVerified(member.verified) && <VerifiedBadge size={14} />}
                                         </div>
-                                        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
-                                            {member.username ? `@${member.username}` : ''}
+                                        <div style={{ fontSize: 13, marginTop: 2 }}>
+                                            {member.online ? (
+                                                <span style={{ color: '#22c55e' }}>آنلاین</span>
+                                            ) : (
+                                                <span style={{ color: 'var(--text-secondary)' }}>
+                                                    {member.username ? `@${member.username}` : 'آفلاین'}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
