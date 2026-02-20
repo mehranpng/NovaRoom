@@ -11,9 +11,10 @@ interface NewChatModalProps {
     onUserSelected: (user: User) => void;
     onCreateGroup: (groupName: string) => Promise<any> | any;
     onJoinGroup: (inviteCode: string) => Promise<void> | void;
+    currentUser?: User | null;
 }
 
-export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, onJoinGroup }: NewChatModalProps) {
+export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, onJoinGroup, currentUser }: NewChatModalProps) {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
@@ -22,6 +23,8 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
     const [inviteInput, setInviteInput] = useState('');
     const [createdGroupLink, setCreatedGroupLink] = useState<string>('');
     const [copied, setCopied] = useState(false);
+    const [groupError, setGroupError] = useState<string>('');
+    const [joinError, setJoinError] = useState<string>('');
 
     const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -35,6 +38,8 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
         setInviteInput('');
         setCreatedGroupLink('');
         setCopied(false);
+        setGroupError('');
+        setJoinError('');
     }, [isOpen]);
 
     useEffect(() => {
@@ -90,9 +95,10 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
     const handleCreateGroup = async () => {
         const normalized = groupName.trim();
         if (normalized.length < 3) {
-            alert('نام گروه باید حداقل ۳ کاراکتر باشد');
+            setGroupError('نام گروه باید حداقل ۳ کاراکتر باشد');
             return;
         }
+        setGroupError('');
         const res = await onCreateGroup(normalized);
         if (res?.inviteLink) {
             setCreatedGroupLink(res.inviteLink);
@@ -103,10 +109,15 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
     const handleJoinGroup = async () => {
         const inviteCode = extractInviteCode(inviteInput);
         if (!inviteCode) {
-            alert('لینک یا کد دعوت گروه را وارد کنید');
+            setJoinError('لینک یا کد دعوت گروه را وارد کنید');
             return;
         }
-        await onJoinGroup(inviteCode);
+        setJoinError('');
+        try {
+            await onJoinGroup(inviteCode);
+        } catch {
+            setJoinError('لینک دعوت نامعتبر است یا گروه یافت نشد');
+        }
     };
 
     const handleCopy = () => {
@@ -116,6 +127,8 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
     };
 
     if (!isOpen) return null;
+
+    const isVerified = Boolean(currentUser?.verified);
 
     return (
         <div
@@ -212,94 +225,140 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
                     </>
                 ) : (
                     <div className="new-chat-modal__group-box">
-                        <label className="new-chat-modal__label">ساخت گروه</label>
-                        <div className="new-chat-modal__input-wrap">
-                            <Users size={16} />
-                            <input
-                                type="text"
-                                placeholder="نام گروه"
-                                value={groupName}
-                                onChange={(e) => setGroupName(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleCreateGroup();
-                                }}
-                            />
-                        </div>
-                        <button type="button" className="new-chat-modal__action" onClick={handleCreateGroup}>
-                            ساخت گروه جدید
-                        </button>
+                        {/* ساخت گروه: فقط برای کاربران verified */}
+                        {isVerified ? (
+                            <>
+                                <label className="new-chat-modal__label">ساخت گروه</label>
+                                <div className="new-chat-modal__input-wrap">
+                                    <Users size={16} style={{ color: 'var(--text-secondary)' }} />
+                                    <input
+                                        type="text"
+                                        placeholder="نام گروه"
+                                        value={groupName}
+                                        onChange={(e) => {
+                                            setGroupName(e.target.value);
+                                            if (groupError) setGroupError('');
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') handleCreateGroup();
+                                        }}
+                                    />
+                                </div>
+                                {groupError && (
+                                    <p style={{
+                                        fontSize: 12,
+                                        color: '#ef4444',
+                                        margin: '4px 0 0',
+                                        paddingRight: 4,
+                                    }}>
+                                        {groupError}
+                                    </p>
+                                )}
+                                <button type="button" className="new-chat-modal__action" onClick={handleCreateGroup}>
+                                    ساخت گروه جدید
+                                </button>
 
-                        {/* نمایش لینک دعوت بعد از ساخت گروه */}
-                        {createdGroupLink && (
+                                {/* نمایش لینک دعوت بعد از ساخت گروه */}
+                                {createdGroupLink && (
+                                    <div style={{
+                                        marginTop: 12,
+                                        padding: '12px 14px',
+                                        background: 'var(--bg-secondary)',
+                                        borderRadius: 12,
+                                        border: '1px solid var(--border-primary)',
+                                    }}>
+                                        <div style={{
+                                            fontSize: 12,
+                                            color: 'var(--text-secondary)',
+                                            marginBottom: 8,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 6,
+                                        }}>
+                                            ✅ گروه ساخته شد — لینک دعوت:
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <span style={{
+                                                fontSize: 12,
+                                                fontFamily: 'monospace',
+                                                flex: 1,
+                                                wordBreak: 'break-all',
+                                                color: 'var(--text-primary)',
+                                                background: 'var(--bg-primary)',
+                                                padding: '6px 10px',
+                                                borderRadius: 8,
+                                                border: '1px solid var(--border-primary)',
+                                            }}>
+                                                {createdGroupLink}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={handleCopy}
+                                                style={{
+                                                    padding: '6px 12px',
+                                                    borderRadius: 8,
+                                                    border: '1px solid var(--border-primary)',
+                                                    background: copied ? '#22c55e' : 'var(--bg-primary)',
+                                                    color: copied ? '#fff' : 'var(--text-primary)',
+                                                    cursor: 'pointer',
+                                                    fontSize: 12,
+                                                    whiteSpace: 'nowrap',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: 4,
+                                                    transition: 'background 0.2s, color 0.2s',
+                                                }}
+                                            >
+                                                {copied ? <CheckCheck size={14} /> : <Copy size={14} />}
+                                                {copied ? 'کپی شد' : 'کپی'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        ) : (
                             <div style={{
-                                marginTop: 12,
                                 padding: '12px 14px',
                                 background: 'var(--bg-secondary)',
                                 borderRadius: 12,
                                 border: '1px solid var(--border-primary)',
+                                fontSize: 13,
+                                color: 'var(--text-secondary)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
                             }}>
-                                <div style={{
-                                    fontSize: 12,
-                                    color: 'var(--text-secondary)',
-                                    marginBottom: 8,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 6,
-                                }}>
-                                    ✅ گروه ساخته شد — لینک دعوت:
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <span style={{
-                                        fontSize: 12,
-                                        fontFamily: 'monospace',
-                                        flex: 1,
-                                        wordBreak: 'break-all',
-                                        color: 'var(--text-primary)',
-                                        background: 'var(--bg-primary)',
-                                        padding: '6px 10px',
-                                        borderRadius: 8,
-                                        border: '1px solid var(--border-primary)',
-                                    }}>
-                                        {createdGroupLink}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        onClick={handleCopy}
-                                        style={{
-                                            padding: '6px 12px',
-                                            borderRadius: 8,
-                                            border: '1px solid var(--border-primary)',
-                                            background: copied ? '#22c55e' : 'var(--bg-primary)',
-                                            color: copied ? '#fff' : 'var(--text-primary)',
-                                            cursor: 'pointer',
-                                            fontSize: 12,
-                                            whiteSpace: 'nowrap',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 4,
-                                            transition: 'background 0.2s, color 0.2s',
-                                        }}
-                                    >
-                                        {copied ? <CheckCheck size={14} /> : <Copy size={14} />}
-                                        {copied ? 'کپی شد' : 'کپی'}
-                                    </button>
-                                </div>
+                                <Users size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
+                                ساخت گروه فقط برای کاربران تأییدشده در دسترس است
                             </div>
                         )}
 
                         <label className="new-chat-modal__label" style={{ marginTop: 16 }}>عضویت با لینک</label>
                         <div className="new-chat-modal__input-wrap">
-                            <LinkIcon size={16} />
+                            <LinkIcon size={16} style={{ color: 'var(--text-secondary)' }} />
                             <input
                                 type="text"
                                 placeholder="novaroom://group/INVITE_CODE"
                                 value={inviteInput}
-                                onChange={(e) => setInviteInput(e.target.value)}
+                                onChange={(e) => {
+                                    setInviteInput(e.target.value);
+                                    if (joinError) setJoinError('');
+                                }}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') handleJoinGroup();
                                 }}
                             />
                         </div>
+                        {joinError && (
+                            <p style={{
+                                fontSize: 12,
+                                color: '#ef4444',
+                                margin: '4px 0 0',
+                                paddingRight: 4,
+                            }}>
+                                {joinError}
+                            </p>
+                        )}
                         <button type="button" className="new-chat-modal__action new-chat-modal__action--secondary" onClick={handleJoinGroup}>
                             عضویت در گروه
                         </button>

@@ -545,7 +545,7 @@ export function App() {
             }
         } catch (error) {
             console.error(error);
-            alert('عضویت در گروه انجام نشد');
+            throw error; // Let NewChatModal handle the error display inline
         }
     }, [loadChats, handleSelectChat]);
 
@@ -794,6 +794,7 @@ export function App() {
                     onUserSelected={handleUserSelectedFromModal}
                     onCreateGroup={handleCreateGroup}
                     onJoinGroup={handleJoinGroup}
+                    currentUser={currentUser}
                 />
             </div>
         </MusicPlayerProvider>
