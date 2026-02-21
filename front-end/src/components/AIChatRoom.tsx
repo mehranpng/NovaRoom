@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Forward } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Forward, Check } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
@@ -45,15 +45,64 @@ function formatMessageTime(ts: unknown) {
     return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
 }
 
+// ─── CodeBlock with copy button ───────────────────────────────────────────────
+function CodeBlock({ className, children }: { className?: string; children?: React.ReactNode }) {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+        const code = typeof children === 'string' ? children : String(children ?? '');
+        try {
+            if (navigator.clipboard && (window as unknown as { isSecureContext?: boolean }).isSecureContext) {
+                await navigator.clipboard.writeText(code);
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = code;
+                ta.style.position = 'fixed';
+                ta.style.left = '-9999px';
+                ta.style.top = '0';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            // ignore
+        }
+    };
+
+    // extract language label e.g. "language-python" → "python"
+    const lang = className?.replace('language-', '') ?? '';
+
+    return (
+        <div className="md-code-block-wrapper">
+            <div className="md-code-block-header">
+                {lang && <span className="md-code-lang">{lang}</span>}
+                <button
+                    type="button"
+                    className={copied ? 'md-code-copy-btn md-code-copy-btn--copied' : 'md-code-copy-btn'}
+                    onClick={handleCopy}
+                    aria-label="Copy code"
+                >
+                    {copied ? <Check size={13} /> : <Copy size={13} />}
+                    <span>{copied ? 'کپی شد' : 'کپی'}</span>
+                </button>
+            </div>
+            <pre className="md-code-block">
+                <code className={className}>{children}</code>
+            </pre>
+        </div>
+    );
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 const markdownComponents: Components = {
     code({ className, children, ...props }) {
         const isInline = !('data-language' in props) && !className?.includes('language-');
         if (!isInline) {
-            return (
-                <pre className="md-code-block">
-                    <code className={className}>{children}</code>
-                </pre>
-            );
+            return <CodeBlock className={className}>{children}</CodeBlock>;
         }
         return <code className="md-code-inline">{children}</code>;
     },

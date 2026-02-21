@@ -969,16 +969,78 @@ textarea {
   padding: 1px 5px;
 }
 
+/* ── Code block wrapper (with copy button) ── */
+.message-text--markdown .md-code-block-wrapper {
+  margin: 0.5em 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(0,0,0,0.12);
+  direction: ltr;
+  text-align: left;
+}
+
+.message-text--markdown .md-code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: rgba(0,0,0,0.08);
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  min-height: 34px;
+}
+
+.message-text--markdown .md-code-lang {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(0,0,0,0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.message-text--markdown .md-code-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(0,0,0,0.15);
+  background: rgba(255,255,255,0.55);
+  color: rgba(0,0,0,0.55);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  margin-left: auto;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+.message-text--markdown .md-code-copy-btn:hover {
+  background: rgba(255,255,255,0.85);
+  color: rgba(0,0,0,0.75);
+}
+
+.message-text--markdown .md-code-copy-btn--copied {
+  background: #d1fae5;
+  border-color: #6ee7b7;
+  color: #047857;
+}
+
+.message-text--markdown .md-code-copy-btn--copied:hover {
+  background: #a7f3d0;
+}
+
 .message-text--markdown .md-code-block {
   font-family: 'Courier New', Courier, monospace;
   font-size: 0.84em;
-  background: rgba(0,0,0,0.12);
-  border-radius: 8px;
   padding: 10px 14px;
-  margin: 0.5em 0;
+  margin: 0;
   overflow-x: auto;
   white-space: pre;
   display: block;
+  background: transparent;
 }
 
 .message-text--markdown .md-code-block code {
@@ -999,8 +1061,34 @@ textarea {
   background: rgba(255,255,255,0.12);
 }
 
-.dark-mode .message-text--markdown .md-code-block {
-  background: rgba(255,255,255,0.08);
+.dark-mode .message-text--markdown .md-code-block-wrapper {
+  background: rgba(0,0,0,0.35);
+}
+
+.dark-mode .message-text--markdown .md-code-block-header {
+  background: rgba(255,255,255,0.06);
+  border-bottom-color: rgba(255,255,255,0.08);
+}
+
+.dark-mode .message-text--markdown .md-code-lang {
+  color: rgba(255,255,255,0.4);
+}
+
+.dark-mode .message-text--markdown .md-code-copy-btn {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.6);
+}
+
+.dark-mode .message-text--markdown .md-code-copy-btn:hover {
+  background: rgba(255,255,255,0.18);
+  color: rgba(255,255,255,0.9);
+}
+
+.dark-mode .message-text--markdown .md-code-copy-btn--copied {
+  background: #064e3b;
+  border-color: #065f46;
+  color: #6ee7b7;
 }
 
 .dark-mode .message-text--markdown .md-blockquote {
@@ -1011,14 +1099,43 @@ textarea {
   color: #93c5fd;
 }
 
-/* Mine bubble markdown (white text) */
+/* Mine bubble markdown overrides */
 .message-bubble--mine .message-text--markdown .md-code-inline {
   background: rgba(255,255,255,0.2);
   color: #fff;
 }
 
+.message-bubble--mine .message-text--markdown .md-code-block-wrapper {
+  background: rgba(0,0,0,0.28);
+}
+
+.message-bubble--mine .message-text--markdown .md-code-block-header {
+  background: rgba(0,0,0,0.18);
+  border-bottom-color: rgba(255,255,255,0.1);
+}
+
+.message-bubble--mine .message-text--markdown .md-code-lang {
+  color: rgba(255,255,255,0.5);
+}
+
+.message-bubble--mine .message-text--markdown .md-code-copy-btn {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.25);
+  color: rgba(255,255,255,0.75);
+}
+
+.message-bubble--mine .message-text--markdown .md-code-copy-btn:hover {
+  background: rgba(255,255,255,0.28);
+  color: #fff;
+}
+
+.message-bubble--mine .message-text--markdown .md-code-copy-btn--copied {
+  background: rgba(110,231,183,0.2);
+  border-color: rgba(110,231,183,0.5);
+  color: #6ee7b7;
+}
+
 .message-bubble--mine .message-text--markdown .md-code-block {
-  background: rgba(0,0,0,0.25);
   color: #e2e8f0;
 }
 
