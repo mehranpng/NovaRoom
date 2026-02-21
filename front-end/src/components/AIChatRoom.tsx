@@ -57,21 +57,21 @@ const markdownComponents: Components = {
         }
         return <code className="md-code-inline">{children}</code>;
     },
-    h1: ({ children }: { children: React.ReactNode }) => <h1 className="md-h1">{children}</h1>,
-    h2: ({ children }: { children: React.ReactNode }) => <h2 className="md-h2">{children}</h2>,
-    h3: ({ children }: { children: React.ReactNode }) => <h3 className="md-h3">{children}</h3>,
-    h4: ({ children }: { children: React.ReactNode }) => <h4 className="md-h4">{children}</h4>,
-    h5: ({ children }: { children: React.ReactNode }) => <h5 className="md-h5">{children}</h5>,
-    h6: ({ children }: { children: React.ReactNode }) => <h6 className="md-h6">{children}</h6>,
-    p: ({ children }: { children: React.ReactNode }) => <p className="md-p">{children}</p>,
-    ul: ({ children }: { children: React.ReactNode }) => <ul className="md-ul">{children}</ul>,
-    ol: ({ children }: { children: React.ReactNode }) => <ol className="md-ol">{children}</ol>,
-    li: ({ children }: { children: React.ReactNode }) => <li className="md-li">{children}</li>,
-    strong: ({ children }: { children: React.ReactNode }) => <strong className="md-strong">{children}</strong>,
-    em: ({ children }: { children: React.ReactNode }) => <em className="md-em">{children}</em>,
-    del: ({ children }: { children: React.ReactNode }) => <del className="md-del">{children}</del>,
-    blockquote: ({ children }: { children: React.ReactNode }) => <blockquote className="md-blockquote">{children}</blockquote>,
-    a: ({ children, href }: { children: React.ReactNode; href?: string }) => (
+    h1: ({ children }: { children?: React.ReactNode }) => <h1 className="md-h1">{children}</h1>,
+    h2: ({ children }: { children?: React.ReactNode }) => <h2 className="md-h2">{children}</h2>,
+    h3: ({ children }: { children?: React.ReactNode }) => <h3 className="md-h3">{children}</h3>,
+    h4: ({ children }: { children?: React.ReactNode }) => <h4 className="md-h4">{children}</h4>,
+    h5: ({ children }: { children?: React.ReactNode }) => <h5 className="md-h5">{children}</h5>,
+    h6: ({ children }: { children?: React.ReactNode }) => <h6 className="md-h6">{children}</h6>,
+    p: ({ children }: { children?: React.ReactNode }) => <p className="md-p">{children}</p>,
+    ul: ({ children }: { children?: React.ReactNode }) => <ul className="md-ul">{children}</ul>,
+    ol: ({ children }: { children?: React.ReactNode }) => <ol className="md-ol">{children}</ol>,
+    li: ({ children }: { children?: React.ReactNode }) => <li className="md-li">{children}</li>,
+    strong: ({ children }: { children?: React.ReactNode }) => <strong className="md-strong">{children}</strong>,
+    em: ({ children }: { children?: React.ReactNode }) => <em className="md-em">{children}</em>,
+    del: ({ children }: { children?: React.ReactNode }) => <del className="md-del">{children}</del>,
+    blockquote: ({ children }: { children?: React.ReactNode }) => <blockquote className="md-blockquote">{children}</blockquote>,
+    a: ({ children, href }: { children?: React.ReactNode; href?: string }) => (
         <a className="md-link" href={href} target="_blank" rel="noopener noreferrer">{children}</a>
     ),
 };
@@ -297,10 +297,10 @@ export function AIChatRoom({
 
     const handleForwardMessage = async (targetChatId: string) => {
         if (!forwardingMessageId) return;
-        
+
         try {
             const aiChatId = `ai_chat_${currentUserId}`;
-            
+
             await apiFetch('/messages/forward', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -308,10 +308,10 @@ export function AIChatRoom({
                     targetChatId,
                 }),
             });
-            
+
             setForwardingMessageId(null);
             setForwardModalOpen(false);
-            
+
             if (onSelectChat && targetChatId !== aiChatId) {
                 onSelectChat(targetChatId);
             }
@@ -326,10 +326,10 @@ export function AIChatRoom({
     return (
         <div className="chat-room" style={{ position: 'relative' }} ref={roomRef}>
             <div className="chat-room__header">
-                <button 
-                    className="chat-room__back-btn" 
-                    onClick={onBack} 
-                    aria-label="Back" 
+                <button
+                    className="chat-room__back-btn"
+                    onClick={onBack}
+                    aria-label="Back"
                     type="button"
                     style={{ display: 'flex' }}
                 >
