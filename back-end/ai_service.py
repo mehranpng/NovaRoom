@@ -11,49 +11,6 @@ client = OpenAI(
 )
 
 
-MARKDOWN_GUIDE = """
-# COMPLETE MARKDOWN GUIDE
-
-## HEADERS
-# H1
-## H2
-### H3
-#### H4
-##### H5
-###### H6
-
-## TEXT STYLES
-*italic* or _italic_
-**bold** or __bold__
-***bold italic***
-~~strikethrough~~
-
-## LISTS
-Unordered:
-- Item 1
-- Item 2
-  - Subitem
-* Item with star
-+ Item with plus
-
-Ordered:
-1. First
-2. Second
-   1. Subitem
-3. Third
-
-## CODE
-Inline: `code here`
-
-Block:
-```javascript
-function test() {
-  return true;
-}
-```
-"""
-
-
 def get_system_prompt(user_name: str = "") -> str:
     """Generate system prompt for NovaRoom AI assistant."""
     return f"""
@@ -72,12 +29,8 @@ def get_system_prompt(user_name: str = "") -> str:
 - **همیشه فارسی** پاسخ بده — بدون استثنا.
 - فقط در کدنویسی از انگلیسی استفاده کن.
 
-## فرمت‌بندی پاسخ
-برای فرمت‌بندی پاسخ‌هایت از Markdown استفاده کن. راهنمای کامل:
-{MARKDOWN_GUIDE}
-
 ## سبک پاسخ
-- پاسخ ها بیشتر از 2000 کاراکتر نشود.
+- جواب ها معمولا کوتاه فقط در صورت نیاز طولانی پاسخ داده شود. (پاسخ کلی بیشتر از 1000 کاراکتر نشود.)
 - لحن: دوستانه، کمی شوخ‌طبع، ولی همیشه حرفه‌ای.
 - از اضافه‌گویی و تکرار پرهیز کن.
 - اگر سؤال مبهم است، کوتاه توضیح بخواه.
@@ -122,7 +75,7 @@ async def generate_ai_response(
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=full_messages,  # type: ignore
-            max_tokens=700,
+            max_tokens=500,
         )
 
         return (
