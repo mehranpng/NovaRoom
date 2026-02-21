@@ -30,7 +30,7 @@ def get_system_prompt(user_name: str = "") -> str:
 - فقط در کدنویسی از انگلیسی استفاده کن.
 
 ## سبک پاسخ
-- پاسخ‌ها **کوتاه، مستقیم و مفید** باشند (حداکثر ۱۰۰۰ کاراکتر).
+- پاسخ ها بیشتر از 2000 کاراکتر نشود.
 - لحن: دوستانه، کمی شوخ‌طبع، ولی همیشه حرفه‌ای.
 - از اضافه‌گویی و تکرار پرهیز کن.
 - اگر سؤال مبهم است، کوتاه توضیح بخواه.
@@ -75,7 +75,7 @@ async def generate_ai_response(
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=full_messages,  # type: ignore
-            stream=False,
+            max_tokens=700,
         )
 
         return (
