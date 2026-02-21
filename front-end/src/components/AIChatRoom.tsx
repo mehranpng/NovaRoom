@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ArrowDown, ArrowLeft, Copy, Forward } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import type { Components } from 'react-markdown';
 import type { Message, Chat } from '../types';
 import { VerifiedBadge } from './VerifiedBadge';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
@@ -22,7 +23,7 @@ interface AIChatRoomProps {
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000; // +03:30
 
-function normalizeTs(ts: any): number {
+function normalizeTs(ts: unknown): number {
     if (ts == null) return Date.now();
     if (typeof ts === 'string') {
         const n = Date.parse(ts);
@@ -35,14 +36,45 @@ function normalizeTs(ts: any): number {
     return Date.now();
 }
 
-function iranShiftedDate(ts: any): Date {
+function iranShiftedDate(ts: unknown): Date {
     return new Date(normalizeTs(ts) + IRAN_OFFSET_MS);
 }
 
-function formatMessageTime(ts: any) {
+function formatMessageTime(ts: unknown) {
     const d = iranShiftedDate(ts);
     return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
 }
+
+const markdownComponents: Components = {
+    code({ className, children, ...props }) {
+        const isInline = !('data-language' in props) && !className?.includes('language-');
+        if (!isInline) {
+            return (
+                <pre className="md-code-block">
+                    <code className={className}>{children}</code>
+                </pre>
+            );
+        }
+        return <code className="md-code-inline">{children}</code>;
+    },
+    h1: ({ children }: { children: React.ReactNode }) => <h1 className="md-h1">{children}</h1>,
+    h2: ({ children }: { children: React.ReactNode }) => <h2 className="md-h2">{children}</h2>,
+    h3: ({ children }: { children: React.ReactNode }) => <h3 className="md-h3">{children}</h3>,
+    h4: ({ children }: { children: React.ReactNode }) => <h4 className="md-h4">{children}</h4>,
+    h5: ({ children }: { children: React.ReactNode }) => <h5 className="md-h5">{children}</h5>,
+    h6: ({ children }: { children: React.ReactNode }) => <h6 className="md-h6">{children}</h6>,
+    p: ({ children }: { children: React.ReactNode }) => <p className="md-p">{children}</p>,
+    ul: ({ children }: { children: React.ReactNode }) => <ul className="md-ul">{children}</ul>,
+    ol: ({ children }: { children: React.ReactNode }) => <ol className="md-ol">{children}</ol>,
+    li: ({ children }: { children: React.ReactNode }) => <li className="md-li">{children}</li>,
+    strong: ({ children }: { children: React.ReactNode }) => <strong className="md-strong">{children}</strong>,
+    em: ({ children }: { children: React.ReactNode }) => <em className="md-em">{children}</em>,
+    del: ({ children }: { children: React.ReactNode }) => <del className="md-del">{children}</del>,
+    blockquote: ({ children }: { children: React.ReactNode }) => <blockquote className="md-blockquote">{children}</blockquote>,
+    a: ({ children, href }: { children: React.ReactNode; href?: string }) => (
+        <a className="md-link" href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+    ),
+};
 
 export function AIChatRoom({
     messages,
@@ -94,7 +126,7 @@ export function AIChatRoom({
         const room = roomRef.current;
         if (!room) return;
 
-        const vv = (window as any).visualViewport as VisualViewport | undefined;
+        const vv = (window as unknown as { visualViewport?: VisualViewport }).visualViewport;
         if (!vv) {
             room.style.setProperty('--keyboard-offset', '0px');
             return;
@@ -237,7 +269,7 @@ export function AIChatRoom({
     const doCopyMessage = async (m: Message) => {
         const value = m.text ?? '';
         try {
-            if (navigator.clipboard && (window as any).isSecureContext) {
+            if (navigator.clipboard && (window as unknown as { isSecureContext?: boolean }).isSecureContext) {
                 await navigator.clipboard.writeText(value);
             } else {
                 const ta = document.createElement('textarea');
@@ -358,7 +390,7 @@ export function AIChatRoom({
                                         role="button"
                                         tabIndex={0}
                                         onKeyDown={(e) => {
-                                            if (e.key === 'Enter') openMessageMenu(message.id, e.currentTarget as any);
+                                            if (e.key === 'Enter') openMessageMenu(message.id, e.currentTarget as HTMLElement);
                                         }}
                                         style={{ cursor: 'pointer' }}
                                     >
@@ -368,45 +400,7 @@ export function AIChatRoom({
                                             <div className="message-text message-text--markdown">
                                                 <ReactMarkdown
                                                     remarkPlugins={[remarkGfm]}
-                                                    components={{
-                                                        code({ node, className, children, ...props }: any) {
-                                                            const match = /language-(\w+)/.exec(className || '');
-                                                            const isBlock = !props.inline;
-                                                            if (isBlock) {
-                                                                return (
-                                                                    <pre className="md-code-block">
-                                                                        <code className={className}>
-                                                                            {children}
-                                                                        </code>
-                                                                    </pre>
-                                                                );
-                                                            }
-                                                            return (
-                                                                <code className="md-code-inline" {...props}>
-                                                                    {children}
-                                                                </code>
-                                                            );
-                                                        },
-                                                        h1: ({ children }) => <h1 className="md-h1">{children}</h1>,
-                                                        h2: ({ children }) => <h2 className="md-h2">{children}</h2>,
-                                                        h3: ({ children }) => <h3 className="md-h3">{children}</h3>,
-                                                        h4: ({ children }) => <h4 className="md-h4">{children}</h4>,
-                                                        h5: ({ children }) => <h5 className="md-h5">{children}</h5>,
-                                                        h6: ({ children }) => <h6 className="md-h6">{children}</h6>,
-                                                        p: ({ children }) => <p className="md-p">{children}</p>,
-                                                        ul: ({ children }) => <ul className="md-ul">{children}</ul>,
-                                                        ol: ({ children }) => <ol className="md-ol">{children}</ol>,
-                                                        li: ({ children }) => <li className="md-li">{children}</li>,
-                                                        strong: ({ children }) => <strong className="md-strong">{children}</strong>,
-                                                        em: ({ children }) => <em className="md-em">{children}</em>,
-                                                        del: ({ children }) => <del className="md-del">{children}</del>,
-                                                        blockquote: ({ children }) => <blockquote className="md-blockquote">{children}</blockquote>,
-                                                        a: ({ children, href }) => (
-                                                            <a className="md-link" href={href} target="_blank" rel="noopener noreferrer">
-                                                                {children}
-                                                            </a>
-                                                        ),
-                                                    }}
+                                                    components={markdownComponents}
                                                 >
                                                     {message.text ?? ''}
                                                 </ReactMarkdown>
@@ -564,7 +558,6 @@ export function AIChatRoom({
                     gap: 4px;
                     padding: 4px 0;
                 }
-
                 .typing-indicator span {
                     width: 8px;
                     height: 8px;
@@ -572,61 +565,11 @@ export function AIChatRoom({
                     background: #9ca3af;
                     animation: typing-bounce 1.4s infinite ease-in-out;
                 }
-
                 .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
                 .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
-
                 @keyframes typing-bounce {
                     0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
                     40% { transform: scale(1.2); opacity: 1; }
-                }
-
-                /* Markdown styles */
-                .message-text--markdown { line-height: 1.6; }
-                .message-text--markdown .md-h1 { font-size: 1.4em; font-weight: 700; margin: 0.5em 0 0.3em; line-height: 1.3; }
-                .message-text--markdown .md-h2 { font-size: 1.25em; font-weight: 700; margin: 0.5em 0 0.3em; line-height: 1.3; }
-                .message-text--markdown .md-h3 { font-size: 1.1em; font-weight: 600; margin: 0.4em 0 0.25em; line-height: 1.3; }
-                .message-text--markdown .md-h4 { font-size: 1em; font-weight: 600; margin: 0.4em 0 0.2em; }
-                .message-text--markdown .md-h5 { font-size: 0.9em; font-weight: 600; margin: 0.3em 0 0.2em; }
-                .message-text--markdown .md-h6 { font-size: 0.85em; font-weight: 600; margin: 0.3em 0 0.2em; color: #6b7280; }
-                .message-text--markdown .md-p { margin: 0.3em 0; }
-                .message-text--markdown .md-p:first-child { margin-top: 0; }
-                .message-text--markdown .md-p:last-child { margin-bottom: 0; }
-                .message-text--markdown .md-strong { font-weight: 700; }
-                .message-text--markdown .md-em { font-style: italic; }
-                .message-text--markdown .md-del { text-decoration: line-through; opacity: 0.75; }
-                .message-text--markdown .md-ul { list-style: disc; padding-right: 1.4em; margin: 0.3em 0; }
-                .message-text--markdown .md-ol { list-style: decimal; padding-right: 1.4em; margin: 0.3em 0; }
-                .message-text--markdown .md-li { margin: 0.1em 0; }
-                .message-text--markdown .md-blockquote {
-                    border-right: 3px solid #d1d5db;
-                    padding: 4px 10px;
-                    margin: 0.4em 0;
-                    color: #6b7280;
-                    background: rgba(0,0,0,0.04);
-                    border-radius: 0 4px 4px 0;
-                }
-                .message-text--markdown .md-code-inline {
-                    font-family: 'Courier New', Courier, monospace;
-                    font-size: 0.88em;
-                    background: rgba(0,0,0,0.08);
-                    border-radius: 3px;
-                    padding: 1px 5px;
-                }
-                .message-text--markdown .md-code-block {
-                    font-family: 'Courier New', Courier, monospace;
-                    font-size: 0.85em;
-                    background: rgba(0,0,0,0.10);
-                    border-radius: 6px;
-                    padding: 10px 12px;
-                    margin: 0.5em 0;
-                    overflow-x: auto;
-                    white-space: pre;
-                }
-                .message-text--markdown .md-link {
-                    color: #2563eb;
-                    text-decoration: underline;
-                    word-break: break-all;
                 }
             `}</style>
         </div>

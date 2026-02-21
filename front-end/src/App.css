@@ -862,6 +862,182 @@ textarea {
   text-align: right;
 }
 
+/* ========================================
+   MARKDOWN MESSAGE STYLES
+   ======================================== */
+.message-text--markdown {
+  white-space: normal;
+  line-height: 1.6;
+  direction: rtl;
+  text-align: right;
+}
+
+.message-text--markdown .md-h1 {
+  font-size: 1.4em;
+  font-weight: 700;
+  margin: 0.5em 0 0.3em;
+  line-height: 1.3;
+  border-bottom: 1px solid rgba(0,0,0,0.1);
+  padding-bottom: 0.2em;
+}
+
+.message-text--markdown .md-h2 {
+  font-size: 1.2em;
+  font-weight: 700;
+  margin: 0.5em 0 0.3em;
+  line-height: 1.3;
+}
+
+.message-text--markdown .md-h3 {
+  font-size: 1.05em;
+  font-weight: 600;
+  margin: 0.4em 0 0.25em;
+  line-height: 1.3;
+}
+
+.message-text--markdown .md-h4 {
+  font-size: 1em;
+  font-weight: 600;
+  margin: 0.4em 0 0.2em;
+}
+
+.message-text--markdown .md-h5 {
+  font-size: 0.9em;
+  font-weight: 600;
+  margin: 0.3em 0 0.2em;
+}
+
+.message-text--markdown .md-h6 {
+  font-size: 0.85em;
+  font-weight: 600;
+  margin: 0.3em 0 0.2em;
+  opacity: 0.75;
+}
+
+.message-text--markdown .md-p {
+  margin: 0.25em 0;
+}
+
+.message-text--markdown .md-p:first-child { margin-top: 0; }
+.message-text--markdown .md-p:last-child  { margin-bottom: 0; }
+
+.message-text--markdown .md-strong {
+  font-weight: 700;
+}
+
+.message-text--markdown .md-em {
+  font-style: italic;
+}
+
+.message-text--markdown .md-del {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.message-text--markdown .md-ul {
+  list-style: disc;
+  padding-right: 1.4em;
+  margin: 0.3em 0;
+}
+
+.message-text--markdown .md-ol {
+  list-style: decimal;
+  padding-right: 1.4em;
+  margin: 0.3em 0;
+}
+
+.message-text--markdown .md-li {
+  margin: 0.1em 0;
+  line-height: 1.5;
+}
+
+.message-text--markdown .md-blockquote {
+  border-right: 3px solid currentColor;
+  opacity: 0.85;
+  padding: 4px 10px;
+  margin: 0.4em 0;
+  background: rgba(0,0,0,0.05);
+  border-radius: 0 4px 4px 0;
+  font-style: italic;
+}
+
+.message-text--markdown .md-code-inline {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.87em;
+  background: rgba(0,0,0,0.1);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.message-text--markdown .md-code-block {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.84em;
+  background: rgba(0,0,0,0.12);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 0.5em 0;
+  overflow-x: auto;
+  white-space: pre;
+  display: block;
+}
+
+.message-text--markdown .md-code-block code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+.message-text--markdown .md-link {
+  color: #2563eb;
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+/* Dark mode overrides for markdown */
+.dark-mode .message-text--markdown .md-code-inline {
+  background: rgba(255,255,255,0.12);
+}
+
+.dark-mode .message-text--markdown .md-code-block {
+  background: rgba(255,255,255,0.08);
+}
+
+.dark-mode .message-text--markdown .md-blockquote {
+  background: rgba(255,255,255,0.05);
+}
+
+.dark-mode .message-text--markdown .md-link {
+  color: #93c5fd;
+}
+
+/* Mine bubble markdown (white text) */
+.message-bubble--mine .message-text--markdown .md-code-inline {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+}
+
+.message-bubble--mine .message-text--markdown .md-code-block {
+  background: rgba(0,0,0,0.25);
+  color: #e2e8f0;
+}
+
+.message-bubble--mine .message-text--markdown .md-blockquote {
+  border-right-color: rgba(255,255,255,0.6);
+  background: rgba(255,255,255,0.1);
+}
+
+.message-bubble--mine .message-text--markdown .md-link {
+  color: #bfdbfe;
+}
+
+.message-bubble--mine .message-text--markdown .md-h1 {
+  border-bottom-color: rgba(255,255,255,0.2);
+}
+
+/* ========================================
+   (rest of file unchanged)
+   ======================================== */
 .message-meta {
   display: flex;
   align-items: center;
@@ -1439,7 +1615,7 @@ textarea {
 
 .profile__avatar-btn {
   display: inline-flex;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   align-items: center;
   gap: 6px;
   border-radius: 999px;
@@ -1461,7 +1637,7 @@ textarea {
 .profile__avatar-btn[aria-disabled='true'] {
   opacity: 0.6;
   cursor: not-allowed;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .profile__fields {
@@ -1557,7 +1733,7 @@ textarea {
 }
 
 .profile__field-hint {
-    direction: rtl;
+  direction: rtl;
   text-align: left;
 }
 
@@ -1888,12 +2064,10 @@ textarea {
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
-/* Disable HTML validation messages */
 .form-group input:invalid {
   box-shadow: none;
 }
 
-/* Numeric-only inputs for verification codes */
 .form-group input[type="text"][inputmode="numeric"] {
   font-family: 'SF Mono', 'Fira Code', monospace;
   letter-spacing: 0.3em;
@@ -2100,7 +2274,7 @@ textarea {
   border-radius: 20px;
   width: 100%;
   max-width: 420px;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   max-height: 85vh;
   overflow: hidden;
   box-shadow: var(--shadow-lg);
@@ -2121,10 +2295,9 @@ textarea {
   color: var(--text-primary);
 }
 
-
 .new-chat-modal__tabs {
   display: flex;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   gap: 8px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-primary);
@@ -2143,28 +2316,25 @@ textarea {
   gap: 6px;
   cursor: pointer;
   font-weight: 600;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .new-chat-modal__tab--active {
   background: #3b82f6;
   color: #fff;
   border-color: #3b82f6;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .new-chat-modal__group-box {
   padding: 16px;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .new-chat-modal__label {
   display: block;
   margin-bottom: 8px;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 13px;
   color: var(--text-secondary);
 }
@@ -2176,7 +2346,7 @@ textarea {
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: 12px;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   padding: 0 10px;
   margin-bottom: 10px;
 }
@@ -2187,8 +2357,7 @@ textarea {
   background: transparent;
   color: var(--text-primary);
   height: 40px;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   outline: none;
 }
 
@@ -2199,15 +2368,14 @@ textarea {
   background: #3b82f6;
   color: #fff;
   font-weight: 700;
-      font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   padding: 10px 12px;
   cursor: pointer;
 }
 
 .new-chat-modal__action--secondary {
   background: #0f766e;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-
+  font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .search-box {
@@ -2243,9 +2411,9 @@ textarea {
   overflow-y: auto;
 }
 
-.loading{
-    direction: rtl;
-    text-align: right;
+.loading {
+  direction: rtl;
+  text-align: right;
 }
 
 .loading,
