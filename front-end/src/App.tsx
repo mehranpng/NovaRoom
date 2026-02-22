@@ -58,6 +58,13 @@ export function App() {
         chatsRef.current = chats;
     }, [chats]);
 
+    // Keep a ref to activeChatId and view so WebSocket callbacks always read the latest values
+    // without needing to be re-created (avoids stale closure bug on unread badge).
+    const activeChatIdRef = useRef<string | null>(null);
+    const viewRef = useRef<View>('chatList');
+    useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
+    useEffect(() => { viewRef.current = view; }, [view]);
+
     // Mobile keyboard/viewport fix: keep app sized to VisualViewport when available.
     useEffect(() => {
         const apply = () => {
@@ -128,8 +135,11 @@ export function App() {
             });
 
             // Keep active chat unread badge cleared even if server data is briefly stale.
+            // Use ref so this always reads the latest activeChatId without stale closure.
+            const currentActiveChatId = activeChatIdRef.current;
+            const currentView = viewRef.current;
             const merged = normalized.map((c) => {
-                if (view === 'chatRoom' && activeChatId && c.id === activeChatId) {
+                if (currentView === 'chatRoom' && currentActiveChatId && c.id === currentActiveChatId) {
                     return { ...c, unreadCount: 0 };
                 }
                 return c;
@@ -141,7 +151,7 @@ export function App() {
             console.error('Failed to load chats', error);
             setIsInitialChatsLoad(false);
         }
-    }, [isAuthenticated, activeChatId, view, isInitialChatsLoad]);
+    }, [isAuthenticated, isInitialChatsLoad]);
 
     const handleLogout = useCallback(() => {
         localStorage.removeItem('token');
@@ -182,11 +192,15 @@ export function App() {
             loadChats(false);
         }
 
-        // Update last message + unread counter in chat list
+        // Update last message + unread counter in chat list.
+        // Read activeChatId and view from refs to avoid stale closure.
         setChats(prev => {
             const myId = currentUser?.chatId;
             const isIncoming = Boolean(myId) && newMsg.senderId !== myId;
-            const shouldIncrementUnread = isIncoming && (view !== 'chatRoom' || activeChatId !== chatId);
+            // Use refs for always-fresh values — this fixes the "unread badge shows
+            // wrong count" bug caused by stale closure on activeChatId / view.
+            const isActiveChat = activeChatIdRef.current === chatId && viewRef.current === 'chatRoom';
+            const shouldIncrementUnread = isIncoming && !isActiveChat;
 
             return prev.map(chat => {
                 if (chat.id !== chatId) return chat;
@@ -202,7 +216,7 @@ export function App() {
                 };
             });
         });
-    }, [currentUser?.chatId, view, activeChatId, loadChats]);
+    }, [currentUser?.chatId, loadChats]);
 
     const handleMessageEdited = useCallback((chatId: string, updated: Message) => {
         setMessages(prev => {
@@ -522,13 +536,42 @@ export function App() {
                 method: 'POST',
                 body: JSON.stringify({ name: groupName }),
             });
+
+            // Optimistically prepend the new group to the top of the list
+            // with the current timestamp so it sorts to the top immediately.
+            if (res?.chatId) {
+                const newGroupChat: Chat = {
+                    id: res.chatId,
+                    participantIds: [currentUser?.chatId ?? ''],
+                    otherUser: {
+                        chatId: res.chatId,
+                        name: groupName,
+                        username: '',
+                        bio: '',
+                        avatar: '',
+                        online: false,
+                        verified: false,
+                    },
+                    chatType: 'group',
+                    lastMessage: {
+                        id: '',
+                        text: 'گروه ساخته شد',
+                        senderId: currentUser?.chatId ?? '',
+                        timestamp: Date.now(),
+                    },
+                    unreadCount: 0,
+                };
+                setChats(prev => [newGroupChat, ...prev]);
+            }
+
+            // Then sync from server to get authoritative data
             await loadChats(false);
             return res; // Return the response to NewChatModal to show the link!
         } catch (error) {
             console.error(error);
             alert('ساخت گروه با خطا مواجه شد');
         }
-    }, [loadChats]);
+    }, [loadChats, currentUser?.chatId]);
 
     const handleJoinGroup = useCallback(async (inviteCode: string) => {
         try {
