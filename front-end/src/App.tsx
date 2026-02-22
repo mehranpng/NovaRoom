@@ -65,6 +65,11 @@ export function App() {
     useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
     useEffect(() => { viewRef.current = view; }, [view]);
 
+    // Track which group chats were freshly created this session so we can
+    // keep them pinned at the top until they receive their first real message.
+    // Key = chatId, Value = the epoch ms when the user created it.
+    const newGroupTimestamps = useRef<Record<string, number>>({});
+
     // Mobile keyboard/viewport fix: keep app sized to VisualViewport when available.
     useEffect(() => {
         const apply = () => {
@@ -116,21 +121,24 @@ export function App() {
     const loadChats = useCallback(async (showLoading = true) => {
         if (!isAuthenticated) return;
 
-        // Only show skeleton on initial load
         if (showLoading && isInitialChatsLoad) {
-            // Will be set to false after first load
+            // skeleton shown via isInitialChatsLoad flag
         }
 
         try {
             const data = await apiFetch('/chats');
-            // Normalise timestamps. For chats that have no lastMessage yet
-            // (e.g. a freshly-created group), assign the current time so they
-            // sort to the top of the list instead of falling to the bottom.
-            const now = Date.now();
+
             const normalized: Chat[] = (data as any[]).map((c) => {
                 if (!c?.lastMessage) {
-                    // No last message: treat as "just created" so it sorts first
-                    return { ...c, lastMessage: { id: '', text: '', senderId: '', timestamp: now } } as Chat;
+                    // No real message yet. Use the creation timestamp recorded when the
+                    // user created this group in the current session, so it stays at the
+                    // top. Once it falls out of newGroupTimestamps (i.e. the user didn't
+                    // just create it) use 0 so it sorts below real conversations.
+                    const pinnedTs = newGroupTimestamps.current[c.id] ?? 0;
+                    return {
+                        ...c,
+                        lastMessage: { id: '', text: '', senderId: '', timestamp: pinnedTs },
+                    } as Chat;
                 }
                 return {
                     ...c,
@@ -142,7 +150,6 @@ export function App() {
             });
 
             // Keep active chat unread badge cleared even if server data is briefly stale.
-            // Use ref so this always reads the latest activeChatId without stale closure.
             const currentActiveChatId = activeChatIdRef.current;
             const currentView = viewRef.current;
             const merged = normalized.map((c) => {
@@ -174,6 +181,7 @@ export function App() {
         setMessagesLoadedOnce({});
         setShowAIChat(false);
         setAIMessages([]);
+        newGroupTimestamps.current = {};
         navigate('/login', { replace: true });
     }, [navigate]);
 
@@ -181,7 +189,6 @@ export function App() {
     const handleNewMessage = useCallback((chatId: string, newMsg: Message) => {
         setMessages(prev => {
             const currentMessages = prev[chatId] || [];
-            // Prevent duplicate messages
             if (currentMessages.some(m => m.id === newMsg.id)) {
                 return prev;
             }
@@ -191,21 +198,21 @@ export function App() {
             };
         });
 
-        // If this message belongs to a chat that doesn't exist in our list yet
-        // (first message of a brand-new conversation), fetch chats so it appears
-        // in the sidebar without a refresh.
         const hasChat = chatsRef.current.some(c => c.id === chatId);
         if (!hasChat) {
             loadChats(false);
         }
 
-        // Update last message + unread counter in chat list.
-        // Read activeChatId and view from refs to avoid stale closure.
+        // Once a real message arrives for a group that was just created,
+        // remove it from the pinned-timestamp registry so future sorts are
+        // driven by the actual lastMessage timestamp.
+        if (newGroupTimestamps.current[chatId]) {
+            delete newGroupTimestamps.current[chatId];
+        }
+
         setChats(prev => {
             const myId = currentUser?.chatId;
             const isIncoming = Boolean(myId) && newMsg.senderId !== myId;
-            // Use refs for always-fresh values - this fixes the "unread badge shows
-            // wrong count" bug caused by stale closure on activeChatId / view.
             const isActiveChat = activeChatIdRef.current === chatId && viewRef.current === 'chatRoom';
             const shouldIncrementUnread = isIncoming && !isActiveChat;
 
@@ -294,8 +301,6 @@ export function App() {
                 [chatId]: prev[chatId].map(m => ({ ...m, seen: true }))
             };
         });
-
-        // If messages are seen, clear unread badge immediately.
         setChats(prev => prev.map(c => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
     }, []);
 
@@ -355,7 +360,6 @@ export function App() {
         localStorage.setItem('token', token);
         setCurrentUser(user);
         setIsAuthenticated(true);
-        // replace: true so the browser back-button doesn't go back to /login
         navigate('/', { replace: true });
     };
 
@@ -376,10 +380,8 @@ export function App() {
         setActiveChatId(chatId);
         setView('chatRoom');
 
-        // Optimistic: remove unread badge immediately
         setChats(prev => prev.map(c => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
 
-        // Only show skeleton if this chat has never been loaded before
         const shouldShowSkeleton = !messagesLoadedOnce[chatId];
         if (shouldShowSkeleton) {
             setMessagesLoading(prev => ({ ...prev, [chatId]: true }));
@@ -390,7 +392,6 @@ export function App() {
             setMessages(prev => ({ ...prev, [chatId]: msgs }));
             setMessagesLoadedOnce(prev => ({ ...prev, [chatId]: true }));
 
-            // Don't send seen for saved messages
             if (currentUser && chatId !== `saved_messages_${currentUser.chatId}`) {
                 sendSeen(chatId);
             }
@@ -478,7 +479,7 @@ export function App() {
             setAIMessages(prev => prev.filter(m => m.id !== messageId));
         } catch (error) {
             console.error('Failed to delete AI message:', error);
-            alert('حذف پیام با خطا مواجه شد');
+            alert('\u062d\u0630\u0641 \u067e\u06cc\u0627\u0645 \u0628\u0627 \u062e\u0637\u0627 \u0645\u0648\u0627\u062c\u0647 \u0634\u062f');
         }
     }, []);
 
@@ -523,9 +524,12 @@ export function App() {
                 body: JSON.stringify({ name: groupName }),
             });
 
-            // Optimistically prepend the new group with the current timestamp
-            // so ChatList sorts it to the very top before the server sync.
             if (res?.chatId) {
+                // Record the creation time for this group so loadChats can
+                // keep it pinned at the top until a real message arrives.
+                const createdAt = Date.now();
+                newGroupTimestamps.current[res.chatId] = createdAt;
+
                 const newGroupChat: Chat = {
                     id: res.chatId,
                     participantIds: [currentUser?.chatId ?? ''],
@@ -541,23 +545,23 @@ export function App() {
                     },
                     lastMessage: {
                         id: '',
-                        text: 'گروه ساخته شد',
+                        text: '\u06af\u0631\u0648\u0647 \u0633\u0627\u062e\u062a\u0647 \u0634\u062f',
                         senderId: currentUser?.chatId ?? '',
-                        timestamp: Date.now(),
+                        timestamp: createdAt,
                     },
                     unreadCount: 0,
                 };
+                // Prepend and remove any stale duplicate with the same id
                 setChats(prev => [newGroupChat, ...prev.filter(c => c.id !== res.chatId)]);
             }
 
-            // Sync authoritative data from server.
-            // loadChats will also keep the group at the top because we now assign
-            // timestamp=Date.now() to chats that have no lastMessage.
+            // Sync from server — loadChats will use newGroupTimestamps to keep
+            // the group pinned even though the server returns no lastMessage.
             await loadChats(false);
             return res;
         } catch (error) {
             console.error(error);
-            alert('ساخت گروه با خطا مواجه شد');
+            alert('\u0633\u0627\u062e\u062a \u06af\u0631\u0648\u0647 \u0628\u0627 \u062e\u0637\u0627 \u0645\u0648\u0627\u062c\u0647 \u0634\u062f');
         }
     }, [loadChats, currentUser?.chatId]);
 
@@ -620,6 +624,7 @@ export function App() {
             const { [chatId]: _, ...rest } = prev;
             return rest;
         });
+        delete newGroupTimestamps.current[chatId];
         setActiveChatId(null);
         setPendingUser(null);
         setShowAIChat(false);
@@ -668,7 +673,7 @@ export function App() {
         if (currentUser && activeChatId === `saved_messages_${currentUser.chatId}`) {
             return {
                 chatId: 'saved',
-                name: 'پیام‌های ذخیره شده',
+                name: '\u067e\u06cc\u0627\u0645\u200c\u0647\u0627\u06cc \u0630\u062e\u06cc\u0631\u0647 \u0634\u062f\u0647',
                 username: 'saved',
                 bio: '',
                 avatar: '',
@@ -706,7 +711,7 @@ export function App() {
         };
     };
 
-    // ─── Unauthenticated routes ───────────────────────────────────────────────
+    // --- Unauthenticated routes ---
     if (!isAuthenticated) {
         return (
             <Routes>
@@ -734,9 +739,7 @@ export function App() {
         );
     }
 
-    // ─── Authenticated: always serve the app at "/" ──────────────────────────
-    // If the URL is still /login (or any auth page), redirect to root so the
-    // address bar no longer shows /login after a successful sign-in.
+    // --- Authenticated: redirect away from auth pages ---
     const authPages = ['/login', '/register', '/forgot-password'];
     const isOnAuthPage = authPages.some(p => window.location.pathname.startsWith(p));
     if (isOnAuthPage) {
