@@ -123,14 +123,21 @@ export function App() {
 
         try {
             const data = await apiFetch('/chats');
+            // Normalise timestamps. For chats that have no lastMessage yet
+            // (e.g. a freshly-created group), assign the current time so they
+            // sort to the top of the list instead of falling to the bottom.
+            const now = Date.now();
             const normalized: Chat[] = (data as any[]).map((c) => {
-                if (!c?.lastMessage) return c as Chat;
+                if (!c?.lastMessage) {
+                    // No last message: treat as "just created" so it sorts first
+                    return { ...c, lastMessage: { id: '', text: '', senderId: '', timestamp: now } } as Chat;
+                }
                 return {
                     ...c,
                     lastMessage: {
                         ...c.lastMessage,
                         timestamp: normalizeTimestamp(c.lastMessage.timestamp),
-                    }
+                    },
                 } as Chat;
             });
 
@@ -197,7 +204,7 @@ export function App() {
         setChats(prev => {
             const myId = currentUser?.chatId;
             const isIncoming = Boolean(myId) && newMsg.senderId !== myId;
-            // Use refs for always-fresh values — this fixes the "unread badge shows
+            // Use refs for always-fresh values - this fixes the "unread badge shows
             // wrong count" bug caused by stale closure on activeChatId / view.
             const isActiveChat = activeChatIdRef.current === chatId && viewRef.current === 'chatRoom';
             const shouldIncrementUnread = isIncoming && !isActiveChat;
@@ -303,7 +310,6 @@ export function App() {
         });
     }, []);
 
-
     // AI WebSocket handlers
     const handleNewAIMessage = useCallback((message: any) => {
         const messageWithChatId: Message = {
@@ -326,14 +332,13 @@ export function App() {
         onReactionUpdated: handleReactionUpdated
     });
 
-
     // AI WebSocket initialization
     const { sendMessage: sendAIMessage } = useAIWebSocket({
         token: localStorage.getItem('token'),
         onNewMessage: handleNewAIMessage,
     });
 
-    // Check auth
+    // Check auth on mount
     useEffect(() => {
         const token = localStorage.getItem('token');
         if (token) {
@@ -347,16 +352,17 @@ export function App() {
     }, []);
 
     const handleLoginSuccess = (user: User, token: string) => {
+        localStorage.setItem('token', token);
         setCurrentUser(user);
         setIsAuthenticated(true);
-        localStorage.setItem('token', token);
+        // replace: true so the browser back-button doesn't go back to /login
         navigate('/', { replace: true });
     };
 
     const handleRegisterSuccess = (user: User, token: string) => {
+        localStorage.setItem('token', token);
         setCurrentUser(user);
         setIsAuthenticated(true);
-        localStorage.setItem('token', token);
         navigate('/', { replace: true });
     };
 
@@ -381,7 +387,6 @@ export function App() {
 
         try {
             const msgs = await apiFetch(`/chats/${chatId}/messages?limit=100`);
-            // API already returns messages in correct order (oldest first, newest last)
             setMessages(prev => ({ ...prev, [chatId]: msgs }));
             setMessagesLoadedOnce(prev => ({ ...prev, [chatId]: true }));
 
@@ -404,21 +409,14 @@ export function App() {
         if (!currentUser) return;
         const text = payload.text;
 
-        // Check if this is saved messages chat
         const savedMessagesId = `saved_messages_${currentUser.chatId}`;
         if (activeChatId === savedMessagesId) {
-            // Send message to saved messages
             const success = sendViaWS(savedMessagesId, text, payload.replyToId, payload.file);
-            if (!success) {
-                console.warn('WebSocket not connected');
-            }
-            // Reload chats to update the saved messages in the list
+            if (!success) console.warn('WebSocket not connected');
             loadChats(false);
             return;
         }
 
-        // If we are in a "pending" chat (selected from search), create the chat now
-        // (only on first message) then send.
         if (!activeChatId && pendingUser) {
             if (payload.editMessageId) return;
 
@@ -446,11 +444,8 @@ export function App() {
                 setView('chatRoom');
 
                 const success = sendViaWS(createdChatId, text, payload.replyToId, payload.file);
-                if (!success) {
-                    console.warn('WebSocket not connected');
-                }
+                if (!success) console.warn('WebSocket not connected');
 
-                // Sync chat list (server has the authoritative otherUser/lastMessage/unreadCount)
                 loadChats(false);
                 return;
             } catch (err) {
@@ -469,9 +464,7 @@ export function App() {
         }
 
         const success = sendViaWS(activeChatId, text, payload.replyToId, payload.file);
-        if (!success) {
-            console.warn('WebSocket not connected');
-        }
+        if (!success) console.warn('WebSocket not connected');
     }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats]);
 
     const handleDeleteMessage = useCallback((messageId: string) => {
@@ -481,11 +474,7 @@ export function App() {
 
     const handleDeleteAIMessage = useCallback(async (messageId: string) => {
         try {
-            await apiFetch(`/ai/messages/${encodeURIComponent(messageId)}`, {
-                method: 'DELETE',
-            });
-
-            // Remove message from UI
+            await apiFetch(`/ai/messages/${encodeURIComponent(messageId)}`, { method: 'DELETE' });
             setAIMessages(prev => prev.filter(m => m.id !== messageId));
         } catch (error) {
             console.error('Failed to delete AI message:', error);
@@ -496,7 +485,6 @@ export function App() {
     const handleUserSelectedFromModal = useCallback((user: User) => {
         setNewChatModalOpen(false);
 
-        // If the chat already exists, open it immediately so previous messages show.
         const myId = currentUser?.chatId;
         if (myId) {
             const existing = chatsRef.current.find((c) => {
@@ -522,13 +510,11 @@ export function App() {
             }
         }
 
-        // Otherwise stay in "pending" mode (chat is created on first message).
         setPendingUser(user);
         setActiveChatId(null);
         setShowAIChat(false);
         setView('chatRoom');
     }, [currentUser?.chatId, handleSelectChat]);
-
 
     const handleCreateGroup = useCallback(async (groupName: string) => {
         try {
@@ -537,12 +523,13 @@ export function App() {
                 body: JSON.stringify({ name: groupName }),
             });
 
-            // Optimistically prepend the new group to the top of the list
-            // with the current timestamp so it sorts to the top immediately.
+            // Optimistically prepend the new group with the current timestamp
+            // so ChatList sorts it to the very top before the server sync.
             if (res?.chatId) {
                 const newGroupChat: Chat = {
                     id: res.chatId,
                     participantIds: [currentUser?.chatId ?? ''],
+                    chatType: 'group',
                     otherUser: {
                         chatId: res.chatId,
                         name: groupName,
@@ -552,7 +539,6 @@ export function App() {
                         online: false,
                         verified: false,
                     },
-                    chatType: 'group',
                     lastMessage: {
                         id: '',
                         text: 'گروه ساخته شد',
@@ -561,12 +547,14 @@ export function App() {
                     },
                     unreadCount: 0,
                 };
-                setChats(prev => [newGroupChat, ...prev]);
+                setChats(prev => [newGroupChat, ...prev.filter(c => c.id !== res.chatId)]);
             }
 
-            // Then sync from server to get authoritative data
+            // Sync authoritative data from server.
+            // loadChats will also keep the group at the top because we now assign
+            // timestamp=Date.now() to chats that have no lastMessage.
             await loadChats(false);
-            return res; // Return the response to NewChatModal to show the link!
+            return res;
         } catch (error) {
             console.error(error);
             alert('ساخت گروه با خطا مواجه شد');
@@ -588,10 +576,9 @@ export function App() {
             }
         } catch (error) {
             console.error(error);
-            throw error; // Let NewChatModal handle the error display inline
+            throw error;
         }
     }, [loadChats, handleSelectChat]);
-
 
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -613,7 +600,6 @@ export function App() {
         setView('chatList');
         setPendingUser(null);
         setShowAIChat(false);
-        // Clear active chat when going back so messages don't get marked as seen
         setActiveChatId(null);
     };
 
@@ -648,7 +634,6 @@ export function App() {
         setView('chatRoom');
     };
 
-
     const handleOpenSavedMessages = useCallback(() => {
         if (!currentUser) return;
         const savedMessagesId = `saved_messages_${currentUser.chatId}`;
@@ -658,7 +643,6 @@ export function App() {
     const handleSendAIMessage = useCallback((text: string) => {
         if (!currentUser) return;
 
-        // Add user message to UI immediately
         const userMessage: Message = {
             id: `temp-${Date.now()}`,
             chatId: 'ai_chat',
@@ -671,7 +655,6 @@ export function App() {
         setAIMessages(prev => [...prev, userMessage]);
         setAITyping(true);
 
-        // Send to AI
         const success = sendAIMessage(text);
         if (!success) {
             console.warn('Failed to send message to AI');
@@ -679,11 +662,9 @@ export function App() {
         }
     }, [currentUser, sendAIMessage]);
 
-    // Temporary contact resolver - updated to handle saved messages even when not in chat list
     const getActiveContact = (): User => {
         if (pendingUser) return pendingUser;
 
-        // Check if this is saved messages FIRST, before looking in chats
         if (currentUser && activeChatId === `saved_messages_${currentUser.chatId}`) {
             return {
                 chatId: 'saved',
@@ -725,6 +706,7 @@ export function App() {
         };
     };
 
+    // ─── Unauthenticated routes ───────────────────────────────────────────────
     if (!isAuthenticated) {
         return (
             <Routes>
@@ -735,31 +717,35 @@ export function App() {
                         onForgotPasswordClick={() => navigate('/forgot-password/request')}
                     />
                 } />
-
                 <Route path="/register/*" element={
                     <Register
                         onRegisterSuccess={handleRegisterSuccess}
                         onBackToLogin={() => navigate('/login')}
                     />
                 } />
-
                 <Route path="/forgot-password/*" element={
                     <ForgotPassword
                         onBackToLogin={() => navigate('/login')}
                         onResetSuccess={() => navigate('/login')}
                     />
                 } />
-
                 <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
         );
     }
 
+    // ─── Authenticated: always serve the app at "/" ──────────────────────────
+    // If the URL is still /login (or any auth page), redirect to root so the
+    // address bar no longer shows /login after a successful sign-in.
+    const authPages = ['/login', '/register', '/forgot-password'];
+    const isOnAuthPage = authPages.some(p => window.location.pathname.startsWith(p));
+    if (isOnAuthPage) {
+        return <Navigate to="/" replace />;
+    }
+
     const activeChat = chats.find(c => c.id === activeChatId) || null;
     const activeMessages = activeChatId ? messages[activeChatId] || [] : [];
     const activeMessagesLoading = activeChatId ? messagesLoading[activeChatId] || false : false;
-
-    // Check if we have saved messages open (even if not in chat list)
     const isSavedMessagesActive = currentUser && activeChatId === `saved_messages_${currentUser.chatId}`;
 
     return (
