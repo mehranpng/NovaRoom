@@ -415,7 +415,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                                 <div className="profile__group-item" key={group.chatId}>
                                     <div>
                                         <p className="profile__group-name">{group.name}</p>
-                                        <p className="profile__group-code">کد دعوت: {group.inviteCode}</p>
+                                        <p className="profile__group-code">{group.inviteCode}</p>
                                     </div>
                                     <button
                                         type="button"
@@ -423,7 +423,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                                         onClick={() => handleCopy(group.inviteLink, `group-${group.chatId}`)}
                                     >
                                         <Link2 size={14} />
-                                        {copiedField === `group-${group.chatId}` ? 'کپی شد' : 'کپی لینک'}
+                                        {copiedField === `group-${group.chatId}` ? 'کپی شد' : 'کپی لینک دعوت'}
                                     </button>
                                 </div>
                             ))

@@ -87,7 +87,6 @@ function CodeBlock({ className, children }: { className?: string; children?: Rea
                     aria-label="Copy code"
                 >
                     {copied ? <Check size={13} /> : <Copy size={13} />}
-                    <span>{copied ? 'کپی شد' : 'کپی'}</span>
                 </button>
             </div>
             <pre className="md-code-block">
