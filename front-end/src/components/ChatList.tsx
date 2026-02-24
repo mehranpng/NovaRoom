@@ -185,8 +185,18 @@ export function ChatList({
     const isMobile = useIsMobile(768);
 
     const [pinnedIds, setPinnedIds] = useState<string[]>([]);
-    const [chatActionOpenId, setChatActionOpenId] = useState<string | null>(null);
-    const chatActionRef = useRef<HTMLDivElement | null>(null);
+    const pinnedIdsRef = useRef<string[]>([]);
+
+    const [chatActionMenu, setChatActionMenu] = useState<null | { chatId: string; top: number; left: number }>(null);
+    const chatItemsRef = useRef<HTMLDivElement | null>(null);
+    const chatActionMenuRef = useRef<HTMLDivElement | null>(null);
+    const chatActionBtnRef = useRef<HTMLElement | null>(null);
+
+    const [pinBusy, setPinBusy] = useState<Record<string, boolean>>({});
+
+    useEffect(() => {
+        pinnedIdsRef.current = pinnedIds;
+    }, [pinnedIds]);
 
     // Load pinned from localStorage quickly, then try syncing from backend.
     useEffect(() => {
@@ -221,15 +231,17 @@ export function ChatList({
 
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
-            if (!chatActionRef.current) return;
-            if (chatActionRef.current.contains(e.target as Node)) return;
-            setChatActionOpenId(null);
+            const target = e.target as Node;
+            if (chatActionMenuRef.current?.contains(target)) return;
+            if (chatActionBtnRef.current?.contains(target)) return;
+            setChatActionMenu(null);
         };
-        if (chatActionOpenId) {
+
+        if (chatActionMenu) {
             document.addEventListener('mousedown', onDocClick);
         }
         return () => document.removeEventListener('mousedown', onDocClick);
-    }, [chatActionOpenId]);
+    }, [chatActionMenu]);
 
     const getContact = (chat: Chat): User => {
         if (chat.otherUser) {
@@ -264,28 +276,32 @@ export function ChatList({
     };
 
     const togglePin = async (chatId: string) => {
-        const currentlyPinned = isPinned(chatId);
+        if (pinBusy[chatId]) return;
 
-        if (!currentlyPinned && pinnedIds.length >= 20) {
+        const prev = pinnedIdsRef.current;
+        const currentlyPinned = prev.includes(chatId);
+
+        if (!currentlyPinned && prev.length >= 20) {
             alert('حداکثر ۲۰ گفتگو را می‌توانید پین کنید');
             return;
         }
 
+        setPinBusy((m) => ({ ...m, [chatId]: true }));
+
         // optimistic update
-        const next = currentlyPinned ? pinnedIds.filter((id) => id !== chatId) : [chatId, ...pinnedIds];
+        const next = currentlyPinned ? prev.filter((id) => id !== chatId) : [chatId, ...prev];
         setPinnedIds(next);
         persistPinned(next);
 
         try {
-            if (currentlyPinned) {
-                const r = await apiFetch<{ pinnedChatIds: string[] }>(`/profile/me/pins/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
-                setPinnedIds((r?.pinnedChatIds || []).slice(0, 20));
-                persistPinned((r?.pinnedChatIds || []).slice(0, 20));
-            } else {
-                const r = await apiFetch<{ pinnedChatIds: string[] }>(`/profile/me/pins/${encodeURIComponent(chatId)}`, { method: 'POST' });
-                setPinnedIds((r?.pinnedChatIds || []).slice(0, 20));
-                persistPinned((r?.pinnedChatIds || []).slice(0, 20));
-            }
+            const url = `/profile/me/pins/${encodeURIComponent(chatId)}`;
+            const r = currentlyPinned
+                ? await apiFetch<{ pinnedChatIds: string[] }>(url, { method: 'DELETE' })
+                : await apiFetch<{ pinnedChatIds: string[] }>(url, { method: 'POST' });
+
+            const ids = (r?.pinnedChatIds || []).slice(0, 20);
+            setPinnedIds(ids);
+            persistPinned(ids);
         } catch (e: any) {
             // rollback by refetch
             apiFetch<{ pinnedChatIds: string[] }>('/profile/me/pins')
@@ -299,8 +315,34 @@ export function ChatList({
                 });
             alert(e?.message || 'خطا در تغییر وضعیت پین');
         } finally {
-            setChatActionOpenId(null);
+            setPinBusy((m) => ({ ...m, [chatId]: false }));
+            setChatActionMenu(null);
         }
+    };
+
+    const openActionMenu = (chatId: string, btnEl: HTMLElement) => {
+        const container = chatItemsRef.current;
+        if (!container) return;
+
+        const c = container.getBoundingClientRect();
+        const r = btnEl.getBoundingClientRect();
+
+        const menuWidth = 170;
+        const menuHeight = 44;
+        const padding = 8;
+
+        // Position under button by default.
+        const spaceBelow = c.bottom - r.bottom;
+        const spaceAbove = r.top - c.top;
+        let top = spaceBelow < menuHeight + 12
+            ? Math.max(padding, (r.top - c.top) - menuHeight - 8)
+            : (r.bottom - c.top) + 6;
+
+        // Align menu to the button's right edge.
+        let left = (r.right - c.left) - menuWidth;
+        left = Math.max(padding, Math.min(left, c.width - menuWidth - padding));
+
+        setChatActionMenu((prev) => (prev?.chatId === chatId ? null : { chatId, top, left }));
     };
 
     // Sort all chats by last message timestamp, but keep pinned at top.
@@ -412,7 +454,7 @@ export function ChatList({
             </div>
 
             {/* Chat List */}
-            <div className="chat-list__items">
+            <div className="chat-list__items" ref={chatItemsRef} style={{ position: 'relative' }}>
                 {/* AI Chat - Always pinned at top */}
                 {showAIChat && (
                     <button
@@ -531,39 +573,19 @@ export function ChatList({
                                                 </span>
                                             )}
 
-                                            <div className="chat-list__chat-actions" ref={chatActionRef}>
-                                                <button
-                                                    className="icon-btn icon-btn--xs"
-                                                    type="button"
-                                                    aria-label="Chat actions"
-                                                    onClick={(e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        setChatActionOpenId((prev) => (prev === chat.id ? null : chat.id));
-                                                    }}
-                                                >
-                                                    <MoreVertical size={16} />
-                                                </button>
-
-                                                {chatActionOpenId === chat.id && (
-                                                    <div
-                                                        className="popover popover--mini popover--right"
-                                                        onClick={(e) => {
-                                                            e.preventDefault();
-                                                            e.stopPropagation();
-                                                        }}
-                                                    >
-                                                        <button
-                                                            className="popover__item"
-                                                            type="button"
-                                                            onClick={() => togglePin(chat.id)}
-                                                        >
-                                                            <Pin size={16} />
-                                                            {pinned ? 'آن‌پین' : 'پین'}
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
+                                            <button
+                                                className="icon-btn icon-btn--xs"
+                                                type="button"
+                                                aria-label="Chat actions"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    chatActionBtnRef.current = e.currentTarget;
+                                                    openActionMenu(chat.id, e.currentTarget);
+                                                }}
+                                            >
+                                                <MoreVertical size={16} />
+                                            </button>
                                         </div>
                                     </div>
 
@@ -577,6 +599,29 @@ export function ChatList({
                                         )}
                                     </div>
                                 </div>
+
+                                {chatActionMenu?.chatId === chat.id && (
+                                    <div
+                                        ref={chatActionMenuRef}
+                                        className="popover popover--mini"
+                                        style={{ top: chatActionMenu.top, left: chatActionMenu.left, right: 'auto', position: 'absolute', zIndex: 60 }}
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                        }}
+                                    >
+                                        <button
+                                            className="popover__item"
+                                            type="button"
+                                            onClick={() => togglePin(chat.id)}
+                                            disabled={Boolean(pinBusy[chat.id])}
+                                            style={pinBusy[chat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
+                                        >
+                                            <Pin size={16} />
+                                            {pinned ? 'آن‌پین' : 'پین'}
+                                        </button>
+                                    </div>
+                                )}
                             </button>
                         );
                     })
