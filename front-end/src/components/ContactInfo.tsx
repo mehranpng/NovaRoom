@@ -65,7 +65,6 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
                     )}
                 </div>
 
-                {/* دکمه پیام دادن — فقط برای اکانت (نه گروه) */}
                 {canOpenChat && (
                     <div className="contact-info__card" style={{ padding: 10 }}>
                         <button
@@ -89,7 +88,7 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
                             }}
                             aria-label="Open chat"
                         >
-                            پیام خالی
+                            پیام
                             <MessageCircle size={18} />
                         </button>
                     </div>
