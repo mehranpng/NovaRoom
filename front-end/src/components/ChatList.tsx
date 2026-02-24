@@ -30,7 +30,9 @@ type IconProps = {
 
 const PIN_ROTATE_DEG = 45;
 
-function PinIcon({ size = 16, className, style, title }: IconProps) {
+const STREAMLINE_SHARP_PIN_D = 'm23 9 -8 -8 -3 5 -9.00005 4 4.7929 4.7929 -6.5 6.5 1.41421 1.4142 6.5 -6.5L14 21l4 -9 5 -3Z';
+
+function PinFilledSharpIcon({ size = 16, className, style, title }: IconProps) {
     return (
         <svg
             width={size}
@@ -42,21 +44,17 @@ function PinIcon({ size = 16, className, style, title }: IconProps) {
             role={title ? 'img' : 'presentation'}
         >
             {title ? <title>{title}</title> : null}
-            {/* A chunky, filled pushpin silhouette (closer to the provided reference) */}
             <path
+                d={STREAMLINE_SHARP_PIN_D}
                 fill="currentColor"
-                d="M13.2 2.4c.55-.28 1.18.07 1.3.67l1.05 5.16c.12.62-.1 1.26-.56 1.7l-1.66 1.58v2.8c0 .22-.03.44-.1.65l-1.55 5.65c-.3 1.08-1.83 1.08-2.13 0L8.0 14.9c-.06-.2-.1-.42-.1-.65v-2.8L6.24 10c-.46-.44-.68-1.08-.56-1.7l1.05-5.16c.12-.6.75-.95 1.3-.67 1.05.52 2.32.83 3.59.83s2.54-.31 3.59-.83Z"
-            />
-            <path
-                fill="currentColor"
-                d="M9.35 7.05h4.9c.42 0 .75.34.75.75s-.33.75-.75.75h-4.9a.75.75 0 0 1 0-1.5Z"
-                opacity="0.22"
+                fillRule="evenodd"
+                clipRule="evenodd"
             />
         </svg>
     );
 }
 
-function UnpinIcon({ size = 16, className, style, title }: IconProps) {
+function PinOutlineSharpIcon({ size = 16, className, style, title }: IconProps) {
     return (
         <svg
             width={size}
@@ -69,12 +67,37 @@ function UnpinIcon({ size = 16, className, style, title }: IconProps) {
         >
             {title ? <title>{title}</title> : null}
             <path
-                fill="currentColor"
-                d="M13.2 2.4c.55-.28 1.18.07 1.3.67l1.05 5.16c.12.62-.1 1.26-.56 1.7l-1.66 1.58v2.8c0 .22-.03.44-.1.65l-1.55 5.65c-.3 1.08-1.83 1.08-2.13 0L8.0 14.9c-.06-.2-.1-.42-.1-.65v-2.8L6.24 10c-.46-.44-.68-1.08-.56-1.7l1.05-5.16c.12-.6.75-.95 1.3-.67 1.05.52 2.32.83 3.59.83s2.54-.31 3.59-.83Z"
+                d={STREAMLINE_SHARP_PIN_D}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinejoin="miter"
+                strokeLinecap="square"
             />
-            {/* strike-through */}
+        </svg>
+    );
+}
+
+function UnpinFilledSharpIcon({ size = 16, className, style, title }: IconProps) {
+    return (
+        <svg
+            width={size}
+            height={size}
+            viewBox="0 0 24 24"
+            className={className}
+            style={{ transform: `rotate(${PIN_ROTATE_DEG}deg)`, ...style }}
+            aria-hidden={title ? undefined : true}
+            role={title ? 'img' : 'presentation'}
+        >
+            {title ? <title>{title}</title> : null}
             <path
-                d="M5.2 19.2 19.2 5.2"
+                d={STREAMLINE_SHARP_PIN_D}
+                fill="currentColor"
+                fillRule="evenodd"
+                clipRule="evenodd"
+            />
+            <path
+                d="M5 19 19 5"
                 stroke="currentColor"
                 strokeWidth="2.6"
                 strokeLinecap="round"
@@ -661,7 +684,7 @@ export function ChatList({
                                             {contact.name}
                                             {contact.verified ? <VerifiedBadge size={14} /> : null}
                                             {pinned ? (
-                                                <PinIcon
+                                                <PinFilledSharpIcon
                                                     size={14}
                                                     className="chat-list__pin-icon"
                                                     title="سنجاق شده"
@@ -727,7 +750,7 @@ export function ChatList({
                                             disabled={Boolean(pinBusy[chat.id])}
                                             style={pinBusy[chat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
                                         >
-                                            {pinned ? <UnpinIcon size={16} /> : <PinIcon size={16} />}
+                                            {pinned ? <UnpinFilledSharpIcon size={16} /> : <PinOutlineSharpIcon size={16} />}
                                             {pinned ? 'برداشتن سنجاق' : 'سنجاق'}
                                         </button>
                                     </div>
