@@ -1,4 +1,4 @@
-import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun } from 'lucide-react';
+import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, MoreVertical, Pin } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';
@@ -125,6 +125,46 @@ function useIsMobile(breakpointPx = 768) {
     return isMobile;
 }
 
+const PINNED_STORAGE_KEY_PREFIX = 'pinnedChats:';
+
+function getPinnedKey(userId: string) {
+    return `${PINNED_STORAGE_KEY_PREFIX}${userId}`;
+}
+
+function safeJsonParse<T>(value: string | null): T | null {
+    if (!value) return null;
+    try {
+        return JSON.parse(value) as T;
+    } catch {
+        return null;
+    }
+}
+
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}${path}`, {
+        ...init,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(init?.headers || {}),
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+    });
+
+    if (!res.ok) {
+        let detail = 'Request failed';
+        try {
+            const j = await res.json();
+            detail = j?.detail || detail;
+        } catch {
+            // ignore
+        }
+        throw new Error(detail);
+    }
+
+    return (await res.json()) as T;
+}
+
 export function ChatList({
     chats,
     currentUser,
@@ -144,6 +184,29 @@ export function ChatList({
 
     const isMobile = useIsMobile(768);
 
+    const [pinnedIds, setPinnedIds] = useState<string[]>([]);
+    const [chatActionOpenId, setChatActionOpenId] = useState<string | null>(null);
+    const chatActionRef = useRef<HTMLDivElement | null>(null);
+
+    // Load pinned from localStorage quickly, then try syncing from backend.
+    useEffect(() => {
+        const key = getPinnedKey(currentUser.chatId);
+        const stored = safeJsonParse<{ ids: string[] }>(localStorage.getItem(key));
+        if (stored?.ids?.length) {
+            setPinnedIds(stored.ids.slice(0, 20));
+        }
+
+        apiFetch<{ pinnedChatIds: string[] }>('/profile/me/pins')
+            .then((r) => {
+                const ids = (r?.pinnedChatIds || []).slice(0, 20);
+                setPinnedIds(ids);
+                localStorage.setItem(key, JSON.stringify({ ids }));
+            })
+            .catch(() => {
+                // ignore network/auth errors and rely on local state
+            });
+    }, [currentUser.chatId]);
+
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
             if (!menuRef.current) return;
@@ -155,6 +218,18 @@ export function ChatList({
         }
         return () => document.removeEventListener('mousedown', onDocClick);
     }, [menuOpen]);
+
+    useEffect(() => {
+        const onDocClick = (e: MouseEvent) => {
+            if (!chatActionRef.current) return;
+            if (chatActionRef.current.contains(e.target as Node)) return;
+            setChatActionOpenId(null);
+        };
+        if (chatActionOpenId) {
+            document.addEventListener('mousedown', onDocClick);
+        }
+        return () => document.removeEventListener('mousedown', onDocClick);
+    }, [chatActionOpenId]);
 
     const getContact = (chat: Chat): User => {
         if (chat.otherUser) {
@@ -181,11 +256,63 @@ export function ChatList({
 
     const savedMessagesId = `saved_messages_${currentUser.chatId}`;
 
-    // Sort all chats (including saved messages) by last message timestamp
+    const isPinned = (chatId: string) => pinnedIds.includes(chatId);
+
+    const persistPinned = (ids: string[]) => {
+        const key = getPinnedKey(currentUser.chatId);
+        localStorage.setItem(key, JSON.stringify({ ids }));
+    };
+
+    const togglePin = async (chatId: string) => {
+        const currentlyPinned = isPinned(chatId);
+
+        if (!currentlyPinned && pinnedIds.length >= 20) {
+            alert('حداکثر ۲۰ گفتگو را می‌توانید پین کنید');
+            return;
+        }
+
+        // optimistic update
+        const next = currentlyPinned ? pinnedIds.filter((id) => id !== chatId) : [chatId, ...pinnedIds];
+        setPinnedIds(next);
+        persistPinned(next);
+
+        try {
+            if (currentlyPinned) {
+                const r = await apiFetch<{ pinnedChatIds: string[] }>(`/profile/me/pins/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
+                setPinnedIds((r?.pinnedChatIds || []).slice(0, 20));
+                persistPinned((r?.pinnedChatIds || []).slice(0, 20));
+            } else {
+                const r = await apiFetch<{ pinnedChatIds: string[] }>(`/profile/me/pins/${encodeURIComponent(chatId)}`, { method: 'POST' });
+                setPinnedIds((r?.pinnedChatIds || []).slice(0, 20));
+                persistPinned((r?.pinnedChatIds || []).slice(0, 20));
+            }
+        } catch (e: any) {
+            // rollback by refetch
+            apiFetch<{ pinnedChatIds: string[] }>('/profile/me/pins')
+                .then((r) => {
+                    const ids = (r?.pinnedChatIds || []).slice(0, 20);
+                    setPinnedIds(ids);
+                    persistPinned(ids);
+                })
+                .catch(() => {
+                    // if we can't refetch, keep optimistic state
+                });
+            alert(e?.message || 'خطا در تغییر وضعیت پین');
+        } finally {
+            setChatActionOpenId(null);
+        }
+    };
+
+    // Sort all chats by last message timestamp, but keep pinned at top.
+    // Within pinned: order by latest lastMessage as well.
     const sortedChats = [...chats].sort((a, b) => {
+        const aPinned = isPinned(a.id) ? 1 : 0;
+        const bPinned = isPinned(b.id) ? 1 : 0;
+        if (aPinned !== bPinned) return bPinned - aPinned;
+
         const aTime = a.lastMessage ? normalizeTs(a.lastMessage.timestamp) : 0;
         const bTime = b.lastMessage ? normalizeTs(b.lastMessage.timestamp) : 0;
-        return bTime - aTime; // Descending order (newest first)
+        return bTime - aTime;
     });
 
     // Apply search filter
@@ -214,8 +341,6 @@ export function ChatList({
 
     // Check if we should show AI chat in search results
     const showAIChat = !searchQuery || 'NovaRoom AI'.includes(searchQuery.toLowerCase()) || 'دستیار'.includes(searchQuery);
-
-    // Check if we should show Official Channel in search results
 
     return (
         <div className="chat-list">
@@ -324,9 +449,7 @@ export function ChatList({
                     </button>
                 )}
 
-
-
-                {/* All chats (including saved messages) - sorted by timestamp */}
+                {/* All chats - sorted by pinned then timestamp */}
                 {loading ? (
                     <ChatListSkeleton />
                 ) : chats.length === 0 ? (
@@ -340,9 +463,9 @@ export function ChatList({
                     filteredChats.map((chat) => {
                         const isActive = activeChatId === chat.id;
                         const isSaved = chat.id === savedMessagesId;
+                        const pinned = isPinned(chat.id);
 
                         if (isSaved) {
-                            // Render Saved Messages
                             return (
                                 <button
                                     key={chat.id}
@@ -374,7 +497,6 @@ export function ChatList({
                             );
                         }
 
-                        // Render Regular Chat
                         const isMine = chat.lastMessage?.senderId === currentUser.chatId;
                         const contact = getContact(chat);
                         const unreadCount = typeof chat.unreadCount === 'number' && chat.unreadCount > 0 ? chat.unreadCount : 0;
@@ -383,9 +505,14 @@ export function ChatList({
                             <button
                                 key={chat.id}
                                 onClick={() => onSelectChat(chat.id)}
-                                className={cx('chat-list__item', isActive && 'chat-list__item--active')}
+                                className={cx(
+                                    'chat-list__item',
+                                    isActive && 'chat-list__item--active',
+                                    pinned && 'chat-list__item--pinned'
+                                )}
                             >
                                 <Avatar name={contact.name} size="md" online={contact.online} src={contact.avatar} />
+
                                 <div className="chat-list__item-content">
                                     <div className="chat-list__item-row">
                                         <span
@@ -394,13 +521,52 @@ export function ChatList({
                                         >
                                             {contact.name}
                                             {contact.verified ? <VerifiedBadge size={14} /> : null}
+                                            {pinned ? <Pin size={14} className="chat-list__pin-icon" /> : null}
                                         </span>
-                                        {chat.lastMessage && (
-                                            <span className="chat-list__item-time">
-                                                {formatTime(chat.lastMessage.timestamp)}
-                                            </span>
-                                        )}
+
+                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                                            {chat.lastMessage && (
+                                                <span className="chat-list__item-time">
+                                                    {formatTime(chat.lastMessage.timestamp)}
+                                                </span>
+                                            )}
+
+                                            <div className="chat-list__chat-actions" ref={chatActionRef}>
+                                                <button
+                                                    className="icon-btn icon-btn--xs"
+                                                    type="button"
+                                                    aria-label="Chat actions"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        setChatActionOpenId((prev) => (prev === chat.id ? null : chat.id));
+                                                    }}
+                                                >
+                                                    <MoreVertical size={16} />
+                                                </button>
+
+                                                {chatActionOpenId === chat.id && (
+                                                    <div
+                                                        className="popover popover--mini popover--right"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                        }}
+                                                    >
+                                                        <button
+                                                            className="popover__item"
+                                                            type="button"
+                                                            onClick={() => togglePin(chat.id)}
+                                                        >
+                                                            <Pin size={16} />
+                                                            {pinned ? 'آن‌پین' : 'پین'}
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
+
                                     <div className="chat-list__item-preview">
                                         <p className="chat-list__item-text">
                                             {isMine && <span className="chat-list__item-text-prefix">شما: </span>}
