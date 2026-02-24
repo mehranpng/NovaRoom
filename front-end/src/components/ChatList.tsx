@@ -1,5 +1,5 @@
-import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, MoreVertical, Pin } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, MoreVertical } from 'lucide-react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -19,6 +19,80 @@ interface ChatListProps {
     onOpenAIChat: () => void;
     onOpenSavedMessages: () => void;
     loading?: boolean;
+}
+
+type IconProps = {
+    size?: number;
+    className?: string;
+    style?: CSSProperties;
+    title?: string;
+};
+
+function FilledPinIcon({ size = 16, className, style, title }: IconProps) {
+    return (
+        <svg
+            width={size}
+            height={size}
+            viewBox="0 0 24 24"
+            className={className}
+            style={style}
+            aria-hidden={title ? undefined : true}
+            role={title ? 'img' : 'presentation'}
+        >
+            {title ? <title>{title}</title> : null}
+            <path
+                fill="currentColor"
+                d="M14.1 2.8c.4-.2.8.1.9.5l1 5.1c.1.4 0 .9-.3 1.2l-1.6 1.6V14c0 .2 0 .3-.1.5l-1.5 5.8c-.2.7-1.2.7-1.4 0L9.6 14.5c0-.2-.1-.3-.1-.5v-2.4L8 9.9c-.3-.3-.4-.8-.3-1.2l1-5.1c.1-.4.5-.7.9-.5 1 .4 2.2.7 3.4.7s2.4-.3 3.4-.7Zm-2 9.2h-.2V14l.1.4.1-.4v-2Z"
+            />
+        </svg>
+    );
+}
+
+function UnpinIcon({ size = 16, className, style, title }: IconProps) {
+    return (
+        <svg
+            width={size}
+            height={size}
+            viewBox="0 0 24 24"
+            className={className}
+            style={style}
+            aria-hidden={title ? undefined : true}
+            role={title ? 'img' : 'presentation'}
+        >
+            {title ? <title>{title}</title> : null}
+            <path
+                fill="currentColor"
+                d="M14.1 2.8c.4-.2.8.1.9.5l1 5.1c.1.4 0 .9-.3 1.2l-1.6 1.6V14c0 .2 0 .3-.1.5l-1.5 5.8c-.2.7-1.2.7-1.4 0L9.6 14.5c0-.2-.1-.3-.1-.5v-2.4L8 9.9c-.3-.3-.4-.8-.3-1.2l1-5.1c.1-.4.5-.7.9-.5 1 .4 2.2.7 3.4.7s2.4-.3 3.4-.7Z"
+                opacity="0.9"
+            />
+            <path
+                d="M5 19 19 5"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+            />
+        </svg>
+    );
+}
+
+function FilledGroupIcon({ size = 16, className, style, title }: IconProps) {
+    return (
+        <svg
+            width={size}
+            height={size}
+            viewBox="0 0 24 24"
+            className={className}
+            style={style}
+            aria-hidden={title ? undefined : true}
+            role={title ? 'img' : 'presentation'}
+        >
+            {title ? <title>{title}</title> : null}
+            <path
+                fill="currentColor"
+                d="M7.6 11.2c1.8 0 3.3-1.5 3.3-3.3S9.4 4.6 7.6 4.6 4.3 6.1 4.3 7.9s1.5 3.3 3.3 3.3Zm8.8 0c1.7 0 3.1-1.4 3.1-3.1S18.1 5 16.4 5s-3.1 1.4-3.1 3.1 1.4 3.1 3.1 3.1Zm-8.8 1.2c-2.9 0-5.3 2.3-5.3 5.2v1c0 .5.4.9.9.9h9.4c.5 0 .9-.4.9-.9v-1c0-2.9-2.4-5.2-5.9-5.2Zm9.1.3c-.7 0-1.4.1-2 .3 1.4 1.1 2.3 2.7 2.4 4.6h4.9c.5 0 .9-.4.9-.9v-.6c0-2-1.7-3.4-4.2-3.4Z"
+            />
+        </svg>
+    );
 }
 
 const TEHRAN_TZ = 'Asia/Tehran';
@@ -282,7 +356,7 @@ export function ChatList({
         const currentlyPinned = prev.includes(chatId);
 
         if (!currentlyPinned && prev.length >= 20) {
-            alert('حداکثر ۲۰ گفتگو را می‌توانید پین کنید');
+            alert('حداکثر ۲۰ گفتگو را می‌توانید سنجاق کنید');
             return;
         }
 
@@ -313,7 +387,7 @@ export function ChatList({
                 .catch(() => {
                     // if we can't refetch, keep optimistic state
                 });
-            alert(e?.message || 'خطا در تغییر وضعیت پین');
+            alert(e?.message || 'خطا در تغییر وضعیت سنجاق');
         } finally {
             setPinBusy((m) => ({ ...m, [chatId]: false }));
             setChatActionMenu(null);
@@ -327,13 +401,12 @@ export function ChatList({
         const c = container.getBoundingClientRect();
         const r = btnEl.getBoundingClientRect();
 
-        const menuWidth = 170;
+        const menuWidth = 190;
         const menuHeight = 44;
         const padding = 8;
 
         // Position under button by default.
         const spaceBelow = c.bottom - r.bottom;
-        const spaceAbove = r.top - c.top;
         let top = spaceBelow < menuHeight + 12
             ? Math.max(padding, (r.top - c.top) - menuHeight - 8)
             : (r.bottom - c.top) + 6;
@@ -343,6 +416,15 @@ export function ChatList({
         left = Math.max(padding, Math.min(left, c.width - menuWidth - padding));
 
         setChatActionMenu((prev) => (prev?.chatId === chatId ? null : { chatId, top, left }));
+    };
+
+    const isGroupChat = (chat: Chat) => {
+        const anyChat = chat as any;
+        return Boolean(
+            anyChat?.chatType === 'group' ||
+            anyChat?.id?.startsWith?.('grp_') ||
+            (anyChat?.otherUser && Boolean((anyChat.otherUser as any)?.isGroup))
+        );
     };
 
     // Sort all chats by last message timestamp, but keep pinned at top.
@@ -506,6 +588,7 @@ export function ChatList({
                         const isActive = activeChatId === chat.id;
                         const isSaved = chat.id === savedMessagesId;
                         const pinned = isPinned(chat.id);
+                        const group = !isSaved && isGroupChat(chat);
 
                         if (isSaved) {
                             return (
@@ -561,9 +644,23 @@ export function ChatList({
                                             className="chat-list__item-name"
                                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                                         >
+                                            {group ? (
+                                                <FilledGroupIcon
+                                                    size={14}
+                                                    title="گروه"
+                                                    style={{ opacity: 0.9 }}
+                                                />
+                                            ) : null}
                                             {contact.name}
                                             {contact.verified ? <VerifiedBadge size={14} /> : null}
-                                            {pinned ? <Pin size={14} className="chat-list__pin-icon" /> : null}
+                                            {pinned ? (
+                                                <FilledPinIcon
+                                                    size={14}
+                                                    className="chat-list__pin-icon"
+                                                    title="سنجاق شده"
+                                                    style={{ transform: 'rotate(-25deg)' }}
+                                                />
+                                            ) : null}
                                         </span>
 
                                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -617,8 +714,8 @@ export function ChatList({
                                             disabled={Boolean(pinBusy[chat.id])}
                                             style={pinBusy[chat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
                                         >
-                                            <Pin size={16} />
-                                            {pinned ? 'آن‌پین' : 'پین'}
+                                            {pinned ? <UnpinIcon size={16} /> : <FilledPinIcon size={16} />}
+                                            {pinned ? 'برداشتن سنجاق' : 'سنجاق'}
                                         </button>
                                     </div>
                                 )}
