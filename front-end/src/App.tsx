@@ -40,7 +40,17 @@ export function App() {
 
     // When opening a chat from the list, capture its unreadCount BEFORE clearing it,
     // so ChatRoom can scroll to the first unread message and render an unread separator.
+    // IMPORTANT: this should be consumed (cleared) after first use, otherwise reopening the chat
+    // will keep triggering the unread-jump logic.
     const [openChatUnread, setOpenChatUnread] = useState<{ chatId: string; count: number } | null>(null);
+
+    const consumeOpenChatUnread = useCallback((id: string) => {
+        setOpenChatUnread((prev) => {
+            if (!prev) return prev;
+            if (prev.chatId !== id) return prev;
+            return null;
+        });
+    }, []);
 
     // AI Chat state
     const [showAIChat, setShowAIChat] = useState(false);
@@ -834,6 +844,7 @@ export function App() {
                                 onOpenDirectChat={(user) => handleUserSelectedFromModal(user)}
                                 onOpenProfile={handleOpenProfile}
                                 initialUnreadCount={initialUnreadCount}
+                                onConsumeInitialUnread={consumeOpenChatUnread}
                             />
                         ) : (
                             <EmptyState />

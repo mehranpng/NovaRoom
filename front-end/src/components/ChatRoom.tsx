@@ -29,6 +29,7 @@ interface ChatRoomProps {
     onOpenDirectChat?: (user: User) => void;
     onOpenProfile?: () => void;
     initialUnreadCount?: number;
+    onConsumeInitialUnread?: (chatId: string) => void;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000;
@@ -123,6 +124,7 @@ export function ChatRoom({
     onOpenDirectChat,
     onOpenProfile,
     initialUnreadCount = 0,
+    onConsumeInitialUnread,
 }: ChatRoomProps) {
     const currentChat = useMemo(
         () => chats.find((c) => c.id === chatId) || null,
@@ -189,12 +191,27 @@ export function ChatRoom({
     // Unread separator anchor for the current open session.
     const [unreadAnchorId, setUnreadAnchorId] = useState<string | null>(null);
 
+    // Keep unread count used for UI stable, even if App "consumes" initialUnreadCount afterwards.
+    const [displayUnreadCount, setDisplayUnreadCount] = useState<number>(initialUnreadCount);
+
+    // Auto-jump bookkeeping to avoid saving an automatic scroll position as user's scroll memory.
+    const autoJumpedToUnreadRef = useRef(false);
+    const userScrolledAfterAutoJumpRef = useRef(false);
+    const programmaticScrollEventsRef = useRef(0);
+    const consumedInitialUnreadRef = useRef(false);
+
+    const markProgrammaticScroll = () => {
+        programmaticScrollEventsRef.current += 2;
+    };
+
     const scrollToBottom = (smooth = false) => {
         const container = messagesContainerRef.current;
         if (container) {
+            markProgrammaticScroll();
             container.scrollTo({ top: Math.max(0, container.scrollHeight - container.clientHeight), behavior: smooth ? 'smooth' : 'auto' });
             return;
         }
+        markProgrammaticScroll();
         messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
     };
 
@@ -213,6 +230,13 @@ export function ChatRoom({
         };
     };
 
+    const maybeSaveScroll = (id: string) => {
+        // If we auto-jumped to unread and user didn't scroll after that,
+        // do NOT persist this position as the user's scroll memory.
+        if (autoJumpedToUnreadRef.current && !userScrolledAfterAutoJumpRef.current) return;
+        saveScroll(id);
+    };
+
     const restoreScroll = (id: string): boolean => {
         const container = messagesContainerRef.current;
         const mem = scrollMemoryRef.current[id];
@@ -221,6 +245,7 @@ export function ChatRoom({
         if (mem.atBottom) {
             scrollToBottom(false);
         } else {
+            markProgrammaticScroll();
             container.scrollTop = mem.top;
         }
         return true;
@@ -233,18 +258,19 @@ export function ChatRoom({
         const cr = container.getBoundingClientRect();
         const tr = el.getBoundingClientRect();
         const delta = tr.top - cr.top;
+        markProgrammaticScroll();
         container.scrollTop = Math.max(0, container.scrollTop + delta - topOffset);
         isAtBottomRef.current = computeNearBottom();
     };
 
-    const computeUnreadAnchorId = (): string | null => {
+    const computeUnreadAnchorId = (unreadCount: number): string | null => {
         if (!isGroupChat) return null;
 
         // Prefer explicit per-message seen flag if present.
         const firstUnseen = messages.find((m: any) => m.senderId !== currentUserId && m.seen === false);
         if (firstUnseen?.id) return firstUnseen.id;
 
-        const cnt = Number(initialUnreadCount || 0);
+        const cnt = Number(unreadCount || 0);
         if (!Number.isFinite(cnt) || cnt <= 0) return null;
 
         let remaining = cnt;
@@ -267,10 +293,20 @@ export function ChatRoom({
         }
 
         // If group opened with unread, jump to first unread (Telegram-like).
-        if (isGroupChat && initialUnreadCount > 0) {
-            const anchor = unreadAnchorId || computeUnreadAnchorId();
+        if (isGroupChat && displayUnreadCount > 0) {
+            const anchor = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
             if (anchor) {
+                autoJumpedToUnreadRef.current = true;
+                userScrolledAfterAutoJumpRef.current = false;
+
                 scrollToMessageTop(anchor);
+
+                if (!consumedInitialUnreadRef.current) {
+                    consumedInitialUnreadRef.current = true;
+                    // Consume in App so next time you open this chat, it doesn't auto-jump again.
+                    window.setTimeout(() => onConsumeInitialUnread?.(chatId), 0);
+                }
+
                 return;
             }
         }
@@ -286,7 +322,7 @@ export function ChatRoom({
 
     const openMember = (memberId: string) => {
         if (!memberId) return;
-        saveScroll(chatId);
+        maybeSaveScroll(chatId);
         if (memberId === currentUserId) {
             onOpenProfile?.();
             return;
@@ -412,6 +448,7 @@ export function ChatRoom({
         const el = messageElsRef.current.get(messageId);
         const container = messagesContainerRef.current;
         if (!el || !container) return;
+        markProgrammaticScroll();
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         if (highlightRafRef.current) cancelAnimationFrame(highlightRafRef.current);
         const startedAt = performance.now();
@@ -520,7 +557,7 @@ export function ChatRoom({
     // Save scroll when leaving current chatId (unmount or switching to another chat).
     useEffect(() => {
         return () => {
-            saveScroll(chatId);
+            maybeSaveScroll(chatId);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
@@ -536,18 +573,31 @@ export function ChatRoom({
         setMsgMenu(null); setReactionMenu(null);
         setText(''); setUploadedFile(null);
         setUnreadAnchorId(null);
+
+        setDisplayUnreadCount(initialUnreadCount);
+        autoJumpedToUnreadRef.current = false;
+        userScrolledAfterAutoJumpRef.current = false;
+        programmaticScrollEventsRef.current = 0;
+        consumedInitialUnreadRef.current = false;
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
+
+    // If initialUnreadCount arrives late (edge cases), capture it once for UI.
+    useEffect(() => {
+        if (initialUnreadCount > 0 && displayUnreadCount === 0) {
+            setDisplayUnreadCount(initialUnreadCount);
+        }
+    }, [initialUnreadCount, displayUnreadCount]);
 
     // When opening a group with unread messages, compute anchor once for this open session.
     useEffect(() => {
         if (!isGroupChat) return;
         if (unreadAnchorId) return;
-        if (!initialUnreadCount || initialUnreadCount <= 0) return;
-        const id = computeUnreadAnchorId();
+        if (!displayUnreadCount || displayUnreadCount <= 0) return;
+        const id = computeUnreadAnchorId(displayUnreadCount);
         if (id) setUnreadAnchorId(id);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isGroupChat, initialUnreadCount, messages.length, chatId]);
+    }, [isGroupChat, displayUnreadCount, messages.length, chatId]);
 
     // Restore scroll after coming back from ContactInfo / member info / members list.
     useEffect(() => {
@@ -589,15 +639,26 @@ export function ChatRoom({
         }
         prevLenRef.current = messages.length;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [messages.length, chatId, loading, isGroupChat, initialUnreadCount, unreadAnchorId]);
+    }, [messages.length, chatId, loading, isGroupChat, displayUnreadCount, unreadAnchorId]);
 
     const onMessagesScroll = () => {
         const container = messagesContainerRef.current;
         if (!container) return;
+
         const nearBottom = computeNearBottom();
         isAtBottomRef.current = nearBottom;
         if (nearBottom) { setNewMsgCount(0); setShowScrollBtn(false); }
         else setShowScrollBtn(container.scrollHeight - container.scrollTop - container.clientHeight > 300);
+
+        // Ignore programmatic scroll events (initial jumps / restore / scrollToBottom).
+        if (programmaticScrollEventsRef.current > 0) {
+            programmaticScrollEventsRef.current -= 1;
+            return;
+        }
+
+        if (autoJumpedToUnreadRef.current) {
+            userScrolledAfterAutoJumpRef.current = true;
+        }
 
         // keep memory fresh (in-memory only)
         saveScroll(chatId);
@@ -845,14 +906,14 @@ export function ChatRoom({
     return (
         <div className="chat-room" style={{ position: 'relative' }} ref={roomRef}>
             <div className="chat-room__header">
-                <button className="chat-room__back-btn" onClick={() => { saveScroll(chatId); onBack(); }} aria-label="Back" type="button"><ArrowLeft size={20} /></button>
-                <button className="icon-btn chat-room__close-btn" onClick={() => { saveScroll(chatId); onCloseChat(); }} aria-label="Back to empty" type="button"><ArrowLeft size={20} /></button>
+                <button className="chat-room__back-btn" onClick={() => { maybeSaveScroll(chatId); onBack(); }} aria-label="Back" type="button"><ArrowLeft size={20} /></button>
+                <button className="icon-btn chat-room__close-btn" onClick={() => { maybeSaveScroll(chatId); onCloseChat(); }} aria-label="Back to empty" type="button"><ArrowLeft size={20} /></button>
 
                 <button
                     className="chat-room__header-clickable chat-room__header-clickable--full"
                     onClick={() => {
                         if (isSavedMessages) return;
-                        saveScroll(chatId);
+                        maybeSaveScroll(chatId);
                         if (isGroupChat) { setMemberSearch(''); setShowMembersList(true); }
                         else setShowContactInfo(true);
                     }}
@@ -957,7 +1018,7 @@ export function ChatRoom({
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', justifyContent: 'center' }}>
                                             <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
                                             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 999, padding: '6px 10px', fontFamily: 'Vazir, sans-serif' }}>
-                                                پیام‌های خوانده نشده{initialUnreadCount > 0 ? ` (${initialUnreadCount})` : ''}
+                                                پیام‌های خوانده نشده{displayUnreadCount > 0 ? ` (${displayUnreadCount})` : ''}
                                             </div>
                                             <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
                                         </div>
