@@ -585,4 +585,544 @@ export function ChatRoom({
         );
     }
 
-    // ... (rest of file unchanged)
+    if (showMembersList) {
+        const membersList = Object.values(groupMembers);
+        const filtered = memberSearch.trim()
+            ? membersList.filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()) || m.username.toLowerCase().includes(memberSearch.toLowerCase()))
+            : membersList;
+        // آنلاین‌ها اول نمایش داده شون
+        const sortedFiltered = [...filtered].sort((a, b) => {
+            if (a.online && !b.online) return -1;
+            if (!a.online && b.online) return 1;
+            return 0;
+        });
+        const onlineCount = membersList.filter(m => m.online).length;
+        const isInviteLink = (s: string) => s.startsWith('novaroom://') || s.startsWith('senoroom://');
+        const inviteLink = contact.username && isInviteLink(contact.username) ? contact.username : null;
+
+        return (
+            <div className="contact-info">
+                <div className="contact-info__header">
+                    <button className="contact-info__back" onClick={() => setShowMembersList(false)} type="button"><ArrowLeft size={20} /></button>
+                    <div className="contact-info__title">اطلاعات گروه</div>
+                    <div className="contact-info__spacer" />
+                </div>
+                <div className="contact-info__content">
+                    <div className="contact-info__avatar">
+                        <Avatar name={contact.name} size="xl" src={contact.avatar} />
+                        <div className="contact-info__name" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{contact.name}</div>
+                        <div className="contact-info__status chat-room__contact-status--online" style={{ color: '#22c55e' }}>
+                            {membersList.length} عضو • {onlineCount} آنلاین
+                        </div>
+                    </div>
+                    {inviteLink && (
+                        <div className="contact-info__card">
+                            <div className="contact-info__label">لینک دعوت</div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                <div className="contact-info__mono" style={{ fontSize: 13, wordBreak: 'break-all', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <Users size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
+                                    {inviteLink}
+                                </div>
+                                <button type="button" className="icon-btn" style={{ flexShrink: 0 }} onClick={() => navigator.clipboard.writeText(inviteLink).catch(() => {})}>
+                                    <Copy size={18} />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                    <div className="contact-info__card" style={{ padding: '8px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Search size={15} style={{ opacity: 0.5, flexShrink: 0 }} />
+                            <input type="text" placeholder="جستجو در اعضا..." value={memberSearch} onChange={e => setMemberSearch(e.target.value)}
+                                style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, fontSize: 14, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', direction: 'rtl' }} />
+                        </div>
+                    </div>
+                    <div style={{ padding: '8px 4px 4px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'Vazir, sans-serif' }}>اعضا ({membersList.length})</div>
+                    <div className="contact-info__card" style={{ padding: 0, overflow: 'hidden' }}>
+                        {sortedFiltered.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)', fontSize: 14 }}>عضوی یافت نشد</div>
+                        ) : (
+                            sortedFiltered.map((member, idx) => (
+                                <div key={member.chatId}
+                                    onClick={() => { setShowMembersList(false); setViewingMemberId(member.chatId); }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer', borderTop: idx > 0 ? '1px solid var(--border-primary)' : 'none', transition: 'background 0.15s' }}
+                                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+                                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                >
+                                    {/* آواتار با dot آنلاین — فقط در همین لیست */}
+                                    <Avatar name={member.name} size="md" src={member.avatar} online={member.online} />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>
+                                            {member.name}
+                                            {resolveVerified(member.verified) && <VerifiedBadge size={14} />}
+                                        </div>
+                                        <div style={{ fontSize: 13, marginTop: 2 }}>
+                                            {member.online ? (
+                                                <span style={{ color: '#22c55e' }}>آنلاین</span>
+                                            ) : (
+                                                <span style={{ color: 'var(--text-secondary)' }}>
+                                                    {member.username ? `@${member.username}` : 'آفلاین'}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    const activeMsg = msgMenu ? messages.find((mm) => mm.id === msgMenu.id) : null;
+    const activeMsgIsMine = activeMsg ? activeMsg.senderId === currentUserId : false;
+    const activeMsgIsForwarded = activeMsg?.forwardedFrom ? true : false;
+    const canDeleteActiveMsg = activeMsgIsMine || (isGroupChat && isVerifiedUser);
+
+    const reactionMsg = reactionMenu ? messages.find((mm) => mm.id === reactionMenu.id) : null;
+    const myReaction = reactionMsg?.reactions?.find((r: any) =>
+        r.userIds && Array.isArray(r.userIds) && r.userIds.includes(currentUserId)
+    );
+
+    const reactionUsersList: { userId: string; emoji: string; name: string; avatar: string; verified: boolean }[] = [];
+    if (reactionMsg?.reactions && reactionMsg.reactions.length > 0) {
+        reactionMsg.reactions.forEach((r: any) => {
+            (r.userIds || []).forEach((uid: string) => {
+                const member = groupMembers[uid];
+                reactionUsersList.push({
+                    userId: uid,
+                    emoji: r.emoji,
+                    name: member?.name || uid,
+                    avatar: member?.avatar || '',
+                    verified: resolveVerified(member?.verified),
+                });
+            });
+        });
+    }
+
+    return (
+        <div className="chat-room" style={{ position: 'relative' }} ref={roomRef}>
+            <div className="chat-room__header">
+                <button className="chat-room__back-btn" onClick={onBack} aria-label="Back" type="button"><ArrowLeft size={20} /></button>
+                <button className="icon-btn chat-room__close-btn" onClick={onCloseChat} aria-label="Back to empty" type="button"><ArrowLeft size={20} /></button>
+
+                <button
+                    className="chat-room__header-clickable chat-room__header-clickable--full"
+                    onClick={() => {
+                        if (isSavedMessages) return;
+                        if (isGroupChat) { setMemberSearch(''); setShowMembersList(true); }
+                        else setShowContactInfo(true);
+                    }}
+                    aria-label={isSavedMessages ? '' : 'Open contact info'}
+                    type="button"
+                    style={isSavedMessages ? { cursor: 'default' } : undefined}
+                >
+                    <Avatar
+                        name={contact.name}
+                        size="sm"
+                        online={isGroupChat || isSavedMessages ? undefined : contact.online}
+                        savedMessages={isSavedMessages}
+                        src={contact.avatar}
+                    />
+                    <div className="chat-room__header-info">
+                        <div className="chat-room__contact-name" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            {contact.name}
+                            {!isSavedMessages && resolveVerified(contact.verified) ? <VerifiedBadge size={14} /> : null}
+                        </div>
+                        {!isSavedMessages && (
+                            <div className={isGroupChat || contact.online ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
+                                {isGroupChat
+                                    ? `${chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0} عضو • ${chatStats?.onlineMembers ?? 0} آنلاین`
+                                    : contact.online ? 'آنلاین' : 'آفلاین'}
+                            </div>
+                        )}
+                    </div>
+                </button>
+
+                {!isSavedMessages && (
+                    <div className="chat-room__header-actions" ref={menuRef}>
+                        <button
+                            className="icon-btn"
+                            onClick={() => setChatMenuOpen((v) => !v)}
+                            aria-label="More"
+                            disabled={!canDeleteChat}
+                            style={!canDeleteChat ? { opacity: 0.4, cursor: 'default' } : undefined}
+                            type="button"
+                        >
+                            <MoreVertical size={20} />
+                        </button>
+
+                        {chatMenuOpen && canDeleteChat && (
+                            <div className="popover popover--mini popover--right">
+                                {isGroupChat ? (
+                                    <>
+                                        {/* خروج از گروه — همه کاربران */}
+                                        <button
+                                            className="popover__item popover__item--danger"
+                                            onClick={() => { setConfirmLeaveGroup(true); setChatMenuOpen(false); }}
+                                            type="button"
+                                        >
+                                            <LogOut size={16} />
+                                            خروج از گروه
+                                        </button>
+                                        {/* حذف گروه — فقط verified (هر نوع truthy value) */}
+                                        {isVerifiedUser && (
+                                            <button
+                                                className="popover__item popover__item--danger"
+                                                onClick={() => { setConfirmDeleteChat(true); setChatMenuOpen(false); }}
+                                                type="button"
+                                            >
+                                                <Trash2 size={16} />
+                                                حذف گروه
+                                            </button>
+                                        )}
+                                    </>
+                                ) : (
+                                    <button
+                                        className="popover__item popover__item--danger"
+                                        onClick={() => { setConfirmDeleteChat(true); setChatMenuOpen(false); }}
+                                        type="button"
+                                    >
+                                        <Trash2 size={16} />
+                                        حذف گفتگو
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            <div className="chat-room__messages" ref={messagesContainerRef} onScroll={onMessagesScroll}
+                style={{ overflowX: dragState.active ? 'hidden' : 'auto' }}>
+                <div className="chat-room__messages-inner">
+                    {loading ? <ChatMessagesSkeleton /> : (
+                        items.map(({ m, isMine, dayBreak, shape }) => {
+                            const isHighlighted = highlightId === m.id;
+                            const dragX = dragState.id === m.id ? dragState.x : 0;
+                            const dragActive = dragState.id === m.id ? dragState.active : false;
+                            return (
+                                <div key={m.id}>
+                                    {dayBreak && (
+                                        <div className="chat-room__date-separator">
+                                            <div className="chat-room__date-label">{formatDayLabel(m.timestamp)}</div>
+                                        </div>
+                                    )}
+                                    <div
+                                        className={isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`}
+                                        onPointerDown={(e) => {
+                                            if (e.pointerType !== 'mouse' || e.button !== 0) return;
+                                            swipeRef.current = { id: m.id, startX: e.clientX, startY: e.clientY, active: true, captured: false, pointerId: e.pointerId, blockClickUntil: swipeRef.current.blockClickUntil };
+                                        }}
+                                        onPointerMove={(e) => {
+                                            if (e.pointerType !== 'mouse' || !swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                            const dx = e.clientX - swipeRef.current.startX;
+                                            const dy = e.clientY - swipeRef.current.startY;
+                                            if (!swipeRef.current.captured) {
+                                                if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
+                                                swipeRef.current.captured = true;
+                                                try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
+                                            }
+                                            e.preventDefault();
+                                            setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
+                                        }}
+                                        onPointerUp={(e) => {
+                                            if (e.pointerType !== 'mouse' || !swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                            const dx = e.clientX - swipeRef.current.startX;
+                                            const dy = e.clientY - swipeRef.current.startY;
+                                            if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
+                                            if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
+                                            resetDrag(m.id);
+                                            swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
+                                        }}
+                                        onPointerCancel={(e) => {
+                                            if (e.pointerType !== 'mouse' || swipeRef.current.id !== m.id) return;
+                                            resetDrag(m.id);
+                                            swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
+                                        }}
+                                        onTouchStart={(e) => {
+                                            const t = e.touches[0];
+                                            swipeRef.current = { id: m.id, startX: t.clientX, startY: t.clientY, active: true, captured: false, pointerId: null, blockClickUntil: swipeRef.current.blockClickUntil };
+                                        }}
+                                        onTouchMove={(e) => {
+                                            if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                            const t = e.touches[0];
+                                            const dx = t.clientX - swipeRef.current.startX;
+                                            const dy = t.clientX - swipeRef.current.startY;
+                                            if (!swipeRef.current.captured) {
+                                                if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
+                                                swipeRef.current.captured = true;
+                                            }
+                                            e.preventDefault();
+                                            setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
+                                        }}
+                                        onTouchEnd={(e) => {
+                                            if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                            const t = e.changedTouches[0];
+                                            const dx = t.clientX - swipeRef.current.startX;
+                                            const dy = t.clientX - swipeRef.current.startY;
+                                            if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
+                                            if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
+                                            resetDrag(m.id);
+                                            swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
+                                        }}
+                                        onTouchCancel={() => {
+                                            if (swipeRef.current.id !== m.id) return;
+                                            resetDrag(m.id);
+                                            swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
+                                        }}
+                                    >
+                                        {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--last') && (() => {
+                                            const sender = groupMembers[m.senderId];
+                                            const senderName = sender?.name || m.senderId || 'ناشناس';
+                                            return (
+                                                <div style={{ position: 'absolute', left: 0, bottom: 0, cursor: 'pointer', zIndex: 1 }}
+                                                    onClick={(e) => { e.stopPropagation(); setViewingMemberId(m.senderId); }}>
+                                                    <Avatar name={senderName} size="sm" src={sender?.avatar || ''} />
+                                                </div>
+                                            );
+                                        })()}
+
+                                        <div
+                                            ref={(el) => { if (!el) { messageElsRef.current.delete(m.id); return; } messageElsRef.current.set(m.id, el); }}
+                                            className={isMine ? `message-bubble message-bubble--mine ${shape}` : `message-bubble message-bubble--theirs ${shape}`}
+                                            onClick={(e) => { if (Date.now() < swipeRef.current.blockClickUntil) return; openMessageMenu(m.id, e.currentTarget); }}
+                                            role="button" tabIndex={0}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') openMessageMenu(m.id, e.currentTarget as any); }}
+                                            style={{
+                                                cursor: 'pointer',
+                                                transform: `translateX(${dragX}px)`,
+                                                transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 180ms ease-out',
+                                                boxShadow: isHighlighted ? '0 0 0 3px rgba(245, 158, 11, 0.4)' : undefined,
+                                            }}
+                                        >
+                                            {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--first') && (() => {
+                                                const sender = groupMembers[m.senderId];
+                                                const senderName = sender?.name || m.senderId || 'ناشناس';
+                                                const colors = ['#E91E63','#9C27B0','#673AB7','#3F51B5','#2196F3','#00BCD4','#009688','#4CAF50','#FF5722','#FF9800'];
+                                                const colorIdx = m.senderId ? Math.abs(m.senderId.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % colors.length : 0;
+                                                return (
+                                                    <div onClick={(e) => { e.stopPropagation(); setViewingMemberId(m.senderId); }}
+                                                        style={{ fontSize: 13, fontWeight: 700, color: colors[colorIdx], marginBottom: 3, cursor: 'pointer', fontFamily: 'Vazir, sans-serif', lineHeight: '1.2' }}>
+                                                        {senderName}
+                                                    </div>
+                                                );
+                                            })()}
+
+                                            {m.forwardedFrom && (
+                                                <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4, fontStyle: 'italic', fontFamily: 'Vazir, sans-serif' }}>
+                                                    فوروارد شده از: {m.forwardedFrom.name || m.forwardedFrom.username || 'ناشناس'}
+                                                </div>
+                                            )}
+
+                                            {m.replyTo && (
+                                                <div onClick={(e) => { e.stopPropagation(); scrollToMessage(m.replyTo!.id); }}
+                                                    role="button" tabIndex={0}
+                                                    onKeyDown={(e) => { if (e.key === 'Enter') scrollToMessage(m.replyTo!.id); }}
+                                                    className="message-reply-box"
+                                                    style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
+                                                    <div className="message-reply-box__label">پاسخ</div>
+                                                    <div className="message-reply-box__text">{m.replyTo.text}</div>
+                                                </div>
+                                            )}
+
+                                            {m.text && <div className="message-text">{m.text}</div>}
+                                            {m.file && <FileMessage file={m.file} token={token} />}
+
+                                            {m.reactions && m.reactions.length > 0 && (
+                                                <div className="message-reactions">
+                                                    {m.reactions.map((reaction: any, idx: number) => {
+                                                        const userIds = reaction.userIds || [];
+                                                        const isMyReaction = userIds.includes(currentUserId);
+                                                        return (
+                                                            <button key={idx}
+                                                                className={isMyReaction ? 'message-reaction message-reaction--active' : 'message-reaction'}
+                                                                onClick={(e) => { e.stopPropagation(); if (isMyReaction) handleDeleteReaction(m.id); else handleReact(m.id, reaction.emoji); }}
+                                                                type="button"
+                                                            >
+                                                                <span className="message-reaction__emoji">{reaction.emoji}</span>
+                                                                {reaction.count > 1 && <span className="message-reaction__count">{reaction.count}</span>}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+
+                                            <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
+                                                <span className="message-time">{formatMessageTime(m.timestamp)}</span>
+                                                {m.edited && <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>ویرایش شده</span>}
+                                                {isMine && (
+                                                    <span className={m.seen ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
+                                                        {m.seen ? '✓✓' : '✓'}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                    <div ref={messagesEndRef} />
+                </div>
+            </div>
+
+            {msgMenu && activeMsg && (
+                <div ref={msgMenuRef} className="popover popover--mini"
+                    style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
+                    onClick={(e) => e.stopPropagation()}>
+                    <button className="popover__item" onClick={() => { const el = messageElsRef.current.get(activeMsg.id); if (el) openReactionMenu(activeMsg.id, el); }} type="button">
+                        <Smile size={16} />واکنش
+                    </button>
+                    <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><Reply size={16} />پاسخ</button>
+                    <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><Forward size={16} />فوروارد</button>
+                    {activeMsgIsMine && !activeMsgIsForwarded && (
+                        <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
+                    )}
+                    <button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><Copy size={16} />کپی</button>
+                    {canDeleteActiveMsg && (
+                        <button className="popover__item popover__item--danger" onClick={() => doDeleteMessage(activeMsg.id)} type="button">
+                            <Trash2 size={16} />حذف
+                        </button>
+                    )}
+                </div>
+            )}
+
+            {reactionMenu && reactionMsg && (
+                <div ref={reactionMenuRef}
+                    style={{ top: reactionMenu.top, left: reactionMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
+                    onClick={(e) => e.stopPropagation()}>
+                    <ReactionPicker
+                        messageId={reactionMsg.id}
+                        currentReaction={myReaction?.emoji}
+                        onReact={(id, emoji) => handleReact(id, emoji)}
+                        onDeleteReaction={(id) => handleDeleteReaction(id)}
+                        onClose={() => setReactionMenu(null)}
+                    />
+
+                    {reactionUsersList.length > 0 && (
+                        <div style={{ marginTop: 6, background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 12, overflow: 'hidden', minWidth: 220, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+                            <div style={{ padding: '7px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)', fontFamily: 'Vazir, sans-serif' }}>
+                                واکنش‌دهندگان ({reactionUsersList.length})
+                            </div>
+                            {reactionUsersList.map((ru, i) => (
+                                <div key={i}
+                                    onClick={(e) => { e.stopPropagation(); setReactionMenu(null); setViewingMemberId(ru.userId); }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderTop: i > 0 ? '1px solid var(--border-primary)' : 'none', cursor: 'pointer', transition: 'background 0.12s' }}
+                                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary, rgba(0,0,0,0.04))')}
+                                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                >
+                                    <div style={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
+                                        <Avatar name={ru.name} size="xs" src={ru.avatar} />
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
+                                        <span style={{ fontSize: 13, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {ru.name}
+                                        </span>
+                                        {ru.verified && <VerifiedBadge size={13} />}
+                                    </div>
+                                    <span style={{ fontSize: 18, flexShrink: 0 }}>{ru.emoji}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {(newMsgCount > 0 || showScrollBtn) && (
+                <button type="button" aria-label="Jump to latest messages"
+                    onClick={() => { scrollToBottom(true); setNewMsgCount(0); setShowScrollBtn(false); }}
+                    style={{ position: 'absolute', right: 16, bottom: 96, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid rgba(0,0,0,0.12)', background: '#fff', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px' }}>
+                    <ArrowDown size={16} />
+                    {newMsgCount > 0 && (
+                        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{newMsgCount}</span>
+                            <span style={{ width: 6, height: 6, borderRadius: 999, background: '#2F80ED', marginTop: 4 }} />
+                        </span>
+                    )}
+                </button>
+            )}
+
+            <div className="chat-room__input-area">
+                {(replyTo || editingId) && (
+                    <div className="chat-room__reply-edit-box">
+                        <div style={{ minWidth: 0 }}>
+                            <div className="chat-room__reply-edit-box__title">{editingId ? 'در حال ویرایش' : 'در حال پاسخ'}</div>
+                            {!editingId && replyTo && <div className="chat-room__reply-edit-box__text">{replyTo.text}</div>}
+                        </div>
+                        <button type="button" className="icon-btn" aria-label="Cancel" onClick={() => { setReplyTo(null); setEditingId(null); setText(''); }}>
+                            <X size={18} />
+                        </button>
+                    </div>
+                )}
+                {uploadedFile && (
+                    <div className="chat-room__reply-edit-box">
+                        <div style={{ minWidth: 0 }}>
+                            <div className="chat-room__reply-edit-box__title">فایل آپلود شده</div>
+                            <div className="chat-room__reply-edit-box__text">{uploadedFile.fileName}</div>
+                        </div>
+                        <button type="button" className="icon-btn" aria-label="Remove file" onClick={() => setUploadedFile(null)}><X size={18} /></button>
+                    </div>
+                )}
+                <div className="chat-room__input-wrapper">
+                    <FileUpload token={token} onFileUploaded={handleFileUploaded} />
+                    <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
+                        value={text} onChange={(e) => setText(e.target.value)}
+                        onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }}
+                        rows={1}
+                    />
+                    <button
+                        className={text.trim() || uploadedFile ? 'chat-room__send-btn chat-room__send-btn--active' : 'chat-room__send-btn chat-room__send-btn--disabled'}
+                        onClick={submit} disabled={!text.trim() && !uploadedFile} aria-label="Send" type="button">
+                        <SendHorizontal size={18} />
+                    </button>
+                </div>
+            </div>
+
+            <ForwardModal isOpen={forwardModalOpen} chats={chats} currentUserId={currentUserId}
+                onClose={() => setForwardModalOpen(false)} onForward={handleForwardMessage} onSelectChat={onSelectChat} />
+
+            {confirmDeleteChat && (
+                <div className="chat-room-modal-overlay" ref={confirmDeleteChatRef}>
+                    <div className="chat-room-confirm-modal">
+                        <h3 className="chat-room-confirm-modal__title">{isGroupChat ? 'گروه حذف شود؟' : 'گفتگو حذف شود؟'}</h3>
+                        <p className="chat-room-confirm-modal__text">
+                            {isGroupChat ? 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.' : 'این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'}
+                        </p>
+                        <div className="chat-room-confirm-modal__actions">
+                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteChat(false)} type="button">لغو</button>
+                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doDeleteChat} type="button">حذف</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {confirmLeaveGroup && (
+                <div className="chat-room-modal-overlay" ref={confirmLeaveGroupRef}>
+                    <div className="chat-room-confirm-modal">
+                        <h3 className="chat-room-confirm-modal__title">خروج از گروه؟</h3>
+                        <p className="chat-room-confirm-modal__text">آیا می‌خواهید از گروه خارج شوید؟ گروه برای شما حذف خواهد شد.</p>
+                        <div className="chat-room-confirm-modal__actions">
+                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmLeaveGroup(false)} type="button">لغو</button>
+                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doLeaveGroup} type="button">خروج</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {confirmDeleteMsg && (
+                <div className="chat-room-modal-overlay" ref={confirmDeleteMsgRef}>
+                    <div className="chat-room-confirm-modal">
+                        <h3 className="chat-room-confirm-modal__title">این پیام حذف شود؟</h3>
+                        <p className="chat-room-confirm-modal__text">این عمل پیام را برای هر دو کاربر حذف خواهد کرد.</p>
+                        <div className="chat-room-confirm-modal__actions">
+                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteMsg(null)} type="button">لغو</button>
+                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={confirmDeleteMessage} type="button">حذف</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
