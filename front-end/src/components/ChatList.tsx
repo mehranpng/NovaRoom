@@ -28,21 +28,29 @@ type IconProps = {
     title?: string;
 };
 
-function FilledPinIcon({ size = 16, className, style, title }: IconProps) {
+const PIN_ROTATE_DEG = 45;
+
+function PinIcon({ size = 16, className, style, title }: IconProps) {
     return (
         <svg
             width={size}
             height={size}
             viewBox="0 0 24 24"
             className={className}
-            style={style}
+            style={{ transform: `rotate(${PIN_ROTATE_DEG}deg)`, ...style }}
             aria-hidden={title ? undefined : true}
             role={title ? 'img' : 'presentation'}
         >
             {title ? <title>{title}</title> : null}
+            {/* A chunky, filled pushpin silhouette (closer to the provided reference) */}
             <path
                 fill="currentColor"
-                d="M14.1 2.8c.4-.2.8.1.9.5l1 5.1c.1.4 0 .9-.3 1.2l-1.6 1.6V14c0 .2 0 .3-.1.5l-1.5 5.8c-.2.7-1.2.7-1.4 0L9.6 14.5c0-.2-.1-.3-.1-.5v-2.4L8 9.9c-.3-.3-.4-.8-.3-1.2l1-5.1c.1-.4.5-.7.9-.5 1 .4 2.2.7 3.4.7s2.4-.3 3.4-.7Zm-2 9.2h-.2V14l.1.4.1-.4v-2Z"
+                d="M13.2 2.4c.55-.28 1.18.07 1.3.67l1.05 5.16c.12.62-.1 1.26-.56 1.7l-1.66 1.58v2.8c0 .22-.03.44-.1.65l-1.55 5.65c-.3 1.08-1.83 1.08-2.13 0L8.0 14.9c-.06-.2-.1-.42-.1-.65v-2.8L6.24 10c-.46-.44-.68-1.08-.56-1.7l1.05-5.16c.12-.6.75-.95 1.3-.67 1.05.52 2.32.83 3.59.83s2.54-.31 3.59-.83Z"
+            />
+            <path
+                fill="currentColor"
+                d="M9.35 7.05h4.9c.42 0 .75.34.75.75s-.33.75-.75.75h-4.9a.75.75 0 0 1 0-1.5Z"
+                opacity="0.22"
             />
         </svg>
     );
@@ -55,20 +63,20 @@ function UnpinIcon({ size = 16, className, style, title }: IconProps) {
             height={size}
             viewBox="0 0 24 24"
             className={className}
-            style={style}
+            style={{ transform: `rotate(${PIN_ROTATE_DEG}deg)`, ...style }}
             aria-hidden={title ? undefined : true}
             role={title ? 'img' : 'presentation'}
         >
             {title ? <title>{title}</title> : null}
             <path
                 fill="currentColor"
-                d="M14.1 2.8c.4-.2.8.1.9.5l1 5.1c.1.4 0 .9-.3 1.2l-1.6 1.6V14c0 .2 0 .3-.1.5l-1.5 5.8c-.2.7-1.2.7-1.4 0L9.6 14.5c0-.2-.1-.3-.1-.5v-2.4L8 9.9c-.3-.3-.4-.8-.3-1.2l1-5.1c.1-.4.5-.7.9-.5 1 .4 2.2.7 3.4.7s2.4-.3 3.4-.7Z"
-                opacity="0.9"
+                d="M13.2 2.4c.55-.28 1.18.07 1.3.67l1.05 5.16c.12.62-.1 1.26-.56 1.7l-1.66 1.58v2.8c0 .22-.03.44-.1.65l-1.55 5.65c-.3 1.08-1.83 1.08-2.13 0L8.0 14.9c-.06-.2-.1-.42-.1-.65v-2.8L6.24 10c-.46-.44-.68-1.08-.56-1.7l1.05-5.16c.12-.6.75-.95 1.3-.67 1.05.52 2.32.83 3.59.83s2.54-.31 3.59-.83Z"
             />
+            {/* strike-through */}
             <path
-                d="M5 19 19 5"
+                d="M5.2 19.2 19.2 5.2"
                 stroke="currentColor"
-                strokeWidth="2.4"
+                strokeWidth="2.6"
                 strokeLinecap="round"
             />
         </svg>
@@ -390,7 +398,6 @@ export function ChatList({
             alert(e?.message || 'خطا در تغییر وضعیت سنجاق');
         } finally {
             setPinBusy((m) => ({ ...m, [chatId]: false }));
-            setChatActionMenu(null);
         }
     };
 
@@ -654,11 +661,11 @@ export function ChatList({
                                             {contact.name}
                                             {contact.verified ? <VerifiedBadge size={14} /> : null}
                                             {pinned ? (
-                                                <FilledPinIcon
+                                                <PinIcon
                                                     size={14}
                                                     className="chat-list__pin-icon"
                                                     title="سنجاق شده"
-                                                    style={{ transform: 'rotate(-25deg)' }}
+                                                    style={{ opacity: 0.95 }}
                                                 />
                                             ) : null}
                                         </span>
@@ -710,11 +717,17 @@ export function ChatList({
                                         <button
                                             className="popover__item"
                                             type="button"
-                                            onClick={() => togglePin(chat.id)}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                // close immediately (before async request)
+                                                setChatActionMenu(null);
+                                                togglePin(chat.id);
+                                            }}
                                             disabled={Boolean(pinBusy[chat.id])}
                                             style={pinBusy[chat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
                                         >
-                                            {pinned ? <UnpinIcon size={16} /> : <FilledPinIcon size={16} />}
+                                            {pinned ? <UnpinIcon size={16} /> : <PinIcon size={16} />}
                                             {pinned ? 'برداشتن سنجاق' : 'سنجاق'}
                                         </button>
                                     </div>
