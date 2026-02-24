@@ -28,6 +28,7 @@ interface ChatRoomProps {
     onSelectChat?: (chatId: string) => void;
     onOpenDirectChat?: (user: User) => void;
     onOpenProfile?: () => void;
+    initialUnreadCount?: number;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000;
@@ -121,6 +122,7 @@ export function ChatRoom({
     onSelectChat,
     onOpenDirectChat,
     onOpenProfile,
+    initialUnreadCount = 0,
 }: ChatRoomProps) {
     const currentChat = useMemo(
         () => chats.find((c) => c.id === chatId) || null,
@@ -181,8 +183,110 @@ export function ChatRoom({
     const initialScrollDoneRef = useRef(false);
     const lastChatIdRef = useRef<string | null>(null);
 
+    // Scroll memory: keep per-chat scroll position in memory until refresh.
+    const scrollMemoryRef = useRef<Record<string, { top: number; atBottom: boolean }>>({});
+
+    // Unread separator anchor for the current open session.
+    const [unreadAnchorId, setUnreadAnchorId] = useState<string | null>(null);
+
+    const scrollToBottom = (smooth = false) => {
+        const container = messagesContainerRef.current;
+        if (container) {
+            container.scrollTo({ top: Math.max(0, container.scrollHeight - container.clientHeight), behavior: smooth ? 'smooth' : 'auto' });
+            return;
+        }
+        messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
+    };
+
+    const computeNearBottom = () => {
+        const container = messagesContainerRef.current;
+        if (!container) return true;
+        return container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+    };
+
+    const saveScroll = (id: string) => {
+        const container = messagesContainerRef.current;
+        if (!container) return;
+        scrollMemoryRef.current[id] = {
+            top: container.scrollTop,
+            atBottom: computeNearBottom(),
+        };
+    };
+
+    const restoreScroll = (id: string): boolean => {
+        const container = messagesContainerRef.current;
+        const mem = scrollMemoryRef.current[id];
+        if (!container || !mem) return false;
+        isAtBottomRef.current = Boolean(mem.atBottom);
+        if (mem.atBottom) {
+            scrollToBottom(false);
+        } else {
+            container.scrollTop = mem.top;
+        }
+        return true;
+    };
+
+    const scrollToMessageTop = (messageId: string, topOffset = 84) => {
+        const el = messageElsRef.current.get(messageId);
+        const container = messagesContainerRef.current;
+        if (!el || !container) return;
+        const cr = container.getBoundingClientRect();
+        const tr = el.getBoundingClientRect();
+        const delta = tr.top - cr.top;
+        container.scrollTop = Math.max(0, container.scrollTop + delta - topOffset);
+        isAtBottomRef.current = computeNearBottom();
+    };
+
+    const computeUnreadAnchorId = (): string | null => {
+        if (!isGroupChat) return null;
+
+        // Prefer explicit per-message seen flag if present.
+        const firstUnseen = messages.find((m: any) => m.senderId !== currentUserId && m.seen === false);
+        if (firstUnseen?.id) return firstUnseen.id;
+
+        const cnt = Number(initialUnreadCount || 0);
+        if (!Number.isFinite(cnt) || cnt <= 0) return null;
+
+        let remaining = cnt;
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const m = messages[i];
+            if (m.senderId === currentUserId) continue;
+            remaining -= 1;
+            if (remaining === 0) return m.id;
+        }
+        return messages[0]?.id || null;
+    };
+
+    const applyInitialScroll = () => {
+        const mem = scrollMemoryRef.current[chatId];
+
+        // If user previously left this chat NOT at bottom, preserve their exact scroll position.
+        if (mem && !mem.atBottom) {
+            restoreScroll(chatId);
+            return;
+        }
+
+        // If group opened with unread, jump to first unread (Telegram-like).
+        if (isGroupChat && initialUnreadCount > 0) {
+            const anchor = unreadAnchorId || computeUnreadAnchorId();
+            if (anchor) {
+                scrollToMessageTop(anchor);
+                return;
+            }
+        }
+
+        // If user left at bottom before, or we have no scroll memory: default to bottom.
+        if (mem) {
+            restoreScroll(chatId);
+            return;
+        }
+
+        scrollToBottom(false);
+    };
+
     const openMember = (memberId: string) => {
         if (!memberId) return;
+        saveScroll(chatId);
         if (memberId === currentUserId) {
             onOpenProfile?.();
             return;
@@ -252,21 +356,6 @@ export function ChatRoom({
     const isSavedMessages = contact.chatId === 'saved';
     const canDeleteChat = chatId !== 'pending' && !isSavedMessages;
     const token = localStorage.getItem('token') || '';
-
-    const scrollToBottom = (smooth = false) => {
-        const container = messagesContainerRef.current;
-        if (container) {
-            container.scrollTo({ top: Math.max(0, container.scrollHeight - container.clientHeight), behavior: smooth ? 'smooth' : 'auto' });
-            return;
-        }
-        messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
-    };
-
-    const computeNearBottom = () => {
-        const container = messagesContainerRef.current;
-        if (!container) return true;
-        return container.scrollHeight - container.scrollTop - container.clientHeight < 120;
-    };
 
     const resizeTextarea = () => {
         const textarea = textareaRef.current;
@@ -428,6 +517,14 @@ export function ChatRoom({
         };
     }, []);
 
+    // Save scroll when leaving current chatId (unmount or switching to another chat).
+    useEffect(() => {
+        return () => {
+            saveScroll(chatId);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [chatId]);
+
     useEffect(() => {
         if (lastChatIdRef.current === chatId) return;
         lastChatIdRef.current = chatId;
@@ -438,23 +535,41 @@ export function ChatRoom({
         setReplyTo(null); setEditingId(null);
         setMsgMenu(null); setReactionMenu(null);
         setText(''); setUploadedFile(null);
+        setUnreadAnchorId(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
 
+    // When opening a group with unread messages, compute anchor once for this open session.
     useEffect(() => {
-        const raf = requestAnimationFrame(() => scrollToBottom(false));
+        if (!isGroupChat) return;
+        if (unreadAnchorId) return;
+        if (!initialUnreadCount || initialUnreadCount <= 0) return;
+        const id = computeUnreadAnchorId();
+        if (id) setUnreadAnchorId(id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isGroupChat, initialUnreadCount, messages.length, chatId]);
+
+    // Restore scroll after coming back from ContactInfo / member info / members list.
+    useEffect(() => {
+        if (showContactInfo || viewingMemberId || showMembersList) return;
+        const mem = scrollMemoryRef.current[chatId];
+        if (!mem) return;
+        const raf = requestAnimationFrame(() => {
+            restoreScroll(chatId);
+        });
         return () => cancelAnimationFrame(raf);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [chatId]);
+    }, [showContactInfo, viewingMemberId, showMembersList, chatId]);
 
     useEffect(() => {
         const container = messagesContainerRef.current;
         if (!container) { prevLenRef.current = messages.length; return; }
         const nearBottom = computeNearBottom();
         isAtBottomRef.current = nearBottom;
+
         if (!initialScrollDoneRef.current) {
-            if (messages.length > 0) {
-                const raf = requestAnimationFrame(() => scrollToBottom(false));
+            if (messages.length > 0 && !loading) {
+                const raf = requestAnimationFrame(() => applyInitialScroll());
                 initialScrollDoneRef.current = true;
                 prevLenRef.current = messages.length;
                 return () => cancelAnimationFrame(raf);
@@ -462,6 +577,7 @@ export function ChatRoom({
             prevLenRef.current = messages.length;
             return;
         }
+
         const added = messages.length - prevLenRef.current;
         if (added > 0) {
             if (nearBottom) {
@@ -473,7 +589,7 @@ export function ChatRoom({
         }
         prevLenRef.current = messages.length;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [messages.length, chatId]);
+    }, [messages.length, chatId, loading, isGroupChat, initialUnreadCount, unreadAnchorId]);
 
     const onMessagesScroll = () => {
         const container = messagesContainerRef.current;
@@ -482,6 +598,9 @@ export function ChatRoom({
         isAtBottomRef.current = nearBottom;
         if (nearBottom) { setNewMsgCount(0); setShowScrollBtn(false); }
         else setShowScrollBtn(container.scrollHeight - container.scrollTop - container.clientHeight > 300);
+
+        // keep memory fresh (in-memory only)
+        saveScroll(chatId);
     };
 
     const items = useMemo(() => messages.map((m, idx) => {
@@ -525,7 +644,7 @@ export function ChatRoom({
         const r = targetEl.getBoundingClientRect();
         const menuHeight = 220; const menuWidth = 180;
         const spaceBelow = roomRect.height - (r.bottom - roomRect.top);
-        let top = spaceBelow < menuHeight + 16 ? Math.max(64, (r.bottom - roomRect.top) - menuHeight) : r.bottom - roomRect.top;
+        const top = spaceBelow < menuHeight + 16 ? Math.max(64, (r.bottom - roomRect.top) - menuHeight) : r.bottom - roomRect.top;
         const finalLeft = Math.max(12, Math.min(r.left - roomRect.left, roomRect.width - menuWidth - 16));
         setMsgMenu({ id: messageId, top, left: finalLeft });
         setReactionMenu(null);
@@ -538,7 +657,7 @@ export function ChatRoom({
         const r = targetEl.getBoundingClientRect();
         const pickerHeight = 200; const pickerWidth = 320;
         const spaceBelow = roomRect.height - (r.bottom - roomRect.top);
-        let top = spaceBelow < pickerHeight + 16 ? Math.max(64, (r.bottom - roomRect.top) - pickerHeight) : r.bottom - roomRect.top;
+        const top = spaceBelow < pickerHeight + 16 ? Math.max(64, (r.bottom - roomRect.top) - pickerHeight) : r.bottom - roomRect.top;
         const finalLeft = Math.max(12, Math.min(r.left - roomRect.left, roomRect.width - pickerWidth - 16));
         setReactionMenu({ id: messageId, top, left: finalLeft });
         setMsgMenu(null);
@@ -569,7 +688,7 @@ export function ChatRoom({
         return (
             <ContactInfo
                 user={contact}
-                onBack={() => { setShowContactInfo(false); requestAnimationFrame(() => scrollToBottom(false)); }}
+                onBack={() => { setShowContactInfo(false); }}
                 onOpenChat={(u) => {
                     if (u.chatId === currentUserId) {
                         onOpenProfile?.();
@@ -578,7 +697,6 @@ export function ChatRoom({
                     }
                     onOpenDirectChat?.(u);
                     setShowContactInfo(false);
-                    requestAnimationFrame(() => scrollToBottom(false));
                 }}
             />
         );
@@ -701,7 +819,6 @@ export function ChatRoom({
 
     const activeMsg = msgMenu ? messages.find((mm) => mm.id === msgMenu.id) : null;
     const activeMsgIsMine = activeMsg ? activeMsg.senderId === currentUserId : false;
-    const activeMsgIsForwarded = activeMsg?.forwardedFrom ? true : false;
     const canDeleteActiveMsg = activeMsgIsMine || (isGroupChat && isVerifiedUser);
 
     const reactionMsg = reactionMenu ? messages.find((mm) => mm.id === reactionMenu.id) : null;
@@ -728,13 +845,14 @@ export function ChatRoom({
     return (
         <div className="chat-room" style={{ position: 'relative' }} ref={roomRef}>
             <div className="chat-room__header">
-                <button className="chat-room__back-btn" onClick={onBack} aria-label="Back" type="button"><ArrowLeft size={20} /></button>
-                <button className="icon-btn chat-room__close-btn" onClick={onCloseChat} aria-label="Back to empty" type="button"><ArrowLeft size={20} /></button>
+                <button className="chat-room__back-btn" onClick={() => { saveScroll(chatId); onBack(); }} aria-label="Back" type="button"><ArrowLeft size={20} /></button>
+                <button className="icon-btn chat-room__close-btn" onClick={() => { saveScroll(chatId); onCloseChat(); }} aria-label="Back to empty" type="button"><ArrowLeft size={20} /></button>
 
                 <button
                     className="chat-room__header-clickable chat-room__header-clickable--full"
                     onClick={() => {
                         if (isSavedMessages) return;
+                        saveScroll(chatId);
                         if (isGroupChat) { setMemberSearch(''); setShowMembersList(true); }
                         else setShowContactInfo(true);
                     }}
@@ -826,6 +944,7 @@ export function ChatRoom({
                             const isHighlighted = highlightId === m.id;
                             const dragX = dragState.id === m.id ? dragState.x : 0;
                             const dragActive = dragState.id === m.id ? dragState.active : false;
+                            const showUnreadSeparator = Boolean(isGroupChat && unreadAnchorId && unreadAnchorId === m.id);
                             return (
                                 <div key={m.id}>
                                     {dayBreak && (
@@ -833,6 +952,17 @@ export function ChatRoom({
                                             <div className="chat-room__date-label">{formatDayLabel(m.timestamp)}</div>
                                         </div>
                                     )}
+
+                                    {showUnreadSeparator && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', justifyContent: 'center' }}>
+                                            <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
+                                            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 999, padding: '6px 10px', fontFamily: 'Vazir, sans-serif' }}>
+                                                پیام‌های خوانده نشده{initialUnreadCount > 0 ? ` (${initialUnreadCount})` : ''}
+                                            </div>
+                                            <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
+                                        </div>
+                                    )}
+
                                     <div
                                         className={isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`}
                                         onPointerDown={(e) => {
@@ -873,7 +1003,7 @@ export function ChatRoom({
                                             if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
                                             const t = e.touches[0];
                                             const dx = t.clientX - swipeRef.current.startX;
-                                            const dy = t.clientX - swipeRef.current.startY;
+                                            const dy = t.clientY - swipeRef.current.startY;
                                             if (!swipeRef.current.captured) {
                                                 if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
                                                 swipeRef.current.captured = true;
@@ -885,7 +1015,7 @@ export function ChatRoom({
                                             if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
                                             const t = e.changedTouches[0];
                                             const dx = t.clientX - swipeRef.current.startX;
-                                            const dy = t.clientX - swipeRef.current.startY;
+                                            const dy = t.clientY - swipeRef.current.startY;
                                             if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
                                             if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
                                             resetDrag(m.id);
@@ -1025,7 +1155,7 @@ export function ChatRoom({
                         onClose={() => setReactionMenu(null)}
                     />
 
-                    {reactionUsersList.length > 0 && (
+                    {isGroupChat && reactionUsersList.length > 0 && (
                         <div style={{ marginTop: 6, background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 12, overflow: 'hidden', minWidth: 220, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
                             <div style={{ padding: '7px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)', fontFamily: 'Vazir, sans-serif' }}>
                                 واکنش‌دهندگان ({reactionUsersList.length})

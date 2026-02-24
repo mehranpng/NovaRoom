@@ -38,6 +38,10 @@ export function App() {
     const [messages, setMessages] = useState<Record<string, Message[]>>({});
     const [newChatModalOpen, setNewChatModalOpen] = useState(false);
 
+    // When opening a chat from the list, capture its unreadCount BEFORE clearing it,
+    // so ChatRoom can scroll to the first unread message and render an unread separator.
+    const [openChatUnread, setOpenChatUnread] = useState<{ chatId: string; count: number } | null>(null);
+
     // AI Chat state
     const [showAIChat, setShowAIChat] = useState(false);
     const [aiMessages, setAIMessages] = useState<Message[]>([]);
@@ -182,6 +186,7 @@ export function App() {
         setShowAIChat(false);
         setAIMessages([]);
         newGroupTimestamps.current = {};
+        setOpenChatUnread(null);
         navigate('/login', { replace: true });
     }, [navigate]);
 
@@ -377,6 +382,11 @@ export function App() {
     const handleSelectChat = useCallback(async (chatId: string) => {
         setPendingUser(null);
         setShowAIChat(false);
+
+        // Capture unreadCount BEFORE clearing so ChatRoom can use it.
+        const openingUnread = chatsRef.current.find(c => c.id === chatId)?.unreadCount || 0;
+        setOpenChatUnread({ chatId, count: openingUnread });
+
         setActiveChatId(chatId);
         setView('chatRoom');
 
@@ -676,7 +686,7 @@ export function App() {
         if (currentUser && activeChatId === `saved_messages_${currentUser.chatId}`) {
             return {
                 chatId: 'saved',
-                name: 'پیامهای ذخیره شده',
+                name: 'پیام\u007fهای ذخیره شده',
                 username: 'saved',
                 bio: '',
                 avatar: '',
@@ -754,6 +764,10 @@ export function App() {
     const activeMessagesLoading = activeChatId ? messagesLoading[activeChatId] || false : false;
     const isSavedMessagesActive = currentUser && activeChatId === `saved_messages_${currentUser.chatId}`;
 
+    const initialUnreadCount = openChatUnread?.chatId && openChatUnread.chatId === (activeChatId || 'pending')
+        ? openChatUnread.count
+        : 0;
+
     return (
         <MusicPlayerProvider>
             <MiniMusicPlayer />
@@ -819,6 +833,7 @@ export function App() {
                                 onSelectChat={handleSelectChat}
                                 onOpenDirectChat={(user) => handleUserSelectedFromModal(user)}
                                 onOpenProfile={handleOpenProfile}
+                                initialUnreadCount={initialUnreadCount}
                             />
                         ) : (
                             <EmptyState />
