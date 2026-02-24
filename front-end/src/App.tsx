@@ -489,6 +489,9 @@ export function App() {
         const myId = currentUser?.chatId;
         if (myId) {
             const existing = chatsRef.current.find((c) => {
+                // اگر گروه بود، به عنوان چت خصوصی حساب نشه
+                if ((c as any)?.chatType === 'group') return false;
+
                 const hasParticipants = Array.isArray(c.participantIds) && c.participantIds.includes(myId) && c.participantIds.includes(user.chatId);
                 if (hasParticipants) return true;
 
@@ -815,6 +818,7 @@ export function App() {
                                 chats={chats}
                                 onSelectChat={handleSelectChat}
                                 onOpenDirectChat={(user) => handleUserSelectedFromModal(user)}
+                                onOpenProfile={handleOpenProfile}
                             />
                         ) : (
                             <EmptyState />

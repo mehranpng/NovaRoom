@@ -27,6 +27,7 @@ interface ChatRoomProps {
     chats: Chat[];
     onSelectChat?: (chatId: string) => void;
     onOpenDirectChat?: (user: User) => void;
+    onOpenProfile?: () => void;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000;
@@ -119,6 +120,7 @@ export function ChatRoom({
     chats,
     onSelectChat,
     onOpenDirectChat,
+    onOpenProfile,
 }: ChatRoomProps) {
     const currentChat = useMemo(
         () => chats.find((c) => c.id === chatId) || null,
@@ -178,6 +180,15 @@ export function ChatRoom({
     const prevLenRef = useRef(0);
     const initialScrollDoneRef = useRef(false);
     const lastChatIdRef = useRef<string | null>(null);
+
+    const openMember = (memberId: string) => {
+        if (!memberId) return;
+        if (memberId === currentUserId) {
+            onOpenProfile?.();
+            return;
+        }
+        setViewingMemberId(memberId);
+    };
 
     useEffect(() => {
         if (!isGroupChat) {
@@ -560,6 +571,11 @@ export function ChatRoom({
                 user={contact}
                 onBack={() => { setShowContactInfo(false); requestAnimationFrame(() => scrollToBottom(false)); }}
                 onOpenChat={(u) => {
+                    if (u.chatId === currentUserId) {
+                        onOpenProfile?.();
+                        setShowContactInfo(false);
+                        return;
+                    }
                     onOpenDirectChat?.(u);
                     setShowContactInfo(false);
                     requestAnimationFrame(() => scrollToBottom(false));
@@ -578,6 +594,11 @@ export function ChatRoom({
                 user={memberUser}
                 onBack={() => setViewingMemberId(null)}
                 onOpenChat={(u) => {
+                    if (u.chatId === currentUserId) {
+                        onOpenProfile?.();
+                        setViewingMemberId(null);
+                        return;
+                    }
                     onOpenDirectChat?.(u);
                     setViewingMemberId(null);
                 }}
@@ -643,7 +664,11 @@ export function ChatRoom({
                         ) : (
                             sortedFiltered.map((member, idx) => (
                                 <div key={member.chatId}
-                                    onClick={() => { setShowMembersList(false); setViewingMemberId(member.chatId); }}
+                                    onClick={() => {
+                                        setShowMembersList(false);
+                                        if (member.chatId === currentUserId) onOpenProfile?.();
+                                        else setViewingMemberId(member.chatId);
+                                    }}
                                     style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer', borderTop: idx > 0 ? '1px solid var(--border-primary)' : 'none', transition: 'background 0.15s' }}
                                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
                                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
@@ -877,7 +902,7 @@ export function ChatRoom({
                                             const senderName = sender?.name || m.senderId || 'ناشناس';
                                             return (
                                                 <div style={{ position: 'absolute', left: 0, bottom: 0, cursor: 'pointer', zIndex: 1 }}
-                                                    onClick={(e) => { e.stopPropagation(); setViewingMemberId(m.senderId); }}>
+                                                    onClick={(e) => { e.stopPropagation(); openMember(m.senderId); }}>
                                                     <Avatar name={senderName} size="sm" src={sender?.avatar || ''} />
                                                 </div>
                                             );
@@ -902,7 +927,7 @@ export function ChatRoom({
                                                 const colors = ['#E91E63','#9C27B0','#673AB7','#3F51B5','#2196F3','#00BCD4','#009688','#4CAF50','#FF5722','#FF9800'];
                                                 const colorIdx = m.senderId ? Math.abs(m.senderId.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % colors.length : 0;
                                                 return (
-                                                    <div onClick={(e) => { e.stopPropagation(); setViewingMemberId(m.senderId); }}
+                                                    <div onClick={(e) => { e.stopPropagation(); openMember(m.senderId); }}
                                                         style={{ fontSize: 13, fontWeight: 700, color: colors[colorIdx], marginBottom: 3, cursor: 'pointer', fontFamily: 'Vazir, sans-serif', lineHeight: '1.2' }}>
                                                         {senderName}
                                                     </div>
@@ -976,7 +1001,7 @@ export function ChatRoom({
                     </button>
                     <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><Reply size={16} />پاسخ</button>
                     <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><Forward size={16} />فوروارد</button>
-                    {activeMsgIsMine && !activeMsgIsForwarded && (
+                    {activeMsg.senderId === currentUserId && !activeMsg.forwardedFrom && (
                         <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
                     )}
                     <button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><Copy size={16} />کپی</button>
@@ -1007,7 +1032,11 @@ export function ChatRoom({
                             </div>
                             {reactionUsersList.map((ru, i) => (
                                 <div key={i}
-                                    onClick={(e) => { e.stopPropagation(); setReactionMenu(null); setViewingMemberId(ru.userId); }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setReactionMenu(null);
+                                        openMember(ru.userId);
+                                    }}
                                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderTop: i > 0 ? '1px solid var(--border-primary)' : 'none', cursor: 'pointer', transition: 'background 0.12s' }}
                                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary, rgba(0,0,0,0.04))')}
                                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}

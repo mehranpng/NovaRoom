@@ -89,8 +89,8 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
                             }}
                             aria-label="Open chat"
                         >
+                            پیام خالی
                             <MessageCircle size={18} />
-                            پیام دادن
                         </button>
                     </div>
                 )}
