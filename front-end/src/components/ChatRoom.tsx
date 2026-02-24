@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X, Forward, Users, Search, LogOut } from 'lucide-react';
 import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata } from '../types';
 import { Avatar } from './Avatar';
@@ -325,6 +325,27 @@ export function ChatRoom({
         scrollToBottom(false);
     };
 
+    const shouldPreserveExactScroll = () => {
+        const mem = scrollMemoryRef.current[chatId];
+        return Boolean(mem && mem.userInteracted && !mem.atBottom);
+    };
+
+    const settleToBottomIfNeeded = () => {
+        const c = messagesContainerRef.current;
+        if (!c) return;
+        if (userHasScrolledRef.current) return;
+        if (shouldPreserveExactScroll()) return;
+        // If group has unread, initial logic will jump to unread.
+        if (isGroupChat && displayUnreadCount > 0) return;
+
+        const hasOverflow = (c.scrollHeight - c.clientHeight) > 300;
+        if (!hasOverflow) return;
+        if (computeNearBottom()) return;
+
+        // Only force if we're still at the top.
+        if (c.scrollTop < 20) scrollToBottom(false);
+    };
+
     const openMember = (memberId: string) => {
         if (!memberId) return;
         maybeSaveScroll(chatId);
@@ -605,6 +626,23 @@ export function ChatRoom({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isGroupChat, displayUnreadCount, messages.length, chatId]);
 
+    // Back→open can mount while layout is still settling (mobile show/hide); retry a few times to avoid sticking at top.
+    useLayoutEffect(() => {
+        if (loading) return;
+        if (messages.length === 0) return;
+        settleToBottomIfNeeded();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [chatId, loading, messages.length, isGroupChat, displayUnreadCount]);
+
+    useEffect(() => {
+        if (loading) return;
+        if (messages.length === 0) return;
+        const delays = [0, 80, 180, 350, 700];
+        const timers = delays.map((d) => window.setTimeout(() => settleToBottomIfNeeded(), d));
+        return () => { timers.forEach((t) => window.clearTimeout(t)); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [chatId, loading, messages.length, isGroupChat, displayUnreadCount]);
+
     // Restore scroll after coming back from ContactInfo / member info / members list.
     useEffect(() => {
         if (showContactInfo || viewingMemberId || showMembersList) return;
@@ -628,7 +666,7 @@ export function ChatRoom({
                 const raf = requestAnimationFrame(() => {
                     applyInitialScroll();
 
-                    // Safety net: if initial open ended up at top (common when scroll memory captured top=0), force bottom once.
+                    // Safety net: if initial open ended up at top (common when layout not ready), force bottom once.
                     window.setTimeout(() => {
                         const c = messagesContainerRef.current;
                         if (!c) return;
