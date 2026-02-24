@@ -1,4 +1,4 @@
-import { ArrowLeft, Copy, Check, Calendar, Link2 } from 'lucide-react';
+import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
@@ -7,9 +7,10 @@ import { VerifiedBadge } from './VerifiedBadge';
 interface ContactInfoProps {
     user: User;
     onBack: () => void;
+    onOpenChat?: (user: User) => void;
 }
 
-export function ContactInfo({ user, onBack }: ContactInfoProps) {
+export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
     const [copied, setCopied] = useState(false);
 
     useEffect(() => {
@@ -34,6 +35,8 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
     };
+
+    const canOpenChat = Boolean(onOpenChat) && !isGroup && Boolean(user.chatId) && user.chatId !== 'saved';
 
     return (
         <div className="contact-info">
@@ -61,6 +64,36 @@ export function ContactInfo({ user, onBack }: ContactInfoProps) {
                         </div>
                     )}
                 </div>
+
+                {/* دکمه پیام دادن — فقط برای اکانت (نه گروه) */}
+                {canOpenChat && (
+                    <div className="contact-info__card" style={{ padding: 10 }}>
+                        <button
+                            type="button"
+                            onClick={() => onOpenChat?.(user)}
+                            style={{
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 10,
+                                padding: '10px 12px',
+                                borderRadius: 12,
+                                border: '1px solid var(--border-primary)',
+                                background: 'var(--bg-secondary)',
+                                color: 'var(--text-primary)',
+                                cursor: 'pointer',
+                                fontSize: 14,
+                                fontWeight: 700,
+                                fontFamily: 'Vazir, sans-serif',
+                            }}
+                            aria-label="Open chat"
+                        >
+                            <MessageCircle size={18} />
+                            پیام دادن
+                        </button>
+                    </div>
+                )}
 
                 {/* بیوگرافی — برای گروه نشون داده نمیشه اگه خالی باشه */}
                 {(!isGroup || displayBio) && (
