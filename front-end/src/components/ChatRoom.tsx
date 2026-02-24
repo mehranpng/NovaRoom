@@ -186,7 +186,9 @@ export function ChatRoom({
     const lastChatIdRef = useRef<string | null>(null);
 
     // Scroll memory: keep per-chat scroll position in memory until refresh.
-    const scrollMemoryRef = useRef<Record<string, { top: number; atBottom: boolean }>>({});
+    // IMPORTANT: only restore exact scrollTop if user actually scrolled in that chat (prevents "always open at top").
+    const scrollMemoryRef = useRef<Record<string, { top: number; atBottom: boolean; userInteracted: boolean }>>({});
+    const userHasScrolledRef = useRef(false);
 
     // Unread separator anchor for the current open session.
     const [unreadAnchorId, setUnreadAnchorId] = useState<string | null>(null);
@@ -227,6 +229,7 @@ export function ChatRoom({
         scrollMemoryRef.current[id] = {
             top: container.scrollTop,
             atBottom: computeNearBottom(),
+            userInteracted: Boolean(userHasScrolledRef.current),
         };
     };
 
@@ -286,8 +289,9 @@ export function ChatRoom({
     const applyInitialScroll = () => {
         const mem = scrollMemoryRef.current[chatId];
 
-        // If user previously left this chat NOT at bottom, preserve their exact scroll position.
-        if (mem && !mem.atBottom) {
+        // Only restore exact scrollTop if user actually scrolled in this chat.
+        // (Otherwise a stale "top=0" can cause "always open from first message".)
+        if (mem && mem.userInteracted && !mem.atBottom) {
             restoreScroll(chatId);
             return;
         }
@@ -311,12 +315,13 @@ export function ChatRoom({
             }
         }
 
-        // If user left at bottom before, or we have no scroll memory: default to bottom.
-        if (mem) {
+        // If we have memory and it was at bottom, keep bottom.
+        if (mem && mem.atBottom) {
             restoreScroll(chatId);
             return;
         }
 
+        // Default: always open at bottom.
         scrollToBottom(false);
     };
 
@@ -579,6 +584,7 @@ export function ChatRoom({
         userScrolledAfterAutoJumpRef.current = false;
         programmaticScrollEventsRef.current = 0;
         consumedInitialUnreadRef.current = false;
+        userHasScrolledRef.current = false;
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
 
@@ -619,7 +625,23 @@ export function ChatRoom({
 
         if (!initialScrollDoneRef.current) {
             if (messages.length > 0 && !loading) {
-                const raf = requestAnimationFrame(() => applyInitialScroll());
+                const raf = requestAnimationFrame(() => {
+                    applyInitialScroll();
+
+                    // Safety net: if initial open ended up at top (common when scroll memory captured top=0), force bottom once.
+                    window.setTimeout(() => {
+                        const c = messagesContainerRef.current;
+                        if (!c) return;
+                        if (userHasScrolledRef.current) return;
+                        if (isGroupChat && displayUnreadCount > 0) return;
+                        const mem = scrollMemoryRef.current[chatId];
+                        if (mem?.userInteracted && !mem.atBottom) return;
+                        const hasOverflow = (c.scrollHeight - c.clientHeight) > 300;
+                        if (hasOverflow && c.scrollTop < 20 && !computeNearBottom()) {
+                            scrollToBottom(false);
+                        }
+                    }, 120);
+                });
                 initialScrollDoneRef.current = true;
                 prevLenRef.current = messages.length;
                 return () => cancelAnimationFrame(raf);
@@ -655,6 +677,8 @@ export function ChatRoom({
             programmaticScrollEventsRef.current -= 1;
             return;
         }
+
+        userHasScrolledRef.current = true;
 
         if (autoJumpedToUnreadRef.current) {
             userScrolledAfterAutoJumpRef.current = true;
