@@ -267,8 +267,6 @@ export function ChatRoom({
     };
 
     const computeUnreadAnchorId = (unreadCount: number): string | null => {
-        if (!isGroupChat) return null;
-
         // Prefer explicit per-message seen flag if present.
         const firstUnseen = messages.find((m: any) => m.senderId !== currentUserId && m.seen === false);
         if (firstUnseen?.id) return firstUnseen.id;
@@ -296,8 +294,8 @@ export function ChatRoom({
             return;
         }
 
-        // If group opened with unread, jump to first unread (Telegram-like).
-        if (isGroupChat && displayUnreadCount > 0) {
+        // If opened with unread, jump to first unread (Telegram-like).
+        if (displayUnreadCount > 0) {
             const anchor = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
             if (anchor) {
                 autoJumpedToUnreadRef.current = true;
@@ -335,8 +333,8 @@ export function ChatRoom({
         if (!c) return;
         if (userHasScrolledRef.current) return;
         if (shouldPreserveExactScroll()) return;
-        // If group has unread, initial logic will jump to unread.
-        if (isGroupChat && displayUnreadCount > 0) return;
+        // If chat has unread, initial logic will jump to unread.
+        if (displayUnreadCount > 0) return;
 
         const hasOverflow = (c.scrollHeight - c.clientHeight) > 300;
         if (!hasOverflow) return;
@@ -569,8 +567,8 @@ export function ChatRoom({
             setMsgMenu(null);
             setReactionMenu(null);
         };
-        document.addEventListener('mousedown', onDocClick);
-        return () => document.removeEventListener('mousedown', onDocClick);
+        document.addEventListener('click', onDocClick);
+        return () => document.removeEventListener('click', onDocClick);
     }, []);
 
     useEffect(() => {
@@ -616,15 +614,14 @@ export function ChatRoom({
         }
     }, [initialUnreadCount, displayUnreadCount]);
 
-    // When opening a group with unread messages, compute anchor once for this open session.
+    // When opening a chat with unread messages, compute anchor once for this open session.
     useEffect(() => {
-        if (!isGroupChat) return;
         if (unreadAnchorId) return;
         if (!displayUnreadCount || displayUnreadCount <= 0) return;
         const id = computeUnreadAnchorId(displayUnreadCount);
         if (id) setUnreadAnchorId(id);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isGroupChat, displayUnreadCount, messages.length, chatId]);
+    }, [displayUnreadCount, messages.length, chatId]);
 
     // Back→open can mount while layout is still settling (mobile show/hide); retry a few times to avoid sticking at top.
     useLayoutEffect(() => {
@@ -632,7 +629,7 @@ export function ChatRoom({
         if (messages.length === 0) return;
         settleToBottomIfNeeded();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [chatId, loading, messages.length, isGroupChat, displayUnreadCount]);
+    }, [chatId, loading, messages.length, displayUnreadCount]);
 
     useEffect(() => {
         if (loading) return;
@@ -641,7 +638,7 @@ export function ChatRoom({
         const timers = delays.map((d) => window.setTimeout(() => settleToBottomIfNeeded(), d));
         return () => { timers.forEach((t) => window.clearTimeout(t)); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [chatId, loading, messages.length, isGroupChat, displayUnreadCount]);
+    }, [chatId, loading, messages.length, displayUnreadCount]);
 
     // Restore scroll after coming back from ContactInfo / member info / members list.
     useEffect(() => {
@@ -671,7 +668,7 @@ export function ChatRoom({
                         const c = messagesContainerRef.current;
                         if (!c) return;
                         if (userHasScrolledRef.current) return;
-                        if (isGroupChat && displayUnreadCount > 0) return;
+                        if (displayUnreadCount > 0) return;
                         const mem = scrollMemoryRef.current[chatId];
                         if (mem?.userInteracted && !mem.atBottom) return;
                         const hasOverflow = (c.scrollHeight - c.clientHeight) > 300;
@@ -699,7 +696,7 @@ export function ChatRoom({
         }
         prevLenRef.current = messages.length;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [messages.length, chatId, loading, isGroupChat, displayUnreadCount, unreadAnchorId]);
+    }, [messages.length, chatId, loading, displayUnreadCount, unreadAnchorId]);
 
     const onMessagesScroll = () => {
         const container = messagesContainerRef.current;
@@ -760,18 +757,55 @@ export function ChatRoom({
         } catch { alert('خروج از گروه با خطا مواجه شد'); }
     };
 
-    const openMessageMenu = (messageId: string, targetEl: HTMLElement) => {
+    const openMessageMenu = (messageId: string, targetEl: HTMLElement, clientX?: number, clientY?: number) => {
         const room = roomRef.current;
         if (!room) return;
+
+        // Toggle: clicking the same message while menu is open closes it.
+        if (msgMenu?.id === messageId) {
+            setMsgMenu(null);
+            setReactionMenu(null);
+            return;
+        }
+
         const roomRect = room.getBoundingClientRect();
         const r = targetEl.getBoundingClientRect();
-        const menuHeight = 220; const menuWidth = 180;
-        const spaceBelow = roomRect.height - (r.bottom - roomRect.top);
-        const top = spaceBelow < menuHeight + 16 ? Math.max(64, (r.bottom - roomRect.top) - menuHeight) : r.bottom - roomRect.top;
-        const finalLeft = Math.max(12, Math.min(r.left - roomRect.left, roomRect.width - menuWidth - 16));
-        setMsgMenu({ id: messageId, top, left: finalLeft });
+
+        const x = typeof clientX === 'number' && Number.isFinite(clientX) ? clientX : (r.left + 12);
+        const y = typeof clientY === 'number' && Number.isFinite(clientY) ? clientY : r.bottom;
+
+        // Position near the actual click/touch point (relative to room).
+        const relX = x - roomRect.left;
+        const relY = y - roomRect.top;
+
+        setMsgMenu({ id: messageId, top: relY + 8, left: relX - 12 });
         setReactionMenu(null);
     };
+
+    // Clamp msg menu inside the visible room (especially important on mobile).
+    useLayoutEffect(() => {
+        if (!msgMenu) return;
+        const room = roomRef.current;
+        const menu = msgMenuRef.current;
+        if (!room || !menu) return;
+
+        const rr = room.getBoundingClientRect();
+        const mr = menu.getBoundingClientRect();
+
+        const padding = 12;
+        const minTop = 64;
+
+        const maxLeft = rr.width - mr.width - padding;
+        const maxTop = rr.height - mr.height - padding;
+
+        const clampedLeft = Math.min(Math.max(msgMenu.left, padding), Math.max(padding, maxLeft));
+        const clampedTop = Math.min(Math.max(msgMenu.top, minTop), Math.max(minTop, maxTop));
+
+        if (clampedLeft !== msgMenu.left || clampedTop !== msgMenu.top) {
+            setMsgMenu((s) => (s ? { ...s, left: clampedLeft, top: clampedTop } : s));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [msgMenu?.id, msgMenu?.top, msgMenu?.left]);
 
     const openReactionMenu = (messageId: string, targetEl: HTMLElement) => {
         const room = roomRef.current;
@@ -1067,7 +1101,11 @@ export function ChatRoom({
                             const isHighlighted = highlightId === m.id;
                             const dragX = dragState.id === m.id ? dragState.x : 0;
                             const dragActive = dragState.id === m.id ? dragState.active : false;
-                            const showUnreadSeparator = Boolean(isGroupChat && unreadAnchorId && unreadAnchorId === m.id);
+                            const showUnreadSeparator = Boolean(unreadAnchorId && unreadAnchorId === m.id);
+
+                            const isMenuActive = Boolean(msgMenu && msgMenu.id === m.id);
+                            const dimOthers = Boolean(msgMenu && !isMenuActive);
+
                             return (
                                 <div key={m.id}>
                                     {dayBreak && (
@@ -1088,6 +1126,11 @@ export function ChatRoom({
 
                                     <div
                                         className={isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`}
+                                        style={{
+                                            opacity: dimOthers ? 0.72 : 1,
+                                            filter: dimOthers ? 'brightness(0.96)' : undefined,
+                                            transition: 'opacity 120ms ease, filter 120ms ease',
+                                        }}
                                         onPointerDown={(e) => {
                                             if (e.pointerType !== 'mouse' || e.button !== 0) return;
                                             swipeRef.current = { id: m.id, startX: e.clientX, startY: e.clientY, active: true, captured: false, pointerId: e.pointerId, blockClickUntil: swipeRef.current.blockClickUntil };
@@ -1164,14 +1207,23 @@ export function ChatRoom({
                                         <div
                                             ref={(el) => { if (!el) { messageElsRef.current.delete(m.id); return; } messageElsRef.current.set(m.id, el); }}
                                             className={isMine ? `message-bubble message-bubble--mine ${shape}` : `message-bubble message-bubble--theirs ${shape}`}
-                                            onClick={(e) => { if (Date.now() < swipeRef.current.blockClickUntil) return; openMessageMenu(m.id, e.currentTarget); }}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (Date.now() < swipeRef.current.blockClickUntil) return;
+                                                const ne = e.nativeEvent as MouseEvent;
+                                                openMessageMenu(m.id, e.currentTarget, ne.clientX, ne.clientY);
+                                            }}
                                             role="button" tabIndex={0}
                                             onKeyDown={(e) => { if (e.key === 'Enter') openMessageMenu(m.id, e.currentTarget as any); }}
                                             style={{
                                                 cursor: 'pointer',
                                                 transform: `translateX(${dragX}px)`,
                                                 transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 180ms ease-out',
-                                                boxShadow: isHighlighted ? '0 0 0 3px rgba(245, 158, 11, 0.4)' : undefined,
+                                                boxShadow: isHighlighted
+                                                    ? '0 0 0 3px rgba(245, 158, 11, 0.4)'
+                                                    : isMenuActive
+                                                        ? '0 0 0 2px rgba(47, 128, 237, 0.35)'
+                                                        : undefined,
                                             }}
                                         >
                                             {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--first') && (() => {
