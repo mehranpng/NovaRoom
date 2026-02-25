@@ -39,9 +39,6 @@ const avatarFetching = new Map<string, Promise<string>>();
 function resolveAvatarUrl(src: string): string {
   if (!src) return '';
 
-  // Allow data URLs directly (e.g. during optimistic UI / legacy stored avatars)
-  if (src.startsWith('data:')) return src;
-
   if (src.startsWith('blob:')) return src;
 
   if (src.startsWith('http://') || src.startsWith('https://')) {
@@ -76,12 +73,6 @@ async function fetchAvatar(src: string): Promise<string> {
 
     const fullUrl = resolveAvatarUrl(src);
     if (!fullUrl) return '';
-
-    // Data URLs don't need fetching.
-    if (fullUrl.startsWith('data:') || fullUrl.startsWith('blob:')) {
-      avatarCache.set(cacheKey, fullUrl);
-      return fullUrl;
-    }
 
     try {
       const response = await fetch(fullUrl, {

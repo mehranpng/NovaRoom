@@ -1,9 +1,9 @@
-import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Save, Image as ImageIcon, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Save } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
-import { apiFetch, API_BASE_URL } from '../config/api';
+import { apiFetch } from '../config/api';
 
 interface ContactInfoProps {
     user: User;
@@ -19,7 +19,6 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
     const [groupAvatar, setGroupAvatar] = useState('');
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const groupFileInputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
         setCopied(false);
@@ -74,58 +73,12 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
         const un = (user.username || '').trim();
         if (!un) return;
         const textToCopy = isInviteLink(un) ? un : `@${un}`;
-        navigator.clipboard.writeText(textToCopy).catch(() => { });
+        navigator.clipboard.writeText(textToCopy).catch(() => {});
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
     };
 
     const canOpenChat = Boolean(onOpenChat) && !isGroup && Boolean(user.chatId) && user.chatId !== 'saved';
-
-    const uploadGroupAvatarToServer = async (file: File) => {
-        if (!file) return;
-
-        // same UX constraint as FileUpload component
-        if (file.size > 3 * 1024 * 1024) {
-            setError('حجم فایل نباید بیشتر از ۳ مگابایت باشد');
-            return;
-        }
-
-        const token = localStorage.getItem('token') || '';
-        if (!token) {
-            setError('توکن یافت نشد');
-            return;
-        }
-
-        setSaving(true);
-        setError(null);
-
-        try {
-            const formData = new FormData();
-            formData.append('file', file);
-
-            const res = await fetch(`${API_BASE_URL}/files/upload`, {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'ngrok-skip-browser-warning': 'true',
-                },
-                body: formData,
-            });
-
-            if (!res.ok) throw new Error('upload failed');
-            const json = await res.json();
-
-            const fileId = json?.file?.fileId || json?.file?.id || json?.file?.file_id || json?.file?.path || '';
-            if (!fileId) throw new Error('invalid upload response');
-
-            setGroupAvatar(String(fileId));
-        } catch (e) {
-            console.error(e);
-            setError('آپلود عکس گروه با خطا مواجه شد');
-        } finally {
-            setSaving(false);
-        }
-    };
 
     const saveGroup = async () => {
         if (!user.chatId) return;
@@ -198,11 +151,11 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                <div style={{ fontSize: 12, opacity: 0.7, color: 'var(--text-primary)' }}>اسم گروه</div>
+                                <div style={{ fontSize: 12, opacity: 0.7 }}>اسم گروه</div>
                                 <input
                                     value={groupName}
                                     onChange={(e) => setGroupName(e.target.value)}
-                                    placeholder={String(user.name ?? '') || 'اسم گروه'}
+                                    placeholder="مثلاً تیم توسعه"
                                     style={{
                                         width: '100%',
                                         padding: '10px 12px',
@@ -218,50 +171,23 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                <div style={{ fontSize: 12, opacity: 0.7, color: 'var(--text-primary)' }}>آواتار گروه</div>
-
-                                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                                    <Avatar name={groupName || user.name} size="md" src={groupAvatar || user.avatar} />
-
-                                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                                        <button
-                                            type="button"
-                                            onClick={() => groupFileInputRef.current?.click()}
-                                            disabled={saving}
-                                            className="icon-btn"
-                                            title="انتخاب عکس از سیستم"
-                                        >
-                                            <ImageIcon size={18} />
-                                        </button>
-
-                                        <button
-                                            type="button"
-                                            onClick={() => setGroupAvatar('')}
-                                            disabled={saving}
-                                            className="icon-btn"
-                                            title="حذف آواتار"
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
-                                    </div>
-                                </div>
-
+                                <div style={{ fontSize: 12, opacity: 0.7 }}>آواتار گروه (URL)</div>
                                 <input
-                                    ref={groupFileInputRef}
-                                    type="file"
-                                    accept="image/*"
-                                    style={{ display: 'none' }}
-                                    onChange={async (e) => {
-                                        const f = e.target.files?.[0];
-                                        if (!f) return;
-                                        await uploadGroupAvatarToServer(f);
-                                        e.currentTarget.value = '';
+                                    value={groupAvatar}
+                                    onChange={(e) => setGroupAvatar(e.target.value)}
+                                    placeholder="https://..."
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px 12px',
+                                        borderRadius: 12,
+                                        border: '1px solid var(--border-primary)',
+                                        background: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)',
+                                        fontSize: 14,
+                                        fontFamily: 'Vazir, sans-serif',
                                     }}
+                                    disabled={saving}
                                 />
-
-                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', opacity: 0.9 }}>
-                                    بعد از آپلود، فقط «ذخیره» را بزن.
-                                </div>
                             </div>
 
                             {error && (
