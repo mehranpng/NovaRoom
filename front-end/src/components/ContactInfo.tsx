@@ -1,4 +1,4 @@
-import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Save, Image as ImageIcon, Trash2, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Save, Image as ImageIcon, Trash2, RotateCcw, Users } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
@@ -9,6 +9,7 @@ interface ContactInfoProps {
     user: User;
     onBack: () => void;
     onOpenChat?: (user: User) => void;
+    onOpenMembers?: () => void;
 }
 
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
@@ -18,7 +19,7 @@ function extractUploadedFileId(res: any): string {
     return String(file.fileId || file.id || file.file_id || file.path || '').trim();
 }
 
-export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
+export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: ContactInfoProps) {
     const [copied, setCopied] = useState(false);
     const [canEditGroup, setCanEditGroup] = useState(false);
     const [editingGroup, setEditingGroup] = useState(false);
@@ -192,6 +193,35 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
                         </div>
                     )}
                 </div>
+
+                {isGroup && onOpenMembers && (
+                    <div className="contact-info__card" style={{ padding: 10 }}>
+                        <button
+                            type="button"
+                            onClick={onOpenMembers}
+                            style={{
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 10,
+                                padding: '10px 12px',
+                                borderRadius: 12,
+                                border: '1px solid var(--border-primary)',
+                                background: 'var(--bg-secondary)',
+                                color: 'var(--text-primary, #fff)',
+                                cursor: 'pointer',
+                                fontSize: 14,
+                                fontWeight: 700,
+                                fontFamily: 'Vazir, sans-serif',
+                            }}
+                            aria-label="Open members list"
+                        >
+                            اعضا
+                            <Users size={18} />
+                        </button>
+                    </div>
+                )}
 
                 {isGroup && canEditGroup && editingGroup && (
                     <div className="contact-info__card">

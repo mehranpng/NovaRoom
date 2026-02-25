@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X, Forward, Users, Search, LogOut, Save, Image as ImageIcon } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X, Forward, Users, Search, LogOut } from 'lucide-react';
 import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -87,7 +87,8 @@ function bubbleShape(prevSameSender: boolean, nextSameSender: boolean) {
     if (!prevSameSender && !nextSameSender) return 'msg-shape--single';
     if (!prevSameSender && nextSameSender) return 'msg-shape--first';
     if (prevSameSender && nextSameSender) return 'msg-shape--middle';
-    return 'msg-shape--last';
+    if (prevSameSender && !nextSameSender) return 'msg-shape--last';
+    return 'msg-shape--single';
 }
 
 /** هر مقداری غیر از false / 0 / "false" / null / undefined رو verified حساب می‌کنیم */
@@ -95,15 +96,6 @@ function resolveVerified(val: any): boolean {
     if (val === null || val === undefined) return false;
     if (val === false || val === 0 || val === 'false' || val === '0') return false;
     return true;
-}
-
-async function readFileAsDataUrl(file: File): Promise<string> {
-    return await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ''));
-        reader.onerror = () => reject(new Error('FileReader failed'));
-        reader.readAsDataURL(file);
-    });
 }
 
 type GroupMember = {
@@ -151,14 +143,6 @@ export function ChatRoom({
     const [showContactInfo, setShowContactInfo] = useState(false);
     const [forwardModalOpen, setForwardModalOpen] = useState(false);
     const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
-
-    // Group edit state (in group info view)
-    const [editingGroup, setEditingGroup] = useState(false);
-    const [groupName, setGroupName] = useState('');
-    const [groupAvatar, setGroupAvatar] = useState('');
-    const [savingGroup, setSavingGroup] = useState(false);
-    const [groupEditError, setGroupEditError] = useState<string | null>(null);
-    const groupFileInputRef = useRef<HTMLInputElement | null>(null);
 
     const [replyTo, setReplyTo] = useState<MessageReplyType | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -369,39 +353,6 @@ export function ChatRoom({
             return;
         }
         setViewingMemberId(memberId);
-    };
-
-    const saveGroupInfo = async () => {
-        if (!isGroupChat) return;
-        if (!isVerifiedUser) return;
-
-        const name = groupName.trim();
-        if (name.length < 3) {
-            setGroupEditError('اسم گروه باید حداقل ۳ کاراکتر باشد');
-            return;
-        }
-
-        setSavingGroup(true);
-        setGroupEditError(null);
-
-        try {
-            await apiFetch(`/groups/${encodeURIComponent(chatId)}`, {
-                method: 'PUT',
-                body: JSON.stringify({
-                    name,
-                    avatar: groupAvatar,
-                }),
-            });
-
-            // Refresh chats in App so group name/avatar updates everywhere.
-            window.dispatchEvent(new Event('novaroom:refresh_chats'));
-            setEditingGroup(false);
-        } catch (e) {
-            console.error(e);
-            setGroupEditError('ویرایش گروه با خطا مواجه شد');
-        } finally {
-            setSavingGroup(false);
-        }
     };
 
     useEffect(() => {
@@ -654,13 +605,6 @@ export function ChatRoom({
         programmaticScrollEventsRef.current = 0;
         consumedInitialUnreadRef.current = false;
         userHasScrolledRef.current = false;
-
-        // reset group edit state when switching chats
-        setEditingGroup(false);
-        setSavingGroup(false);
-        setGroupEditError(null);
-        setGroupName('');
-        setGroupAvatar('');
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
 
@@ -899,10 +843,16 @@ export function ChatRoom({
     };
 
     if (showContactInfo) {
+        const infoUser: any = isGroupChat ? { ...contact, chatId, isGroup: true } : contact;
         return (
             <ContactInfo
-                user={contact}
+                user={infoUser}
                 onBack={() => { setShowContactInfo(false); }}
+                onOpenMembers={isGroupChat ? () => {
+                    setShowContactInfo(false);
+                    setMemberSearch('');
+                    setShowMembersList(true);
+                } : undefined}
                 onOpenChat={(u) => {
                     if (u.chatId === currentUserId) {
                         onOpenProfile?.();
@@ -953,37 +903,25 @@ export function ChatRoom({
         const isInviteLink = (s: string) => s.startsWith('novaroom://') || s.startsWith('senoroom://');
         const inviteLink = contact.username && isInviteLink(contact.username) ? contact.username : null;
 
-        const previewName = groupName || contact.name;
-        const previewAvatar = groupAvatar || contact.avatar;
-
         return (
             <div className="contact-info">
                 <div className="contact-info__header">
-                    <button className="contact-info__back" onClick={() => { setShowMembersList(false); setEditingGroup(false); }} type="button"><ArrowLeft size={20} /></button>
+                    <button className="contact-info__back" onClick={() => { setShowMembersList(false); }} type="button"><ArrowLeft size={20} /></button>
                     <div className="contact-info__title">اطلاعات گروه</div>
                     <div className="contact-info__spacer" />
 
-                    {isVerifiedUser && (
-                        <button
-                            type="button"
-                            className="icon-btn"
-                            aria-label="Edit group"
-                            title={editingGroup ? 'بستن ویرایش' : 'ویرایش گروه'}
-                            onClick={() => {
-                                setGroupEditError(null);
-                                setEditingGroup((v) => {
-                                    const next = !v;
-                                    if (next) {
-                                        setGroupName(String(contact.name || ''));
-                                        setGroupAvatar(String(contact.avatar || ''));
-                                    }
-                                    return next;
-                                });
-                            }}
-                        >
-                            {editingGroup ? <X size={18} /> : <Pencil size={18} />}
-                        </button>
-                    )}
+                    <button
+                        type="button"
+                        className="icon-btn"
+                        aria-label="Back to group info"
+                        title="بازگشت به اطلاعات"
+                        onClick={() => {
+                            setShowMembersList(false);
+                            setShowContactInfo(true);
+                        }}
+                    >
+                        <Users size={18} />
+                    </button>
                 </div>
 
                 <div className="contact-info__content">
@@ -994,134 +932,6 @@ export function ChatRoom({
                             {membersList.length} عضو • {onlineCount} آنلاین
                         </div>
                     </div>
-
-                    {editingGroup && isVerifiedUser && (
-                        <div className="contact-info__card">
-                            <div className="contact-info__label">ویرایش گروه</div>
-
-                            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 10, marginBottom: 8 }}>
-                                <Avatar name={previewName} size="md" src={previewAvatar} />
-                                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                                    <button
-                                        type="button"
-                                        onClick={() => groupFileInputRef.current?.click()}
-                                        disabled={savingGroup}
-                                        className="icon-btn"
-                                        title="انتخاب عکس از سیستم"
-                                    >
-                                        <ImageIcon size={18} />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setGroupAvatar('')}
-                                        disabled={savingGroup}
-                                        className="icon-btn"
-                                        title="حذف آواتار"
-                                    >
-                                        <Trash2 size={18} />
-                                    </button>
-                                </div>
-                            </div>
-
-                            <input
-                                ref={groupFileInputRef}
-                                type="file"
-                                accept="image/*"
-                                style={{ display: 'none' }}
-                                onChange={async (e) => {
-                                    const f = e.target.files?.[0];
-                                    if (!f) return;
-                                    try {
-                                        const dataUrl = await readFileAsDataUrl(f);
-                                        setGroupAvatar(dataUrl);
-                                    } catch {
-                                        alert('خواندن فایل با خطا مواجه شد');
-                                    } finally {
-                                        // allow selecting same file again
-                                        e.currentTarget.value = '';
-                                    }
-                                }}
-                            />
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
-                                <div style={{ fontSize: 12, opacity: 0.7 }}>اسم گروه</div>
-                                <input
-                                    value={groupName}
-                                    onChange={(e) => setGroupName(e.target.value)}
-                                    placeholder="مثلاً تیم توسعه"
-                                    style={{
-                                        width: '100%',
-                                        padding: '10px 12px',
-                                        borderRadius: 12,
-                                        border: '1px solid var(--border-primary)',
-                                        background: 'var(--bg-secondary)',
-                                        color: 'var(--text-primary)',
-                                        fontSize: 14,
-                                        fontFamily: 'Vazir, sans-serif',
-                                    }}
-                                    disabled={savingGroup}
-                                />
-                            </div>
-
-                            {groupEditError && (
-                                <div style={{ color: 'var(--danger, #ff4d4f)', fontSize: 12, marginTop: 8 }}>
-                                    {groupEditError}
-                                </div>
-                            )}
-
-                            <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
-                                <button
-                                    type="button"
-                                    onClick={saveGroupInfo}
-                                    disabled={savingGroup}
-                                    style={{
-                                        flex: 1,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: 8,
-                                        padding: '10px 12px',
-                                        borderRadius: 12,
-                                        border: '1px solid var(--border-primary)',
-                                        background: 'var(--bg-secondary)',
-                                        color: 'var(--text-primary)',
-                                        cursor: savingGroup ? 'not-allowed' : 'pointer',
-                                        fontSize: 14,
-                                        fontWeight: 700,
-                                        fontFamily: 'Vazir, sans-serif',
-                                    }}
-                                >
-                                    ذخیره
-                                    <Save size={18} />
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => { setEditingGroup(false); setGroupEditError(null); }}
-                                    disabled={savingGroup}
-                                    style={{
-                                        flex: 1,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: 8,
-                                        padding: '10px 12px',
-                                        borderRadius: 12,
-                                        border: '1px solid var(--border-primary)',
-                                        background: 'transparent',
-                                        color: 'var(--text-primary)',
-                                        cursor: savingGroup ? 'not-allowed' : 'pointer',
-                                        fontSize: 14,
-                                        fontWeight: 700,
-                                        fontFamily: 'Vazir, sans-serif',
-                                    }}
-                                >
-                                    بستن
-                                    <X size={18} />
-                                </button>
-                            </div>
-                        </div>
-                    )}
 
                     {inviteLink && (
                         <div className="contact-info__card">
@@ -1223,15 +1033,7 @@ export function ChatRoom({
                     onClick={() => {
                         if (isSavedMessages) return;
                         maybeSaveScroll(chatId);
-                        if (isGroupChat) {
-                            setMemberSearch('');
-                            setEditingGroup(false);
-                            setGroupEditError(null);
-                            setGroupName(String(contact.name || ''));
-                            setGroupAvatar(String(contact.avatar || ''));
-                            setShowMembersList(true);
-                        }
-                        else setShowContactInfo(true);
+                        setShowContactInfo(true);
                     }}
                     aria-label={isSavedMessages ? '' : 'Open contact info'}
                     type="button"
@@ -1276,6 +1078,14 @@ export function ChatRoom({
                             <div className="popover popover--mini popover--right">
                                 {isGroupChat ? (
                                     <>
+                                        <button
+                                            className="popover__item"
+                                            onClick={() => { setChatMenuOpen(false); setMemberSearch(''); setShowMembersList(true); }}
+                                            type="button"
+                                        >
+                                            <Users size={16} />
+                                            اعضا
+                                        </button>
                                         {/* خروج از گروه — همه کاربران */}
                                         <button
                                             className="popover__item popover__item--danger"
@@ -1511,71 +1321,103 @@ export function ChatRoom({
                 </div>
             </div>
 
-            {msgMenu && activeMsg && (
-                <div ref={msgMenuRef} className="popover popover--mini"
-                    style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
-                    onClick={(e) => e.stopPropagation()}>
-                    <button className="popover__item" onClick={() => { const el = messageElsRef.current.get(activeMsg.id); if (el) openReactionMenu(activeMsg.id, el); }} type="button">
-                        <Smile size={16} />واکنش
-                    </button>
-                    <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><Reply size={16} />پاسخ</button>
-                    <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><Forward size={16} />فوروارد</button>
-                    {activeMsg.senderId === currentUserId && !activeMsg.forwardedFrom && (
-                        <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
-                    )}
-                    <button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><Copy size={16} />کپی</button>
-                    {canDeleteActiveMsg && (
-                        <button className="popover__item popover__item--danger" onClick={() => doDeleteMessage(activeMsg.id)} type="button">
-                            <Trash2 size={16} />حذف
+            {msgMenu && (() => {
+                const activeMsg = messages.find((mm) => mm.id === msgMenu.id);
+                if (!activeMsg) return null;
+                const activeMsgIsMine = activeMsg.senderId === currentUserId;
+                const canDeleteActiveMsg = activeMsgIsMine || (isGroupChat && isVerifiedUser);
+
+                return (
+                    <div ref={msgMenuRef} className="popover popover--mini"
+                        style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
+                        onClick={(e) => e.stopPropagation()}>
+                        <button className="popover__item" onClick={() => { const el = messageElsRef.current.get(activeMsg.id); if (el) openReactionMenu(activeMsg.id, el); }} type="button">
+                            <Smile size={16} />واکنش
                         </button>
-                    )}
-                </div>
-            )}
+                        <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><Reply size={16} />پاسخ</button>
+                        <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><Forward size={16} />فوروارد</button>
+                        {activeMsg.senderId === currentUserId && !activeMsg.forwardedFrom && (
+                            <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
+                        )}
+                        <button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><Copy size={16} />کپی</button>
+                        {canDeleteActiveMsg && (
+                            <button className="popover__item popover__item--danger" onClick={() => doDeleteMessage(activeMsg.id)} type="button">
+                                <Trash2 size={16} />حذف
+                            </button>
+                        )}
+                    </div>
+                );
+            })()}
 
-            {reactionMenu && reactionMsg && (
-                <div ref={reactionMenuRef}
-                    style={{ top: reactionMenu.top, left: reactionMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
-                    onClick={(e) => e.stopPropagation()}>
-                    <ReactionPicker
-                        messageId={reactionMsg.id}
-                        currentReaction={myReaction?.emoji}
-                        onReact={(id, emoji) => handleReact(id, emoji)}
-                        onDeleteReaction={(id) => handleDeleteReaction(id)}
-                        onClose={() => setReactionMenu(null)}
-                    />
+            {reactionMenu && (() => {
+                const reactionMsg = messages.find((mm) => mm.id === reactionMenu.id);
+                if (!reactionMsg) return null;
 
-                    {isGroupChat && reactionUsersList.length > 0 && (
-                        <div style={{ marginTop: 6, background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 12, overflow: 'hidden', minWidth: 220, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
-                            <div style={{ padding: '7px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)', fontFamily: 'Vazir, sans-serif' }}>
-                                واکنش‌دهندگان ({reactionUsersList.length})
-                            </div>
-                            {reactionUsersList.map((ru, i) => (
-                                <div key={i}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setReactionMenu(null);
-                                        openMember(ru.userId);
-                                    }}
-                                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderTop: i > 0 ? '1px solid var(--border-primary)' : 'none', cursor: 'pointer', transition: 'background 0.12s' }}
-                                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary, rgba(0,0,0,0.04))')}
-                                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                                >
-                                    <div style={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
-                                        <Avatar name={ru.name} size="xs" src={ru.avatar} />
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
-                                        <span style={{ fontSize: 13, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            {ru.name}
-                                        </span>
-                                        {ru.verified && <VerifiedBadge size={13} />}
-                                    </div>
-                                    <span style={{ fontSize: 18, flexShrink: 0 }}>{ru.emoji}</span>
+                const myReaction = reactionMsg?.reactions?.find((r: any) =>
+                    r.userIds && Array.isArray(r.userIds) && r.userIds.includes(currentUserId)
+                );
+
+                const reactionUsersList: { userId: string; emoji: string; name: string; avatar: string; verified: boolean }[] = [];
+                if (reactionMsg?.reactions && reactionMsg.reactions.length > 0) {
+                    reactionMsg.reactions.forEach((r: any) => {
+                        (r.userIds || []).forEach((uid: string) => {
+                            const member = groupMembers[uid];
+                            reactionUsersList.push({
+                                userId: uid,
+                                emoji: r.emoji,
+                                name: member?.name || uid,
+                                avatar: member?.avatar || '',
+                                verified: resolveVerified(member?.verified),
+                            });
+                        });
+                    });
+                }
+
+                return (
+                    <div ref={reactionMenuRef}
+                        style={{ top: reactionMenu.top, left: reactionMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
+                        onClick={(e) => e.stopPropagation()}>
+                        <ReactionPicker
+                            messageId={reactionMsg.id}
+                            currentReaction={myReaction?.emoji}
+                            onReact={(id, emoji) => handleReact(id, emoji)}
+                            onDeleteReaction={(id) => handleDeleteReaction(id)}
+                            onClose={() => setReactionMenu(null)}
+                        />
+
+                        {isGroupChat && reactionUsersList.length > 0 && (
+                            <div style={{ marginTop: 6, background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 12, overflow: 'hidden', minWidth: 220, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+                                <div style={{ padding: '7px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)', fontFamily: 'Vazir, sans-serif' }}>
+                                    واکنش‌دهندگان ({reactionUsersList.length})
                                 </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
+                                {reactionUsersList.map((ru, i) => (
+                                    <div key={i}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setReactionMenu(null);
+                                            openMember(ru.userId);
+                                        }}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderTop: i > 0 ? '1px solid var(--border-primary)' : 'none', cursor: 'pointer', transition: 'background 0.12s' }}
+                                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary, rgba(0,0,0,0.04))')}
+                                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                    >
+                                        <div style={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
+                                            <Avatar name={ru.name} size="xs" src={ru.avatar} />
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
+                                            <span style={{ fontSize: 13, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {ru.name}
+                                            </span>
+                                            {ru.verified && <VerifiedBadge size={13} />}
+                                        </div>
+                                        <span style={{ fontSize: 18, flexShrink: 0 }}>{ru.emoji}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
+            })()}
 
             {(newMsgCount > 0 || showScrollBtn) && (
                 <button type="button" aria-label="Jump to latest messages"
