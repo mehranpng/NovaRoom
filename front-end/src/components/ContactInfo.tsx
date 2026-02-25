@@ -1,5 +1,5 @@
-import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Save } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Save, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -11,14 +11,22 @@ interface ContactInfoProps {
     onOpenChat?: (user: User) => void;
 }
 
+const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+
+function extractUploadedFileId(res: any): string {
+    const file = res?.file || {};
+    return String(file.fileId || file.id || file.file_id || file.path || '').trim();
+}
+
 export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
     const [copied, setCopied] = useState(false);
     const [canEditGroup, setCanEditGroup] = useState(false);
     const [editingGroup, setEditingGroup] = useState(false);
     const [groupName, setGroupName] = useState('');
-    const [groupAvatar, setGroupAvatar] = useState('');
+    const [groupAvatar, setGroupAvatar] = useState(''); // stores fileId
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
         setCopied(false);
@@ -73,12 +81,42 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
         const un = (user.username || '').trim();
         if (!un) return;
         const textToCopy = isInviteLink(un) ? un : `@${un}`;
-        navigator.clipboard.writeText(textToCopy).catch(() => {});
+        navigator.clipboard.writeText(textToCopy).catch(() => { });
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
     };
 
     const canOpenChat = Boolean(onOpenChat) && !isGroup && Boolean(user.chatId) && user.chatId !== 'saved';
+
+    const uploadGroupAvatar = async (file: File) => {
+        if (!file) return;
+
+        if (file.size > MAX_IMAGE_BYTES) {
+            setError('حجم عکس نباید بیشتر از ۳ مگابایت باشد');
+            return;
+        }
+
+        setSaving(true);
+        setError(null);
+
+        try {
+            const form = new FormData();
+            form.append('file', file);
+            const res = await apiFetch('/files/upload', { method: 'POST', body: form });
+
+            if (res?.success !== true) throw new Error('Upload failed');
+            const fileId = extractUploadedFileId(res);
+            if (!fileId) throw new Error('Invalid upload response');
+
+            // فقط fileId ذخیره می‌شه تا Avatar از /files/{fileId} لود کنه
+            setGroupAvatar(fileId);
+        } catch (e) {
+            console.error(e);
+            setError('آپلود عکس گروه با خطا مواجه شد');
+        } finally {
+            setSaving(false);
+        }
+    };
 
     const saveGroup = async () => {
         if (!user.chatId) return;
@@ -105,6 +143,9 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
             setSaving(false);
         }
     };
+
+    const previewName = groupName || String(user.name || '');
+    const previewAvatar = groupAvatar || String(user.avatar || '');
 
     return (
         <div className="contact-info">
@@ -151,11 +192,11 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                <div style={{ fontSize: 12, opacity: 0.7 }}>اسم گروه</div>
+                                <div style={{ fontSize: 12, opacity: 0.7, color: 'var(--text-primary)' }}>اسم گروه</div>
                                 <input
                                     value={groupName}
                                     onChange={(e) => setGroupName(e.target.value)}
-                                    placeholder="مثلاً تیم توسعه"
+                                    placeholder={String(user.name ?? '') || 'مثلاً تیم توسعه'}
                                     style={{
                                         width: '100%',
                                         padding: '10px 12px',
@@ -171,23 +212,51 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                <div style={{ fontSize: 12, opacity: 0.7 }}>آواتار گروه (URL)</div>
+                                <div style={{ fontSize: 12, opacity: 0.7, color: 'var(--text-primary)' }}>عکس گروه</div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                    <Avatar name={previewName} size="md" src={previewAvatar} />
+
+                                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                                        <button
+                                            type="button"
+                                            className="icon-btn"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={saving}
+                                            title="انتخاب و آپلود عکس"
+                                        >
+                                            <ImageIcon size={18} />
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            className="icon-btn"
+                                            onClick={() => setGroupAvatar('')}
+                                            disabled={saving}
+                                            title="حذف عکس گروه"
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </div>
+                                </div>
+
                                 <input
-                                    value={groupAvatar}
-                                    onChange={(e) => setGroupAvatar(e.target.value)}
-                                    placeholder="https://..."
-                                    style={{
-                                        width: '100%',
-                                        padding: '10px 12px',
-                                        borderRadius: 12,
-                                        border: '1px solid var(--border-primary)',
-                                        background: 'var(--bg-secondary)',
-                                        color: 'var(--text-primary)',
-                                        fontSize: 14,
-                                        fontFamily: 'Vazir, sans-serif',
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    style={{ display: 'none' }}
+                                    onChange={async (e) => {
+                                        const f = e.target.files?.[0];
+                                        if (!f) return;
+                                        await uploadGroupAvatar(f);
+                                        // اجازه انتخاب دوباره همان فایل
+                                        e.currentTarget.value = '';
                                     }}
-                                    disabled={saving}
                                 />
+
+                                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                    عکس بعد از انتخاب، روی سرور آپلود می‌شود؛ بعدش «ذخیره» را بزن.
+                                </div>
                             </div>
 
                             {error && (
