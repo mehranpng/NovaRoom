@@ -795,7 +795,12 @@ export function ChatList({
                                     pinned && 'chat-list__item--pinned'
                                 )}
                             >
-                                <Avatar name={contact.name} size="md" online={contact.online} src={contact.avatar} />
+                                <Avatar
+                                    name={contact.name}
+                                    size="md"
+                                    online={group ? undefined : contact.online}
+                                    src={contact.avatar}
+                                />
 
                                 <div className="chat-list__item-content">
                                     <div className="chat-list__item-row">
