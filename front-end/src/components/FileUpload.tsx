@@ -130,11 +130,15 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
             {uploading && selectedFile && (
                 <div
                     className="file-upload-progress-inline"
+                    role="progressbar"
                     aria-label={`Uploading ${uploadProgress}%`}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={uploadProgress}
                 >
                     <div
                         className="file-upload-progress-inline__fill"
-                        style={{ height: `${uploadProgress}%` }}
+                        style={{ width: `${uploadProgress}%` }}
                     />
                 </div>
             )}
