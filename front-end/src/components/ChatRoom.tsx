@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X, Forward, Users, Search, LogOut } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X, Forward, Users, Search, LogOut, Save, Image as ImageIcon } from 'lucide-react';
 import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -97,6 +97,15 @@ function resolveVerified(val: any): boolean {
     return true;
 }
 
+async function readFileAsDataUrl(file: File): Promise<string> {
+    return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('FileReader failed'));
+        reader.readAsDataURL(file);
+    });
+}
+
 type GroupMember = {
     name: string;
     username: string;
@@ -142,6 +151,14 @@ export function ChatRoom({
     const [showContactInfo, setShowContactInfo] = useState(false);
     const [forwardModalOpen, setForwardModalOpen] = useState(false);
     const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
+
+    // Group edit state (in group info view)
+    const [editingGroup, setEditingGroup] = useState(false);
+    const [groupName, setGroupName] = useState('');
+    const [groupAvatar, setGroupAvatar] = useState('');
+    const [savingGroup, setSavingGroup] = useState(false);
+    const [groupEditError, setGroupEditError] = useState<string | null>(null);
+    const groupFileInputRef = useRef<HTMLInputElement | null>(null);
 
     const [replyTo, setReplyTo] = useState<MessageReplyType | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -201,6 +218,7 @@ export function ChatRoom({
     const userScrolledAfterAutoJumpRef = useRef(false);
     const programmaticScrollEventsRef = useRef(0);
     const consumedInitialUnreadRef = useRef(false);
+    const userHasScrolledRef = useRef(false);
 
     const markProgrammaticScroll = () => {
         programmaticScrollEventsRef.current += 2;
@@ -352,6 +370,39 @@ export function ChatRoom({
             return;
         }
         setViewingMemberId(memberId);
+    };
+
+    const saveGroupInfo = async () => {
+        if (!isGroupChat) return;
+        if (!isVerifiedUser) return;
+
+        const name = groupName.trim();
+        if (name.length < 3) {
+            setGroupEditError('اسم گروه باید حداقل ۳ کاراکتر باشد');
+            return;
+        }
+
+        setSavingGroup(true);
+        setGroupEditError(null);
+
+        try {
+            await apiFetch(`/groups/${encodeURIComponent(chatId)}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    name,
+                    avatar: groupAvatar,
+                }),
+            });
+
+            // Refresh chats in App so group name/avatar updates everywhere.
+            window.dispatchEvent(new Event('novaroom:refresh_chats'));
+            setEditingGroup(false);
+        } catch (e) {
+            console.error(e);
+            setGroupEditError('ویرایش گروه با خطا مواجه شد');
+        } finally {
+            setSavingGroup(false);
+        }
     };
 
     useEffect(() => {
@@ -604,6 +655,13 @@ export function ChatRoom({
         programmaticScrollEventsRef.current = 0;
         consumedInitialUnreadRef.current = false;
         userHasScrolledRef.current = false;
+
+        // reset group edit state when switching chats
+        setEditingGroup(false);
+        setSavingGroup(false);
+        setGroupEditError(null);
+        setGroupName('');
+        setGroupAvatar('');
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
 
@@ -896,13 +954,39 @@ export function ChatRoom({
         const isInviteLink = (s: string) => s.startsWith('novaroom://') || s.startsWith('senoroom://');
         const inviteLink = contact.username && isInviteLink(contact.username) ? contact.username : null;
 
+        const previewName = groupName || contact.name;
+        const previewAvatar = groupAvatar || contact.avatar;
+
         return (
             <div className="contact-info">
                 <div className="contact-info__header">
-                    <button className="contact-info__back" onClick={() => setShowMembersList(false)} type="button"><ArrowLeft size={20} /></button>
+                    <button className="contact-info__back" onClick={() => { setShowMembersList(false); setEditingGroup(false); }} type="button"><ArrowLeft size={20} /></button>
                     <div className="contact-info__title">اطلاعات گروه</div>
                     <div className="contact-info__spacer" />
+
+                    {isVerifiedUser && (
+                        <button
+                            type="button"
+                            className="icon-btn"
+                            aria-label="Edit group"
+                            title={editingGroup ? 'بستن ویرایش' : 'ویرایش گروه'}
+                            onClick={() => {
+                                setGroupEditError(null);
+                                setEditingGroup((v) => {
+                                    const next = !v;
+                                    if (next) {
+                                        setGroupName(String(contact.name || ''));
+                                        setGroupAvatar(String(contact.avatar || ''));
+                                    }
+                                    return next;
+                                });
+                            }}
+                        >
+                            {editingGroup ? <X size={18} /> : <Pencil size={18} />}
+                        </button>
+                    )}
                 </div>
+
                 <div className="contact-info__content">
                     <div className="contact-info__avatar">
                         <Avatar name={contact.name} size="xl" src={contact.avatar} />
@@ -911,6 +995,135 @@ export function ChatRoom({
                             {membersList.length} عضو • {onlineCount} آنلاین
                         </div>
                     </div>
+
+                    {editingGroup && isVerifiedUser && (
+                        <div className="contact-info__card">
+                            <div className="contact-info__label">ویرایش گروه</div>
+
+                            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 10, marginBottom: 8 }}>
+                                <Avatar name={previewName} size="md" src={previewAvatar} />
+                                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => groupFileInputRef.current?.click()}
+                                        disabled={savingGroup}
+                                        className="icon-btn"
+                                        title="انتخاب عکس از سیستم"
+                                    >
+                                        <ImageIcon size={18} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setGroupAvatar('')}
+                                        disabled={savingGroup}
+                                        className="icon-btn"
+                                        title="حذف آواتار"
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <input
+                                ref={groupFileInputRef}
+                                type="file"
+                                accept="image/*"
+                                style={{ display: 'none' }}
+                                onChange={async (e) => {
+                                    const f = e.target.files?.[0];
+                                    if (!f) return;
+                                    try {
+                                        const dataUrl = await readFileAsDataUrl(f);
+                                        setGroupAvatar(dataUrl);
+                                    } catch {
+                                        alert('خواندن فایل با خطا مواجه شد');
+                                    } finally {
+                                        // allow selecting same file again
+                                        e.currentTarget.value = '';
+                                    }
+                                }}
+                            />
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+                                <div style={{ fontSize: 12, opacity: 0.7 }}>اسم گروه</div>
+                                <input
+                                    value={groupName}
+                                    onChange={(e) => setGroupName(e.target.value)}
+                                    placeholder="مثلاً تیم توسعه"
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px 12px',
+                                        borderRadius: 12,
+                                        border: '1px solid var(--border-primary)',
+                                        background: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)',
+                                        fontSize: 14,
+                                        fontFamily: 'Vazir, sans-serif',
+                                    }}
+                                    disabled={savingGroup}
+                                />
+                            </div>
+
+                            {groupEditError && (
+                                <div style={{ color: 'var(--danger, #ff4d4f)', fontSize: 12, marginTop: 8 }}>
+                                    {groupEditError}
+                                </div>
+                            )}
+
+                            <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+                                <button
+                                    type="button"
+                                    onClick={saveGroupInfo}
+                                    disabled={savingGroup}
+                                    style={{
+                                        flex: 1,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: 8,
+                                        padding: '10px 12px',
+                                        borderRadius: 12,
+                                        border: '1px solid var(--border-primary)',
+                                        background: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)',
+                                        cursor: savingGroup ? 'not-allowed' : 'pointer',
+                                        fontSize: 14,
+                                        fontWeight: 700,
+                                        fontFamily: 'Vazir, sans-serif',
+                                    }}
+                                >
+                                    ذخیره
+                                    <Save size={18} />
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => { setEditingGroup(false); setGroupEditError(null); }}
+                                    disabled={savingGroup}
+                                    style={{
+                                        flex: 1,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: 8,
+                                        padding: '10px 12px',
+                                        borderRadius: 12,
+                                        border: '1px solid var(--border-primary)',
+                                        background: 'transparent',
+                                        color: 'var(--text-primary)',
+                                        cursor: savingGroup ? 'not-allowed' : 'pointer',
+                                        fontSize: 14,
+                                        fontWeight: 700,
+                                        fontFamily: 'Vazir, sans-serif',
+                                    }}
+                                >
+                                    بستن
+                                    <X size={18} />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {inviteLink && (
                         <div className="contact-info__card">
                             <div className="contact-info__label">لینک دعوت</div>
@@ -925,6 +1138,7 @@ export function ChatRoom({
                             </div>
                         </div>
                     )}
+
                     <div className="contact-info__card" style={{ padding: '8px 12px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Search size={15} style={{ opacity: 0.5, flexShrink: 0 }} />
@@ -1010,7 +1224,14 @@ export function ChatRoom({
                     onClick={() => {
                         if (isSavedMessages) return;
                         maybeSaveScroll(chatId);
-                        if (isGroupChat) { setMemberSearch(''); setShowMembersList(true); }
+                        if (isGroupChat) {
+                            setMemberSearch('');
+                            setEditingGroup(false);
+                            setGroupEditError(null);
+                            setGroupName(String(contact.name || ''));
+                            setGroupAvatar(String(contact.avatar || ''));
+                            setShowMembersList(true);
+                        }
                         else setShowContactInfo(true);
                     }}
                     aria-label={isSavedMessages ? '' : 'Open contact info'}
@@ -1351,7 +1572,7 @@ export function ChatRoom({
                                     </div>
                                     <span style={{ fontSize: 18, flexShrink: 0 }}>{ru.emoji}</span>
                                 </div>
-                            ))}
+                            ))
                         </div>
                     )}
                 </div>
