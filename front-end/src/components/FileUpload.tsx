@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react';
-import { Paperclip, X } from 'lucide-react';
+import { Paperclip } from 'lucide-react';
 import type { FileMetadata } from '../types';
 import { API_BASE_URL } from '../config/api';
-import { formatFileSize, validateFileSize } from '../utils/fileUtils';
+import { validateFileSize } from '../utils/fileUtils';
 
 interface FileUploadProps {
     token: string;
@@ -97,12 +97,6 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
         }
     };
 
-    const cancelUpload = () => {
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-        }
-    };
-
     const resetUpload = () => {
         setSelectedFile(null);
         setUploading(false);
@@ -123,36 +117,26 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
                 disabled={uploading}
             />
 
-            {uploading && selectedFile ? (
-                <div className="file-upload-progress">
-                    <div className="file-upload-info">
-                        <span className="file-upload-name">{selectedFile.name}</span>
-                        <span className="file-upload-size">{formatFileSize(selectedFile.size)}</span>
-                    </div>
-                    <div className="file-upload-bar">
-                        <div
-                            className="file-upload-bar-fill"
-                            style={{ width: `${uploadProgress}%` }}
-                        >
-                            <span className="file-upload-percentage">{uploadProgress}%</span>
-                        </div>
-                    </div>
-                    <button
-                        onClick={cancelUpload}
-                        className="file-upload-cancel"
-                        title="لغو آپلود"
-                    >
-                        <X size={18} />
-                    </button>
-                </div>
-            ) : (
-                <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="file-upload-button"
-                    title="ارسال فایل"
+            <button
+                onClick={() => fileInputRef.current?.click()}
+                className="file-upload-button"
+                title={uploading ? 'در حال آپلود...' : 'ارسال فایل'}
+                disabled={uploading}
+                type="button"
+            >
+                <Paperclip size={20} />
+            </button>
+
+            {uploading && selectedFile && (
+                <div
+                    className="file-upload-progress-inline"
+                    aria-label={`Uploading ${uploadProgress}%`}
                 >
-                    <Paperclip size={20} />
-                </button>
+                    <div
+                        className="file-upload-progress-inline__fill"
+                        style={{ height: `${uploadProgress}%` }}
+                    />
+                </div>
             )}
         </div>
     );

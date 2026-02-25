@@ -6,6 +6,7 @@
 .file-upload-container {
   display: flex;
   align-items: center;
+  position: relative;
 }
 
 .file-upload-button {
@@ -30,7 +31,45 @@
   transform: scale(0.95);
 }
 
-/* Upload Progress */
+.file-upload-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Upload Progress (inline bar next to chat input, mobile-friendly) */
+.file-upload-progress-inline {
+  position: absolute;
+  left: calc(100% + 10px);
+  bottom: 8px;
+  width: 4px;
+  height: 34px;
+  background: var(--border-secondary);
+  border-radius: 999px;
+  overflow: hidden;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.file-upload-progress-inline__fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0%;
+  background: linear-gradient(180deg, #3b82f6, #2563eb);
+  transition: height 0.2s ease;
+}
+
+@media (max-width: 640px) {
+  .file-upload-progress-inline {
+    height: 30px;
+    bottom: 9px;
+    width: 3px;
+    left: calc(100% + 8px);
+  }
+}
+
+/* Upload Progress (legacy - kept for other usages if any) */
 .file-upload-progress {
   display: flex;
   align-items: center;

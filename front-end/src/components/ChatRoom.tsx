@@ -1104,7 +1104,6 @@ export function ChatRoom({
                             const showUnreadSeparator = Boolean(unreadAnchorId && unreadAnchorId === m.id);
 
                             const isMenuActive = Boolean(msgMenu && msgMenu.id === m.id);
-                            const dimOthers = Boolean(msgMenu && !isMenuActive);
 
                             return (
                                 <div key={m.id}>
@@ -1126,11 +1125,6 @@ export function ChatRoom({
 
                                     <div
                                         className={isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`}
-                                        style={{
-                                            opacity: dimOthers ? 0.72 : 1,
-                                            filter: dimOthers ? 'brightness(0.96)' : undefined,
-                                            transition: 'opacity 120ms ease, filter 120ms ease',
-                                        }}
                                         onPointerDown={(e) => {
                                             if (e.pointerType !== 'mouse' || e.button !== 0) return;
                                             swipeRef.current = { id: m.id, startX: e.clientX, startY: e.clientY, active: true, captured: false, pointerId: e.pointerId, blockClickUntil: swipeRef.current.blockClickUntil };
@@ -1250,7 +1244,7 @@ export function ChatRoom({
                                                     role="button" tabIndex={0}
                                                     onKeyDown={(e) => { if (e.key === 'Enter') scrollToMessage(m.replyTo!.id); }}
                                                     className="message-reply-box"
-                                                    style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
+                                                    style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12px, cursor: 'pointer' }}>
                                                     <div className="message-reply-box__label">پاسخ</div>
                                                     <div className="message-reply-box__text">{m.replyTo.text}</div>
                                                 </div>
