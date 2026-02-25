@@ -1,4 +1,4 @@
-import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, MoreVertical } from 'lucide-react';
+import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, MoreVertical, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';
@@ -245,6 +245,13 @@ function safeJsonParse<T>(value: string | null): T | null {
     }
 }
 
+/** هر مقداری غیر از false / 0 / "false" / null / undefined رو verified حساب می‌کنیم */
+function resolveVerified(val: any): boolean {
+    if (val === null || val === undefined) return false;
+    if (val === false || val === 0 || val === 'false' || val === '0') return false;
+    return true;
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const token = localStorage.getItem('token');
     const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}${path}`, {
@@ -289,6 +296,12 @@ export function ChatList({
 
     const isMobile = useIsMobile(768);
 
+    // Keep a local copy so we can remove deleted/left chats immediately.
+    const [localChats, setLocalChats] = useState<Chat[]>(chats);
+    useEffect(() => { setLocalChats(chats); }, [chats]);
+
+    const isVerifiedUser = resolveVerified((currentUser as any)?.verified);
+
     const [pinnedIds, setPinnedIds] = useState<string[]>([]);
     const pinnedIdsRef = useRef<string[]>([]);
 
@@ -298,6 +311,7 @@ export function ChatList({
     const chatActionBtnRef = useRef<HTMLElement | null>(null);
 
     const [pinBusy, setPinBusy] = useState<Record<string, boolean>>({});
+    const [actionBusy, setActionBusy] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
         pinnedIdsRef.current = pinnedIds;
@@ -380,6 +394,19 @@ export function ChatList({
         localStorage.setItem(key, JSON.stringify({ ids }));
     };
 
+    const removePinnedIfNeeded = (chatId: string) => {
+        const prev = pinnedIdsRef.current;
+        if (!prev.includes(chatId)) return;
+        const next = prev.filter((id) => id !== chatId);
+        setPinnedIds(next);
+        persistPinned(next);
+    };
+
+    const removeChatLocally = (chatId: string) => {
+        setLocalChats((prev) => prev.filter((c) => c.id !== chatId));
+        removePinnedIfNeeded(chatId);
+    };
+
     const togglePin = async (chatId: string) => {
         if (pinBusy[chatId]) return;
 
@@ -424,6 +451,44 @@ export function ChatList({
         }
     };
 
+    const doDeleteChat = async (chatId: string, isGroup: boolean) => {
+        if (actionBusy[chatId]) return;
+
+        const ok = window.confirm(
+            isGroup
+                ? 'گروه حذف شود؟\nگروه و تمام پیام‌ها برای همه حذف خواهد شد.'
+                : 'گفتگو حذف شود؟\nاین عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'
+        );
+        if (!ok) return;
+
+        setActionBusy((m) => ({ ...m, [chatId]: true }));
+        try {
+            await apiFetch(`/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
+            removeChatLocally(chatId);
+        } catch {
+            alert(isGroup ? 'حذف گروه با خطا مواجه شد' : 'حذف گفتگو با خطا مواجه شد');
+        } finally {
+            setActionBusy((m) => ({ ...m, [chatId]: false }));
+        }
+    };
+
+    const doLeaveGroup = async (chatId: string) => {
+        if (actionBusy[chatId]) return;
+
+        const ok = window.confirm('خروج از گروه؟\nآیا می‌خواهید از گروه خارج شوید؟ گروه برای شما حذف خواهد شد.');
+        if (!ok) return;
+
+        setActionBusy((m) => ({ ...m, [chatId]: true }));
+        try {
+            await apiFetch(`/groups/${encodeURIComponent(chatId)}/leave`, { method: 'POST' });
+            removeChatLocally(chatId);
+        } catch {
+            alert('خروج از گروه با خطا مواجه شد');
+        } finally {
+            setActionBusy((m) => ({ ...m, [chatId]: false }));
+        }
+    };
+
     const openActionMenu = (chatId: string, btnEl: HTMLElement) => {
         const container = chatItemsRef.current;
         if (!container) return;
@@ -432,7 +497,8 @@ export function ChatList({
         const r = btnEl.getBoundingClientRect();
 
         const menuWidth = 190;
-        const menuHeight = 44;
+        // Height estimate: pin + (delete OR leave+delete)
+        const menuHeight = 156;
         const padding = 8;
 
         // IMPORTANT: popover is absolutely positioned inside the scrollable chat list,
@@ -474,7 +540,7 @@ export function ChatList({
 
     // Sort all chats by last message timestamp, but keep pinned at top.
     // Within pinned: order by latest lastMessage as well.
-    const sortedChats = [...chats].sort((a, b) => {
+    const sortedChats = [...localChats].sort((a, b) => {
         const aPinned = isPinned(a.id) ? 1 : 0;
         const bPinned = isPinned(b.id) ? 1 : 0;
         if (aPinned !== bPinned) return bPinned - aPinned;
@@ -621,7 +687,7 @@ export function ChatList({
                 {/* All chats - sorted by pinned then timestamp */}
                 {loading ? (
                     <ChatListSkeleton />
-                ) : chats.length === 0 ? (
+                ) : localChats.length === 0 ? (
                     isMobile && !hasActiveChat ? <EmptyState /> : null
                 ) : filteredChats.length === 0 ? (
                     <div className="chat-list__empty">
@@ -768,6 +834,60 @@ export function ChatList({
                                             {pinned ? <UnpinFilledSharpIcon size={16} /> : <PinOutlineSharpIcon size={16} />}
                                             {pinned ? 'برداشتن سنجاق' : 'سنجاق'}
                                         </button>
+
+                                        {group ? (
+                                            <>
+                                                <button
+                                                    className="popover__item popover__item--danger"
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        setChatActionMenu(null);
+                                                        doLeaveGroup(chat.id);
+                                                    }}
+                                                    disabled={Boolean(actionBusy[chat.id])}
+                                                    style={actionBusy[chat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
+                                                >
+                                                    <LogOut size={16} />
+                                                    خروج از گروه
+                                                </button>
+
+                                                {isVerifiedUser && (
+                                                    <button
+                                                        className="popover__item popover__item--danger"
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            setChatActionMenu(null);
+                                                            doDeleteChat(chat.id, true);
+                                                        }}
+                                                        disabled={Boolean(actionBusy[chat.id])}
+                                                        style={actionBusy[chat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
+                                                    >
+                                                        <Trash2 size={16} />
+                                                        حذف گروه
+                                                    </button>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <button
+                                                className="popover__item popover__item--danger"
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    setChatActionMenu(null);
+                                                    doDeleteChat(chat.id, false);
+                                                }}
+                                                disabled={Boolean(actionBusy[chat.id])}
+                                                style={actionBusy[chat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
+                                            >
+                                                <Trash2 size={16} />
+                                                حذف گفتگو
+                                            </button>
+                                        )}
                                     </div>
                                 )}
                             </button>
