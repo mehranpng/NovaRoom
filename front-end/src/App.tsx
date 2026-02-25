@@ -719,6 +719,7 @@ export function App() {
                 bio: chat.otherUser.bio ?? '',
                 online: Boolean(chat.otherUser.online),
                 verified: Boolean((chat.otherUser as any)?.verified),
+                registrationDate: (chat.otherUser as any)?.registrationDate,
             };
         }
 
