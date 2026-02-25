@@ -74,8 +74,19 @@ async function fetchAvatar(src: string): Promise<string> {
     const fullUrl = resolveAvatarUrl(src);
     if (!fullUrl) return '';
 
-    // data/blob/http can be used directly; no server fetch
-    if (fullUrl.startsWith('data:') || fullUrl.startsWith('blob:') || fullUrl.startsWith('http')) {
+    // data/blob can be used directly; no server fetch
+    if (fullUrl.startsWith('data:') || fullUrl.startsWith('blob:')) {
+      avatarCache.set(cacheKey, fullUrl);
+      return fullUrl;
+    }
+
+    // External http(s) should be used directly.
+    // For our own API files, we fetch with Authorization and turn into a blob URL.
+    const isHttp = fullUrl.startsWith('http://') || fullUrl.startsWith('https://');
+    const isOurApi = Boolean(API_BASE_URL && isHttp && fullUrl.startsWith(API_BASE_URL));
+    const isProtectedAsset = isOurApi && (fullUrl.includes('/files/') || fullUrl.includes('/avatars/'));
+
+    if (isHttp && !isProtectedAsset) {
       avatarCache.set(cacheKey, fullUrl);
       return fullUrl;
     }
@@ -130,7 +141,9 @@ export function Avatar({ name, size = 'md', online, savedMessages = false, src =
       if (!cancelled) setResolvedSrc(url);
     });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [src]);
 
   const px = sizeMap[size];
@@ -159,7 +172,13 @@ export function Avatar({ name, size = 'md', online, savedMessages = false, src =
           alt={name}
           className="avatar__image"
           loading="lazy"
-          style={{ width: `${px}px`, height: `${px}px`, borderRadius: '50%', objectFit: 'cover', display: 'block' }}
+          style={{
+            width: `${px}px`,
+            height: `${px}px`,
+            borderRadius: '50%',
+            objectFit: 'cover',
+            display: 'block',
+          }}
         />
       ) : (
         <div
