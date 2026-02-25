@@ -1,5 +1,5 @@
 import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, MoreVertical, Trash2 } from 'lucide-react';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -277,6 +277,8 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     return (await res.json()) as T;
 }
 
+type ConfirmAction = null | { kind: 'delete_chat' | 'delete_group' | 'leave_group'; chatId: string };
+
 export function ChatList({
     chats,
     currentUser,
@@ -312,6 +314,32 @@ export function ChatList({
 
     const [pinBusy, setPinBusy] = useState<Record<string, boolean>>({});
     const [actionBusy, setActionBusy] = useState<Record<string, boolean>>({});
+
+    const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
+    const confirmOverlayRef = useRef<HTMLDivElement | null>(null);
+
+    const confirmMeta = useMemo(() => {
+        if (!confirmAction) return null;
+        if (confirmAction.kind === 'leave_group') {
+            return {
+                title: 'خروج از گروه؟',
+                text: 'آیا می‌خواهید از گروه خارج شوید؟ گروه برای شما حذف خواهد شد.',
+                confirmLabel: 'خروج',
+            };
+        }
+        if (confirmAction.kind === 'delete_group') {
+            return {
+                title: 'گروه حذف شود؟',
+                text: 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.',
+                confirmLabel: 'حذف',
+            };
+        }
+        return {
+            title: 'گفتگو حذف شود؟',
+            text: 'این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.',
+            confirmLabel: 'حذف',
+        };
+    }, [confirmAction]);
 
     useEffect(() => {
         pinnedIdsRef.current = pinnedIds;
@@ -361,6 +389,30 @@ export function ChatList({
         }
         return () => document.removeEventListener('mousedown', onDocClick);
     }, [chatActionMenu]);
+
+    useEffect(() => {
+        if (!confirmAction) return;
+
+        const onDocMouseDown = (e: MouseEvent) => {
+            const target = e.target as Node;
+            const modal = confirmOverlayRef.current?.querySelector('.chat-room-confirm-modal');
+            if (modal && !modal.contains(target)) {
+                setConfirmAction(null);
+            }
+        };
+
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setConfirmAction(null);
+        };
+
+        document.addEventListener('mousedown', onDocMouseDown);
+        document.addEventListener('keydown', onKeyDown);
+
+        return () => {
+            document.removeEventListener('mousedown', onDocMouseDown);
+            document.removeEventListener('keydown', onKeyDown);
+        };
+    }, [confirmAction]);
 
     const getContact = (chat: Chat): User => {
         if (chat.otherUser) {
@@ -451,39 +503,33 @@ export function ChatList({
         }
     };
 
-    const doDeleteChat = async (chatId: string, isGroup: boolean) => {
-        if (actionBusy[chatId]) return;
-
-        const ok = window.confirm(
-            isGroup
-                ? 'گروه حذف شود؟\nگروه و تمام پیام‌ها برای همه حذف خواهد شد.'
-                : 'گفتگو حذف شود؟\nاین عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'
-        );
-        if (!ok) return;
-
-        setActionBusy((m) => ({ ...m, [chatId]: true }));
-        try {
-            await apiFetch(`/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
-            removeChatLocally(chatId);
-        } catch {
-            alert(isGroup ? 'حذف گروه با خطا مواجه شد' : 'حذف گفتگو با خطا مواجه شد');
-        } finally {
-            setActionBusy((m) => ({ ...m, [chatId]: false }));
-        }
+    const requestDeleteChat = (chatId: string, isGroup: boolean) => {
+        setConfirmAction({ kind: isGroup ? 'delete_group' : 'delete_chat', chatId });
     };
 
-    const doLeaveGroup = async (chatId: string) => {
-        if (actionBusy[chatId]) return;
+    const requestLeaveGroup = (chatId: string) => {
+        setConfirmAction({ kind: 'leave_group', chatId });
+    };
 
-        const ok = window.confirm('خروج از گروه؟\nآیا می‌خواهید از گروه خارج شوید؟ گروه برای شما حذف خواهد شد.');
-        if (!ok) return;
+    const runConfirmAction = async () => {
+        if (!confirmAction) return;
+        const { kind, chatId } = confirmAction;
+        if (actionBusy[chatId]) return;
 
         setActionBusy((m) => ({ ...m, [chatId]: true }));
         try {
-            await apiFetch(`/groups/${encodeURIComponent(chatId)}/leave`, { method: 'POST' });
-            removeChatLocally(chatId);
+            if (kind === 'leave_group') {
+                await apiFetch(`/groups/${encodeURIComponent(chatId)}/leave`, { method: 'POST' });
+                removeChatLocally(chatId);
+            } else {
+                await apiFetch(`/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
+                removeChatLocally(chatId);
+            }
+            setConfirmAction(null);
         } catch {
-            alert('خروج از گروه با خطا مواجه شد');
+            if (kind === 'leave_group') alert('خروج از گروه با خطا مواجه شد');
+            else if (kind === 'delete_group') alert('حذف گروه با خطا مواجه شد');
+            else alert('حذف گفتگو با خطا مواجه شد');
         } finally {
             setActionBusy((m) => ({ ...m, [chatId]: false }));
         }
@@ -577,8 +623,10 @@ export function ChatList({
     // Check if we should show AI chat in search results
     const showAIChat = !searchQuery || 'NovaRoom AI'.includes(searchQuery.toLowerCase()) || 'دستیار'.includes(searchQuery);
 
+    const confirmBusy = confirmAction ? Boolean(actionBusy[confirmAction.chatId]) : false;
+
     return (
-        <div className="chat-list">
+        <div className="chat-list" style={{ position: 'relative' }}>
             {/* Header */}
             <div className="chat-list__header">
                 <div className="chat-list__header-left">
@@ -844,7 +892,7 @@ export function ChatList({
                                                         e.preventDefault();
                                                         e.stopPropagation();
                                                         setChatActionMenu(null);
-                                                        doLeaveGroup(chat.id);
+                                                        requestLeaveGroup(chat.id);
                                                     }}
                                                     disabled={Boolean(actionBusy[chat.id])}
                                                     style={actionBusy[chat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
@@ -861,7 +909,7 @@ export function ChatList({
                                                             e.preventDefault();
                                                             e.stopPropagation();
                                                             setChatActionMenu(null);
-                                                            doDeleteChat(chat.id, true);
+                                                            requestDeleteChat(chat.id, true);
                                                         }}
                                                         disabled={Boolean(actionBusy[chat.id])}
                                                         style={actionBusy[chat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
@@ -879,7 +927,7 @@ export function ChatList({
                                                     e.preventDefault();
                                                     e.stopPropagation();
                                                     setChatActionMenu(null);
-                                                    doDeleteChat(chat.id, false);
+                                                    requestDeleteChat(chat.id, false);
                                                 }}
                                                 disabled={Boolean(actionBusy[chat.id])}
                                                 style={actionBusy[chat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
@@ -895,6 +943,37 @@ export function ChatList({
                     })
                 )}
             </div>
+
+            {/* Custom confirm modal (same classes as ChatRoom) */}
+            {confirmAction && confirmMeta && (
+                <div className="chat-room-modal-overlay" ref={confirmOverlayRef} style={{ zIndex: 120 }}>
+                    <div
+                        className="chat-room-confirm-modal"
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
+                        <h3 className="chat-room-confirm-modal__title">{confirmMeta.title}</h3>
+                        <p className="chat-room-confirm-modal__text">{confirmMeta.text}</p>
+                        <div className="chat-room-confirm-modal__actions">
+                            <button
+                                className="chat-room-confirm-modal__btn"
+                                onClick={() => setConfirmAction(null)}
+                                disabled={confirmBusy}
+                                type="button"
+                            >
+                                لغو
+                            </button>
+                            <button
+                                className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger"
+                                onClick={runConfirmAction}
+                                disabled={confirmBusy}
+                                type="button"
+                            >
+                                {confirmMeta.confirmLabel}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
