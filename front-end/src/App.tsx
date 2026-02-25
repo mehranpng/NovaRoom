@@ -389,6 +389,16 @@ export function App() {
         if (isAuthenticated) loadChats();
     }, [isAuthenticated, loadChats]);
 
+    // Allow child components (e.g., ContactInfo group edit) to request a chat-list refresh.
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        const handler = () => {
+            loadChats(false);
+        };
+        window.addEventListener('novaroom:refresh_chats', handler as any);
+        return () => window.removeEventListener('novaroom:refresh_chats', handler as any);
+    }, [isAuthenticated, loadChats]);
+
     const handleSelectChat = useCallback(async (chatId: string) => {
         setPendingUser(null);
         setShowAIChat(false);

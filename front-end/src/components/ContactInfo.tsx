@@ -1,8 +1,9 @@
-import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Save } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
+import { apiFetch } from '../config/api';
 
 interface ContactInfoProps {
     user: User;
@@ -12,6 +13,12 @@ interface ContactInfoProps {
 
 export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
     const [copied, setCopied] = useState(false);
+    const [canEditGroup, setCanEditGroup] = useState(false);
+    const [editingGroup, setEditingGroup] = useState(false);
+    const [groupName, setGroupName] = useState('');
+    const [groupAvatar, setGroupAvatar] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         setCopied(false);
@@ -22,10 +29,45 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
     const isInviteLink = (un: string) =>
         un.startsWith('senoroom://') || un.startsWith('novaroom://');
 
-    const isGroup = user.username ? isInviteLink(user.username) : false;
+    const isGroup = useMemo(() => {
+        const chatId = String((user as any)?.chatId ?? '');
+        const un = String((user as any)?.username ?? '');
+        return Boolean((user as any)?.isGroup) || chatId.startsWith('grp_') || (un ? isInviteLink(un) : false);
+    }, [user]);
 
     // bio "گروه" رو نشون نده
     const displayBio = bio === 'گروه' ? '' : bio;
+
+    useEffect(() => {
+        // Reset group edit state when user changes
+        setEditingGroup(false);
+        setSaving(false);
+        setError(null);
+        setGroupName(String(user.name ?? ''));
+        setGroupAvatar(String(user.avatar ?? ''));
+    }, [user.chatId, user.name, user.avatar]);
+
+    useEffect(() => {
+        let cancelled = false;
+        if (!isGroup) {
+            setCanEditGroup(false);
+            return;
+        }
+
+        apiFetch('/profile/me')
+            .then((me) => {
+                if (cancelled) return;
+                setCanEditGroup(Boolean(me?.verified));
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setCanEditGroup(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [isGroup]);
 
     const handleCopy = () => {
         const un = (user.username || '').trim();
@@ -38,6 +80,32 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
 
     const canOpenChat = Boolean(onOpenChat) && !isGroup && Boolean(user.chatId) && user.chatId !== 'saved';
 
+    const saveGroup = async () => {
+        if (!user.chatId) return;
+
+        setSaving(true);
+        setError(null);
+
+        try {
+            await apiFetch(`/groups/${encodeURIComponent(user.chatId)}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    name: groupName,
+                    avatar: groupAvatar,
+                }),
+            });
+
+            // Ask App to refresh /chats so sidebar + header get updated.
+            window.dispatchEvent(new Event('novaroom:refresh_chats'));
+            setEditingGroup(false);
+        } catch (e) {
+            console.error(e);
+            setError('ویرایش گروه با خطا مواجه شد');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     return (
         <div className="contact-info">
             <div className="contact-info__header">
@@ -46,6 +114,18 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
                 </button>
                 <div className="contact-info__title">{isGroup ? 'اطلاعات گروه' : 'مخاطب'}</div>
                 <div className="contact-info__spacer" />
+
+                {isGroup && canEditGroup && (
+                    <button
+                        type="button"
+                        className="icon-btn"
+                        aria-label="Edit group"
+                        onClick={() => setEditingGroup((v) => !v)}
+                        title={editingGroup ? 'بستن ویرایش' : 'ویرایش'}
+                    >
+                        {editingGroup ? <X size={18} /> : <Pencil size={18} />}
+                    </button>
+                )}
             </div>
 
             <div className="contact-info__content">
@@ -56,7 +136,7 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                     >
                         {user.name}
-                        {user.verified ? <VerifiedBadge size={16} /> : null}
+                        {!isGroup && user.verified ? <VerifiedBadge size={16} /> : null}
                     </div>
                     {!isGroup && (
                         <div className={user.online ? 'contact-info__status contact-info__status--online' : 'contact-info__status'}>
@@ -64,6 +144,117 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
                         </div>
                     )}
                 </div>
+
+                {isGroup && canEditGroup && editingGroup && (
+                    <div className="contact-info__card">
+                        <div className="contact-info__label">ویرایش گروه</div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                <div style={{ fontSize: 12, opacity: 0.7 }}>اسم گروه</div>
+                                <input
+                                    value={groupName}
+                                    onChange={(e) => setGroupName(e.target.value)}
+                                    placeholder="مثلاً تیم توسعه"
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px 12px',
+                                        borderRadius: 12,
+                                        border: '1px solid var(--border-primary)',
+                                        background: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)',
+                                        fontSize: 14,
+                                        fontFamily: 'Vazir, sans-serif',
+                                    }}
+                                    disabled={saving}
+                                />
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                <div style={{ fontSize: 12, opacity: 0.7 }}>آواتار گروه (URL)</div>
+                                <input
+                                    value={groupAvatar}
+                                    onChange={(e) => setGroupAvatar(e.target.value)}
+                                    placeholder="https://..."
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px 12px',
+                                        borderRadius: 12,
+                                        border: '1px solid var(--border-primary)',
+                                        background: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)',
+                                        fontSize: 14,
+                                        fontFamily: 'Vazir, sans-serif',
+                                    }}
+                                    disabled={saving}
+                                />
+                            </div>
+
+                            {error && (
+                                <div style={{ color: 'var(--danger, #ff4d4f)', fontSize: 12 }}>
+                                    {error}
+                                </div>
+                            )}
+
+                            <div style={{ display: 'flex', gap: 10 }}>
+                                <button
+                                    type="button"
+                                    onClick={saveGroup}
+                                    disabled={saving}
+                                    style={{
+                                        flex: 1,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: 8,
+                                        padding: '10px 12px',
+                                        borderRadius: 12,
+                                        border: '1px solid var(--border-primary)',
+                                        background: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)',
+                                        cursor: saving ? 'not-allowed' : 'pointer',
+                                        fontSize: 14,
+                                        fontWeight: 700,
+                                        fontFamily: 'Vazir, sans-serif',
+                                    }}
+                                >
+                                    ذخیره
+                                    <Save size={18} />
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setError(null);
+                                        setGroupName(String(user.name ?? ''));
+                                        setGroupAvatar(String(user.avatar ?? ''));
+                                        setEditingGroup(false);
+                                    }}
+                                    disabled={saving}
+                                    style={{
+                                        flex: 1,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: 8,
+                                        padding: '10px 12px',
+                                        borderRadius: 12,
+                                        border: '1px solid var(--border-primary)',
+                                        background: 'transparent',
+                                        color: 'var(--text-primary)',
+                                        cursor: saving ? 'not-allowed' : 'pointer',
+                                        fontSize: 14,
+                                        fontWeight: 700,
+                                        fontFamily: 'Vazir, sans-serif',
+                                    }}
+                                >
+                                    انصراف
+                                    <X size={18} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {canOpenChat && (
                     <div className="contact-info__card" style={{ padding: 10 }}>
