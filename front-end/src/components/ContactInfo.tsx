@@ -140,7 +140,7 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
 
                 {!isGroup && user.registrationDate && (
                     <div className="contact-info__card">
-                        <div className="contact-info__label">تاریخ عضویت</div>
+                        <div className="contact-info__label">تاریخ ساخت اکانت</div>
                         <div className="contact-info__mono" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Calendar size={16} style={{ opacity: 0.7 }} />
                             {user.registrationDate}
