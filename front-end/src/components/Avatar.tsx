@@ -31,7 +31,7 @@ function getInitials(name: string): string {
 const sizeMap = { xs: 28, sm: 40, md: 48, lg: 64, xl: 80 };
 const iconSizeMap = { xs: 14, sm: 20, md: 24, lg: 32, xl: 40 };
 
-// Global cache: src key → blob URL
+// Global cache: src key → blob URL (or passthrough URL for data/blob/http)
 const avatarCache = new Map<string, string>();
 // In-flight requests to avoid duplicates
 const avatarFetching = new Map<string, Promise<string>>();
@@ -39,7 +39,9 @@ const avatarFetching = new Map<string, Promise<string>>();
 function resolveAvatarUrl(src: string): string {
   if (!src) return '';
 
+  // Passthrough for local URLs
   if (src.startsWith('blob:')) return src;
+  if (src.startsWith('data:')) return src;
 
   if (src.startsWith('http://') || src.startsWith('https://')) {
     if (
@@ -58,6 +60,7 @@ function resolveAvatarUrl(src: string): string {
     return `${API_BASE_URL}${src}`;
   }
 
+  // Treat everything else as fileId
   return `${API_BASE_URL}/files/${src}`;
 }
 
@@ -68,11 +71,17 @@ async function fetchAvatar(src: string): Promise<string> {
   if (avatarFetching.has(cacheKey)) return avatarFetching.get(cacheKey)!;
 
   const promise = (async (): Promise<string> => {
-    const token = localStorage.getItem('token');
-    if (!token) return '';
-
     const fullUrl = resolveAvatarUrl(src);
     if (!fullUrl) return '';
+
+    // data/blob/http can be used directly; no server fetch
+    if (fullUrl.startsWith('data:') || fullUrl.startsWith('blob:') || fullUrl.startsWith('http')) {
+      avatarCache.set(cacheKey, fullUrl);
+      return fullUrl;
+    }
+
+    const token = localStorage.getItem('token');
+    if (!token) return '';
 
     try {
       const response = await fetch(fullUrl, {
@@ -117,8 +126,8 @@ export function Avatar({ name, size = 'md', online, savedMessages = false, src =
     }
 
     let cancelled = false;
-    fetchAvatar(src).then((blobUrl) => {
-      if (!cancelled) setResolvedSrc(blobUrl);
+    fetchAvatar(src).then((url) => {
+      if (!cancelled) setResolvedSrc(url);
     });
 
     return () => { cancelled = true; };
