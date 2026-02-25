@@ -919,7 +919,7 @@ export function ChatRoom({
                                     <Users size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
                                     {inviteLink}
                                 </div>
-                                <button type="button" className="icon-btn" style={{ flexShrink: 0 }} onClick={() => navigator.clipboard.writeText(inviteLink).catch(() => {})}>
+                                <button type="button" className="icon-btn" style={{ flexShrink: 0 }} onClick={() => navigator.clipboard.writeText(inviteLink).catch(() => { })}>
                                     <Copy size={18} />
                                 </button>
                             </div>
@@ -1223,7 +1223,7 @@ export function ChatRoom({
                                             {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--first') && (() => {
                                                 const sender = groupMembers[m.senderId];
                                                 const senderName = sender?.name || m.senderId || 'ناشناس';
-                                                const colors = ['#E91E63','#9C27B0','#673AB7','#3F51B5','#2196F3','#00BCD4','#009688','#4CAF50','#FF5722','#FF9800'];
+                                                const colors = ['#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3', '#00BCD4', '#009688', '#4CAF50', '#FF5722', '#FF9800'];
                                                 const colorIdx = m.senderId ? Math.abs(m.senderId.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % colors.length : 0;
                                                 return (
                                                     <div onClick={(e) => { e.stopPropagation(); openMember(m.senderId); }}
@@ -1244,7 +1244,7 @@ export function ChatRoom({
                                                     role="button" tabIndex={0}
                                                     onKeyDown={(e) => { if (e.key === 'Enter') scrollToMessage(m.replyTo!.id); }}
                                                     className="message-reply-box"
-                                                    style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12px, cursor: 'pointer' }}>
+                                                    style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
                                                     <div className="message-reply-box__label">پاسخ</div>
                                                     <div className="message-reply-box__text">{m.replyTo.text}</div>
                                                 </div>
