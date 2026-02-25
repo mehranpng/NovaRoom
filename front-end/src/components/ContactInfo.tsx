@@ -1,4 +1,4 @@
-import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Save, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Save, Image as ImageIcon, Trash2, RotateCcw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
@@ -23,7 +23,8 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
     const [canEditGroup, setCanEditGroup] = useState(false);
     const [editingGroup, setEditingGroup] = useState(false);
     const [groupName, setGroupName] = useState('');
-    const [groupAvatar, setGroupAvatar] = useState(''); // stores fileId
+    const [groupAvatar, setGroupAvatar] = useState(''); // stores fileId (draft)
+    const [avatarTouched, setAvatarTouched] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -53,6 +54,7 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
         setError(null);
         setGroupName(String(user.name ?? ''));
         setGroupAvatar(String(user.avatar ?? ''));
+        setAvatarTouched(false);
     }, [user.chatId, user.name, user.avatar]);
 
     useEffect(() => {
@@ -110,6 +112,7 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
 
             // فقط fileId ذخیره می‌شه تا Avatar از /files/{fileId} لود کنه
             setGroupAvatar(fileId);
+            setAvatarTouched(true);
         } catch (e) {
             console.error(e);
             setError('آپلود عکس گروه با خطا مواجه شد');
@@ -144,8 +147,12 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
         }
     };
 
+    const originalAvatar = String(user.avatar || '');
     const previewName = groupName || String(user.name || '');
-    const previewAvatar = groupAvatar || String(user.avatar || '');
+    const previewAvatar = avatarTouched ? groupAvatar : originalAvatar;
+
+    const canRemoveAvatar = Boolean(previewAvatar);
+    const isAvatarRemoved = avatarTouched && !groupAvatar && Boolean(originalAvatar);
 
     return (
         <div className="contact-info">
@@ -190,9 +197,9 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
                     <div className="contact-info__card">
                         <div className="contact-info__label">ویرایش گروه</div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                <div style={{ fontSize: 12, opacity: 0.7, color: 'var(--text-primary)' }}>اسم گروه</div>
+                                <div style={{ fontSize: 12, opacity: 0.8, color: 'var(--text-primary, #fff)' }}>نام گروه</div>
                                 <input
                                     value={groupName}
                                     onChange={(e) => setGroupName(e.target.value)}
@@ -203,7 +210,7 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
                                         borderRadius: 12,
                                         border: '1px solid var(--border-primary)',
                                         background: 'var(--bg-secondary)',
-                                        color: 'var(--text-primary)',
+                                        color: 'var(--text-primary, #fff)',
                                         fontSize: 14,
                                         fontFamily: 'Vazir, sans-serif',
                                     }}
@@ -212,31 +219,121 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                <div style={{ fontSize: 12, opacity: 0.7, color: 'var(--text-primary)' }}>عکس گروه</div>
+                                <div style={{ fontSize: 12, opacity: 0.8, color: 'var(--text-primary, #fff)' }}>عکس گروه</div>
 
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                    <Avatar name={previewName} size="md" src={previewAvatar} />
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        gap: 12,
+                                        padding: 10,
+                                        borderRadius: 12,
+                                        border: '1px solid var(--border-primary)',
+                                        background: 'var(--bg-secondary)',
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                                        <Avatar name={previewName} size="md" src={previewAvatar} />
+                                        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                            <div style={{ fontSize: 13, color: 'var(--text-primary, #fff)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {previewName || 'گروه'}
+                                            </div>
+                                            <div style={{ fontSize: 12, color: 'var(--text-secondary, #bbb)' }}>
+                                                {isAvatarRemoved ? 'عکس برای حذف انتخاب شد (بعد از ذخیره کامل می‌شود)' : 'برای تغییر، عکس جدید انتخاب کن'}
+                                            </div>
+                                        </div>
+                                    </div>
 
-                                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                                         <button
                                             type="button"
-                                            className="icon-btn"
                                             onClick={() => fileInputRef.current?.click()}
                                             disabled={saving}
+                                            style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: 8,
+                                                padding: '10px 12px',
+                                                borderRadius: 12,
+                                                border: '1px solid var(--border-primary)',
+                                                background: 'transparent',
+                                                color: 'var(--text-primary, #fff)',
+                                                cursor: saving ? 'not-allowed' : 'pointer',
+                                                fontSize: 13,
+                                                fontWeight: 700,
+                                                fontFamily: 'Vazir, sans-serif',
+                                            }}
                                             title="انتخاب و آپلود عکس"
                                         >
                                             <ImageIcon size={18} />
+                                            انتخاب عکس
                                         </button>
 
-                                        <button
-                                            type="button"
-                                            className="icon-btn"
-                                            onClick={() => setGroupAvatar('')}
-                                            disabled={saving}
-                                            title="حذف عکس گروه"
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
+                                        {isAvatarRemoved ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setError(null);
+                                                    setGroupAvatar(originalAvatar);
+                                                    setAvatarTouched(false);
+                                                }}
+                                                disabled={saving}
+                                                style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: 8,
+                                                    padding: '10px 12px',
+                                                    borderRadius: 12,
+                                                    border: '1px solid var(--border-primary)',
+                                                    background: 'transparent',
+                                                    color: 'var(--text-primary, #fff)',
+                                                    cursor: saving ? 'not-allowed' : 'pointer',
+                                                    fontSize: 13,
+                                                    fontWeight: 700,
+                                                    fontFamily: 'Vazir, sans-serif',
+                                                }}
+                                                title="بازگردانی عکس"
+                                            >
+                                                <RotateCcw size={18} />
+                                                بازگردانی
+                                            </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (!canRemoveAvatar) return;
+                                                    const ok = window.confirm('عکس گروه حذف شود؟ (بعد از زدن «ذخیره» اعمال می‌شود)');
+                                                    if (!ok) return;
+                                                    setError(null);
+                                                    setGroupAvatar('');
+                                                    setAvatarTouched(true);
+                                                }}
+                                                disabled={saving || !canRemoveAvatar}
+                                                style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: 8,
+                                                    padding: '10px 12px',
+                                                    borderRadius: 12,
+                                                    border: '1px solid var(--border-primary)',
+                                                    background: 'transparent',
+                                                    color: !canRemoveAvatar ? 'var(--text-secondary, #999)' : 'var(--text-primary, #fff)',
+                                                    cursor: saving || !canRemoveAvatar ? 'not-allowed' : 'pointer',
+                                                    fontSize: 13,
+                                                    fontWeight: 700,
+                                                    fontFamily: 'Vazir, sans-serif',
+                                                    opacity: canRemoveAvatar ? 1 : 0.7,
+                                                }}
+                                                title={canRemoveAvatar ? 'حذف عکس گروه' : 'عکسی برای حذف وجود ندارد'}
+                                            >
+                                                <Trash2 size={18} />
+                                                حذف
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
 
@@ -254,8 +351,8 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
                                     }}
                                 />
 
-                                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                                    عکس بعد از انتخاب، روی سرور آپلود می‌شود؛ بعدش «ذخیره» را بزن.
+                                <div style={{ fontSize: 12, color: 'var(--text-secondary, #bbb)' }}>
+                                    عکس بعد از انتخاب، روی سرور آپلود می‌شود؛ سپس «ذخیره» را بزن.
                                 </div>
                             </div>
 
@@ -280,7 +377,7 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
                                         borderRadius: 12,
                                         border: '1px solid var(--border-primary)',
                                         background: 'var(--bg-secondary)',
-                                        color: 'var(--text-primary)',
+                                        color: 'var(--text-primary, #fff)',
                                         cursor: saving ? 'not-allowed' : 'pointer',
                                         fontSize: 14,
                                         fontWeight: 700,
@@ -297,6 +394,7 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
                                         setError(null);
                                         setGroupName(String(user.name ?? ''));
                                         setGroupAvatar(String(user.avatar ?? ''));
+                                        setAvatarTouched(false);
                                         setEditingGroup(false);
                                     }}
                                     disabled={saving}
@@ -310,7 +408,7 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
                                         borderRadius: 12,
                                         border: '1px solid var(--border-primary)',
                                         background: 'transparent',
-                                        color: 'var(--text-primary)',
+                                        color: 'var(--text-primary, #fff)',
                                         cursor: saving ? 'not-allowed' : 'pointer',
                                         fontSize: 14,
                                         fontWeight: 700,
@@ -340,7 +438,7 @@ export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
                                 borderRadius: 12,
                                 border: '1px solid var(--border-primary)',
                                 background: 'var(--bg-secondary)',
-                                color: 'var(--text-primary)',
+                                color: 'var(--text-primary, #fff)',
                                 cursor: 'pointer',
                                 fontSize: 14,
                                 fontWeight: 700,
