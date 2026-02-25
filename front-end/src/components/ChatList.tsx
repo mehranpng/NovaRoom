@@ -435,15 +435,30 @@ export function ChatList({
         const menuHeight = 44;
         const padding = 8;
 
-        // Position under button by default.
+        // IMPORTANT: popover is absolutely positioned inside the scrollable chat list,
+        // so we must include scrollTop/scrollLeft in coordinate calculations.
+        const scrollTop = container.scrollTop;
+        const scrollLeft = container.scrollLeft;
+
+        const btnTop = (r.top - c.top) + scrollTop;
+        const btnBottom = (r.bottom - c.top) + scrollTop;
+
+        // Position under button by default (decision based on visible space).
         const spaceBelow = c.bottom - r.bottom;
         let top = spaceBelow < menuHeight + 12
-            ? Math.max(padding, (r.top - c.top) - menuHeight - 8)
-            : (r.bottom - c.top) + 6;
+            ? btnTop - menuHeight - 8
+            : btnBottom + 6;
+
+        // Keep menu within the visible part of the list.
+        const minTop = scrollTop + padding;
+        const maxTop = scrollTop + container.clientHeight - menuHeight - padding;
+        top = Math.max(minTop, Math.min(top, maxTop));
 
         // Align menu to the button's right edge.
-        let left = (r.right - c.left) - menuWidth;
-        left = Math.max(padding, Math.min(left, c.width - menuWidth - padding));
+        let left = ((r.right - c.left) + scrollLeft) - menuWidth;
+        const minLeft = scrollLeft + padding;
+        const maxLeft = scrollLeft + container.clientWidth - menuWidth - padding;
+        left = Math.max(minLeft, Math.min(left, maxLeft));
 
         setChatActionMenu((prev) => (prev?.chatId === chatId ? null : { chatId, top, left }));
     };
