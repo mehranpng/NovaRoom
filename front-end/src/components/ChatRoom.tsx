@@ -997,14 +997,8 @@ export function ChatRoom({
         );
     }
 
-    const activeMsg = msgMenu ? messages.find((mm) => mm.id === msgMenu.id) : null;
-    const activeMsgIsMine = activeMsg ? activeMsg.senderId === currentUserId : false;
-    const canDeleteActiveMsg = activeMsgIsMine || (isGroupChat && isVerifiedUser);
 
     const reactionMsg = reactionMenu ? messages.find((mm) => mm.id === reactionMenu.id) : null;
-    const myReaction = reactionMsg?.reactions?.find((r: any) =>
-        r.userIds && Array.isArray(r.userIds) && r.userIds.includes(currentUserId)
-    );
 
     const reactionUsersList: { userId: string; emoji: string; name: string; avatar: string; verified: boolean }[] = [];
     if (reactionMsg?.reactions && reactionMsg.reactions.length > 0) {
