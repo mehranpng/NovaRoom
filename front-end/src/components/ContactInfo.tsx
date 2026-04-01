@@ -11,6 +11,7 @@ interface ContactInfoProps {
     onBack: () => void;
     onOpenChat?: (user: User) => void;
     onOpenMembers?: () => void;
+    startInEditMode?: boolean;
 }
 
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
@@ -20,7 +21,7 @@ function extractUploadedFileId(res: any): string {
     return String(file.fileId || file.id || file.file_id || file.path || '').trim();
 }
 
-export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: ContactInfoProps) {
+export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, startInEditMode = false }: ContactInfoProps) {
     const [copied, setCopied] = useState(false);
     const [canEditGroup, setCanEditGroup] = useState(false);
     const [editingGroup, setEditingGroup] = useState(false);
@@ -49,6 +50,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
     }, [user]);
 
     const displayBio = bio === 'گروه' ? '' : bio;
+    const canEditGroupInfo = isGroup && (canEditGroup || Boolean((user as any)?.verified));
 
     useEffect(() => {
         // Reset group edit state when user changes
@@ -151,6 +153,11 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
     }, [isGroup]);
 
     useEffect(() => {
+        if (!canEditGroupInfo || !startInEditMode) return;
+        setEditingGroup(true);
+    }, [canEditGroupInfo, startInEditMode]);
+
+    useEffect(() => {
         if (!isGroup || !onOpenMembers) return;
         onOpenMembers();
     }, [isGroup, onOpenMembers, user.chatId]);
@@ -249,7 +256,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
                 <div className="contact-info__title">{isGroup ? 'اطلاعات گروه' : 'مخاطب'}</div>
                 <div className="contact-info__spacer" />
 
-                {isGroup && canEditGroup && (
+                {canEditGroupInfo && (
                     <button
                         type="button"
                         className="icon-btn"
@@ -279,7 +286,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
                     )}
                 </div>
 
-                {isGroup && canEditGroup && editingGroup && (
+                {canEditGroupInfo && editingGroup && (
                     <div className="contact-info__card">
                         <div className="contact-info__label">ویرایش گروه</div>
 
