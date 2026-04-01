@@ -332,6 +332,10 @@ export function App() {
         });
     }, []);
 
+    const handleWsReconnectExhausted = useCallback(() => {
+        setWsReconnectExhausted(true);
+    }, []);
+
     // AI WebSocket handlers
     const handleNewAIMessage = useCallback((message: any) => {
         const messageWithChatId: Message = {
@@ -353,7 +357,7 @@ export function App() {
         onMessagesSeen: handleMessagesSeen,
         onReactionUpdated: handleReactionUpdated,
         onConnectionChange: setWsConnected,
-        onReconnectExhausted: () => setWsReconnectExhausted(true),
+        onReconnectExhausted: handleWsReconnectExhausted,
     });
 
     useEffect(() => {
