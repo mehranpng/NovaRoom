@@ -29,6 +29,8 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
     const [avatarTouched, setAvatarTouched] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [resolvedRegistrationDate, setResolvedRegistrationDate] = useState<string>(String(user.registrationDate ?? '').trim());
+    const [registrationLoading, setRegistrationLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
@@ -56,7 +58,75 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
         setGroupName(String(user.name ?? ''));
         setGroupAvatar(String(user.avatar ?? ''));
         setAvatarTouched(false);
+        setResolvedRegistrationDate(String(user.registrationDate ?? '').trim());
+        setRegistrationLoading(false);
     }, [user.chatId, user.name, user.avatar]);
+
+    useEffect(() => {
+        if (isGroup) {
+            setRegistrationLoading(false);
+            return;
+        }
+
+        const existingDate = String(user.registrationDate ?? '').trim();
+        if (existingDate) {
+            setResolvedRegistrationDate(existingDate);
+            setRegistrationLoading(false);
+            return;
+        }
+
+        const username = String(user.username ?? '').trim().replace(/^@+/, '');
+        const chatId = String(user.chatId ?? '').trim();
+        if (!username && !chatId) {
+            setRegistrationLoading(false);
+            return;
+        }
+
+        let cancelled = false;
+        setRegistrationLoading(true);
+
+        const loadRegistrationDate = async () => {
+            let resolved = '';
+
+            try {
+                if (username.length >= 2) {
+                    const users = await apiFetch(`/users/search?query=${encodeURIComponent(username)}`);
+                    if (Array.isArray(users)) {
+                        const found = users.find((u: any) => {
+                            const uUsername = String(u?.username ?? '').toLowerCase();
+                            const uChatId = String(u?.chatId ?? '');
+                            return (uUsername && uUsername === username.toLowerCase()) || (chatId && uChatId === chatId);
+                        });
+                        resolved = String(found?.registrationDate ?? '').trim();
+                    }
+                }
+
+                if (!resolved && chatId) {
+                    const chats = await apiFetch('/chats');
+                    if (Array.isArray(chats)) {
+                        const chatMatch = chats.find((c: any) => {
+                            const other = c?.otherUser ?? {};
+                            return String(other?.chatId ?? '') === chatId || String(other?.username ?? '').toLowerCase() === username.toLowerCase();
+                        });
+                        resolved = String(chatMatch?.otherUser?.registrationDate ?? '').trim();
+                    }
+                }
+            } catch {
+                resolved = '';
+            } finally {
+                if (!cancelled) {
+                    setResolvedRegistrationDate(resolved);
+                    setRegistrationLoading(false);
+                }
+            }
+        };
+
+        loadRegistrationDate();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [isGroup, user.registrationDate, user.username, user.chatId]);
 
     useEffect(() => {
         let cancelled = false;
@@ -508,12 +578,14 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
                     </div>
                 )}
 
-                {!isGroup && user.registrationDate && (
+                {!isGroup && (
                     <div className="contact-info__card">
                         <div className="contact-info__label">تاریخ عضویت</div>
                         <div className="contact-info__mono" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Calendar size={16} style={{ opacity: 0.7 }} />
-                            {user.registrationDate}
+                            {registrationLoading ? (
+                                <span className="skeleton" style={{ display: 'inline-block', width: 110, height: 16, borderRadius: 8 }} />
+                            ) : (resolvedRegistrationDate || 'نامشخص')}
                         </div>
                     </div>
                 )}
