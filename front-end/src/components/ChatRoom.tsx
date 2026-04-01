@@ -430,10 +430,8 @@ export function ChatRoom({
 
     useEffect(() => {
         if (!isGroupChat) { setGroupMembers({}); setMembersLoading(false); return; }
-        if (!isGroupChat) { setGroupMembers({}); setMembersLoading(false); return; }
         let cancelled = false;
         const loadMembers = async () => {
-            setMembersLoading(true);
             setMembersLoading(true);
             try {
                 const members = await apiFetch(`/chats/${encodeURIComponent(chatId)}/members`);
@@ -454,9 +452,6 @@ export function ChatRoom({
                     setGroupMembers(map);
                 }
             } catch { /* ignore */ }
-            finally {
-                if (!cancelled) setMembersLoading(false);
-            }
             finally {
                 if (!cancelled) setMembersLoading(false);
             }
@@ -1059,17 +1054,6 @@ export function ChatRoom({
                     </div>
                     <div style={{ padding: '8px 4px 4px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'Vazir, sans-serif' }}>اعضا ({membersList.length})</div>
                     <div className="contact-info__card" style={{ padding: 0, overflow: 'hidden' }}>
-                        {membersLoading && membersList.length === 0 ? (
-                            Array.from({ length: 6 }).map((_, idx) => (
-                                <div key={`members-loading-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderTop: idx > 0 ? '1px solid var(--border-primary)' : 'none' }}>
-                                    <span className="skeleton" style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0 }} />
-                                    <div style={{ flex: 1 }}>
-                                        <div className="skeleton" style={{ height: 12, width: idx % 2 === 0 ? '52%' : '64%', borderRadius: 6, marginBottom: 8 }} />
-                                        <div className="skeleton" style={{ height: 10, width: idx % 2 === 0 ? '30%' : '38%', borderRadius: 6 }} />
-                                    </div>
-                                </div>
-                            ))
-                        ) : sortedFiltered.length === 0 ? (
                         {membersLoading && membersList.length === 0 ? (
                             Array.from({ length: 6 }).map((_, idx) => (
                                 <div key={`members-loading-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderTop: idx > 0 ? '1px solid var(--border-primary)' : 'none' }}>
