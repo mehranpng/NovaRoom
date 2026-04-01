@@ -2,7 +2,6 @@
    FILE UPLOAD & DOWNLOAD
    ======================================== */
 
-/* File Upload Container */
 .file-upload-container {
     display: flex;
     align-items: center;
@@ -36,13 +35,11 @@
     cursor: default;
 }
 
-/* Ensure the upload progress can be positioned relative to the whole chat input row */
 .chat-room__input-wrapper {
     position: relative;
     overflow: visible;
 }
 
-/* Upload Progress (horizontal bar above chat input, mobile-friendly) */
 .file-upload-progress-inline {
     position: absolute;
     left: 8px;
@@ -75,7 +72,6 @@
     }
 }
 
-/* Upload Progress (legacy - kept for other usages if any) */
 .file-upload-progress {
     display: flex;
     align-items: center;
@@ -340,4 +336,52 @@
 .file-audio-player {
     width: 100%;
     height: 36px;
+}
+
+/* Video Player */
+.file-video-card {
+    border-radius: 12px;
+    overflow: hidden;
+    max-width: 300px;
+    background: rgba(0, 0, 0, 0.07);
+}
+
+.dark-mode .file-video-card {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.message-bubble--mine .file-video-card {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.file-video-player {
+    display: block;
+    width: 100%;
+    max-height: 300px;
+    background: #000;
+    border-radius: 12px 12px 0 0;
+    outline: none;
+}
+
+.file-video-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+}
+
+.file-video-name {
+    font-size: 12px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-secondary);
+    direction: ltr;
+    flex: 1;
+}
+
+.message-bubble--mine .file-video-name {
+    color: rgba(255, 255, 255, 0.8);
 }

@@ -2,98 +2,77 @@ import type { FileMetadata } from '../types';
 import { formatFileSize, getFileIcon, isImageFile } from '../utils/fileUtils';
 import { Download, Play, Pause } from 'lucide-react';
 import { API_BASE_URL } from '../config/api';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useMusicPlayer } from '../contexts/MusicPlayerContext';
 
 interface FileMessageProps {
     file: FileMetadata;
     token: string;
+    onMediaLoad?: () => void;
 }
 
-export function FileMessage({ file, token }: FileMessageProps) {
+export function FileMessage({ file, token, onMediaLoad }: FileMessageProps) {
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [imageLoading, setImageLoading] = useState(false);
     const [imageError, setImageError] = useState(false);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [audioLoading, setAudioLoading] = useState(false);
     const [audioError, setAudioError] = useState(false);
-    
+    const [videoUrl, setVideoUrl] = useState<string | null>(null);
+    const [videoLoading, setVideoLoading] = useState(false);
+    const [videoError, setVideoError] = useState(false);
+    const videoRef = useRef<HTMLVideoElement | null>(null);
+
     const musicPlayer = useMusicPlayer();
     const isImage = isImageFile(file.mimeType);
     const isAudio = (file.mimeType || '').startsWith('audio/');
+    const isVideo = (file.mimeType || '').startsWith('video/');
     const isCurrentTrack = musicPlayer.track?.fileId === file.fileId;
     const isThisPlaying = isCurrentTrack && musicPlayer.isPlaying;
 
-    // Load image with Authorization header
     useEffect(() => {
         if (!isImage) return;
-
         let objectUrl: string | null = null;
         let cancelled = false;
-
         const loadImage = async () => {
             try {
                 setImageLoading(true);
                 setImageError(false);
-                
                 const response = await fetch(`${API_BASE_URL}/files/${file.fileId}`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                    },
+                    headers: { 'Authorization': `Bearer ${token}` },
                 });
-
-                if (!response.ok) {
-                    throw new Error('Failed to load image');
-                }
-
+                if (!response.ok) throw new Error('Failed to load image');
                 const blob = await response.blob();
-                
                 if (!cancelled) {
                     objectUrl = window.URL.createObjectURL(blob);
                     setImageUrl(objectUrl);
                 }
             } catch (error) {
                 console.error('Failed to load image:', error);
-                if (!cancelled) {
-                    setImageError(true);
-                }
+                if (!cancelled) setImageError(true);
             } finally {
-                if (!cancelled) {
-                    setImageLoading(false);
-                }
+                if (!cancelled) setImageLoading(false);
             }
         };
-
         loadImage();
-
         return () => {
             cancelled = true;
-            if (objectUrl) {
-                window.URL.revokeObjectURL(objectUrl);
-            }
+            if (objectUrl) window.URL.revokeObjectURL(objectUrl);
         };
     }, [file.fileId, token, isImage]);
 
     useEffect(() => {
         if (!isAudio) return;
-
         let objectUrl: string | null = null;
         let cancelled = false;
-
         const loadAudio = async () => {
             try {
                 setAudioLoading(true);
                 setAudioError(false);
                 const response = await fetch(`${API_BASE_URL}/files/${file.fileId}`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
+                    headers: { Authorization: `Bearer ${token}` },
                 });
-
-                if (!response.ok) {
-                    throw new Error('Failed to load audio');
-                }
-
+                if (!response.ok) throw new Error('Failed to load audio');
                 const blob = await response.blob();
                 if (!cancelled) {
                     objectUrl = window.URL.createObjectURL(blob);
@@ -106,29 +85,51 @@ export function FileMessage({ file, token }: FileMessageProps) {
                 if (!cancelled) setAudioLoading(false);
             }
         };
-
         loadAudio();
-
         return () => {
             cancelled = true;
-            if (objectUrl) {
-                window.URL.revokeObjectURL(objectUrl);
-            }
+            if (objectUrl) window.URL.revokeObjectURL(objectUrl);
         };
     }, [file.fileId, isAudio, token]);
+
+    // Load video with auth header
+    useEffect(() => {
+        if (!isVideo) return;
+        let objectUrl: string | null = null;
+        let cancelled = false;
+        const loadVideo = async () => {
+            try {
+                setVideoLoading(true);
+                setVideoError(false);
+                const response = await fetch(`${API_BASE_URL}/files/${file.fileId}`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!response.ok) throw new Error('Failed to load video');
+                const blob = await response.blob();
+                if (!cancelled) {
+                    objectUrl = window.URL.createObjectURL(blob);
+                    setVideoUrl(objectUrl);
+                }
+            } catch (error) {
+                console.error('Failed to load video:', error);
+                if (!cancelled) setVideoError(true);
+            } finally {
+                if (!cancelled) setVideoLoading(false);
+            }
+        };
+        loadVideo();
+        return () => {
+            cancelled = true;
+            if (objectUrl) window.URL.revokeObjectURL(objectUrl);
+        };
+    }, [file.fileId, isVideo, token]);
 
     const handleDownload = async () => {
         try {
             const response = await fetch(`${API_BASE_URL}/files/${file.fileId}`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                },
+                headers: { 'Authorization': `Bearer ${token}` },
             });
-
-            if (!response.ok) {
-                throw new Error('Download failed');
-            }
-
+            if (!response.ok) throw new Error('Download failed');
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -149,11 +150,11 @@ export function FileMessage({ file, token }: FileMessageProps) {
             {isImage ? (
                 <div className="file-image-preview">
                     {imageLoading ? (
-                        <div className="file-loading" style={{ minHeight: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div className="file-loading" style={{ minHeight: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <div className="spinner" />
                         </div>
                     ) : imageError || !imageUrl ? (
-                        <div className="file-error" style={{ minHeight: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '8px' }}>
+                        <div className="file-error" style={{ minHeight: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '8px' }}>
                             <span>⚠️</span>
                             <span style={{ fontSize: '12px' }}>خطا در بارگذاری تصویر</span>
                         </div>
@@ -163,11 +164,40 @@ export function FileMessage({ file, token }: FileMessageProps) {
                             alt={file.fileName}
                             onClick={handleDownload}
                             style={{ cursor: 'pointer' }}
+                            onLoad={onMediaLoad}
                         />
                     )}
                     <div className="file-image-overlay">
                         <button onClick={handleDownload} className="file-download-btn">
                             <Download size={20} />
+                        </button>
+                    </div>
+                </div>
+            ) : isVideo ? (
+                <div className="file-video-card">
+                    {videoLoading ? (
+                        <div style={{ minHeight: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div className="spinner" />
+                        </div>
+                    ) : videoError || !videoUrl ? (
+                        <div style={{ minHeight: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8 }}>
+                            <span>⚠️</span>
+                            <span style={{ fontSize: 12 }}>خطا در بارگذاری ویدیو</span>
+                        </div>
+                    ) : (
+                        <video
+                            ref={videoRef}
+                            src={videoUrl}
+                            controls
+                            className="file-video-player"
+                            onLoadedMetadata={onMediaLoad}
+                            preload="metadata"
+                        />
+                    )}
+                    <div className="file-video-footer">
+                        <span className="file-video-name">🎬 {file.fileName}</span>
+                        <button onClick={handleDownload} className="file-download-btn" type="button">
+                            <Download size={16} />
                         </button>
                     </div>
                 </div>
@@ -203,7 +233,7 @@ export function FileMessage({ file, token }: FileMessageProps) {
                         {audioError && <div style={{ fontSize: 11, color: '#e55' }}>پخش ممکن نشد</div>}
                         {isCurrentTrack && musicPlayer.duration > 0 && (
                             <div style={{ fontSize: 11, color: '#888' }}>
-                                {Math.floor(musicPlayer.currentTime / 60)}:{Math.floor(musicPlayer.currentTime % 60).toString().padStart(2,'0')} / {Math.floor(musicPlayer.duration / 60)}:{Math.floor(musicPlayer.duration % 60).toString().padStart(2,'0')}
+                                {Math.floor(musicPlayer.currentTime / 60)}:{Math.floor(musicPlayer.currentTime % 60).toString().padStart(2, '0')} / {Math.floor(musicPlayer.duration / 60)}:{Math.floor(musicPlayer.duration % 60).toString().padStart(2, '0')}
                             </div>
                         )}
                     </div>
