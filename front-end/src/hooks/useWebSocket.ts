@@ -1,5 +1,5 @@
 // useWebSocket.ts
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { API_BASE_URL } from '../config/api';
 import type { FileMetadata } from '../types';
 
@@ -12,6 +12,7 @@ interface UseWebSocketProps {
     onMessagesSeen?: (chatId: string) => void;
     onReactionUpdated?: (chatId: string, messageId: string, reactions: any[]) => void;
     onConnectionChange?: (isConnected: boolean) => void;
+    onReconnectExhausted?: () => void;
 }
 
 type OutgoingEvent =
@@ -22,6 +23,8 @@ type OutgoingEvent =
     | { type: 'ping' };
 
 const WS_RECONNECT_DELAY_MS = 1500;
+const WS_PONG_TIMEOUT_MS = 45000;
+const WS_MAX_RECONNECT_ATTEMPTS = 8;
 
 export function useWebSocket({
     token,
@@ -32,15 +35,20 @@ export function useWebSocket({
     onMessagesSeen,
     onReactionUpdated,
     onConnectionChange,
+    onReconnectExhausted,
 }: UseWebSocketProps) {
     const socketRef = useRef<WebSocket | null>(null);
     const isConnectedRef = useRef(false);
+    const [connectionState, setConnectionState] = useState<'connected' | 'connecting' | 'disconnected'>('disconnected');
+    const [reconnectExhausted, setReconnectExhausted] = useState(false);
 
     // Queue outgoing events while socket is not OPEN (fixes lost "seen" on reconnect).
     const outboxRef = useRef<string[]>([]);
 
     const reconnectTimerRef = useRef<number | null>(null);
     const shouldReconnectRef = useRef(true);
+    const reconnectAttemptsRef = useRef(0);
+    const lastPongAtRef = useRef<number>(Date.now());
 
     const clearReconnectTimer = () => {
         if (reconnectTimerRef.current != null) {
@@ -70,26 +78,40 @@ export function useWebSocket({
         if (!shouldReconnectRef.current) return;
         if (!token) return;
         if (reconnectTimerRef.current != null) return;
+        if (reconnectAttemptsRef.current >= WS_MAX_RECONNECT_ATTEMPTS) {
+            setReconnectExhausted(true);
+            setConnectionState('disconnected');
+            onReconnectExhausted?.();
+            return;
+        }
 
         reconnectTimerRef.current = window.setTimeout(() => {
             reconnectTimerRef.current = null;
+            reconnectAttemptsRef.current += 1;
             connect();
         }, WS_RECONNECT_DELAY_MS);
-    }, [token]);
+    }, [token, onReconnectExhausted]);
 
     const connect = useCallback(() => {
         if (!token) return;
 
-        // If socket exists but isn't OPEN, let its onclose handle reconnection.
-        if (socketRef.current) return;
+        if (socketRef.current?.readyState === WebSocket.OPEN || socketRef.current?.readyState === WebSocket.CONNECTING) return;
+        if (socketRef.current?.readyState === WebSocket.CLOSING || socketRef.current?.readyState === WebSocket.CLOSED) {
+            socketRef.current = null;
+        }
 
         clearReconnectTimer();
+        setConnectionState('connecting');
 
         const wsUrl = `${API_BASE_URL.replace('http', 'ws')}/ws?token=${token}`;
         const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
             isConnectedRef.current = true;
+            reconnectAttemptsRef.current = 0;
+            setReconnectExhausted(false);
+            setConnectionState('connected');
+            lastPongAtRef.current = Date.now();
             onConnectionChange?.(true);
             flushOutbox();
         };
@@ -109,6 +131,8 @@ export function useWebSocket({
                     onMessagesSeen?.(data.chatId);
                 } else if (data.type === 'reaction_updated') {
                     onReactionUpdated?.(data.chatId, data.messageId, data.reactions);
+                } else if (data.type === 'pong') {
+                    lastPongAtRef.current = Date.now();
                 }
             } catch (err) {
                 console.error('WebSocket message parse error:', err);
@@ -117,6 +141,7 @@ export function useWebSocket({
 
         ws.onclose = () => {
             isConnectedRef.current = false;
+            setConnectionState('connecting');
             onConnectionChange?.(false);
 
             // Important: release ref so connect() can create a new socket.
@@ -199,9 +224,23 @@ export function useWebSocket({
         } finally {
             socketRef.current = null;
             isConnectedRef.current = false;
+            setConnectionState('disconnected');
             onConnectionChange?.(false);
         }
     }, [onConnectionChange]);
+
+    const reconnectNow = useCallback(() => {
+        shouldReconnectRef.current = true;
+        reconnectAttemptsRef.current = 0;
+        setReconnectExhausted(false);
+        clearReconnectTimer();
+        try {
+            socketRef.current?.close();
+        } finally {
+            socketRef.current = null;
+            connect();
+        }
+    }, [connect]);
 
     useEffect(() => {
         shouldReconnectRef.current = true;
@@ -224,6 +263,13 @@ export function useWebSocket({
         const interval = window.setInterval(() => {
             if (socketRef.current?.readyState === WebSocket.OPEN) {
                 send({ type: 'ping' });
+                if (Date.now() - lastPongAtRef.current > WS_PONG_TIMEOUT_MS) {
+                    try {
+                        socketRef.current.close();
+                    } catch {
+                        // noop
+                    }
+                }
             }
         }, 25000);
 
@@ -236,6 +282,9 @@ export function useWebSocket({
         deleteMessage,
         sendSeen,
         isConnected: isConnectedRef.current,
-        ws: socketRef.current
+        connectionState,
+        reconnectExhausted,
+        reconnectNow,
+        ws: socketRef.current,
     };
 }

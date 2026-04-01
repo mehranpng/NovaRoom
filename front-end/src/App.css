@@ -418,6 +418,22 @@ textarea {
   color: var(--text-primary);
 }
 
+.chat-list__title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-list__reconnect-btn {
+  border: 1px solid var(--border-secondary);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .chat-list__header-actions {
   display: flex;
   align-items: center;

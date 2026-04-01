@@ -37,6 +37,8 @@ export function App() {
     const [chats, setChats] = useState<Chat[]>([]);
     const [messages, setMessages] = useState<Record<string, Message[]>>({});
     const [newChatModalOpen, setNewChatModalOpen] = useState(false);
+    const [wsConnected, setWsConnected] = useState(false);
+    const [wsReconnectExhausted, setWsReconnectExhausted] = useState(false);
 
     // When opening a chat from the list, capture its unreadCount BEFORE clearing it,
     // so ChatRoom can scroll to the first unread message and render an unread separator.
@@ -342,15 +344,37 @@ export function App() {
     }, []);
 
     // WebSocket initialization
-    const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen } = useWebSocket({
+    const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen, reconnectExhausted, reconnectNow } = useWebSocket({
         token: localStorage.getItem('token'),
         onNewMessage: handleNewMessage,
         onMessageEdited: handleMessageEdited,
         onMessageDeleted: handleMessageDeleted,
         onUserStatusChange: handleUserStatusChange,
         onMessagesSeen: handleMessagesSeen,
-        onReactionUpdated: handleReactionUpdated
+        onReactionUpdated: handleReactionUpdated,
+        onConnectionChange: setWsConnected,
+        onReconnectExhausted: () => setWsReconnectExhausted(true),
     });
+
+    useEffect(() => {
+        setWsReconnectExhausted(reconnectExhausted);
+    }, [reconnectExhausted]);
+
+    useEffect(() => {
+        if (!wsConnected || !isAuthenticated) return;
+        setWsReconnectExhausted(false);
+        loadChats(false);
+
+        if (!activeChatId) return;
+        apiFetch(`/chats/${activeChatId}/messages?limit=100`)
+            .then((msgs) => {
+                setMessages(prev => ({ ...prev, [activeChatId]: msgs }));
+                if (currentUser && activeChatId !== `saved_messages_${currentUser.chatId}`) {
+                    sendSeen(activeChatId);
+                }
+            })
+            .catch((err) => console.error('Failed to sync messages after reconnect', err));
+    }, [wsConnected, isAuthenticated, loadChats, activeChatId, currentUser, sendSeen]);
 
     // AI WebSocket initialization
     const { sendMessage: sendAIMessage } = useAIWebSocket({
@@ -799,12 +823,15 @@ export function App() {
                             chats={chats}
                             currentUser={currentUser!}
                             activeChatId={activeChatId}
+                            wsConnected={wsConnected}
+                            wsReconnectExhausted={wsReconnectExhausted}
                             onSelectChat={handleSelectChat}
                             onOpenProfile={handleOpenProfile}
                             onNewChatClick={() => setNewChatModalOpen(true)}
                             onLogout={handleLogout}
                             onOpenAIChat={handleOpenAIChat}
                             onOpenSavedMessages={handleOpenSavedMessages}
+                            onReconnectNow={reconnectNow}
                             loading={isInitialChatsLoad}
                         />
                     </div>

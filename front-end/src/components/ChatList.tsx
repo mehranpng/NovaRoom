@@ -12,12 +12,15 @@ interface ChatListProps {
     chats: Chat[];
     currentUser: User;
     activeChatId: string | null;
+    wsConnected: boolean;
+    wsReconnectExhausted: boolean;
     onSelectChat: (chatId: string) => void;
     onOpenProfile: () => void;
     onNewChatClick: () => void;
     onLogout: () => void;
     onOpenAIChat: () => void;
     onOpenSavedMessages: () => void;
+    onReconnectNow: () => void;
     loading?: boolean;
 }
 
@@ -282,12 +285,15 @@ export function ChatList({
     chats,
     currentUser,
     activeChatId,
+    wsConnected,
+    wsReconnectExhausted,
     onSelectChat,
     onOpenProfile,
     onNewChatClick,
     onLogout,
     onOpenAIChat,
     onOpenSavedMessages,
+    onReconnectNow,
     loading = false,
 }: ChatListProps) {
     const [searchQuery, setSearchQuery] = useState('');
@@ -632,7 +638,21 @@ export function ChatList({
                     <button onClick={onOpenProfile}>
                         <Avatar name={currentUser.name} size="sm" online={true} src={currentUser.avatar} />
                     </button>
-                    <h1 className="chat-list__title">NovaRoom</h1>
+                    <div className="chat-list__title-wrap">
+                        <h1 className="chat-list__title">{wsConnected ? 'NovaRoom' : 'Connecting...'}</h1>
+                        {!wsConnected && wsReconnectExhausted && (
+                            <button
+                                type="button"
+                                className="chat-list__reconnect-btn"
+                                onClick={() => {
+                                    onReconnectNow();
+                                    window.location.reload();
+                                }}
+                            >
+                                Refresh
+                            </button>
+                        )}
+                    </div>
                 </div>
                 <div className="chat-list__header-actions">
                     <button className="icon-btn" onClick={onNewChatClick}>
