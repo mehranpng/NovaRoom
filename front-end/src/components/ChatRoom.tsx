@@ -142,6 +142,11 @@ function applyOptimisticDeleteReaction(
     });
     return base.filter((r) => r.count > 0);
 }
+
+/** ویبره کوچک — فقط اگر دستگاه پشتیبانی کند */
+function triggerHaptic() {
+    try { navigator.vibrate?.(30); } catch { /* ignore */ }
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function ChatRoom({
@@ -558,11 +563,17 @@ export function ChatRoom({
         // find current reactions for this message
         const msg = messages.find((m) => m.id === messageId);
         const currentReactions = optimisticReactions[messageId] ?? (msg?.reactions as ReactionEntry[] | undefined);
+        // check if user already has this reaction (toggle off scenario → no haptic)
+        const alreadyReacted = (currentReactions || []).some(
+            (r) => r.emoji === emoji && r.userIds.includes(currentUserId)
+        );
         // apply optimistic update immediately
         setOptimisticReactions((prev) => ({
             ...prev,
             [messageId]: applyOptimisticReact(currentReactions, currentUserId, emoji),
         }));
+        // ویبره فقط هنگام ثبت ری‌اکشن جدید (نه toggle off)
+        if (!alreadyReacted) triggerHaptic();
         try {
             await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, { method: 'POST', body: JSON.stringify({ emoji }) });
         } catch (e) {
@@ -902,6 +913,7 @@ export function ChatRoom({
     const beginReply = (m: Message) => {
         setReplyTo({ id: m.id, senderId: m.senderId, text: m.text });
         setEditingId(null); setMsgMenu(null); setReactionMenu(null);
+        triggerHaptic();
         setTimeout(() => textareaRef.current?.focus(), 0);
     };
 
@@ -1162,14 +1174,6 @@ export function ChatRoom({
                                 <div className="popover popover--mini popover--right">
                                     {isGroupChat ? (
                                         <>
-                                            <button
-                                                className="popover__item"
-                                                onClick={() => { setChatMenuOpen(false); setMemberSearch(''); setShowMembersList(true); }}
-                                                type="button"
-                                            >
-                                                <Users size={16} />
-                                                اعضا
-                                            </button>
                                             {/* خروج از گروه — همه کاربران */}
                                             <button
                                                 className="popover__item popover__item--danger"
@@ -1219,8 +1223,15 @@ export function ChatRoom({
                     )}
                 </div>
 
-                <div className="chat-room__messages" ref={messagesContainerRef} onScroll={onMessagesScroll}
-                    style={{ overflowX: dragState.active ? 'hidden' : 'auto' }}>
+                <div
+                    className="chat-room__messages"
+                    ref={messagesContainerRef}
+                    onScroll={onMessagesScroll}
+                    style={{
+                        overflowX: dragState.active ? 'hidden' : 'auto',
+                        overflowY: dragState.active ? 'hidden' : 'auto',
+                    }}
+                >
                     <div className="chat-room__messages-inner">
                         {loading ? <ChatMessagesSkeleton /> : (
                             items.map(({ m, isMine, dayBreak, shape }) => {
@@ -1263,19 +1274,21 @@ export function ChatRoom({
                                                 const dx = e.clientX - swipeRef.current.startX;
                                                 const dy = e.clientY - swipeRef.current.startY;
                                                 if (!swipeRef.current.captured) {
-                                                    if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
+                                                    // راست به چپ: dx باید منفی باشد
+                                                    if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx >= 0) return;
                                                     swipeRef.current.captured = true;
                                                     try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
                                                 }
                                                 e.preventDefault();
-                                                setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
+                                                // x منفی است، مقدار مطلق را برای translateX استفاده می‌کنیم (حرکت به چپ)
+                                                setDragState({ id: m.id, x: Math.max(-72, Math.min(0, dx)), active: true });
                                             }}
                                             onPointerUp={(e) => {
                                                 if (e.pointerType !== 'mouse' || !swipeRef.current.active || swipeRef.current.id !== m.id) return;
                                                 const dx = e.clientX - swipeRef.current.startX;
                                                 const dy = e.clientY - swipeRef.current.startY;
                                                 if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
-                                                if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
+                                                if (dx < -60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
                                                 resetDrag(m.id);
                                                 swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
                                             }}
@@ -1294,11 +1307,12 @@ export function ChatRoom({
                                                 const dx = t.clientX - swipeRef.current.startX;
                                                 const dy = t.clientY - swipeRef.current.startY;
                                                 if (!swipeRef.current.captured) {
-                                                    if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
+                                                    // راست به چپ: dx باید منفی باشد
+                                                    if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx >= 0) return;
                                                     swipeRef.current.captured = true;
                                                 }
                                                 e.preventDefault();
-                                                setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
+                                                setDragState({ id: m.id, x: Math.max(-72, Math.min(0, dx)), active: true });
                                             }}
                                             onTouchEnd={(e) => {
                                                 if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
@@ -1306,7 +1320,7 @@ export function ChatRoom({
                                                 const dx = t.clientX - swipeRef.current.startX;
                                                 const dy = t.clientY - swipeRef.current.startY;
                                                 if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
-                                                if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
+                                                if (dx < -60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
                                                 resetDrag(m.id);
                                                 swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
                                             }}
