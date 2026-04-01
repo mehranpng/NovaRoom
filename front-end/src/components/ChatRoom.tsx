@@ -143,9 +143,9 @@ function applyOptimisticDeleteReaction(
     return base.filter((r) => r.count > 0);
 }
 
-/** ویبره کوچک — فقط اگر دستگاه پشتیبانی کند */
+/** ویبره خیلی کوتاه — فقط اگر دستگاه پشتیبانی کند */
 function triggerHaptic() {
-    try { navigator.vibrate?.(30); } catch { /* ignore */ }
+    try { navigator.vibrate?.(18); } catch { /* ignore */ }
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -216,6 +216,7 @@ export function ChatRoom({
         x: 0,
         active: false,
     });
+    const [replySwipeLocked, setReplySwipeLocked] = useState(false);
 
     const [newMsgCount, setNewMsgCount] = useState(0);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -504,6 +505,7 @@ export function ChatRoom({
 
     const resetDrag = (messageId: string) => {
         setDragState({ id: messageId, x: 0, active: false });
+        setReplySwipeLocked(false);
         window.setTimeout(() => setDragState((s) => (s.id === messageId ? { id: null, x: 0, active: false } : s)), 140);
     };
 
@@ -1228,8 +1230,8 @@ export function ChatRoom({
                     ref={messagesContainerRef}
                     onScroll={onMessagesScroll}
                     style={{
-                        overflowX: dragState.active ? 'hidden' : 'auto',
-                        overflowY: dragState.active ? 'hidden' : 'auto',
+                        overflowX: replySwipeLocked ? 'hidden' : 'auto',
+                        overflowY: replySwipeLocked ? 'hidden' : 'auto',
                     }}
                 >
                     <div className="chat-room__messages-inner">
@@ -1274,21 +1276,21 @@ export function ChatRoom({
                                                 const dx = e.clientX - swipeRef.current.startX;
                                                 const dy = e.clientY - swipeRef.current.startY;
                                                 if (!swipeRef.current.captured) {
-                                                    // راست به چپ: dx باید منفی باشد
-                                                    if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx >= 0) return;
+                                                    // چپ به راست: dx باید مثبت باشد
+                                                    if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
                                                     swipeRef.current.captured = true;
+                                                    setReplySwipeLocked(true);
                                                     try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
                                                 }
                                                 e.preventDefault();
-                                                // x منفی است، مقدار مطلق را برای translateX استفاده می‌کنیم (حرکت به چپ)
-                                                setDragState({ id: m.id, x: Math.max(-72, Math.min(0, dx)), active: true });
+                                                setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
                                             }}
                                             onPointerUp={(e) => {
                                                 if (e.pointerType !== 'mouse' || !swipeRef.current.active || swipeRef.current.id !== m.id) return;
                                                 const dx = e.clientX - swipeRef.current.startX;
                                                 const dy = e.clientY - swipeRef.current.startY;
                                                 if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
-                                                if (dx < -60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
+                                                if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
                                                 resetDrag(m.id);
                                                 swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
                                             }}
@@ -1307,12 +1309,13 @@ export function ChatRoom({
                                                 const dx = t.clientX - swipeRef.current.startX;
                                                 const dy = t.clientY - swipeRef.current.startY;
                                                 if (!swipeRef.current.captured) {
-                                                    // راست به چپ: dx باید منفی باشد
-                                                    if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx >= 0) return;
+                                                    // چپ به راست: dx باید مثبت باشد
+                                                    if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
                                                     swipeRef.current.captured = true;
+                                                    setReplySwipeLocked(true);
                                                 }
                                                 e.preventDefault();
-                                                setDragState({ id: m.id, x: Math.max(-72, Math.min(0, dx)), active: true });
+                                                setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
                                             }}
                                             onTouchEnd={(e) => {
                                                 if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
@@ -1320,7 +1323,7 @@ export function ChatRoom({
                                                 const dx = t.clientX - swipeRef.current.startX;
                                                 const dy = t.clientY - swipeRef.current.startY;
                                                 if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
-                                                if (dx < -60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
+                                                if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
                                                 resetDrag(m.id);
                                                 swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
                                             }}
@@ -1356,6 +1359,7 @@ export function ChatRoom({
                                                     cursor: 'pointer',
                                                     transform: `translateX(${dragX}px)`,
                                                     transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 180ms ease-out',
+                                                    touchAction: dragActive ? 'none' : 'auto',
                                                     boxShadow: isHighlighted
                                                         ? '0 0 0 3px rgba(245, 158, 11, 0.4)'
                                                         : isMenuActive
