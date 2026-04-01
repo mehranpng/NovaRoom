@@ -109,6 +109,41 @@ type GroupMember = {
     online?: boolean;
 };
 
+// ── Optimistic reaction helpers ──────────────────────────────────────────────
+type ReactionEntry = { emoji: string; count: number; userIds: string[] };
+
+function applyOptimisticReact(
+    reactions: ReactionEntry[] | undefined,
+    userId: string,
+    emoji: string,
+): ReactionEntry[] {
+    const base: ReactionEntry[] = (reactions || []).map((r) => ({ ...r, userIds: [...r.userIds] }));
+    // remove existing reaction by this user from any emoji
+    base.forEach((r) => {
+        const idx = r.userIds.indexOf(userId);
+        if (idx !== -1) { r.userIds.splice(idx, 1); r.count = Math.max(0, r.count - 1); }
+    });
+    // add new reaction
+    const existing = base.find((r) => r.emoji === emoji);
+    if (existing) { existing.userIds.push(userId); existing.count += 1; }
+    else base.push({ emoji, count: 1, userIds: [userId] });
+    // remove entries with count 0
+    return base.filter((r) => r.count > 0);
+}
+
+function applyOptimisticDeleteReaction(
+    reactions: ReactionEntry[] | undefined,
+    userId: string,
+): ReactionEntry[] {
+    const base: ReactionEntry[] = (reactions || []).map((r) => ({ ...r, userIds: [...r.userIds] }));
+    base.forEach((r) => {
+        const idx = r.userIds.indexOf(userId);
+        if (idx !== -1) { r.userIds.splice(idx, 1); r.count = Math.max(0, r.count - 1); }
+    });
+    return base.filter((r) => r.count > 0);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function ChatRoom({
     chatId,
     contact,
@@ -150,6 +185,9 @@ export function ChatRoom({
 
     const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number }>(null);
     const [reactionMenu, setReactionMenu] = useState<null | { id: string; top: number; left: number }>(null);
+
+    // Optimistic reactions: messageId -> overridden reactions array
+    const [optimisticReactions, setOptimisticReactions] = useState<Record<string, ReactionEntry[]>>({});
 
     const menuRef = useRef<HTMLDivElement | null>(null);
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
@@ -514,19 +552,57 @@ export function ChatRoom({
         setMsgMenu(null);
     };
 
+    // ── FIX: Optimistic reaction update ──────────────────────────────────────
     const handleReact = async (messageId: string, emoji: string) => {
         setReactionMenu(null); setMsgMenu(null);
+        // find current reactions for this message
+        const msg = messages.find((m) => m.id === messageId);
+        const currentReactions = optimisticReactions[messageId] ?? (msg?.reactions as ReactionEntry[] | undefined);
+        // apply optimistic update immediately
+        setOptimisticReactions((prev) => ({
+            ...prev,
+            [messageId]: applyOptimisticReact(currentReactions, currentUserId, emoji),
+        }));
         try {
             await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, { method: 'POST', body: JSON.stringify({ emoji }) });
-        } catch (e) { console.error('Failed to react:', e); }
+        } catch (e) {
+            console.error('Failed to react:', e);
+            // rollback on error
+            setOptimisticReactions((prev) => {
+                const next = { ...prev };
+                delete next[messageId];
+                return next;
+            });
+        }
     };
 
     const handleDeleteReaction = async (messageId: string) => {
         setReactionMenu(null); setMsgMenu(null);
+        const msg = messages.find((m) => m.id === messageId);
+        const currentReactions = optimisticReactions[messageId] ?? (msg?.reactions as ReactionEntry[] | undefined);
+        // apply optimistic delete immediately
+        setOptimisticReactions((prev) => ({
+            ...prev,
+            [messageId]: applyOptimisticDeleteReaction(currentReactions, currentUserId),
+        }));
         try {
             await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, { method: 'DELETE' });
-        } catch (e) { console.error('Failed to delete reaction:', e); }
+        } catch (e) {
+            console.error('Failed to delete reaction:', e);
+            // rollback on error
+            setOptimisticReactions((prev) => {
+                const next = { ...prev };
+                delete next[messageId];
+                return next;
+            });
+        }
     };
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Clear optimistic reactions when server messages update (server is source of truth)
+    useEffect(() => {
+        setOptimisticReactions({});
+    }, [messages]);
 
     const handleForwardMessage = async (targetChatId: string) => {
         if (!forwardingMessageId) return;
@@ -599,6 +675,7 @@ export function ChatRoom({
         setMsgMenu(null); setReactionMenu(null);
         setText(''); setUploadedFile(null);
         setUnreadAnchorId(null);
+        setOptimisticReactions({});
 
         setDisplayUnreadCount(initialUnreadCount);
         autoJumpedToUnreadRef.current = false;
@@ -1096,7 +1173,11 @@ export function ChatRoom({
                                             {/* خروج از گروه — همه کاربران */}
                                             <button
                                                 className="popover__item popover__item--danger"
-                                                onClick={() => { setConfirmLeaveGroup(true); setChatMenuOpen(false); }}
+                                                onClick={() => {
+                                                    // FIX: defer closing menu so onDocClick doesn't cancel the modal
+                                                    setConfirmLeaveGroup(true);
+                                                    setTimeout(() => setChatMenuOpen(false), 0);
+                                                }}
                                                 type="button"
                                             >
                                                 <LogOut size={16} />
@@ -1106,7 +1187,11 @@ export function ChatRoom({
                                             {isVerifiedUser && (
                                                 <button
                                                     className="popover__item popover__item--danger"
-                                                    onClick={() => { setConfirmDeleteChat(true); setChatMenuOpen(false); }}
+                                                    onClick={() => {
+                                                        // FIX: defer closing menu so onDocClick doesn't cancel the modal
+                                                        setConfirmDeleteChat(true);
+                                                        setTimeout(() => setChatMenuOpen(false), 0);
+                                                    }}
                                                     type="button"
                                                 >
                                                     <Trash2 size={16} />
@@ -1117,7 +1202,11 @@ export function ChatRoom({
                                     ) : (
                                         <button
                                             className="popover__item popover__item--danger"
-                                            onClick={() => { setConfirmDeleteChat(true); setChatMenuOpen(false); }}
+                                            onClick={() => {
+                                                // FIX: defer closing menu so onDocClick doesn't cancel the modal
+                                                setConfirmDeleteChat(true);
+                                                setTimeout(() => setChatMenuOpen(false), 0);
+                                            }}
                                             type="button"
                                         >
                                             <Trash2 size={16} />
@@ -1141,6 +1230,9 @@ export function ChatRoom({
                                 const showUnreadSeparator = Boolean(unreadAnchorId && unreadAnchorId === m.id);
 
                                 const isMenuActive = Boolean(msgMenu && msgMenu.id === m.id);
+
+                                // FIX: use optimistic reactions if available, fallback to server data
+                                const effectiveReactions = optimisticReactions[m.id] ?? m.reactions;
 
                                 return (
                                     <div key={m.id}>
@@ -1290,9 +1382,9 @@ export function ChatRoom({
                                                 {m.text && <div className="message-text">{m.text}</div>}
                                                 {m.file && <FileMessage file={m.file} token={token} />}
 
-                                                {m.reactions && m.reactions.length > 0 && (
+                                                {effectiveReactions && effectiveReactions.length > 0 && (
                                                     <div className="message-reactions">
-                                                        {m.reactions.map((reaction: any, idx: number) => {
+                                                        {effectiveReactions.map((reaction: any, idx: number) => {
                                                             const userIds = reaction.userIds || [];
                                                             const isMyReaction = userIds.includes(currentUserId);
                                                             return (
