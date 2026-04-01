@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, Users, Link as LinkIcon, X, Copy, CheckCheck } from 'lucide-react';
+import { motion, type Variants } from "framer-motion";
 import { apiFetch } from '../config/api';
 import { type User } from '../types';
 import { Avatar } from './Avatar';
@@ -130,6 +131,13 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
 
     const isVerified = Boolean(currentUser?.verified);
 
+
+    const toastVariants: Variants = {
+        hidden: { opacity: 0, scale: 0.9 },
+        visible: { opacity: 1, scale: 1, transition: { duration: 0.2 } },
+        exit: { opacity: 0, scale: 0.6, transition: { duration: 0.2 } },
+    };
+
     return (
         <div
             className="modal-overlay"
@@ -141,7 +149,13 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
                 }
             }}
         >
-            <div className="new-chat-modal">
+            <motion.div
+                className="new-chat-modal"
+                variants={toastVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+            >
                 <div className="modal-header">
                     <h2>گفتگوی جدید</h2>
                     <button onClick={onClose} className="icon-btn" aria-label="Close">
@@ -364,7 +378,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
                         </button>
                     </div>
                 )}
-            </div>
+            </motion.div>
         </div>
     );
 }

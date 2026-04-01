@@ -4,339 +4,340 @@
 
 /* File Upload Container */
 .file-upload-container {
-  display: flex;
-  align-items: center;
+    display: flex;
+    align-items: center;
 }
 
 .file-upload-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  border-radius: 12px;
-  padding: 8px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: 12px;
+    padding: 8px;
+    padding-bottom: 10px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
 }
 
 .file-upload-button:hover {
-  background: var(--hover-bg);
-  color: var(--text-primary);
+    background: var(--hover-bg);
+    color: var(--text-primary);
 }
 
 .file-upload-button:active {
-  transform: scale(0.95);
+    transform: scale(0.95);
 }
 
 .file-upload-button:disabled {
-  opacity: 0.55;
-  cursor: default;
+    opacity: 0.55;
+    cursor: default;
 }
 
 /* Ensure the upload progress can be positioned relative to the whole chat input row */
 .chat-room__input-wrapper {
-  position: relative;
-  overflow: visible;
+    position: relative;
+    overflow: visible;
 }
 
 /* Upload Progress (horizontal bar above chat input, mobile-friendly) */
 .file-upload-progress-inline {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  top: -6px;
-  height: 3px;
-  background: var(--border-secondary);
-  border-radius: 999px;
-  overflow: hidden;
-  z-index: 6;
-  pointer-events: none;
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    top: -6px;
+    height: 3px;
+    background: var(--border-secondary);
+    border-radius: 999px;
+    overflow: hidden;
+    z-index: 6;
+    pointer-events: none;
 }
 
 .file-upload-progress-inline__fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 0%;
-  background: linear-gradient(90deg, #3b82f6, #2563eb);
-  transition: width 0.2s ease;
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 0%;
+    background: linear-gradient(90deg, #3b82f6, #2563eb);
+    transition: width 0.2s ease;
 }
 
 @media (max-width: 640px) {
-  .file-upload-progress-inline {
-    left: 6px;
-    right: 6px;
-    top: -5px;
-    height: 2px;
-  }
+    .file-upload-progress-inline {
+        left: 6px;
+        right: 6px;
+        top: -5px;
+        height: 2px;
+    }
 }
 
 /* Upload Progress (legacy - kept for other usages if any) */
 .file-upload-progress {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--bg-tertiary);
-  border-radius: 12px;
-  max-width: 300px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border-radius: 12px;
+    max-width: 300px;
 }
 
 .file-upload-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
 .file-upload-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .file-upload-size {
-  font-size: 11px;
-  color: var(--text-secondary);
+    font-size: 11px;
+    color: var(--text-secondary);
 }
 
 .file-upload-bar {
-  position: relative;
-  width: 100%;
-  height: 4px;
-  background: var(--border-secondary);
-  border-radius: 2px;
-  overflow: hidden;
-  margin-top: 4px;
+    position: relative;
+    width: 100%;
+    height: 4px;
+    background: var(--border-secondary);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 4px;
 }
 
 .file-upload-bar-fill {
-  position: relative;
-  height: 100%;
-  background: linear-gradient(90deg, #3b82f6, #2563eb);
-  border-radius: 2px;
-  transition: width 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding-right: 4px;
+    position: relative;
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #2563eb);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 4px;
 }
 
 .file-upload-percentage {
-  position: absolute;
-  right: 4px;
-  top: -18px;
-  font-size: 10px;
-  font-weight: 600;
-  color: #3b82f6;
+    position: absolute;
+    right: 4px;
+    top: -18px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #3b82f6;
 }
 
 .file-upload-cancel {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  border-radius: 8px;
-  padding: 4px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.15s;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    padding: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
 }
 
 .file-upload-cancel:hover {
-  background: var(--hover-bg);
-  color: #dc2626;
+    background: var(--hover-bg);
+    color: #dc2626;
 }
 
 /* File Message Display */
 .file-message {
-  margin-top: 8px;
+    margin-top: 8px;
 }
 
 /* File Attachment (non-image files) */
 .file-attachment {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  background: rgba(0, 0, 0, 0.05);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-  max-width: 280px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    max-width: 280px;
 }
 
 .dark-mode .file-attachment {
-  background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.05);
 }
 
 .file-attachment:hover {
-  background: rgba(0, 0, 0, 0.08);
-  transform: translateY(-1px);
+    background: rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
 }
 
 .dark-mode .file-attachment:hover {
-  background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .message-bubble--mine .file-attachment {
-  background: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.15);
 }
 
 .message-bubble--mine .file-attachment:hover {
-  background: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.25);
 }
 
 .file-icon {
-  font-size: 28px;
-  line-height: 1;
-  flex-shrink: 0;
+    font-size: 28px;
+    line-height: 1;
+    flex-shrink: 0;
 }
 
 .file-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
 .file-name {
-  font-size: 13px;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-primary);
-  direction: ltr;
-  text-align: left;
+    font-size: 13px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+    direction: ltr;
+    text-align: left;
 }
 
 .message-bubble--mine .file-name {
-  color: rgba(255, 255, 255, 0.95);
+    color: rgba(255, 255, 255, 0.95);
 }
 
 .file-size {
-  font-size: 11px;
-  color: var(--text-secondary);
+    font-size: 11px;
+    color: var(--text-secondary);
 }
 
 .message-bubble--mine .file-size {
-  color: rgba(255, 255, 255, 0.7);
+    color: rgba(255, 255, 255, 0.7);
 }
 
 .file-download-btn {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.05);
-  border: none;
-  border-radius: 8px;
-  padding: 6px;
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: all 0.15s;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.05);
+    border: none;
+    border-radius: 8px;
+    padding: 6px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s;
 }
 
 .dark-mode .file-download-btn {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
 }
 
 .file-download-btn:hover {
-  background: rgba(0, 0, 0, 0.1);
-  transform: scale(1.05);
+    background: rgba(0, 0, 0, 0.1);
+    transform: scale(1.05);
 }
 
 .dark-mode .file-download-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.15);
 }
 
 .message-bubble--mine .file-download-btn {
-  background: rgba(255, 255, 255, 0.2);
-  color: #ffffff;
+    background: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
 }
 
 .message-bubble--mine .file-download-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.3);
 }
 
 /* Image Preview */
 .file-image-preview {
-  position: relative;
-  max-width: 280px;
-  border-radius: 12px;
-  overflow: hidden;
-  cursor: pointer;
+    position: relative;
+    max-width: 280px;
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
 }
 
 .file-image-preview img {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-height: 400px;
-  object-fit: cover;
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 400px;
+    object-fit: cover;
 }
 
 .file-image-overlay {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  opacity: 0;
-  transition: opacity 0.15s;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    opacity: 0;
+    transition: opacity 0.15s;
 }
 
 .file-image-preview:hover .file-image-overlay {
-  opacity: 1;
+    opacity: 1;
 }
 
 .file-image-overlay .file-download-btn {
-  background: rgba(0, 0, 0, 0.6);
-  color: #ffffff;
-  backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0.6);
+    color: #ffffff;
+    backdrop-filter: blur(4px);
 }
 
 .file-image-overlay .file-download-btn:hover {
-  background: rgba(0, 0, 0, 0.8);
+    background: rgba(0, 0, 0, 0.8);
 }
 
 .file-audio-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  background: rgba(0, 0, 0, 0.05);
-  border-radius: 12px;
-  max-width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 12px;
+    max-width: 320px;
 }
 
 .message-bubble--mine .file-audio-card {
-  background: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.15);
 }
 
 .file-audio-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  direction: ltr;
-  text-align: left;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    direction: ltr;
+    text-align: left;
 }
 
 .message-bubble--mine .file-audio-title {
-  color: rgba(255,255,255,0.95);
+    color: rgba(255, 255, 255, 0.95);
 }
 
 .file-audio-player {
-  width: 100%;
-  height: 36px;
+    width: 100%;
+    height: 36px;
 }

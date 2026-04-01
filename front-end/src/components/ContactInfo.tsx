@@ -1,4 +1,5 @@
 import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Save, Image as ImageIcon, Trash2, RotateCcw, Users } from 'lucide-react';
+import { motion, type Variants } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
@@ -45,7 +46,6 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
         return Boolean((user as any)?.isGroup) || chatId.startsWith('grp_') || (un ? isInviteLink(un) : false);
     }, [user]);
 
-    // bio "گروه" رو نشون نده
     const displayBio = bio === 'گروه' ? '' : bio;
 
     useEffect(() => {
@@ -111,7 +111,6 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
             const fileId = extractUploadedFileId(res);
             if (!fileId) throw new Error('Invalid upload response');
 
-            // فقط fileId ذخیره می‌شه تا Avatar از /files/{fileId} لود کنه
             setGroupAvatar(fileId);
             setAvatarTouched(true);
         } catch (e) {
@@ -155,8 +154,19 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
     const canRemoveAvatar = Boolean(previewAvatar);
     const isAvatarRemoved = avatarTouched && !groupAvatar && Boolean(originalAvatar);
 
+    const toastVariants: Variants = {
+        hidden: { scale: 0.9, opacity: 0, },
+        visible: { scale: 1, opacity: 1, transition: { duration: 0.2 } },
+    };
+
     return (
-        <div className="contact-info">
+        <motion.div
+            className="contact-info"
+            variants={toastVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+        >
             <div className="contact-info__header">
                 <button className="contact-info__back" onClick={onBack} aria-label="Back" type="button">
                     <ArrowLeft size={20} />
@@ -380,10 +390,6 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
                                         e.currentTarget.value = '';
                                     }}
                                 />
-
-                                <div style={{ fontSize: 12, color: 'var(--text-secondary, #bbb)' }}>
-                                    عکس بعد از انتخاب، روی سرور آپلود می‌شود؛ سپس «ذخیره» را بزن.
-                                </div>
                             </div>
 
                             {error && (
@@ -528,7 +534,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
 
                 {!isGroup && user.registrationDate && (
                     <div className="contact-info__card">
-                        <div className="contact-info__label">تاریخ ساخت اکانت</div>
+                        <div className="contact-info__label">تاریخ عضویت</div>
                         <div className="contact-info__mono" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Calendar size={16} style={{ opacity: 0.7 }} />
                             {user.registrationDate}
@@ -536,6 +542,6 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
                     </div>
                 )}
             </div>
-        </div>
+        </motion.div>
     );
 }

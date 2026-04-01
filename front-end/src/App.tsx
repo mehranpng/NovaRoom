@@ -706,7 +706,7 @@ export function App() {
         if (currentUser && activeChatId === `saved_messages_${currentUser.chatId}`) {
             return {
                 chatId: 'saved',
-                name: 'پیام\u007fهای ذخیره شده',
+                name: 'پیام‌های ذخیره شده',
                 username: 'saved',
                 bio: '',
                 avatar: '',

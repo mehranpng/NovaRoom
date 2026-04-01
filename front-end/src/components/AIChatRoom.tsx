@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { ArrowDown, ArrowLeft, Copy, Forward, Check } from 'lucide-react';
+import { motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
@@ -371,8 +372,20 @@ export function AIChatRoom({
 
     const activeMsg = msgMenu ? messages.find((m) => m.id === msgMenu.id) : null;
 
+    const toastVariants: Variants = {
+        hidden: { opacity: 0, },
+        visible: { opacity: 1, transition: { duration: 0.2 } },
+        exit: { opacity: 0, transition: { duration: 0.2 } },
+    };
+
     return (
-        <div className="chat-room" style={{ position: 'relative' }} ref={roomRef}>
+        <motion.div
+            className="chat-room" style={{ position: 'relative' }} ref={roomRef}
+            variants={toastVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+        >
             <div className="chat-room__header">
                 <button
                     className="chat-room__back-btn"
@@ -620,6 +633,6 @@ export function AIChatRoom({
                     40% { transform: scale(1.2); opacity: 1; }
                 }
             `}</style>
-        </div>
+        </motion.div>
     );
 }

@@ -188,7 +188,6 @@ export function Avatar({ name, size = 'md', online, savedMessages = false, src =
           {getInitials(name)}
         </div>
       )}
-      {/* dot status فقط زمانی رندر می‌شه که online صریحاً true یا false پاس شده باشه */}
       {online === true && (
         <span className="avatar__status avatar__status--online" />
       )}

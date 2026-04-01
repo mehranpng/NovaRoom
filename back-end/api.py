@@ -68,7 +68,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 7
 
 client = AsyncIOMotorClient(os.getenv("MONGO_DB"))
-db = client["Messenger2"]
+db = client["Messenger"]
 cl_users = db["users"]
 cl_chats = db["chats"]
 cl_messages = db["messages"]
@@ -84,8 +84,6 @@ VALID_REACTIONS = ["👍", "👎", "🤣", "😢", "❤️", "💔", "😐"]
 
 # Pin settings
 MAX_PINNED_CHATS = 20
-
-# Official channel ID
 
 
 def utc_now() -> datetime:
@@ -273,7 +271,7 @@ def build_group_invite_link(invite_code: str) -> str:
 
 
 def _get_pinned_from_user_doc(user: dict) -> List[str]:
-    ids = (((user or {}).get("settings") or {}).get("pinnedChatIds") or [])
+    ids = ((user or {}).get("settings") or {}).get("pinnedChatIds") or []
     if not isinstance(ids, list):
         return []
 
@@ -296,7 +294,9 @@ def _user_can_pin_chat(user_id: str, chat_id: str) -> bool:
     if chat_id == get_saved_messages_id(user_id):
         return True
     # Allow only real chat ids.
-    return isinstance(chat_id, str) and (chat_id.startswith("chat_") or chat_id.startswith("grp_"))
+    return isinstance(chat_id, str) and (
+        chat_id.startswith("chat_") or chat_id.startswith("grp_")
+    )
 
 
 @app.on_event("startup")
@@ -343,7 +343,12 @@ async def pin_chat(chat_id: str, current_user: dict = Depends(get_current_user))
 
     await cl_users.update_one(
         {"chatId": user_id},
-        {"$set": {"settings.pinnedChatIds": pinned, "settings.pinnedUpdatedAt": utc_now()}},
+        {
+            "$set": {
+                "settings.pinnedChatIds": pinned,
+                "settings.pinnedUpdatedAt": utc_now(),
+            }
+        },
     )
 
     user = await cl_users.find_one({"chatId": user_id}, {"settings": 1})
@@ -362,7 +367,12 @@ async def unpin_chat(chat_id: str, current_user: dict = Depends(get_current_user
 
     await cl_users.update_one(
         {"chatId": user_id},
-        {"$set": {"settings.pinnedChatIds": pinned, "settings.pinnedUpdatedAt": utc_now()}},
+        {
+            "$set": {
+                "settings.pinnedChatIds": pinned,
+                "settings.pinnedUpdatedAt": utc_now(),
+            }
+        },
     )
 
     user = await cl_users.find_one({"chatId": user_id}, {"settings": 1})
@@ -688,7 +698,7 @@ async def search_users(
     current_user: dict = Depends(get_current_user),
 ):
     q = (query or "").strip()
-    if q.startswith("@"):  # support telegram-like input
+    if q.startswith("@"):
         q = q.lstrip("@")
 
     users = (
@@ -744,13 +754,19 @@ async def create_or_get_chat(
 
 
 @app.post("/groups")
-async def create_group(req: GroupCreateRequest, current_user: dict = Depends(get_current_user)):
+async def create_group(
+    req: GroupCreateRequest, current_user: dict = Depends(get_current_user)
+):
     if not bool(current_user.get("verified", False)):
-        raise HTTPException(status_code=403, detail="Only verified users can create groups")
+        raise HTTPException(
+            status_code=403, detail="Only verified users can create groups"
+        )
 
     name = (req.name or "").strip()
     if len(name) < 3:
-        raise HTTPException(status_code=400, detail="Group name must be at least 3 characters")
+        raise HTTPException(
+            status_code=400, detail="Group name must be at least 3 characters"
+        )
     if len(name) > 64:
         raise HTTPException(status_code=400, detail="Group name is too long")
 
@@ -783,12 +799,16 @@ async def create_group(req: GroupCreateRequest, current_user: dict = Depends(get
 
 
 @app.post("/groups/join")
-async def join_group(req: GroupJoinRequest, current_user: dict = Depends(get_current_user)):
+async def join_group(
+    req: GroupJoinRequest, current_user: dict = Depends(get_current_user)
+):
     invite_code = (req.inviteCode or "").strip()
     if not invite_code:
         raise HTTPException(status_code=400, detail="Invite code is required")
 
-    group_chat = await cl_chats.find_one({"inviteCode": invite_code, "chatType": "group"})
+    group_chat = await cl_chats.find_one(
+        {"inviteCode": invite_code, "chatType": "group"}
+    )
     if not group_chat:
         raise HTTPException(status_code=404, detail="Group not found")
 
@@ -843,9 +863,15 @@ async def leave_group(chat_id: str, current_user: dict = Depends(get_current_use
 
 
 @app.put("/groups/{chat_id}")
-async def update_group(chat_id: str, req: GroupUpdateRequest, current_user: dict = Depends(get_current_user)):
+async def update_group(
+    chat_id: str,
+    req: GroupUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+):
     if not bool(current_user.get("verified", False)):
-        raise HTTPException(status_code=403, detail="Only verified users can update groups")
+        raise HTTPException(
+            status_code=403, detail="Only verified users can update groups"
+        )
 
     my_id = current_user["chatId"]
 
@@ -864,7 +890,9 @@ async def update_group(chat_id: str, req: GroupUpdateRequest, current_user: dict
     if req.name is not None:
         name = (req.name or "").strip()
         if len(name) < 3:
-            raise HTTPException(status_code=400, detail="Group name must be at least 3 characters")
+            raise HTTPException(
+                status_code=400, detail="Group name must be at least 3 characters"
+            )
         if len(name) > 64:
             raise HTTPException(status_code=400, detail="Group name is too long")
         update_data["groupName"] = name
@@ -934,7 +962,9 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
 
     for chat in chats:
         is_group = chat.get("chatType") == "group"
-        other_id = next((pid for pid in chat.get("participants", []) if pid != my_id), None)
+        other_id = next(
+            (pid for pid in chat.get("participants", []) if pid != my_id), None
+        )
         other_user = user_by_id.get(other_id) if (other_id and not is_group) else None
 
         last_msg = chat.get("lastMessage")
@@ -950,14 +980,60 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                 "participantIds": chat.get("participants", []),
                 "chatType": "group" if is_group else "direct",
                 "otherUser": {
-                    "chatId": (chat["_id"] if is_group else (other_user.get("chatId") if other_user else (other_id or ""))),
-                    "name": (chat.get("groupName") or "گروه") if is_group else (other_user["profile"]["name"] if other_user else "Unknown"),
-                    "avatar": (chat.get("groupAvatar") or "") if is_group else (other_user["profile"]["avatar"] if other_user else ""),
-                    "username": build_group_invite_link(chat.get("inviteCode", "")) if is_group else (other_user["profile"]["username"] if other_user else (other_id or "")),
-                    "bio": ("گروه" if is_group else (other_user["profile"]["bio"] if other_user else "")),
-                    "online": False if is_group else (other_user.get("online", False) if other_user else False),
-                    "verified": False if is_group else (bool(other_user.get("verified", False)) if other_user else False),
-                    "registrationDate": None if is_group else (other_user.get("registrationDate") if other_user else None),
+                    "chatId": (
+                        chat["_id"]
+                        if is_group
+                        else (
+                            other_user.get("chatId") if other_user else (other_id or "")
+                        )
+                    ),
+                    "name": (
+                        (chat.get("groupName") or "گروه")
+                        if is_group
+                        else (
+                            other_user["profile"]["name"] if other_user else "Unknown"
+                        )
+                    ),
+                    "avatar": (
+                        (chat.get("groupAvatar") or "")
+                        if is_group
+                        else (other_user["profile"]["avatar"] if other_user else "")
+                    ),
+                    "username": (
+                        build_group_invite_link(chat.get("inviteCode", ""))
+                        if is_group
+                        else (
+                            other_user["profile"]["username"]
+                            if other_user
+                            else (other_id or "")
+                        )
+                    ),
+                    "bio": (
+                        "گروه"
+                        if is_group
+                        else (other_user["profile"]["bio"] if other_user else "")
+                    ),
+                    "online": (
+                        False
+                        if is_group
+                        else (other_user.get("online", False) if other_user else False)
+                    ),
+                    "verified": (
+                        False
+                        if is_group
+                        else (
+                            bool(other_user.get("verified", False))
+                            if other_user
+                            else False
+                        )
+                    ),
+                    "registrationDate": (
+                        None
+                        if is_group
+                        else (
+                            other_user.get("registrationDate") if other_user else None
+                        )
+                    ),
                     "isGroup": is_group,
                 },
                 "lastMessage": last_msg,
@@ -1031,7 +1107,9 @@ async def get_chat_stats(chat_id: str, current_user: dict = Depends(get_current_
 
 
 @app.get("/chats/{chat_id}/members")
-async def get_chat_members(chat_id: str, current_user: dict = Depends(get_current_user)):
+async def get_chat_members(
+    chat_id: str, current_user: dict = Depends(get_current_user)
+):
     my_id = current_user["chatId"]
     chat = await cl_chats.find_one({"_id": chat_id})
     if not chat:
@@ -1045,15 +1123,19 @@ async def get_chat_members(chat_id: str, current_user: dict = Depends(get_curren
     result = []
     for u in users:
         profile = u.get("profile", {})
-        result.append({
-            "chatId": u.get("chatId", ""),
-            "name": profile.get("name") or profile.get("username") or u.get("chatId", ""),
-            "username": profile.get("username", ""),
-            "avatar": profile.get("avatar", ""),
-            "bio": profile.get("bio", ""),
-            "verified": u.get("verified", False),
-            "online": u.get("online", False),
-        })
+        result.append(
+            {
+                "chatId": u.get("chatId", ""),
+                "name": profile.get("name")
+                or profile.get("username")
+                or u.get("chatId", ""),
+                "username": profile.get("username", ""),
+                "avatar": profile.get("avatar", ""),
+                "bio": profile.get("bio", ""),
+                "verified": u.get("verified", False),
+                "online": u.get("online", False),
+            }
+        )
     return result
 
 
@@ -1075,8 +1157,12 @@ async def delete_chat(chat_id: str, current_user: dict = Depends(get_current_use
         raise HTTPException(status_code=403, detail="Not allowed")
 
     # For groups, only verified users can delete the whole group.
-    if chat.get("chatType") == "group" and not bool(current_user.get("verified", False)):
-        raise HTTPException(status_code=403, detail="Only verified users can delete groups")
+    if chat.get("chatType") == "group" and not bool(
+        current_user.get("verified", False)
+    ):
+        raise HTTPException(
+            status_code=403, detail="Only verified users can delete groups"
+        )
 
     # Delete associated files
     messages = await cl_messages.find({"chatId": chat_id}).to_list(None)
@@ -1182,8 +1268,6 @@ async def upload_file(
     file: UploadFile = FastAPIFile(...),
     current_user: dict = Depends(get_current_user),
 ):
-    """Upload a file (max 3MB)"""
-    # Read file content
     file_content = await file.read()
 
     # Validate size
@@ -1213,7 +1297,6 @@ async def download_file(
     file_id: str,
     current_user: dict = Depends(get_current_user),
 ):
-    """Download a file"""
     # Validate file exists
     if not validate_file_access(file_id):
         raise HTTPException(status_code=404, detail="File not found")
@@ -1362,7 +1445,6 @@ async def remove_reaction(
 async def forward_message(
     req: ForwardMessageRequest, current_user: dict = Depends(get_current_user)
 ):
-    """Forward a message to another chat (supports regular, AI, and official channel messages)"""
     user_id = current_user["chatId"]
     message_id = req.messageId
     target_chat_id = req.targetChatId
@@ -1635,7 +1717,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 is_saved = chat_id_target == saved_chat_id
 
                 if not is_saved:
-                    chat_doc = await cl_chats.find_one({"_id": chat_id_target}, {"participants": 1})
+                    chat_doc = await cl_chats.find_one(
+                        {"_id": chat_id_target}, {"participants": 1}
+                    )
                     participants = chat_doc.get("participants", []) if chat_doc else []
                     if chat_id not in participants:
                         continue
@@ -1740,7 +1824,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 saved_chat_id = get_saved_messages_id(chat_id)
                 is_saved = chat_id_target == saved_chat_id
                 if not is_saved:
-                    chat_doc = await cl_chats.find_one({"_id": chat_id_target}, {"participants": 1})
+                    chat_doc = await cl_chats.find_one(
+                        {"_id": chat_id_target}, {"participants": 1}
+                    )
                     if not chat_doc or chat_id not in chat_doc.get("participants", []):
                         continue
 
@@ -1808,14 +1894,18 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     continue
 
                 if msg.get("senderId") != chat_id:
-                    requester = await cl_users.find_one({"chatId": chat_id}, {"verified": 1})
+                    requester = await cl_users.find_one(
+                        {"chatId": chat_id}, {"verified": 1}
+                    )
                     if not requester or not bool(requester.get("verified", False)):
                         continue
 
                 saved_chat_id = get_saved_messages_id(chat_id)
                 is_saved = chat_id_target == saved_chat_id
                 if not is_saved:
-                    chat_doc = await cl_chats.find_one({"_id": chat_id_target}, {"participants": 1})
+                    chat_doc = await cl_chats.find_one(
+                        {"_id": chat_id_target}, {"participants": 1}
+                    )
                     if not chat_doc or chat_id not in chat_doc.get("participants", []):
                         continue
 
@@ -1977,8 +2067,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 history_docs = (
                     await cl_ai_messages.find({"userId": user_id})
                     .sort("timestamp", -1)
-                    .limit(20)
-                    .to_list(20)
+                    .limit(2)
+                    .to_list(2)
                 )
                 history_docs.reverse()
 
@@ -2069,7 +2159,6 @@ async def delete_ai_message(
     await cl_ai_messages.delete_one({"_id": oid})
 
     return {"success": True, "message": "Message deleted successfully"}
-
 
 if __name__ == "__main__":
     import uvicorn

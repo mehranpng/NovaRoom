@@ -245,7 +245,6 @@ function safeJsonParse<T>(value: string | null): T | null {
     }
 }
 
-/** هر مقداری غیر از false / 0 / "false" / null / undefined رو verified حساب می‌کنیم */
 function resolveVerified(val: any): boolean {
     if (val === null || val === undefined) return false;
     if (val === false || val === 0 || val === 'false' || val === '0') return false;
@@ -254,7 +253,7 @@ function resolveVerified(val: any): boolean {
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const token = localStorage.getItem('token');
-    const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}${path}`, {
+    const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://png.runflare.run'}${path}`, {
         ...init,
         headers: {
             'Content-Type': 'application/json',

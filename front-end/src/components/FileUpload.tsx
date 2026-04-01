@@ -22,7 +22,7 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
 
         // Validate file size
         if (!validateFileSize(file.size)) {
-            alert('حجم فایل نباید بیشتر از ۳ مگابایت باشد');
+            alert('حجم فایل نباید بیشتر از ۱۰ مگابایت باشد');
             return;
         }
 

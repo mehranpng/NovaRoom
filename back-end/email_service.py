@@ -13,7 +13,6 @@ SMTP_PORT = 587
 EMAIL_SENDER = "novaroom@mailfa.com"
 APP_PASSWORD = "AyHQyuWKiX5zZsji"
 
-# In-memory storage for verification codes (in production, use Redis or database)
 verification_codes = {}
 password_reset_codes = {}
 
@@ -70,7 +69,6 @@ async def send_verification_email(email: str) -> Optional[str]:
     success = await send_email_async(email, subject, body)
 
     if success:
-        # Store code with expiration time (10 minutes)
         verification_codes[email] = {
             "code": code,
             "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
@@ -87,16 +85,13 @@ async def verify_code(email: str, code: str) -> bool:
 
     stored_data = verification_codes[email]
 
-    # Check if code is expired
     if datetime.now(timezone.utc) > stored_data["expires_at"]:
         del verification_codes[email]
         return False
 
-    # Check if code matches
     if stored_data["code"] != code:
         return False
 
-    # Code is valid, remove it
     del verification_codes[email]
     return True
 
@@ -124,7 +119,6 @@ async def send_password_reset_email(email: str) -> Optional[str]:
     success = await send_email_async(email, subject, body)
 
     if success:
-        # Store code with expiration time (10 minutes)
         password_reset_codes[email] = {
             "code": code,
             "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
@@ -141,16 +135,13 @@ async def verify_reset_code(email: str, code: str) -> bool:
 
     stored_data = password_reset_codes[email]
 
-    # Check if code is expired
     if datetime.now(timezone.utc) > stored_data["expires_at"]:
         del password_reset_codes[email]
         return False
 
-    # Check if code matches
     if stored_data["code"] != code:
         return False
 
-    # Don't delete yet - will be deleted after password is actually reset
     return True
 
 

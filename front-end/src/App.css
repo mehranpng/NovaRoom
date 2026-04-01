@@ -692,12 +692,17 @@ textarea {
 }
 
 .chat-room__contact-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+    display: flex;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.chat-room__contact-name-2 {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .chat-room__contact-status {
@@ -830,6 +835,7 @@ textarea {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--message-reply-text-secondary);
+  direction: rtl;
 }
 
 .message-bubble--theirs .message-reply-box {
@@ -851,6 +857,7 @@ textarea {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--message-reply-text-secondary-theirs);
+  direction: rtl;
 }
 
 .message-text {
@@ -1194,7 +1201,7 @@ textarea {
 .chat-room__input-area {
   border-top: 1px solid var(--border-primary);
   background: var(--bg-primary);
-  padding: 10px 12px 12px;
+  padding: 10px 12px 10px;
 }
 
 .chat-room__input-wrapper {
@@ -1277,7 +1284,7 @@ textarea {
   border: 1px solid var(--reply-box-border);
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: end;
   gap: 10px;
 }
 
@@ -1285,6 +1292,7 @@ textarea {
   font-size: 12px;
   font-weight: 700;
   color: var(--reply-box-text);
+  text-align: right;
 }
 
 .chat-room__reply-edit-box__text {
@@ -1441,6 +1449,7 @@ textarea {
   font-size: 22px;
   font-weight: 700;
   color: var(--text-primary);
+  text-align: center;
 }
 
 .contact-info__username {
@@ -1991,6 +2000,8 @@ textarea {
 .profile__groups-empty {
   font-size: 13px;
   color: var(--text-secondary);
+  direction: rtl;
+  text-align: left;
 }
 
 .profile__group-item {

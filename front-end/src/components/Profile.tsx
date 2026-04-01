@@ -1,4 +1,5 @@
 import { ArrowLeft, Copy, Check, Pencil, X, Save, Calendar, Upload, Trash2, Link2, Users } from 'lucide-react';
+import { motion, type Variants } from "framer-motion";
 import { useEffect, useRef, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
@@ -186,8 +187,19 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
     const canSave =
         isEditing && !!name.trim() && !!username.trim() && usernameStatus === 'available';
 
+    const toastVariants: Variants = {
+        hidden: { scale: 0.9, opacity: 0, },
+        visible: { scale: 1, opacity: 1, transition: { duration: 0.2 } },
+    };
+
     return (
-        <div className="profile">
+        <motion.div
+            className="profile"
+            variants={toastVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+        >
             {/* Header */}
             <div className="profile__header">
                 <button onClick={onBack} className="profile__header-back">
@@ -431,6 +443,6 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                     </div>
                 </div>
             </div>
-        </div>
+        </motion.div >
     );
 }
