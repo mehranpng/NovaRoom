@@ -1,4 +1,4 @@
-import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Save, Image as ImageIcon, Trash2, RotateCcw, Users } from 'lucide-react';
+import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Save, Image as ImageIcon, Trash2, RotateCcw } from 'lucide-react';
 import { motion, type Variants } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '../types';
@@ -20,7 +20,7 @@ function extractUploadedFileId(res: any): string {
     return String(file.fileId || file.id || file.file_id || file.path || '').trim();
 }
 
-export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: ContactInfoProps) {
+export function ContactInfo({ user, onBack, onOpenChat }: ContactInfoProps) {
     const [copied, setCopied] = useState(false);
     const [canEditGroup, setCanEditGroup] = useState(false);
     const [editingGroup, setEditingGroup] = useState(false);
@@ -29,6 +29,10 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
     const [avatarTouched, setAvatarTouched] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [membersLoading, setMembersLoading] = useState(false);
+    const [groupMembers, setGroupMembers] = useState<Array<{ chatId: string; name: string; username: string; avatar: string; online?: boolean }>>([]);
+    const [registrationDate, setRegistrationDate] = useState<string>('');
+    const [registrationLoading, setRegistrationLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
@@ -79,6 +83,74 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
             cancelled = true;
         };
     }, [isGroup]);
+
+    useEffect(() => {
+        let cancelled = false;
+        if (!isGroup || !user.chatId) {
+            setGroupMembers([]);
+            setMembersLoading(false);
+            return;
+        }
+        setMembersLoading(true);
+        apiFetch(`/chats/${encodeURIComponent(user.chatId)}/members`)
+            .then((res) => {
+                if (cancelled) return;
+                setGroupMembers(Array.isArray(res) ? res : []);
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setGroupMembers([]);
+            })
+            .finally(() => {
+                if (cancelled) return;
+                setMembersLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, [isGroup, user.chatId]);
+
+    useEffect(() => {
+        let cancelled = false;
+        if (isGroup) {
+            setRegistrationDate('');
+            setRegistrationLoading(false);
+            return;
+        }
+
+        if (user.registrationDate) {
+            setRegistrationDate(String(user.registrationDate));
+            setRegistrationLoading(false);
+            return;
+        }
+
+        const username = String(user.username || '').trim();
+        if (!username) {
+            setRegistrationDate('');
+            setRegistrationLoading(false);
+            return;
+        }
+
+        setRegistrationLoading(true);
+        apiFetch(`/users/search?q=${encodeURIComponent(username)}`)
+            .then((rows) => {
+                if (cancelled) return;
+                const list = Array.isArray(rows) ? rows : [];
+                const normalized = username.toLowerCase();
+                const exact = list.find((r: any) => String(r?.username || '').toLowerCase() === normalized)
+                    || list.find((r: any) => String(r?.chatId || '') === String(user.chatId || ''));
+                const resolved = exact?.registrationDate || '';
+                setRegistrationDate(String(resolved || ''));
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setRegistrationDate('');
+            })
+            .finally(() => {
+                if (cancelled) return;
+                setRegistrationLoading(false);
+            });
+
+        return () => { cancelled = true; };
+    }, [isGroup, user.chatId, user.username, user.registrationDate]);
 
     const handleCopy = () => {
         const un = (user.username || '').trim();
@@ -204,32 +276,39 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
                     )}
                 </div>
 
-                {isGroup && onOpenMembers && (
-                    <div className="contact-info__card" style={{ padding: 10 }}>
-                        <button
-                            type="button"
-                            onClick={onOpenMembers}
-                            style={{
-                                width: '100%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: 10,
-                                padding: '10px 12px',
-                                borderRadius: 12,
-                                border: '1px solid var(--border-primary)',
-                                background: 'var(--bg-secondary)',
-                                color: 'var(--text-primary, #fff)',
-                                cursor: 'pointer',
-                                fontSize: 14,
-                                fontWeight: 700,
-                                fontFamily: 'Vazir, sans-serif',
-                            }}
-                            aria-label="Open members list"
-                        >
-                            اعضا
-                            <Users size={18} />
-                        </button>
+                {isGroup && (
+                    <div className="contact-info__card">
+                        <div className="contact-info__label">اعضا</div>
+                        {membersLoading ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {[0, 1, 2, 3].map((idx) => (
+                                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--bg-secondary)', opacity: 0.7 }} />
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ height: 10, borderRadius: 8, background: 'var(--bg-secondary)', marginBottom: 6, opacity: 0.8 }} />
+                                            <div style={{ width: '60%', height: 9, borderRadius: 8, background: 'var(--bg-secondary)', opacity: 0.6 }} />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                {groupMembers.map((member) => (
+                                    <div key={member.chatId || member.username} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                        <Avatar name={member.name || member.username || 'کاربر'} size="sm" src={member.avatar || ''} online={Boolean(member.online)} />
+                                        <div style={{ minWidth: 0 }}>
+                                            <div style={{ fontSize: 13, color: 'var(--text-primary, #fff)' }}>{member.name || member.username || 'کاربر'}</div>
+                                            <div style={{ fontSize: 12, color: 'var(--text-secondary, #bbb)', direction: 'ltr' }}>
+                                                @{member.username || member.chatId}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                                {groupMembers.length === 0 && (
+                                    <div style={{ fontSize: 12, color: 'var(--text-secondary, #bbb)' }}>عضوی برای نمایش وجود ندارد</div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -532,13 +611,20 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
                     </div>
                 )}
 
-                {!isGroup && user.registrationDate && (
+                {!isGroup && (registrationLoading || registrationDate) && (
                     <div className="contact-info__card">
                         <div className="contact-info__label">تاریخ عضویت</div>
-                        <div className="contact-info__mono" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <Calendar size={16} style={{ opacity: 0.7 }} />
-                            {user.registrationDate}
-                        </div>
+                        {registrationLoading ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <div style={{ width: 16, height: 16, borderRadius: 4, background: 'var(--bg-secondary)', opacity: 0.7 }} />
+                                <div style={{ width: 120, height: 12, borderRadius: 8, background: 'var(--bg-secondary)', opacity: 0.8 }} />
+                            </div>
+                        ) : (
+                            <div className="contact-info__mono" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <Calendar size={16} style={{ opacity: 0.7 }} />
+                                {registrationDate}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
