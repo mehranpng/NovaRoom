@@ -227,10 +227,13 @@ export function ChatRoom({
     const [showMembersList, setShowMembersList] = useState(false);
     const [memberSearch, setMemberSearch] = useState('');
     const isAtBottomRef = useRef(true);
+    const [openingScrollLock, setOpeningScrollLock] = useState(false);
 
     const prevLenRef = useRef(0);
     const initialScrollDoneRef = useRef(false);
     const lastChatIdRef = useRef<string | null>(null);
+    const openingScrollLockRef = useRef(false);
+    const openingSettleTimerRef = useRef<number | null>(null);
 
     // Scroll memory: keep per-chat scroll position in memory until refresh.
     // IMPORTANT: only restore exact scrollTop if user actually scrolled in that chat (prevents "always open at top").
@@ -251,6 +254,26 @@ export function ChatRoom({
 
     const markProgrammaticScroll = () => {
         programmaticScrollEventsRef.current += 2;
+    };
+
+    const clearOpeningSettleTimer = () => {
+        if (openingSettleTimerRef.current) {
+            window.clearTimeout(openingSettleTimerRef.current);
+            openingSettleTimerRef.current = null;
+        }
+    };
+
+    const finishOpeningScrollLock = () => {
+        clearOpeningSettleTimer();
+        openingScrollLockRef.current = false;
+        setOpeningScrollLock(false);
+    };
+
+    const scheduleOpeningSettle = () => {
+        clearOpeningSettleTimer();
+        openingSettleTimerRef.current = window.setTimeout(() => {
+            finishOpeningScrollLock();
+        }, 140);
     };
 
     const scrollToBottom = (smooth = false) => {
@@ -671,6 +694,7 @@ export function ChatRoom({
         return () => {
             if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
             if (highlightRafRef.current) cancelAnimationFrame(highlightRafRef.current);
+            clearOpeningSettleTimer();
         };
     }, []);
 
@@ -701,6 +725,8 @@ export function ChatRoom({
         programmaticScrollEventsRef.current = 0;
         consumedInitialUnreadRef.current = false;
         userHasScrolledRef.current = false;
+        openingScrollLockRef.current = true;
+        setOpeningScrollLock(true);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
 
@@ -727,6 +753,44 @@ export function ChatRoom({
         settleToBottomIfNeeded();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId, loading, messages.length, displayUnreadCount]);
+
+    useEffect(() => {
+        if (!openingScrollLock) return;
+        if (loading) return;
+        const container = messagesContainerRef.current;
+        const inner = container?.querySelector('.chat-room__messages-inner');
+        if (!container || !inner) {
+            scheduleOpeningSettle();
+            return;
+        }
+
+        const shouldStickBottom =
+            !userHasScrolledRef.current &&
+            !shouldPreserveExactScroll() &&
+            displayUnreadCount <= 0;
+
+        if (!shouldStickBottom) {
+            scheduleOpeningSettle();
+            return;
+        }
+
+        const settleNow = () => {
+            if (!openingScrollLockRef.current) return;
+            scrollToBottom(false);
+            scheduleOpeningSettle();
+        };
+
+        settleNow();
+        const resizeObserver = new ResizeObserver(() => settleNow());
+        resizeObserver.observe(container);
+        resizeObserver.observe(inner);
+
+        return () => {
+            resizeObserver.disconnect();
+            clearOpeningSettleTimer();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [openingScrollLock, loading, chatId, displayUnreadCount, messages.length]);
 
     useEffect(() => {
         if (loading) return;
@@ -833,6 +897,7 @@ export function ChatRoom({
     const submit = () => {
         const t = text.trim();
         if (!t && !uploadedFile) return;
+        triggerHaptic();
         onSendMessage({ text: t || '', replyToId: replyTo?.id, editMessageId: editingId ?? undefined, file: uploadedFile ?? undefined });
         setText(''); setUploadedFile(null); setReplyTo(null); setEditingId(null);
         requestAnimationFrame(() => scrollToBottom(true));
@@ -917,10 +982,10 @@ export function ChatRoom({
         setMsgMenu(null);
     };
 
-    const beginReply = (m: Message) => {
+    const beginReply = (m: Message, withHaptic = false) => {
         setReplyTo({ id: m.id, senderId: m.senderId, text: m.text });
         setEditingId(null); setMsgMenu(null); setReactionMenu(null);
-        triggerHaptic();
+        if (withHaptic) triggerHaptic();
         setTimeout(() => textareaRef.current?.focus(), 0);
     };
 
@@ -1091,25 +1156,6 @@ export function ChatRoom({
         );
     }
 
-
-    const reactionMsg = reactionMenu ? messages.find((mm) => mm.id === reactionMenu.id) : null;
-
-    const reactionUsersList: { userId: string; emoji: string; name: string; avatar: string; verified: boolean }[] = [];
-    if (reactionMsg?.reactions && reactionMsg.reactions.length > 0) {
-        reactionMsg.reactions.forEach((r: any) => {
-            (r.userIds || []).forEach((uid: string) => {
-                const member = groupMembers[uid];
-                reactionUsersList.push({
-                    userId: uid,
-                    emoji: r.emoji,
-                    name: member?.name || uid,
-                    avatar: member?.avatar || '',
-                    verified: resolveVerified(member?.verified),
-                });
-            });
-        });
-    }
-
     const toastVariants: Variants = {
         hidden: { opacity: 0, },
         visible: { opacity: 1, transition: { duration: 0.3 } },
@@ -1231,9 +1277,19 @@ export function ChatRoom({
                     className="chat-room__messages"
                     ref={messagesContainerRef}
                     onScroll={onMessagesScroll}
+                    onPlayCapture={(e) => {
+                        const targetVideo = e.target instanceof HTMLVideoElement ? e.target : null;
+                        if (!targetVideo) return;
+                        const container = messagesContainerRef.current;
+                        if (!container) return;
+                        container.querySelectorAll('video').forEach((videoEl) => {
+                            if (videoEl !== targetVideo && !videoEl.paused) videoEl.pause();
+                        });
+                    }}
                     style={{
                         overflowX: replySwipeLocked ? 'hidden' : 'auto',
                         overflowY: replySwipeLocked ? 'hidden' : 'auto',
+                        visibility: openingScrollLock ? 'hidden' : 'visible',
                     }}
                 >
                     <div className="chat-room__messages-inner">
@@ -1292,7 +1348,7 @@ export function ChatRoom({
                                                 const dx = e.clientX - swipeRef.current.startX;
                                                 const dy = e.clientY - swipeRef.current.startY;
                                                 if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
-                                                if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
+                                                if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m, true);
                                                 resetDrag(m.id);
                                                 swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
                                             }}
@@ -1325,7 +1381,7 @@ export function ChatRoom({
                                                 const dx = t.clientX - swipeRef.current.startX;
                                                 const dy = t.clientY - swipeRef.current.startY;
                                                 if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
-                                                if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m);
+                                                if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m, true);
                                                 resetDrag(m.id);
                                                 swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
                                             }}
@@ -1472,13 +1528,15 @@ export function ChatRoom({
                     const reactionMsg = messages.find((mm) => mm.id === reactionMenu.id);
                     if (!reactionMsg) return null;
 
-                    const myReaction = reactionMsg?.reactions?.find((r: any) =>
+                    const reactionRows = optimisticReactions[reactionMsg.id] ?? reactionMsg.reactions ?? [];
+
+                    const myReaction = reactionRows.find((r: any) =>
                         r.userIds && Array.isArray(r.userIds) && r.userIds.includes(currentUserId)
                     );
 
                     const reactionUsersList: { userId: string; emoji: string; name: string; avatar: string; verified: boolean }[] = [];
-                    if (reactionMsg?.reactions && reactionMsg.reactions.length > 0) {
-                        reactionMsg.reactions.forEach((r: any) => {
+                    if (reactionRows.length > 0) {
+                        reactionRows.forEach((r: any) => {
                             (r.userIds || []).forEach((uid: string) => {
                                 const member = groupMembers[uid];
                                 reactionUsersList.push({
