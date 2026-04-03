@@ -65,6 +65,9 @@ export function App() {
     const [messagesLoadedOnce, setMessagesLoadedOnce] = useState<Record<string, boolean>>({});
     const [messagesLoading, setMessagesLoading] = useState<Record<string, boolean>>({});
 
+    const sendSoundRef = useRef<HTMLAudioElement | null>(null);
+    const receiveSoundRef = useRef<HTMLAudioElement | null>(null);
+
     // When user is selected from search, we open the room but do NOT create the chat
     // until the first message is sent.
     const [pendingUser, setPendingUser] = useState<User | null>(null);
@@ -80,6 +83,28 @@ export function App() {
     const viewRef = useRef<View>('chatList');
     useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
     useEffect(() => { viewRef.current = view; }, [view]);
+
+    useEffect(() => {
+        sendSoundRef.current = new Audio('/sounds/send.mp3');
+        receiveSoundRef.current = new Audio('/sounds/receive.mp3');
+
+        return () => {
+            sendSoundRef.current = null;
+            receiveSoundRef.current = null;
+        };
+    }, []);
+
+    const playChatSound = useCallback((kind: 'send' | 'receive') => {
+        if (viewRef.current !== 'chatRoom' || !activeChatIdRef.current) return;
+
+        const audio = kind === 'send' ? sendSoundRef.current : receiveSoundRef.current;
+        if (!audio) return;
+
+        audio.currentTime = 0;
+        audio.play().catch(() => {
+            // Ignore blocked autoplay errors.
+        });
+    }, []);
 
     // Track which group chats were freshly created this session so we can
     // keep them pinned at the top until they receive their first real message.
@@ -233,6 +258,10 @@ export function App() {
             const isActiveChat = activeChatIdRef.current === chatId && viewRef.current === 'chatRoom';
             const shouldIncrementUnread = isIncoming && !isActiveChat;
 
+            if (isIncoming && isActiveChat) {
+                playChatSound('receive');
+            }
+
             return prev.map(chat => {
                 if (chat.id !== chatId) return chat;
                 return {
@@ -247,7 +276,7 @@ export function App() {
                 };
             });
         });
-    }, [currentUser?.chatId, loadChats]);
+    }, [currentUser?.chatId, loadChats, playChatSound]);
 
     const handleMessageEdited = useCallback((chatId: string, updated: Message) => {
         setMessages(prev => {
@@ -472,6 +501,7 @@ export function App() {
         if (activeChatId === savedMessagesId) {
             const success = sendViaWS(savedMessagesId, text, payload.replyToId, payload.file);
             if (!success) console.warn('WebSocket not connected');
+            if (success) playChatSound('send');
             loadChats(false);
             return;
         }
@@ -504,6 +534,7 @@ export function App() {
 
                 const success = sendViaWS(createdChatId, text, payload.replyToId, payload.file);
                 if (!success) console.warn('WebSocket not connected');
+                if (success) playChatSound('send');
 
                 loadChats(false);
                 return;
@@ -524,7 +555,8 @@ export function App() {
 
         const success = sendViaWS(activeChatId, text, payload.replyToId, payload.file);
         if (!success) console.warn('WebSocket not connected');
-    }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats]);
+        if (success) playChatSound('send');
+    }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, playChatSound]);
 
     const handleDeleteMessage = useCallback((messageId: string) => {
         if (!activeChatId) return;
