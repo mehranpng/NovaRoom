@@ -808,10 +808,21 @@ export function ChatRoom({
         if (showContactInfo || viewingMemberId || showMembersList) return;
         const mem = scrollMemoryRef.current[chatId];
         if (!mem) return;
-        const raf = requestAnimationFrame(() => {
-            restoreScroll(chatId);
-        });
-        return () => cancelAnimationFrame(raf);
+        const raf = requestAnimationFrame(() => restoreScroll(chatId));
+
+        // If user was at bottom, keep sticking to the real bottom for a short period.
+        // This fixes "a little above bottom" after late-loading media from ContactInfo route.
+        const timers = mem.atBottom
+            ? [60, 160, 320, 520, 820].map((delay) => window.setTimeout(() => {
+                if (shouldPreserveExactScroll()) return;
+                scrollToBottom(false);
+            }, delay))
+            : [];
+
+        return () => {
+            cancelAnimationFrame(raf);
+            timers.forEach((t) => window.clearTimeout(t));
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [showContactInfo, viewingMemberId, showMembersList, chatId]);
 
@@ -1193,7 +1204,6 @@ export function ChatRoom({
             animate="visible"
             exit="exit"
         >
-            <div className="chat-room" style={{ position: 'relative' }} ref={roomRef}>
                 <div className="chat-room__header">
                     <button className="chat-room__back-btn" onClick={() => { maybeSaveScroll(chatId); onBack(); }} aria-label="Back" type="button"><ArrowLeft size={20} /></button>
                     <button className="icon-btn chat-room__close-btn" onClick={() => { maybeSaveScroll(chatId); onCloseChat(); }} aria-label="Back to empty" type="button"><ArrowLeft size={20} /></button>
@@ -1566,25 +1576,27 @@ export function ChatRoom({
                             <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)' }}>
                                 دیده شده توسط ({rows.length})
                             </div>
-                            {rows.length === 0 ? (
-                                <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>
-                                    هنوز کسی این پیام را ندیده است
-                                </div>
-                            ) : (
-                                rows.map((u) => (
-                                    <button key={u.chatId} className="popover__item" type="button"
-                                        onClick={() => {
-                                            setSeenByMenu(null);
-                                            openMember(u.chatId);
-                                        }}>
-                                        <Avatar name={u.name || u.username || ''} src={u.avatar || ''} size="sm" />
-                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                            <span>{u.name || u.username || u.chatId}</span>
-                                            {resolveVerified(u.verified) && <VerifiedBadge size={13} />}
-                                        </span>
-                                    </button>
-                                ))
-                            )}
+                            <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                                {rows.length === 0 ? (
+                                    <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>
+                                        هنوز کسی این پیام را ندیده است
+                                    </div>
+                                ) : (
+                                    rows.map((u) => (
+                                        <button key={u.chatId} className="popover__item" type="button"
+                                            onClick={() => {
+                                                setSeenByMenu(null);
+                                                openMember(u.chatId);
+                                            }}>
+                                            <Avatar name={u.name || u.username || ''} src={u.avatar || ''} size="sm" />
+                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                <span>{u.name || u.username || u.chatId}</span>
+                                                {resolveVerified(u.verified) && <VerifiedBadge size={13} />}
+                                            </span>
+                                        </button>
+                                    ))
+                                )}
+                            </div>
                         </div>
                     );
                 })()}
@@ -1633,29 +1645,31 @@ export function ChatRoom({
                                         واکنش‌ها
                                         ({reactionUsersList.length})
                                     </div>
-                                    {reactionUsersList.map((ru, i) => (
-                                        <div key={i}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setReactionMenu(null);
-                                                openMember(ru.userId);
-                                            }}
-                                            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderTop: i > 0 ? '1px solid var(--border-primary)' : 'none', cursor: 'pointer', transition: 'background 0.12s' }}
-                                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary, rgba(0,0,0,0.04))')}
-                                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                                        >
-                                            <div style={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
-                                                <Avatar name={ru.name} size="xs" src={ru.avatar} />
+                                    <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                                        {reactionUsersList.map((ru, i) => (
+                                            <div key={i}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setReactionMenu(null);
+                                                    openMember(ru.userId);
+                                                }}
+                                                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderTop: i > 0 ? '1px solid var(--border-primary)' : 'none', cursor: 'pointer', transition: 'background 0.12s' }}
+                                                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary, rgba(0,0,0,0.04))')}
+                                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                            >
+                                                <div style={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
+                                                    <Avatar name={ru.name} size="xs" src={ru.avatar} />
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
+                                                    <span style={{ fontSize: 13, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {ru.name}
+                                                    </span>
+                                                    {ru.verified && <VerifiedBadge size={13} />}
+                                                </div>
+                                                <span style={{ fontSize: 18, flexShrink: 0 }}>{ru.emoji}</span>
                                             </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
-                                                <span style={{ fontSize: 13, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                    {ru.name}
-                                                </span>
-                                                {ru.verified && <VerifiedBadge size={13} />}
-                                            </div>
-                                            <span style={{ fontSize: 18, flexShrink: 0 }}>{ru.emoji}</span>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -1756,7 +1770,6 @@ export function ChatRoom({
                         </div>
                     </div>
                 )}
-            </div>
         </motion.div>
     );
 }
