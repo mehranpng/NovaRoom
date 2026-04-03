@@ -62,7 +62,7 @@ export function FileMessage({ file, token, onMediaLoad }: FileMessageProps) {
             cancelled = true;
             if (objectUrl) window.URL.revokeObjectURL(objectUrl);
         };
-    }, [file.fileId, token, isImage, onMediaLoad]);
+    }, [file.fileId, token, isImage]);
 
     useEffect(() => {
         if (!isAudio) return;
@@ -128,7 +128,7 @@ export function FileMessage({ file, token, onMediaLoad }: FileMessageProps) {
             cancelled = true;
             if (objectUrl) window.URL.revokeObjectURL(objectUrl);
         };
-    }, [file.fileId, isVideo, token, onMediaLoad]);
+    }, [file.fileId, isVideo, token]);
 
     const handleDownload = async () => {
         try {
