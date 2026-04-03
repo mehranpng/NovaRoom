@@ -228,12 +228,15 @@ export function ChatRoom({
     const [memberSearch, setMemberSearch] = useState('');
     const isAtBottomRef = useRef(true);
     const [openingScrollLock, setOpeningScrollLock] = useState(false);
+    const [pendingInitialMediaCount, setPendingInitialMediaCount] = useState(0);
 
     const prevLenRef = useRef(0);
     const initialScrollDoneRef = useRef(false);
     const lastChatIdRef = useRef<string | null>(null);
     const openingScrollLockRef = useRef(false);
     const openingSettleTimerRef = useRef<number | null>(null);
+    const openingLockFallbackTimerRef = useRef<number | null>(null);
+    const pendingInitialMediaIdsRef = useRef<Set<string>>(new Set());
 
     // Scroll memory: keep per-chat scroll position in memory until refresh.
     // IMPORTANT: only restore exact scrollTop if user actually scrolled in that chat (prevents "always open at top").
@@ -261,11 +264,17 @@ export function ChatRoom({
             window.clearTimeout(openingSettleTimerRef.current);
             openingSettleTimerRef.current = null;
         }
+        if (openingLockFallbackTimerRef.current) {
+            window.clearTimeout(openingLockFallbackTimerRef.current);
+            openingLockFallbackTimerRef.current = null;
+        }
     };
 
     const finishOpeningScrollLock = () => {
         clearOpeningSettleTimer();
         openingScrollLockRef.current = false;
+        pendingInitialMediaIdsRef.current.clear();
+        setPendingInitialMediaCount(0);
         setOpeningScrollLock(false);
     };
 
@@ -274,6 +283,16 @@ export function ChatRoom({
         openingSettleTimerRef.current = window.setTimeout(() => {
             finishOpeningScrollLock();
         }, 140);
+    };
+
+    const handleInitialMediaReady = (messageId: string) => {
+        if (!openingScrollLockRef.current) return;
+        if (!pendingInitialMediaIdsRef.current.has(messageId)) return;
+        pendingInitialMediaIdsRef.current.delete(messageId);
+        setPendingInitialMediaCount(pendingInitialMediaIdsRef.current.size);
+        if (pendingInitialMediaIdsRef.current.size === 0) {
+            scheduleOpeningSettle();
+        }
     };
 
     const scrollToBottom = (smooth = false) => {
@@ -725,6 +744,8 @@ export function ChatRoom({
         programmaticScrollEventsRef.current = 0;
         consumedInitialUnreadRef.current = false;
         userHasScrolledRef.current = false;
+        pendingInitialMediaIdsRef.current.clear();
+        setPendingInitialMediaCount(0);
         openingScrollLockRef.current = true;
         setOpeningScrollLock(true);
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -774,10 +795,31 @@ export function ChatRoom({
             return;
         }
 
+        const mediaIds = new Set(
+            messages
+                .filter((m) => {
+                    const mt = (m.file?.mimeType || '').toLowerCase();
+                    return Boolean(m.file && (mt.startsWith('image/') || mt.startsWith('video/')));
+                })
+                .map((m) => m.id)
+        );
+        pendingInitialMediaIdsRef.current = mediaIds;
+        setPendingInitialMediaCount(mediaIds.size);
+
+        if (mediaIds.size > 0) {
+            openingLockFallbackTimerRef.current = window.setTimeout(() => {
+                finishOpeningScrollLock();
+            }, 3500);
+        } else {
+            scheduleOpeningSettle();
+        }
+
         const settleNow = () => {
             if (!openingScrollLockRef.current) return;
             scrollToBottom(false);
-            scheduleOpeningSettle();
+            if (pendingInitialMediaIdsRef.current.size === 0) {
+                scheduleOpeningSettle();
+            }
         };
 
         settleNow();
@@ -790,7 +832,7 @@ export function ChatRoom({
             clearOpeningSettleTimer();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [openingScrollLock, loading, chatId, displayUnreadCount, messages.length]);
+    }, [openingScrollLock, loading, chatId, displayUnreadCount, messages]);
 
     useEffect(() => {
         if (loading) return;
@@ -1289,10 +1331,10 @@ export function ChatRoom({
                     style={{
                         overflowX: replySwipeLocked ? 'hidden' : 'auto',
                         overflowY: replySwipeLocked ? 'hidden' : 'auto',
-                        visibility: openingScrollLock ? 'hidden' : 'visible',
+                        position: 'relative',
                     }}
                 >
-                    <div className="chat-room__messages-inner">
+                    <div className="chat-room__messages-inner" style={{ visibility: openingScrollLock ? 'hidden' : 'visible' }}>
                         {loading ? <ChatMessagesSkeleton /> : (
                             items.map(({ m, isMine, dayBreak, shape }) => {
                                 const isHighlighted = highlightId === m.id;
@@ -1456,7 +1498,7 @@ export function ChatRoom({
                                                 )}
 
                                                 {m.text && <div className="message-text">{m.text}</div>}
-                                                {m.file && <FileMessage file={m.file} token={token} />}
+                                                {m.file && <FileMessage file={m.file} token={token} onMediaLoad={() => handleInitialMediaReady(m.id)} />}
 
                                                 {effectiveReactions && effectiveReactions.length > 0 && (
                                                     <div className="message-reactions">
@@ -1494,6 +1536,16 @@ export function ChatRoom({
                         )}
                         <div ref={messagesEndRef} />
                     </div>
+                    {openingScrollLock && (
+                        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }}>
+                            <ChatMessagesSkeleton />
+                            {pendingInitialMediaCount > 0 && (
+                                <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-secondary)', marginTop: 6, fontFamily: 'Vazir, sans-serif' }}>
+                                    در حال آماده‌سازی رسانه‌ها ({pendingInitialMediaCount})
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {msgMenu && (() => {

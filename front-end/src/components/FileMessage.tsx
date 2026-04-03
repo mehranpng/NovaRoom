@@ -49,7 +49,10 @@ export function FileMessage({ file, token, onMediaLoad }: FileMessageProps) {
                 }
             } catch (error) {
                 console.error('Failed to load image:', error);
-                if (!cancelled) setImageError(true);
+                if (!cancelled) {
+                    setImageError(true);
+                    onMediaLoad?.();
+                }
             } finally {
                 if (!cancelled) setImageLoading(false);
             }
@@ -59,7 +62,7 @@ export function FileMessage({ file, token, onMediaLoad }: FileMessageProps) {
             cancelled = true;
             if (objectUrl) window.URL.revokeObjectURL(objectUrl);
         };
-    }, [file.fileId, token, isImage]);
+    }, [file.fileId, token, isImage, onMediaLoad]);
 
     useEffect(() => {
         if (!isAudio) return;
@@ -112,7 +115,10 @@ export function FileMessage({ file, token, onMediaLoad }: FileMessageProps) {
                 }
             } catch (error) {
                 console.error('Failed to load video:', error);
-                if (!cancelled) setVideoError(true);
+                if (!cancelled) {
+                    setVideoError(true);
+                    onMediaLoad?.();
+                }
             } finally {
                 if (!cancelled) setVideoLoading(false);
             }
@@ -122,7 +128,7 @@ export function FileMessage({ file, token, onMediaLoad }: FileMessageProps) {
             cancelled = true;
             if (objectUrl) window.URL.revokeObjectURL(objectUrl);
         };
-    }, [file.fileId, isVideo, token]);
+    }, [file.fileId, isVideo, token, onMediaLoad]);
 
     const handleDownload = async () => {
         try {
