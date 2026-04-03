@@ -81,6 +81,7 @@ export function App() {
     // without needing to be re-created (avoids stale closure bug on unread badge).
     const activeChatIdRef = useRef<string | null>(null);
     const viewRef = useRef<View>('chatList');
+    const lastSeenAckMessageIdRef = useRef<Record<string, string>>({});
     useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
     useEffect(() => { viewRef.current = view; }, [view]);
 
@@ -492,6 +493,24 @@ export function App() {
 
         loadChats(false);
     }, [loadChats, sendSeen, messagesLoadedOnce, currentUser]);
+
+    useEffect(() => {
+        if (!activeChatId || !currentUser) return;
+        if (view !== 'chatRoom') return;
+        if (activeChatId === `saved_messages_${currentUser.chatId}`) return;
+
+        const activeMsgs = messages[activeChatId] || [];
+        if (!activeMsgs.length) return;
+
+        const lastMsg = activeMsgs[activeMsgs.length - 1];
+        if (!lastMsg || lastMsg.senderId === currentUser.chatId) return;
+
+        const ackKey = `${activeChatId}:${lastMsg.id}`;
+        if (lastSeenAckMessageIdRef.current[activeChatId] === ackKey) return;
+
+        lastSeenAckMessageIdRef.current[activeChatId] = ackKey;
+        sendSeen(activeChatId);
+    }, [messages, activeChatId, currentUser, view, sendSeen]);
 
     const handleSendMessage = useCallback(async (payload: { text: string; replyToId?: string; editMessageId?: string; file?: FileMetadata }) => {
         if (!currentUser) return;

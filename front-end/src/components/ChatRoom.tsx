@@ -1524,8 +1524,7 @@ export function ChatRoom({
                     if (!activeMsg) return null;
                     const activeMsgIsMine = activeMsg.senderId === currentUserId;
                     const canDeleteActiveMsg = activeMsgIsMine || (isGroupChat && isVerifiedUser);
-                    const seenByUsers = seenByUsersByMessage[activeMsg.id] || [];
-                    const showSeenByAction = isGroupChat && activeMsgIsMine && seenByUsers.length > 0;
+                    const showSeenByAction = isGroupChat && activeMsgIsMine;
 
                     return (
                         <div ref={msgMenuRef} className="popover popover--mini"
@@ -1559,7 +1558,6 @@ export function ChatRoom({
 
                 {seenByMenu && (() => {
                     const rows = seenByUsersByMessage[seenByMenu.id] || [];
-                    if (!rows.length) return null;
 
                     return (
                         <div ref={seenByMenuRef} className="popover popover--mini"
@@ -1568,19 +1566,25 @@ export function ChatRoom({
                             <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)' }}>
                                 دیده شده توسط ({rows.length})
                             </div>
-                            {rows.map((u) => (
-                                <button key={u.chatId} className="popover__item" type="button"
-                                    onClick={() => {
-                                        setSeenByMenu(null);
-                                        openMember(u.chatId);
-                                    }}>
-                                    <Avatar name={u.name || u.username || ''} src={u.avatar || ''} size="sm" />
-                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                        <span>{u.name || u.username || u.chatId}</span>
-                                        {resolveVerified(u.verified) && <VerifiedBadge size={13} />}
-                                    </span>
-                                </button>
-                            ))}
+                            {rows.length === 0 ? (
+                                <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>
+                                    هنوز کسی این پیام را ندیده است
+                                </div>
+                            ) : (
+                                rows.map((u) => (
+                                    <button key={u.chatId} className="popover__item" type="button"
+                                        onClick={() => {
+                                            setSeenByMenu(null);
+                                            openMember(u.chatId);
+                                        }}>
+                                        <Avatar name={u.name || u.username || ''} src={u.avatar || ''} size="sm" />
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                            <span>{u.name || u.username || u.chatId}</span>
+                                            {resolveVerified(u.verified) && <VerifiedBadge size={13} />}
+                                        </span>
+                                    </button>
+                                ))
+                            )}
                         </div>
                     );
                 })()}
