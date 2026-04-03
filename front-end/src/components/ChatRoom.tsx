@@ -227,16 +227,13 @@ export function ChatRoom({
     const [showMembersList, setShowMembersList] = useState(false);
     const [memberSearch, setMemberSearch] = useState('');
     const isAtBottomRef = useRef(true);
-    const [openingScrollLock, setOpeningScrollLock] = useState(false);
-    const [pendingInitialMediaCount, setPendingInitialMediaCount] = useState(0);
 
     const prevLenRef = useRef(0);
     const initialScrollDoneRef = useRef(false);
     const lastChatIdRef = useRef<string | null>(null);
-    const openingScrollLockRef = useRef(false);
-    const openingSettleTimerRef = useRef<number | null>(null);
-    const openingLockFallbackTimerRef = useRef<number | null>(null);
-    const pendingInitialMediaIdsRef = useRef<Set<string>>(new Set());
+    const initialMediaPendingIdsRef = useRef<Set<string>>(new Set());
+    const initialMediaFollowupDoneRef = useRef(false);
+    const unreadConsumedInSessionRef = useRef(false);
 
     // Scroll memory: keep per-chat scroll position in memory until refresh.
     // IMPORTANT: only restore exact scrollTop if user actually scrolled in that chat (prevents "always open at top").
@@ -259,40 +256,23 @@ export function ChatRoom({
         programmaticScrollEventsRef.current += 2;
     };
 
-    const clearOpeningSettleTimer = () => {
-        if (openingSettleTimerRef.current) {
-            window.clearTimeout(openingSettleTimerRef.current);
-            openingSettleTimerRef.current = null;
-        }
-        if (openingLockFallbackTimerRef.current) {
-            window.clearTimeout(openingLockFallbackTimerRef.current);
-            openingLockFallbackTimerRef.current = null;
-        }
-    };
-
-    const finishOpeningScrollLock = () => {
-        clearOpeningSettleTimer();
-        openingScrollLockRef.current = false;
-        pendingInitialMediaIdsRef.current.clear();
-        setPendingInitialMediaCount(0);
-        setOpeningScrollLock(false);
-    };
-
-    const scheduleOpeningSettle = () => {
-        clearOpeningSettleTimer();
-        openingSettleTimerRef.current = window.setTimeout(() => {
-            finishOpeningScrollLock();
-        }, 140);
-    };
-
     const handleInitialMediaReady = (messageId: string) => {
-        if (!openingScrollLockRef.current) return;
-        if (!pendingInitialMediaIdsRef.current.has(messageId)) return;
-        pendingInitialMediaIdsRef.current.delete(messageId);
-        setPendingInitialMediaCount(pendingInitialMediaIdsRef.current.size);
-        if (pendingInitialMediaIdsRef.current.size === 0) {
-            scheduleOpeningSettle();
+        if (initialMediaFollowupDoneRef.current) return;
+        if (!initialMediaPendingIdsRef.current.has(messageId)) return;
+        initialMediaPendingIdsRef.current.delete(messageId);
+        if (initialMediaPendingIdsRef.current.size === 0) {
+            initialMediaFollowupDoneRef.current = true;
+            requestAnimationFrame(() => scrollToBottom(true));
         }
+    };
+
+    const consumeUnreadForOpenSession = () => {
+        if (unreadConsumedInSessionRef.current) return;
+        if (displayUnreadCount <= 0) return;
+        unreadConsumedInSessionRef.current = true;
+        setDisplayUnreadCount(0);
+        setUnreadAnchorId(null);
+        window.setTimeout(() => onConsumeInitialUnread?.(chatId), 0);
     };
 
     const scrollToBottom = (smooth = false) => {
@@ -713,7 +693,6 @@ export function ChatRoom({
         return () => {
             if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
             if (highlightRafRef.current) cancelAnimationFrame(highlightRafRef.current);
-            clearOpeningSettleTimer();
         };
     }, []);
 
@@ -744,10 +723,19 @@ export function ChatRoom({
         programmaticScrollEventsRef.current = 0;
         consumedInitialUnreadRef.current = false;
         userHasScrolledRef.current = false;
-        pendingInitialMediaIdsRef.current.clear();
-        setPendingInitialMediaCount(0);
-        openingScrollLockRef.current = true;
-        setOpeningScrollLock(true);
+        unreadConsumedInSessionRef.current = false;
+        initialMediaFollowupDoneRef.current = false;
+        initialMediaPendingIdsRef.current = new Set(
+            messages
+                .filter((m) => {
+                    const mt = (m.file?.mimeType || '').toLowerCase();
+                    return Boolean(m.file && (mt.startsWith('image/') || mt.startsWith('video/')));
+                })
+                .map((m) => m.id)
+        );
+        if (initialMediaPendingIdsRef.current.size === 0) {
+            initialMediaFollowupDoneRef.current = true;
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
 
@@ -774,65 +762,6 @@ export function ChatRoom({
         settleToBottomIfNeeded();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId, loading, messages.length, displayUnreadCount]);
-
-    useEffect(() => {
-        if (!openingScrollLock) return;
-        if (loading) return;
-        const container = messagesContainerRef.current;
-        const inner = container?.querySelector('.chat-room__messages-inner');
-        if (!container || !inner) {
-            scheduleOpeningSettle();
-            return;
-        }
-
-        const shouldStickBottom =
-            !userHasScrolledRef.current &&
-            !shouldPreserveExactScroll() &&
-            displayUnreadCount <= 0;
-
-        if (!shouldStickBottom) {
-            scheduleOpeningSettle();
-            return;
-        }
-
-        const mediaIds = new Set(
-            messages
-                .filter((m) => {
-                    const mt = (m.file?.mimeType || '').toLowerCase();
-                    return Boolean(m.file && (mt.startsWith('image/') || mt.startsWith('video/')));
-                })
-                .map((m) => m.id)
-        );
-        pendingInitialMediaIdsRef.current = mediaIds;
-        setPendingInitialMediaCount(mediaIds.size);
-
-        if (mediaIds.size > 0) {
-            openingLockFallbackTimerRef.current = window.setTimeout(() => {
-                finishOpeningScrollLock();
-            }, 3500);
-        } else {
-            scheduleOpeningSettle();
-        }
-
-        const settleNow = () => {
-            if (!openingScrollLockRef.current) return;
-            scrollToBottom(false);
-            if (pendingInitialMediaIdsRef.current.size === 0) {
-                scheduleOpeningSettle();
-            }
-        };
-
-        settleNow();
-        const resizeObserver = new ResizeObserver(() => settleNow());
-        resizeObserver.observe(container);
-        resizeObserver.observe(inner);
-
-        return () => {
-            resizeObserver.disconnect();
-            clearOpeningSettleTimer();
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [openingScrollLock, loading, chatId, displayUnreadCount, messages]);
 
     useEffect(() => {
         if (loading) return;
@@ -901,13 +830,27 @@ export function ChatRoom({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [messages.length, chatId, loading, displayUnreadCount, unreadAnchorId]);
 
+    useEffect(() => {
+        if (displayUnreadCount <= 0) return;
+        if (loading) return;
+        if (!messages.length) return;
+        const raf = requestAnimationFrame(() => {
+            if (computeNearBottom()) consumeUnreadForOpenSession();
+        });
+        return () => cancelAnimationFrame(raf);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [chatId, displayUnreadCount, loading, messages.length]);
+
     const onMessagesScroll = () => {
         const container = messagesContainerRef.current;
         if (!container) return;
 
         const nearBottom = computeNearBottom();
         isAtBottomRef.current = nearBottom;
-        if (nearBottom) { setNewMsgCount(0); setShowScrollBtn(false); }
+        if (nearBottom) {
+            setNewMsgCount(0); setShowScrollBtn(false);
+            consumeUnreadForOpenSession();
+        }
         else setShowScrollBtn(container.scrollHeight - container.scrollTop - container.clientHeight > 300);
 
         // Ignore programmatic scroll events (initial jumps / restore / scrollToBottom).
@@ -1331,10 +1274,9 @@ export function ChatRoom({
                     style={{
                         overflowX: replySwipeLocked ? 'hidden' : 'auto',
                         overflowY: replySwipeLocked ? 'hidden' : 'auto',
-                        position: 'relative',
                     }}
                 >
-                    <div className="chat-room__messages-inner" style={{ visibility: openingScrollLock ? 'hidden' : 'visible' }}>
+                    <div className="chat-room__messages-inner">
                         {loading ? <ChatMessagesSkeleton /> : (
                             items.map(({ m, isMine, dayBreak, shape }) => {
                                 const isHighlighted = highlightId === m.id;
@@ -1536,16 +1478,6 @@ export function ChatRoom({
                         )}
                         <div ref={messagesEndRef} />
                     </div>
-                    {openingScrollLock && (
-                        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }}>
-                            <ChatMessagesSkeleton />
-                            {pendingInitialMediaCount > 0 && (
-                                <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-secondary)', marginTop: 6, fontFamily: 'Vazir, sans-serif' }}>
-                                    در حال آماده‌سازی رسانه‌ها ({pendingInitialMediaCount})
-                                </div>
-                            )}
-                        </div>
-                    )}
                 </div>
 
                 {msgMenu && (() => {
