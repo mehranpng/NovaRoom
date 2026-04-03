@@ -1385,6 +1385,61 @@ async def add_reaction(
     return {"reactions": aggregated_reactions}
 
 
+@app.get("/chats/{chat_id}/messages/{message_id}/seen-by")
+async def get_message_seen_by(
+    chat_id: str,
+    message_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = current_user["chatId"]
+
+    chat = await cl_chats.find_one({"_id": chat_id}, {"participants": 1, "chatType": 1})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    participants = chat.get("participants", []) or []
+    if user_id not in participants:
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    if chat.get("chatType") != "group":
+        raise HTTPException(status_code=400, detail="Seen-by is only available in groups")
+
+    oid = await try_object_id(message_id)
+    if not oid:
+        raise HTTPException(status_code=400, detail="Invalid message ID")
+
+    msg = await cl_messages.find_one({"_id": oid, "chatId": chat_id})
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    if msg.get("senderId") != user_id:
+        raise HTTPException(status_code=403, detail="Only sender can view seen-by")
+
+    seen_by_raw = msg.get("seenBy", []) or []
+    seen_by = [sid for sid in seen_by_raw if sid != user_id and sid in participants]
+    if not seen_by:
+        return {"seenBy": []}
+
+    users = await cl_users.find({"chatId": {"$in": seen_by}}).to_list(len(seen_by))
+    users_by_chat_id = {u.get("chatId"): u for u in users}
+
+    result = []
+    for sid in seen_by:
+        u = users_by_chat_id.get(sid)
+        profile = (u or {}).get("profile", {})
+        result.append(
+            {
+                "chatId": sid,
+                "name": profile.get("name") or profile.get("username") or sid,
+                "username": profile.get("username", ""),
+                "avatar": profile.get("avatar", ""),
+                "verified": bool((u or {}).get("verified", False)),
+            }
+        )
+
+    return {"seenBy": result}
+
+
 @app.delete("/chats/{chat_id}/messages/{message_id}/react")
 async def remove_reaction(
     chat_id: str,

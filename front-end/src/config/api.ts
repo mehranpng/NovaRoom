@@ -51,3 +51,7 @@ export const toggleReaction = async (messageId: string, emoji: string) => {
         body: JSON.stringify({ messageId, emoji }),
     });
 };
+
+export const getMessageSeenBy = async (chatId: string, messageId: string) => {
+    return apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/seen-by`);
+};

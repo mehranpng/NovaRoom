@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, Copy, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X, Forward, Users, Search, LogOut } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Eye, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X, Forward, Users, Search, LogOut } from 'lucide-react';
 import { motion, type Variants } from "framer-motion";
 import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
-import { apiFetch } from '../config/api';
+import { apiFetch, getMessageSeenBy } from '../config/api';
 import { ContactInfo } from './ContactInfo';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
 import { ReactionPicker } from './ReactionPicker';
@@ -109,6 +109,14 @@ type GroupMember = {
     online?: boolean;
 };
 
+type SeenByUser = {
+    chatId: string;
+    name: string;
+    username?: string;
+    avatar?: string;
+    verified?: boolean;
+};
+
 // ── Optimistic reaction helpers ──────────────────────────────────────────────
 type ReactionEntry = { emoji: string; count: number; userIds: string[] };
 
@@ -190,6 +198,9 @@ export function ChatRoom({
 
     const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number }>(null);
     const [reactionMenu, setReactionMenu] = useState<null | { id: string; top: number; left: number }>(null);
+    const [seenByMenu, setSeenByMenu] = useState<null | { id: string; top: number; left: number }>(null);
+    const [seenByUsersByMessage, setSeenByUsersByMessage] = useState<Record<string, SeenByUser[]>>({});
+    const [seenByLoadingMessageId, setSeenByLoadingMessageId] = useState<string | null>(null);
 
     // Optimistic reactions: messageId -> overridden reactions array
     const [optimisticReactions, setOptimisticReactions] = useState<Record<string, ReactionEntry[]>>({});
@@ -197,6 +208,7 @@ export function ChatRoom({
     const menuRef = useRef<HTMLDivElement | null>(null);
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
     const reactionMenuRef = useRef<HTMLDivElement | null>(null);
+    const seenByMenuRef = useRef<HTMLDivElement | null>(null);
     const confirmDeleteChatRef = useRef<HTMLDivElement | null>(null);
     const confirmDeleteMsgRef = useRef<HTMLDivElement | null>(null);
     const confirmLeaveGroupRef = useRef<HTMLDivElement | null>(null);
@@ -661,6 +673,22 @@ export function ChatRoom({
         setMsgMenu(null);
     };
 
+    const loadSeenBy = async (messageId: string) => {
+        if (!isGroupChat) return;
+        if (seenByLoadingMessageId === messageId) return;
+        setSeenByLoadingMessageId(messageId);
+        try {
+            const res = await getMessageSeenBy(chatId, messageId);
+            const rows = Array.isArray((res as any)?.seenBy) ? (res as any).seenBy : [];
+            setSeenByUsersByMessage((prev) => ({ ...prev, [messageId]: rows }));
+        } catch (e) {
+            console.error('Failed to load seen-by:', e);
+            setSeenByUsersByMessage((prev) => ({ ...prev, [messageId]: [] }));
+        } finally {
+            setSeenByLoadingMessageId((s) => (s === messageId ? null : s));
+        }
+    };
+
     const handleFileUploaded = (file: FileMetadata) => setUploadedFile(file);
 
     useEffect(() => {
@@ -669,6 +697,7 @@ export function ChatRoom({
             if (menuRef.current?.contains(target)) return;
             if (msgMenuRef.current?.contains(target)) return;
             if (reactionMenuRef.current?.contains(target)) return;
+            if (seenByMenuRef.current?.contains(target)) return;
             if (confirmDeleteChatRef.current) {
                 const modal = confirmDeleteChatRef.current.querySelector('.chat-room-confirm-modal');
                 if (modal && !modal.contains(target)) { setConfirmDeleteChat(false); return; }
@@ -684,6 +713,7 @@ export function ChatRoom({
             setChatMenuOpen(false);
             setMsgMenu(null);
             setReactionMenu(null);
+            setSeenByMenu(null);
         };
         document.addEventListener('click', onDocClick);
         return () => document.removeEventListener('click', onDocClick);
@@ -712,10 +742,11 @@ export function ChatRoom({
         setNewMsgCount(0); setShowScrollBtn(false);
         isAtBottomRef.current = true;
         setReplyTo(null); setEditingId(null);
-        setMsgMenu(null); setReactionMenu(null);
+        setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
         setText(''); setUploadedFile(null);
         setUnreadAnchorId(null);
         setOptimisticReactions({});
+        setSeenByLoadingMessageId(null);
 
         setDisplayUnreadCount(initialUnreadCount);
         autoJumpedToUnreadRef.current = false;
@@ -912,6 +943,7 @@ export function ChatRoom({
         if (msgMenu?.id === messageId) {
             setMsgMenu(null);
             setReactionMenu(null);
+            setSeenByMenu(null);
             return;
         }
 
@@ -927,6 +959,12 @@ export function ChatRoom({
 
         setMsgMenu({ id: messageId, top: relY + 8, left: relX - 12 });
         setReactionMenu(null);
+        setSeenByMenu(null);
+
+        const message = messages.find((m) => m.id === messageId);
+        if (isGroupChat && message?.senderId === currentUserId) {
+            loadSeenBy(messageId);
+        }
     };
 
     // Clamp msg menu inside the visible room (especially important on mobile).
@@ -965,23 +1003,24 @@ export function ChatRoom({
         const finalLeft = Math.max(12, Math.min(r.left - roomRect.left, roomRect.width - pickerWidth - 16));
         setReactionMenu({ id: messageId, top, left: finalLeft });
         setMsgMenu(null);
+        setSeenByMenu(null);
     };
 
     const beginReply = (m: Message, withHaptic = false) => {
         setReplyTo({ id: m.id, senderId: m.senderId, text: m.text });
-        setEditingId(null); setMsgMenu(null); setReactionMenu(null);
+        setEditingId(null); setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
         if (withHaptic) triggerHaptic();
         setTimeout(() => textareaRef.current?.focus(), 0);
     };
 
     const beginEdit = (m: Message) => {
         setEditingId(m.id); setReplyTo(null); setText(m.text);
-        setMsgMenu(null); setReactionMenu(null);
+        setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
         setTimeout(() => textareaRef.current?.focus(), 0);
     };
 
     const doDeleteMessage = (messageId: string) => {
-        setMsgMenu(null); setReactionMenu(null);
+        setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
         setConfirmDeleteMsg(messageId);
     };
 
@@ -1485,11 +1524,21 @@ export function ChatRoom({
                     if (!activeMsg) return null;
                     const activeMsgIsMine = activeMsg.senderId === currentUserId;
                     const canDeleteActiveMsg = activeMsgIsMine || (isGroupChat && isVerifiedUser);
+                    const seenByUsers = seenByUsersByMessage[activeMsg.id] || [];
+                    const showSeenByAction = isGroupChat && activeMsgIsMine && seenByUsers.length > 0;
 
                     return (
                         <div ref={msgMenuRef} className="popover popover--mini"
                             style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
                             onClick={(e) => e.stopPropagation()}>
+                            {showSeenByAction && (
+                                <button className="popover__item" onClick={() => {
+                                    setSeenByMenu({ id: activeMsg.id, top: msgMenu.top, left: msgMenu.left });
+                                    setMsgMenu(null);
+                                }} type="button">
+                                    <Eye size={16} />دیده شده توسط
+                                </button>
+                            )}
                             <button className="popover__item" onClick={() => { const el = messageElsRef.current.get(activeMsg.id); if (el) openReactionMenu(activeMsg.id, el); }} type="button">
                                 <Smile size={16} />واکنش
                             </button>
@@ -1504,6 +1553,34 @@ export function ChatRoom({
                                     <Trash2 size={16} />حذف
                                 </button>
                             )}
+                        </div>
+                    );
+                })()}
+
+                {seenByMenu && (() => {
+                    const rows = seenByUsersByMessage[seenByMenu.id] || [];
+                    if (!rows.length) return null;
+
+                    return (
+                        <div ref={seenByMenuRef} className="popover popover--mini"
+                            style={{ top: seenByMenu.top, left: seenByMenu.left, right: 'auto', position: 'absolute', zIndex: 52 }}
+                            onClick={(e) => e.stopPropagation()}>
+                            <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)' }}>
+                                دیده شده توسط ({rows.length})
+                            </div>
+                            {rows.map((u) => (
+                                <button key={u.chatId} className="popover__item" type="button"
+                                    onClick={() => {
+                                        setSeenByMenu(null);
+                                        openMember(u.chatId);
+                                    }}>
+                                    <Avatar name={u.name || u.username || ''} src={u.avatar || ''} size="sm" />
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                        <span>{u.name || u.username || u.chatId}</span>
+                                        {resolveVerified(u.verified) && <VerifiedBadge size={13} />}
+                                    </span>
+                                </button>
+                            ))}
                         </div>
                     );
                 })()}
