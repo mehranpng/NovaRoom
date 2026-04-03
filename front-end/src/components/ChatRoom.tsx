@@ -11,6 +11,7 @@ import { ReactionPicker } from './ReactionPicker';
 import { ForwardModal } from './ForwardModal';
 import { FileUpload } from './FileUpload';
 import { FileMessage } from './FileMessage';
+import { ImageMediaViewer } from './ImageMediaViewer';
 import './FileComponents.css';
 
 interface ChatRoomProps {
@@ -257,6 +258,7 @@ export function ChatRoom({
 
     // Keep unread count used for UI stable, even if App "consumes" initialUnreadCount afterwards.
     const [displayUnreadCount, setDisplayUnreadCount] = useState<number>(initialUnreadCount);
+    const [openedImageUrl, setOpenedImageUrl] = useState<string | null>(null);
 
     // Auto-jump bookkeeping to avoid saving an automatic scroll position as user's scroll memory.
     const autoJumpedToUnreadRef = useRef(false);
@@ -1489,7 +1491,14 @@ export function ChatRoom({
                                                 )}
 
                                                 {m.text && <div className="message-text">{m.text}</div>}
-                                                {m.file && <FileMessage file={m.file} token={token} onMediaLoad={() => handleInitialMediaReady(m.id)} />}
+                                                {m.file && (
+                                                    <FileMessage
+                                                        file={m.file}
+                                                        token={token}
+                                                        onMediaLoad={() => handleInitialMediaReady(m.id)}
+                                                        onImageClick={(imageUrl) => setOpenedImageUrl(imageUrl)}
+                                                    />
+                                                )}
 
                                                 {effectiveReactions && effectiveReactions.length > 0 && (
                                                     <div className="message-reactions">
@@ -1600,6 +1609,13 @@ export function ChatRoom({
                         </div>
                     );
                 })()}
+
+                {openedImageUrl && (
+                    <ImageMediaViewer
+                        imageUrl={openedImageUrl}
+                        onClose={() => setOpenedImageUrl(null)}
+                    />
+                )}
 
                 {reactionMenu && (() => {
                     const reactionMsg = messages.find((mm) => mm.id === reactionMenu.id);

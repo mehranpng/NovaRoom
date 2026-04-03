@@ -9,9 +9,10 @@ interface FileMessageProps {
     file: FileMetadata;
     token: string;
     onMediaLoad?: () => void;
+    onImageClick?: (imageUrl: string) => void;
 }
 
-export function FileMessage({ file, token, onMediaLoad }: FileMessageProps) {
+export function FileMessage({ file, token, onMediaLoad, onImageClick }: FileMessageProps) {
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [imageLoading, setImageLoading] = useState(false);
     const [imageError, setImageError] = useState(false);
@@ -168,8 +169,11 @@ export function FileMessage({ file, token, onMediaLoad }: FileMessageProps) {
                         <img
                             src={imageUrl}
                             alt={file.fileName}
-                            onClick={handleDownload}
-                            style={{ cursor: 'pointer' }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onImageClick?.(imageUrl);
+                            }}
+                            style={{ cursor: 'zoom-in' }}
                             onLoad={onMediaLoad}
                         />
                     )}
