@@ -1,6 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Eye, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X, Forward, Users, Search, LogOut } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Eye, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X, Forward, Users, Search, LogOut, Check } from 'lucide-react';
 import { motion, type Variants } from "framer-motion";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import type { Components } from 'react-markdown';
 import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -154,6 +157,82 @@ function applyOptimisticDeleteReaction(
     });
     return base.filter((r) => r.count > 0);
 }
+
+function CodeBlock({ className, children }: { className?: string; children?: React.ReactNode }) {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+        const code = typeof children === 'string' ? children : String(children ?? '');
+        try {
+            if (navigator.clipboard && (window as unknown as { isSecureContext?: boolean }).isSecureContext) {
+                await navigator.clipboard.writeText(code);
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = code;
+                ta.style.position = 'fixed';
+                ta.style.left = '-9999px';
+                ta.style.top = '0';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            // ignore
+        }
+    };
+
+    const lang = className?.replace('language-', '') ?? '';
+
+    return (
+        <div className="md-code-block-wrapper">
+            <div className="md-code-block-header">
+                {lang && <span className="md-code-lang">{lang}</span>}
+                <button
+                    type="button"
+                    className={copied ? 'md-code-copy-btn md-code-copy-btn--copied' : 'md-code-copy-btn'}
+                    onClick={handleCopy}
+                    aria-label="Copy code"
+                >
+                    {copied ? <Check size={13} /> : <Copy size={13} />}
+                </button>
+            </div>
+            <pre className="md-code-block">
+                <code className={className}>{children}</code>
+            </pre>
+        </div>
+    );
+}
+
+const markdownComponents: Components = {
+    code({ className, children, ...props }) {
+        const isInline = !('data-language' in props) && !className?.includes('language-');
+        if (!isInline) {
+            return <CodeBlock className={className}>{children}</CodeBlock>;
+        }
+        return <code className="md-code-inline">{children}</code>;
+    },
+    h1: ({ children }: { children?: React.ReactNode }) => <h1 className="md-h1">{children}</h1>,
+    h2: ({ children }: { children?: React.ReactNode }) => <h2 className="md-h2">{children}</h2>,
+    h3: ({ children }: { children?: React.ReactNode }) => <h3 className="md-h3">{children}</h3>,
+    h4: ({ children }: { children?: React.ReactNode }) => <h4 className="md-h4">{children}</h4>,
+    h5: ({ children }: { children?: React.ReactNode }) => <h5 className="md-h5">{children}</h5>,
+    h6: ({ children }: { children?: React.ReactNode }) => <h6 className="md-h6">{children}</h6>,
+    p: ({ children }: { children?: React.ReactNode }) => <p className="md-p">{children}</p>,
+    ul: ({ children }: { children?: React.ReactNode }) => <ul className="md-ul">{children}</ul>,
+    ol: ({ children }: { children?: React.ReactNode }) => <ol className="md-ol">{children}</ol>,
+    li: ({ children }: { children?: React.ReactNode }) => <li className="md-li">{children}</li>,
+    strong: ({ children }: { children?: React.ReactNode }) => <strong className="md-strong">{children}</strong>,
+    em: ({ children }: { children?: React.ReactNode }) => <em className="md-em">{children}</em>,
+    del: ({ children }: { children?: React.ReactNode }) => <del className="md-del">{children}</del>,
+    blockquote: ({ children }: { children?: React.ReactNode }) => <blockquote className="md-blockquote">{children}</blockquote>,
+    a: ({ children, href }: { children?: React.ReactNode; href?: string }) => (
+        <a className="md-link" href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+    ),
+};
 
 /** ویبره خیلی کوتاه — فقط اگر دستگاه پشتیبانی کند */
 function triggerHaptic() {
@@ -1567,7 +1646,16 @@ export function ChatRoom({
                                                 </div>
                                             )}
 
-                                            {m.text && <div className="message-text">{m.text}</div>}
+                                            {m.text && (
+                                                <div className="message-text message-text--markdown">
+                                                    <ReactMarkdown
+                                                        remarkPlugins={[remarkGfm]}
+                                                        components={markdownComponents}
+                                                    >
+                                                        {m.text}
+                                                    </ReactMarkdown>
+                                                </div>
+                                            )}
                                             {m.file && (
                                                 <FileMessage
                                                     file={m.file}

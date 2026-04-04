@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Forward, Check } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Forward, Check, SendHorizontal } from 'lucide-react';
 import { motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -146,10 +146,40 @@ export function AIChatRoom({
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const messagesContainerRef = useRef<HTMLDivElement | null>(null);
     const roomRef = useRef<HTMLDivElement | null>(null);
-    const inputRef = useRef<HTMLInputElement | null>(null);
+    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const sendSoundRef = useRef<HTMLAudioElement | null>(null);
+    const receiveSoundRef = useRef<HTMLAudioElement | null>(null);
     const isAtBottomRef = useRef(true);
     const prevLenRef = useRef(0);
     const initialScrollDoneRef = useRef(false);
+    const prevLastMessageRef = useRef<Message | null>(null);
+
+    const resizeTextarea = () => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        textarea.style.height = 'auto';
+        textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 44), 200)}px`;
+    };
+
+    useEffect(() => { resizeTextarea(); }, [text]);
+
+    useEffect(() => {
+        sendSoundRef.current = new Audio('/sounds/send.mp3');
+        receiveSoundRef.current = new Audio('/sounds/receive.mp3');
+        return () => {
+            sendSoundRef.current = null;
+            receiveSoundRef.current = null;
+        };
+    }, []);
+
+    const playChatSound = (kind: 'send' | 'receive') => {
+        const audio = kind === 'send' ? sendSoundRef.current : receiveSoundRef.current;
+        if (!audio) return;
+        audio.currentTime = 0;
+        audio.play().catch(() => {
+            // Ignore blocked autoplay errors.
+        });
+    };
 
     const scrollToBottom = (smooth = false) => {
         const container = messagesContainerRef.current;
@@ -251,16 +281,24 @@ export function AIChatRoom({
 
         const added = messages.length - prevLenRef.current;
         if (added > 0) {
+            const prevLast = prevLastMessageRef.current;
+            const newLast = messages[messages.length - 1];
+            if (newLast && (!prevLast || prevLast.id !== newLast.id) && newLast.senderId !== currentUserId) {
+                playChatSound('receive');
+            }
+
             if (nearBottom) {
                 const raf = requestAnimationFrame(() => scrollToBottom(true));
                 prevLenRef.current = messages.length;
+                prevLastMessageRef.current = messages[messages.length - 1] ?? null;
                 return () => cancelAnimationFrame(raf);
             }
             setNewMsgCount((c) => c + added);
         }
 
         prevLenRef.current = messages.length;
-    }, [messages.length]);
+        prevLastMessageRef.current = messages[messages.length - 1] ?? null;
+    }, [messages, currentUserId]);
 
     // Handle typing indicator
     useEffect(() => {
@@ -289,6 +327,7 @@ export function AIChatRoom({
         if (!t || isTyping) return;
 
         onSendMessage(t);
+        playChatSound('send');
         setText('');
         requestAnimationFrame(() => scrollToBottom(true));
     };
@@ -568,8 +607,8 @@ export function AIChatRoom({
 
             <div className="chat-room__input-area">
                 <div className="chat-room__input-wrapper">
-                    <input
-                        ref={inputRef}
+                    <textarea
+                        ref={textareaRef}
                         className="chat-room__text-input"
                         placeholder="پیام خود را بنویسید..."
                         value={text}
@@ -580,8 +619,12 @@ export function AIChatRoom({
                             }, 80);
                         }}
                         onKeyDown={(e) => {
-                            if (e.key === 'Enter') submit();
+                            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                e.preventDefault();
+                                submit();
+                            }
                         }}
+                        rows={1}
                         disabled={isTyping}
                     />
                     <button
@@ -595,19 +638,7 @@ export function AIChatRoom({
                         aria-label="Send"
                         type="button"
                     >
-                        <svg
-                            width="18"
-                            height="18"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                        >
-                            <path d="M22 2L11 13" />
-                            <path d="M22 2L15 22L11 13L2 9L22 2Z" />
-                        </svg>
+                        <SendHorizontal size={18} />
                     </button>
                 </div>
             </div>
