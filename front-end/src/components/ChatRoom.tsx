@@ -517,11 +517,6 @@ export function ChatRoom({
         const room = roomRef.current;
         if (!room) return;
         const vv = (window as any).visualViewport as VisualViewport | undefined;
-<<<<<<< HEAD
-        if (!vv) return;
-        let raf: number | null = null;
-        const update = () => {
-=======
         if (!vv) { room.style.setProperty('--keyboard-offset', '0px'); return; }
         const ua = navigator.userAgent || '';
         const isIOSWebKit = /iP(ad|hone|od)/i.test(ua) || (/Macintosh/i.test(ua) && 'ontouchend' in document);
@@ -536,7 +531,6 @@ export function ChatRoom({
                 ? Math.max(0, window.innerHeight - vv.height - offsetTop)
                 : 0;
             el.style.setProperty('--keyboard-offset', `${Math.round(keyboard)}px`);
->>>>>>> 0905a45e05ef835fd0c69e2c1b40a78868cc8784
             if (isAtBottomRef.current) {
                 if (raf) cancelAnimationFrame(raf);
                 raf = requestAnimationFrame(() => scrollToBottom(false));
@@ -551,6 +545,7 @@ export function ChatRoom({
             vv.removeEventListener('scroll', update);
             window.removeEventListener('orientationchange', update);
             if (raf) cancelAnimationFrame(raf);
+            room.style.removeProperty('--keyboard-offset');
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
@@ -1217,590 +1212,590 @@ export function ChatRoom({
             animate="visible"
             exit="exit"
         >
-                <div className="chat-room__header">
-                    <button className="chat-room__back-btn" onClick={() => { maybeSaveScroll(chatId); onBack(); }} aria-label="Back" type="button"><ArrowLeft size={20} /></button>
-                    <button className="icon-btn chat-room__close-btn" onClick={() => { maybeSaveScroll(chatId); onCloseChat(); }} aria-label="Back to empty" type="button"><ArrowLeft size={20} /></button>
+            <div className="chat-room__header">
+                <button className="chat-room__back-btn" onClick={() => { maybeSaveScroll(chatId); onBack(); }} aria-label="Back" type="button"><ArrowLeft size={20} /></button>
+                <button className="icon-btn chat-room__close-btn" onClick={() => { maybeSaveScroll(chatId); onCloseChat(); }} aria-label="Back to empty" type="button"><ArrowLeft size={20} /></button>
 
-                    <button
-                        className="chat-room__header-clickable chat-room__header-clickable--full"
-                        onClick={() => {
-                            if (isSavedMessages) return;
-                            maybeSaveScroll(chatId);
-                            setShowContactInfo(true);
-                        }}
-                        aria-label={isSavedMessages ? '' : 'Open contact info'}
-                        type="button"
-                        style={isSavedMessages ? { cursor: 'default' } : undefined}
-                    >
-                        <Avatar
-                            name={contact.name}
-                            size="sm"
-                            online={isGroupChat || isSavedMessages ? undefined : contact.online}
-                            savedMessages={isSavedMessages}
-                            src={contact.avatar}
-                        />
-                        <div className="chat-room__header-info">
-                            <div className="chat-room__contact-name" style={{ alignItems: 'center', gap: 6 }}>
-                                <p className='chat-room__contact-name-2'>{contact.name}</p>
-                                {!isSavedMessages && resolveVerified(contact.verified) ? <VerifiedBadge size={14} /> : null}
-                            </div>
-                            {!isSavedMessages && (
-                                <div className={isGroupChat || contact.online ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
-                                    {isGroupChat
-                                        ? `${chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0} عضو • ${chatStats?.onlineMembers ?? 0} آنلاین`
-                                        : contact.online ? 'آنلاین' : 'آفلاین'}
-                                </div>
-                            )}
+                <button
+                    className="chat-room__header-clickable chat-room__header-clickable--full"
+                    onClick={() => {
+                        if (isSavedMessages) return;
+                        maybeSaveScroll(chatId);
+                        setShowContactInfo(true);
+                    }}
+                    aria-label={isSavedMessages ? '' : 'Open contact info'}
+                    type="button"
+                    style={isSavedMessages ? { cursor: 'default' } : undefined}
+                >
+                    <Avatar
+                        name={contact.name}
+                        size="sm"
+                        online={isGroupChat || isSavedMessages ? undefined : contact.online}
+                        savedMessages={isSavedMessages}
+                        src={contact.avatar}
+                    />
+                    <div className="chat-room__header-info">
+                        <div className="chat-room__contact-name" style={{ alignItems: 'center', gap: 6 }}>
+                            <p className='chat-room__contact-name-2'>{contact.name}</p>
+                            {!isSavedMessages && resolveVerified(contact.verified) ? <VerifiedBadge size={14} /> : null}
                         </div>
-                    </button>
+                        {!isSavedMessages && (
+                            <div className={isGroupChat || contact.online ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
+                                {isGroupChat
+                                    ? `${chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0} عضو • ${chatStats?.onlineMembers ?? 0} آنلاین`
+                                    : contact.online ? 'آنلاین' : 'آفلاین'}
+                            </div>
+                        )}
+                    </div>
+                </button>
 
-                    {!isSavedMessages && (
-                        <div className="chat-room__header-actions" ref={menuRef}>
-                            <button
-                                className="icon-btn"
-                                onClick={() => setChatMenuOpen((v) => !v)}
-                                aria-label="More"
-                                disabled={!canDeleteChat}
-                                style={!canDeleteChat ? { opacity: 0.4, cursor: 'default' } : undefined}
-                                type="button"
-                            >
-                                <MoreVertical size={20} />
-                            </button>
+                {!isSavedMessages && (
+                    <div className="chat-room__header-actions" ref={menuRef}>
+                        <button
+                            className="icon-btn"
+                            onClick={() => setChatMenuOpen((v) => !v)}
+                            aria-label="More"
+                            disabled={!canDeleteChat}
+                            style={!canDeleteChat ? { opacity: 0.4, cursor: 'default' } : undefined}
+                            type="button"
+                        >
+                            <MoreVertical size={20} />
+                        </button>
 
-                            {chatMenuOpen && canDeleteChat && (
-                                <div className="popover popover--mini popover--right">
-                                    {isGroupChat ? (
-                                        <>
-                                            {/* خروج از گروه — همه کاربران */}
-                                            <button
-                                                className="popover__item popover__item--danger"
-                                                onClick={() => {
-                                                    // FIX: defer closing menu so onDocClick doesn't cancel the modal
-                                                    setConfirmLeaveGroup(true);
-                                                    setTimeout(() => setChatMenuOpen(false), 0);
-                                                }}
-                                                type="button"
-                                            >
-                                                <LogOut size={16} />
-                                                خروج از گروه
-                                            </button>
-                                            {/* حذف گروه — فقط verified (هر نوع truthy value) */}
-                                            {isVerifiedUser && (
-                                                <button
-                                                    className="popover__item popover__item--danger"
-                                                    onClick={() => {
-                                                        // FIX: defer closing menu so onDocClick doesn't cancel the modal
-                                                        setConfirmDeleteChat(true);
-                                                        setTimeout(() => setChatMenuOpen(false), 0);
-                                                    }}
-                                                    type="button"
-                                                >
-                                                    <Trash2 size={16} />
-                                                    حذف گروه
-                                                </button>
-                                            )}
-                                        </>
-                                    ) : (
+                        {chatMenuOpen && canDeleteChat && (
+                            <div className="popover popover--mini popover--right">
+                                {isGroupChat ? (
+                                    <>
+                                        {/* خروج از گروه — همه کاربران */}
                                         <button
                                             className="popover__item popover__item--danger"
                                             onClick={() => {
                                                 // FIX: defer closing menu so onDocClick doesn't cancel the modal
-                                                setConfirmDeleteChat(true);
+                                                setConfirmLeaveGroup(true);
                                                 setTimeout(() => setChatMenuOpen(false), 0);
                                             }}
                                             type="button"
                                         >
-                                            <Trash2 size={16} />
-                                            حذف گفتگو
+                                            <LogOut size={16} />
+                                            خروج از گروه
                                         </button>
+                                        {/* حذف گروه — فقط verified (هر نوع truthy value) */}
+                                        {isVerifiedUser && (
+                                            <button
+                                                className="popover__item popover__item--danger"
+                                                onClick={() => {
+                                                    // FIX: defer closing menu so onDocClick doesn't cancel the modal
+                                                    setConfirmDeleteChat(true);
+                                                    setTimeout(() => setChatMenuOpen(false), 0);
+                                                }}
+                                                type="button"
+                                            >
+                                                <Trash2 size={16} />
+                                                حذف گروه
+                                            </button>
+                                        )}
+                                    </>
+                                ) : (
+                                    <button
+                                        className="popover__item popover__item--danger"
+                                        onClick={() => {
+                                            // FIX: defer closing menu so onDocClick doesn't cancel the modal
+                                            setConfirmDeleteChat(true);
+                                            setTimeout(() => setChatMenuOpen(false), 0);
+                                        }}
+                                        type="button"
+                                    >
+                                        <Trash2 size={16} />
+                                        حذف گفتگو
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            <div
+                className="chat-room__messages"
+                ref={messagesContainerRef}
+                onScroll={onMessagesScroll}
+                onPlayCapture={(e) => {
+                    const targetVideo = e.target instanceof HTMLVideoElement ? e.target : null;
+                    if (!targetVideo) return;
+                    const container = messagesContainerRef.current;
+                    if (!container) return;
+                    container.querySelectorAll('video').forEach((videoEl) => {
+                        if (videoEl !== targetVideo && !videoEl.paused) videoEl.pause();
+                    });
+                }}
+                style={{
+                    overflowX: replySwipeLocked ? 'hidden' : 'auto',
+                    overflowY: replySwipeLocked ? 'hidden' : 'auto',
+                }}
+            >
+                <div className="chat-room__messages-inner">
+                    {loading ? <ChatMessagesSkeleton /> : (
+                        items.map(({ m, isMine, dayBreak, shape }) => {
+                            const isHighlighted = highlightId === m.id;
+                            const dragX = dragState.id === m.id ? dragState.x : 0;
+                            const dragActive = dragState.id === m.id ? dragState.active : false;
+                            const showUnreadSeparator = Boolean(unreadAnchorId && unreadAnchorId === m.id);
+
+                            const isMenuActive = Boolean(msgMenu && msgMenu.id === m.id);
+                            const seenByCountForMessage = seenByUsersByMessage[m.id]?.length ?? 0;
+                            const isSeenForUi = Boolean(
+                                m.seen || (isGroupChat && isMine && seenByCountForMessage > 0)
+                            );
+
+                            // FIX: use optimistic reactions if available, fallback to server data
+                            const effectiveReactions = optimisticReactions[m.id] ?? m.reactions;
+
+                            return (
+                                <div key={m.id}>
+                                    {dayBreak && (
+                                        <div className="chat-room__date-separator">
+                                            <div className="chat-room__date-label">{formatDayLabel(m.timestamp)}</div>
+                                        </div>
                                     )}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
 
-                <div
-                    className="chat-room__messages"
-                    ref={messagesContainerRef}
-                    onScroll={onMessagesScroll}
-                    onPlayCapture={(e) => {
-                        const targetVideo = e.target instanceof HTMLVideoElement ? e.target : null;
-                        if (!targetVideo) return;
-                        const container = messagesContainerRef.current;
-                        if (!container) return;
-                        container.querySelectorAll('video').forEach((videoEl) => {
-                            if (videoEl !== targetVideo && !videoEl.paused) videoEl.pause();
-                        });
-                    }}
-                    style={{
-                        overflowX: replySwipeLocked ? 'hidden' : 'auto',
-                        overflowY: replySwipeLocked ? 'hidden' : 'auto',
-                    }}
-                >
-                    <div className="chat-room__messages-inner">
-                        {loading ? <ChatMessagesSkeleton /> : (
-                            items.map(({ m, isMine, dayBreak, shape }) => {
-                                const isHighlighted = highlightId === m.id;
-                                const dragX = dragState.id === m.id ? dragState.x : 0;
-                                const dragActive = dragState.id === m.id ? dragState.active : false;
-                                const showUnreadSeparator = Boolean(unreadAnchorId && unreadAnchorId === m.id);
-
-                                const isMenuActive = Boolean(msgMenu && msgMenu.id === m.id);
-                                const seenByCountForMessage = seenByUsersByMessage[m.id]?.length ?? 0;
-                                const isSeenForUi = Boolean(
-                                    m.seen || (isGroupChat && isMine && seenByCountForMessage > 0)
-                                );
-
-                                // FIX: use optimistic reactions if available, fallback to server data
-                                const effectiveReactions = optimisticReactions[m.id] ?? m.reactions;
-
-                                return (
-                                    <div key={m.id}>
-                                        {dayBreak && (
-                                            <div className="chat-room__date-separator">
-                                                <div className="chat-room__date-label">{formatDayLabel(m.timestamp)}</div>
+                                    {showUnreadSeparator && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', justifyContent: 'center' }}>
+                                            <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
+                                            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 999, padding: '6px 10px', fontFamily: 'Vazir, sans-serif' }}>
+                                                پیام‌های خوانده نشده{displayUnreadCount > 0 ? ` (${displayUnreadCount})` : ''}
                                             </div>
-                                        )}
+                                            <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
+                                        </div>
+                                    )}
 
-                                        {showUnreadSeparator && (
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', justifyContent: 'center' }}>
-                                                <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
-                                                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 999, padding: '6px 10px', fontFamily: 'Vazir, sans-serif' }}>
-                                                    پیام‌های خوانده نشده{displayUnreadCount > 0 ? ` (${displayUnreadCount})` : ''}
+                                    <div
+                                        className={isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`}
+                                        onPointerDown={(e) => {
+                                            if (e.pointerType !== 'mouse' || e.button !== 0) return;
+                                            swipeRef.current = { id: m.id, startX: e.clientX, startY: e.clientY, active: true, captured: false, pointerId: e.pointerId, blockClickUntil: swipeRef.current.blockClickUntil };
+                                        }}
+                                        onPointerMove={(e) => {
+                                            if (e.pointerType !== 'mouse' || !swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                            const dx = e.clientX - swipeRef.current.startX;
+                                            const dy = e.clientY - swipeRef.current.startY;
+                                            if (!swipeRef.current.captured) {
+                                                // چپ به راست: dx باید مثبت باشد
+                                                if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
+                                                swipeRef.current.captured = true;
+                                                setReplySwipeLocked(true);
+                                                try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
+                                            }
+                                            e.preventDefault();
+                                            setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
+                                        }}
+                                        onPointerUp={(e) => {
+                                            if (e.pointerType !== 'mouse' || !swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                            const dx = e.clientX - swipeRef.current.startX;
+                                            const dy = e.clientY - swipeRef.current.startY;
+                                            if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
+                                            if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m, true);
+                                            resetDrag(m.id);
+                                            swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
+                                        }}
+                                        onPointerCancel={(e) => {
+                                            if (e.pointerType !== 'mouse' || swipeRef.current.id !== m.id) return;
+                                            resetDrag(m.id);
+                                            swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
+                                        }}
+                                        onTouchStart={(e) => {
+                                            const t = e.touches[0];
+                                            swipeRef.current = { id: m.id, startX: t.clientX, startY: t.clientY, active: true, captured: false, pointerId: null, blockClickUntil: swipeRef.current.blockClickUntil };
+                                        }}
+                                        onTouchMove={(e) => {
+                                            if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                            const t = e.touches[0];
+                                            const dx = t.clientX - swipeRef.current.startX;
+                                            const dy = t.clientY - swipeRef.current.startY;
+                                            if (!swipeRef.current.captured) {
+                                                // چپ به راست: dx باید مثبت باشد
+                                                if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
+                                                swipeRef.current.captured = true;
+                                                setReplySwipeLocked(true);
+                                            }
+                                            e.preventDefault();
+                                            setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
+                                        }}
+                                        onTouchEnd={(e) => {
+                                            if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                            const t = e.changedTouches[0];
+                                            const dx = t.clientX - swipeRef.current.startX;
+                                            const dy = t.clientY - swipeRef.current.startY;
+                                            if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
+                                            if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m, true);
+                                            resetDrag(m.id);
+                                            swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
+                                        }}
+                                        onTouchCancel={() => {
+                                            if (swipeRef.current.id !== m.id) return;
+                                            resetDrag(m.id);
+                                            swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
+                                        }}
+                                    >
+                                        {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--last') && (() => {
+                                            const sender = groupMembers[m.senderId];
+                                            const senderName = sender?.name || m.senderId || 'ناشناس';
+                                            return (
+                                                <div style={{ position: 'absolute', left: 0, bottom: 0, cursor: 'pointer', zIndex: 1 }}
+                                                    onClick={(e) => { e.stopPropagation(); openMember(m.senderId); }}>
+                                                    <Avatar name={senderName} size="sm" src={sender?.avatar || ''} />
                                                 </div>
-                                                <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
-                                            </div>
-                                        )}
+                                            );
+                                        })()}
 
                                         <div
-                                            className={isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`}
-                                            onPointerDown={(e) => {
-                                                if (e.pointerType !== 'mouse' || e.button !== 0) return;
-                                                swipeRef.current = { id: m.id, startX: e.clientX, startY: e.clientY, active: true, captured: false, pointerId: e.pointerId, blockClickUntil: swipeRef.current.blockClickUntil };
+                                            ref={(el) => { if (!el) { messageElsRef.current.delete(m.id); return; } messageElsRef.current.set(m.id, el); }}
+                                            className={isMine ? `message-bubble message-bubble--mine ${shape}` : `message-bubble message-bubble--theirs ${shape}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (Date.now() < swipeRef.current.blockClickUntil) return;
+                                                const ne = e.nativeEvent as MouseEvent;
+                                                openMessageMenu(m.id, e.currentTarget, ne.clientX, ne.clientY);
                                             }}
-                                            onPointerMove={(e) => {
-                                                if (e.pointerType !== 'mouse' || !swipeRef.current.active || swipeRef.current.id !== m.id) return;
-                                                const dx = e.clientX - swipeRef.current.startX;
-                                                const dy = e.clientY - swipeRef.current.startY;
-                                                if (!swipeRef.current.captured) {
-                                                    // چپ به راست: dx باید مثبت باشد
-                                                    if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
-                                                    swipeRef.current.captured = true;
-                                                    setReplySwipeLocked(true);
-                                                    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
-                                                }
-                                                e.preventDefault();
-                                                setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
-                                            }}
-                                            onPointerUp={(e) => {
-                                                if (e.pointerType !== 'mouse' || !swipeRef.current.active || swipeRef.current.id !== m.id) return;
-                                                const dx = e.clientX - swipeRef.current.startX;
-                                                const dy = e.clientY - swipeRef.current.startY;
-                                                if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
-                                                if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m, true);
-                                                resetDrag(m.id);
-                                                swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
-                                            }}
-                                            onPointerCancel={(e) => {
-                                                if (e.pointerType !== 'mouse' || swipeRef.current.id !== m.id) return;
-                                                resetDrag(m.id);
-                                                swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
-                                            }}
-                                            onTouchStart={(e) => {
-                                                const t = e.touches[0];
-                                                swipeRef.current = { id: m.id, startX: t.clientX, startY: t.clientY, active: true, captured: false, pointerId: null, blockClickUntil: swipeRef.current.blockClickUntil };
-                                            }}
-                                            onTouchMove={(e) => {
-                                                if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
-                                                const t = e.touches[0];
-                                                const dx = t.clientX - swipeRef.current.startX;
-                                                const dy = t.clientY - swipeRef.current.startY;
-                                                if (!swipeRef.current.captured) {
-                                                    // چپ به راست: dx باید مثبت باشد
-                                                    if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
-                                                    swipeRef.current.captured = true;
-                                                    setReplySwipeLocked(true);
-                                                }
-                                                e.preventDefault();
-                                                setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
-                                            }}
-                                            onTouchEnd={(e) => {
-                                                if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
-                                                const t = e.changedTouches[0];
-                                                const dx = t.clientX - swipeRef.current.startX;
-                                                const dy = t.clientY - swipeRef.current.startY;
-                                                if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
-                                                if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m, true);
-                                                resetDrag(m.id);
-                                                swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
-                                            }}
-                                            onTouchCancel={() => {
-                                                if (swipeRef.current.id !== m.id) return;
-                                                resetDrag(m.id);
-                                                swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
+                                            role="button" tabIndex={0}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') openMessageMenu(m.id, e.currentTarget as any); }}
+                                            style={{
+                                                cursor: 'pointer',
+                                                transform: `translateX(${dragX}px)`,
+                                                transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 180ms ease-out',
+                                                touchAction: dragActive ? 'none' : 'auto',
+                                                boxShadow: isHighlighted
+                                                    ? '0 0 0 3px rgba(245, 158, 11, 0.4)'
+                                                    : isMenuActive
+                                                        ? '0 0 0 2px rgba(47, 128, 237, 0.35)'
+                                                        : undefined,
                                             }}
                                         >
-                                            {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--last') && (() => {
+                                            {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--first') && (() => {
                                                 const sender = groupMembers[m.senderId];
                                                 const senderName = sender?.name || m.senderId || 'ناشناس';
+                                                const colors = ['#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3', '#00BCD4', '#009688', '#4CAF50', '#FF5722', '#FF9800'];
+                                                const colorIdx = m.senderId ? Math.abs(m.senderId.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % colors.length : 0;
                                                 return (
-                                                    <div style={{ position: 'absolute', left: 0, bottom: 0, cursor: 'pointer', zIndex: 1 }}
-                                                        onClick={(e) => { e.stopPropagation(); openMember(m.senderId); }}>
-                                                        <Avatar name={senderName} size="sm" src={sender?.avatar || ''} />
+                                                    <div onClick={(e) => { e.stopPropagation(); openMember(m.senderId); }}
+                                                        style={{ fontSize: 13, fontWeight: 700, color: colors[colorIdx], marginBottom: 3, cursor: 'pointer', fontFamily: 'Vazir, sans-serif', lineHeight: '1.2' }}>
+                                                        {senderName}
                                                     </div>
                                                 );
                                             })()}
 
-                                            <div
-                                                ref={(el) => { if (!el) { messageElsRef.current.delete(m.id); return; } messageElsRef.current.set(m.id, el); }}
-                                                className={isMine ? `message-bubble message-bubble--mine ${shape}` : `message-bubble message-bubble--theirs ${shape}`}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (Date.now() < swipeRef.current.blockClickUntil) return;
-                                                    const ne = e.nativeEvent as MouseEvent;
-                                                    openMessageMenu(m.id, e.currentTarget, ne.clientX, ne.clientY);
-                                                }}
-                                                role="button" tabIndex={0}
-                                                onKeyDown={(e) => { if (e.key === 'Enter') openMessageMenu(m.id, e.currentTarget as any); }}
-                                                style={{
-                                                    cursor: 'pointer',
-                                                    transform: `translateX(${dragX}px)`,
-                                                    transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 180ms ease-out',
-                                                    touchAction: dragActive ? 'none' : 'auto',
-                                                    boxShadow: isHighlighted
-                                                        ? '0 0 0 3px rgba(245, 158, 11, 0.4)'
-                                                        : isMenuActive
-                                                            ? '0 0 0 2px rgba(47, 128, 237, 0.35)'
-                                                            : undefined,
-                                                }}
-                                            >
-                                                {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--first') && (() => {
-                                                    const sender = groupMembers[m.senderId];
-                                                    const senderName = sender?.name || m.senderId || 'ناشناس';
-                                                    const colors = ['#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3', '#00BCD4', '#009688', '#4CAF50', '#FF5722', '#FF9800'];
-                                                    const colorIdx = m.senderId ? Math.abs(m.senderId.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % colors.length : 0;
-                                                    return (
-                                                        <div onClick={(e) => { e.stopPropagation(); openMember(m.senderId); }}
-                                                            style={{ fontSize: 13, fontWeight: 700, color: colors[colorIdx], marginBottom: 3, cursor: 'pointer', fontFamily: 'Vazir, sans-serif', lineHeight: '1.2' }}>
-                                                            {senderName}
-                                                        </div>
-                                                    );
-                                                })()}
-
-                                                {m.forwardedFrom && (
-                                                    <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4, fontStyle: 'italic', fontFamily: 'Vazir, sans-serif' }}>
-                                                        فوروارد شده از: {m.forwardedFrom.name || m.forwardedFrom.username || 'ناشناس'}
-                                                    </div>
-                                                )}
-
-                                                {m.replyTo && (
-                                                    <div onClick={(e) => { e.stopPropagation(); scrollToMessage(m.replyTo!.id); }}
-                                                        role="button" tabIndex={0}
-                                                        onKeyDown={(e) => { if (e.key === 'Enter') scrollToMessage(m.replyTo!.id); }}
-                                                        className="message-reply-box"
-                                                        style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
-                                                        <div className="message-reply-box__label">پاسخ</div>
-                                                        <div className="message-reply-box__text">{m.replyTo.text}</div>
-                                                    </div>
-                                                )}
-
-                                                {m.text && <div className="message-text">{m.text}</div>}
-                                                {m.file && (
-                                                    <FileMessage
-                                                        file={m.file}
-                                                        token={token}
-                                                        onMediaLoad={() => handleInitialMediaReady(m.id)}
-                                                        onImageClick={(imageUrl) => setOpenedImageUrl(imageUrl)}
-                                                    />
-                                                )}
-
-                                                {effectiveReactions && effectiveReactions.length > 0 && (
-                                                    <div className="message-reactions">
-                                                        {effectiveReactions.map((reaction: any, idx: number) => {
-                                                            const userIds = reaction.userIds || [];
-                                                            const isMyReaction = userIds.includes(currentUserId);
-                                                            return (
-                                                                <button key={idx}
-                                                                    className={isMyReaction ? 'message-reaction message-reaction--active' : 'message-reaction'}
-                                                                    onClick={(e) => { e.stopPropagation(); if (isMyReaction) handleDeleteReaction(m.id); else handleReact(m.id, reaction.emoji); }}
-                                                                    type="button"
-                                                                >
-                                                                    <span className="message-reaction__emoji">{reaction.emoji}</span>
-                                                                    {reaction.count > 1 && <span className="message-reaction__count">{reaction.count}</span>}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                )}
-
-                                                <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
-                                                    <span className="message-time">{formatMessageTime(m.timestamp)}</span>
-                                                    {m.edited && <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>ویرایش شده</span>}
-                                                    {isMine && (
-                                                        <span className={isSeenForUi ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
-                                                            {isSeenForUi ? '✓✓' : '✓'}
-                                                        </span>
-                                                    )}
+                                            {m.forwardedFrom && (
+                                                <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4, fontStyle: 'italic', fontFamily: 'Vazir, sans-serif' }}>
+                                                    فوروارد شده از: {m.forwardedFrom.name || m.forwardedFrom.username || 'ناشناس'}
                                                 </div>
+                                            )}
+
+                                            {m.replyTo && (
+                                                <div onClick={(e) => { e.stopPropagation(); scrollToMessage(m.replyTo!.id); }}
+                                                    role="button" tabIndex={0}
+                                                    onKeyDown={(e) => { if (e.key === 'Enter') scrollToMessage(m.replyTo!.id); }}
+                                                    className="message-reply-box"
+                                                    style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
+                                                    <div className="message-reply-box__label">پاسخ</div>
+                                                    <div className="message-reply-box__text">{m.replyTo.text}</div>
+                                                </div>
+                                            )}
+
+                                            {m.text && <div className="message-text">{m.text}</div>}
+                                            {m.file && (
+                                                <FileMessage
+                                                    file={m.file}
+                                                    token={token}
+                                                    onMediaLoad={() => handleInitialMediaReady(m.id)}
+                                                    onImageClick={(imageUrl) => setOpenedImageUrl(imageUrl)}
+                                                />
+                                            )}
+
+                                            {effectiveReactions && effectiveReactions.length > 0 && (
+                                                <div className="message-reactions">
+                                                    {effectiveReactions.map((reaction: any, idx: number) => {
+                                                        const userIds = reaction.userIds || [];
+                                                        const isMyReaction = userIds.includes(currentUserId);
+                                                        return (
+                                                            <button key={idx}
+                                                                className={isMyReaction ? 'message-reaction message-reaction--active' : 'message-reaction'}
+                                                                onClick={(e) => { e.stopPropagation(); if (isMyReaction) handleDeleteReaction(m.id); else handleReact(m.id, reaction.emoji); }}
+                                                                type="button"
+                                                            >
+                                                                <span className="message-reaction__emoji">{reaction.emoji}</span>
+                                                                {reaction.count > 1 && <span className="message-reaction__count">{reaction.count}</span>}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+
+                                            <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
+                                                <span className="message-time">{formatMessageTime(m.timestamp)}</span>
+                                                {m.edited && <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>ویرایش شده</span>}
+                                                {isMine && (
+                                                    <span className={isSeenForUi ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
+                                                        {isSeenForUi ? '✓✓' : '✓'}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
-                                );
-                            })
-                        )}
-                        <div ref={messagesEndRef} />
-                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                    <div ref={messagesEndRef} />
                 </div>
+            </div>
 
-                {msgMenu && (() => {
-                    const activeMsg = messages.find((mm) => mm.id === msgMenu.id);
-                    if (!activeMsg) return null;
-                    const activeMsgIsMine = activeMsg.senderId === currentUserId;
-                    const canDeleteActiveMsg = activeMsgIsMine || (isGroupChat && isVerifiedUser);
-                    const showSeenByAction = isGroupChat && activeMsgIsMine;
+            {msgMenu && (() => {
+                const activeMsg = messages.find((mm) => mm.id === msgMenu.id);
+                if (!activeMsg) return null;
+                const activeMsgIsMine = activeMsg.senderId === currentUserId;
+                const canDeleteActiveMsg = activeMsgIsMine || (isGroupChat && isVerifiedUser);
+                const showSeenByAction = isGroupChat && activeMsgIsMine;
 
-                    return (
-                        <div ref={msgMenuRef} className="popover popover--mini"
-                            style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
-                            onClick={(e) => e.stopPropagation()}>
-                            {showSeenByAction && (
-                                <button className="popover__item" onClick={() => {
-                                    setSeenByMenu({ id: activeMsg.id, top: msgMenu.top, left: msgMenu.left });
-                                    setMsgMenu(null);
-                                }} type="button">
-                                    <Eye size={16} />دیده شده توسط
-                                </button>
-                            )}
-                            <button className="popover__item" onClick={() => { const el = messageElsRef.current.get(activeMsg.id); if (el) openReactionMenu(activeMsg.id, el); }} type="button">
-                                <Smile size={16} />واکنش
+                return (
+                    <div ref={msgMenuRef} className="popover popover--mini"
+                        style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
+                        onClick={(e) => e.stopPropagation()}>
+                        {showSeenByAction && (
+                            <button className="popover__item" onClick={() => {
+                                setSeenByMenu({ id: activeMsg.id, top: msgMenu.top, left: msgMenu.left });
+                                setMsgMenu(null);
+                            }} type="button">
+                                <Eye size={16} />دیده شده توسط
                             </button>
-                            <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><Reply size={16} />پاسخ</button>
-                            <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><Forward size={16} />فوروارد</button>
-                            {activeMsg.senderId === currentUserId && !activeMsg.forwardedFrom && (
-                                <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
-                            )}
-                            <button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><Copy size={16} />کپی</button>
-                            {canDeleteActiveMsg && (
-                                <button className="popover__item popover__item--danger" onClick={() => doDeleteMessage(activeMsg.id)} type="button">
-                                    <Trash2 size={16} />حذف
-                                </button>
+                        )}
+                        <button className="popover__item" onClick={() => { const el = messageElsRef.current.get(activeMsg.id); if (el) openReactionMenu(activeMsg.id, el); }} type="button">
+                            <Smile size={16} />واکنش
+                        </button>
+                        <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><Reply size={16} />پاسخ</button>
+                        <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><Forward size={16} />فوروارد</button>
+                        {activeMsg.senderId === currentUserId && !activeMsg.forwardedFrom && (
+                            <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
+                        )}
+                        <button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><Copy size={16} />کپی</button>
+                        {canDeleteActiveMsg && (
+                            <button className="popover__item popover__item--danger" onClick={() => doDeleteMessage(activeMsg.id)} type="button">
+                                <Trash2 size={16} />حذف
+                            </button>
+                        )}
+                    </div>
+                );
+            })()}
+
+            {seenByMenu && (() => {
+                const rows = seenByUsersByMessage[seenByMenu.id] || [];
+
+                return (
+                    <div ref={seenByMenuRef} className="popover popover--mini"
+                        style={{ top: seenByMenu.top, left: seenByMenu.left, right: 'auto', position: 'absolute', zIndex: 52 }}
+                        onClick={(e) => e.stopPropagation()}>
+                        <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)' }}>
+                            دیده شده توسط ({rows.length})
+                        </div>
+                        <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                            {rows.length === 0 ? (
+                                <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>
+                                    هنوز کسی این پیام را ندیده است
+                                </div>
+                            ) : (
+                                rows.map((u) => (
+                                    <button key={u.chatId} className="popover__item" type="button"
+                                        onClick={() => {
+                                            setSeenByMenu(null);
+                                            openMember(u.chatId);
+                                        }}>
+                                        <Avatar name={u.name || u.username || ''} src={u.avatar || ''} size="sm" />
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                            <span>{u.name || u.username || u.chatId}</span>
+                                            {resolveVerified(u.verified) && <VerifiedBadge size={13} />}
+                                        </span>
+                                    </button>
+                                ))
                             )}
                         </div>
-                    );
-                })()}
+                    </div>
+                );
+            })()}
 
-                {seenByMenu && (() => {
-                    const rows = seenByUsersByMessage[seenByMenu.id] || [];
+            {openedImageUrl && (
+                <ImageMediaViewer
+                    imageUrl={openedImageUrl}
+                    onClose={() => setOpenedImageUrl(null)}
+                />
+            )}
 
-                    return (
-                        <div ref={seenByMenuRef} className="popover popover--mini"
-                            style={{ top: seenByMenu.top, left: seenByMenu.left, right: 'auto', position: 'absolute', zIndex: 52 }}
-                            onClick={(e) => e.stopPropagation()}>
-                            <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)' }}>
-                                دیده شده توسط ({rows.length})
-                            </div>
-                            <div style={{ maxHeight: 260, overflowY: 'auto' }}>
-                                {rows.length === 0 ? (
-                                    <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>
-                                        هنوز کسی این پیام را ندیده است
-                                    </div>
-                                ) : (
-                                    rows.map((u) => (
-                                        <button key={u.chatId} className="popover__item" type="button"
-                                            onClick={() => {
-                                                setSeenByMenu(null);
-                                                openMember(u.chatId);
-                                            }}>
-                                            <Avatar name={u.name || u.username || ''} src={u.avatar || ''} size="sm" />
-                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                                <span>{u.name || u.username || u.chatId}</span>
-                                                {resolveVerified(u.verified) && <VerifiedBadge size={13} />}
-                                            </span>
-                                        </button>
-                                    ))
-                                )}
-                            </div>
-                        </div>
-                    );
-                })()}
+            {reactionMenu && (() => {
+                const reactionMsg = messages.find((mm) => mm.id === reactionMenu.id);
+                if (!reactionMsg) return null;
 
-                {openedImageUrl && (
-                    <ImageMediaViewer
-                        imageUrl={openedImageUrl}
-                        onClose={() => setOpenedImageUrl(null)}
-                    />
-                )}
+                const reactionRows = optimisticReactions[reactionMsg.id] ?? reactionMsg.reactions ?? [];
 
-                {reactionMenu && (() => {
-                    const reactionMsg = messages.find((mm) => mm.id === reactionMenu.id);
-                    if (!reactionMsg) return null;
+                const myReaction = reactionRows.find((r: any) =>
+                    r.userIds && Array.isArray(r.userIds) && r.userIds.includes(currentUserId)
+                );
 
-                    const reactionRows = optimisticReactions[reactionMsg.id] ?? reactionMsg.reactions ?? [];
-
-                    const myReaction = reactionRows.find((r: any) =>
-                        r.userIds && Array.isArray(r.userIds) && r.userIds.includes(currentUserId)
-                    );
-
-                    const reactionUsersList: { userId: string; emoji: string; name: string; avatar: string; verified: boolean }[] = [];
-                    if (reactionRows.length > 0) {
-                        reactionRows.forEach((r: any) => {
-                            (r.userIds || []).forEach((uid: string) => {
-                                const member = groupMembers[uid];
-                                reactionUsersList.push({
-                                    userId: uid,
-                                    emoji: r.emoji,
-                                    name: member?.name || uid,
-                                    avatar: member?.avatar || '',
-                                    verified: resolveVerified(member?.verified),
-                                });
+                const reactionUsersList: { userId: string; emoji: string; name: string; avatar: string; verified: boolean }[] = [];
+                if (reactionRows.length > 0) {
+                    reactionRows.forEach((r: any) => {
+                        (r.userIds || []).forEach((uid: string) => {
+                            const member = groupMembers[uid];
+                            reactionUsersList.push({
+                                userId: uid,
+                                emoji: r.emoji,
+                                name: member?.name || uid,
+                                avatar: member?.avatar || '',
+                                verified: resolveVerified(member?.verified),
                             });
                         });
-                    }
+                    });
+                }
 
-                    return (
-                        <div ref={reactionMenuRef}
-                            style={{ top: reactionMenu.top, left: reactionMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
-                            onClick={(e) => e.stopPropagation()}>
-                            <ReactionPicker
-                                messageId={reactionMsg.id}
-                                currentReaction={myReaction?.emoji}
-                                onReact={(id, emoji) => handleReact(id, emoji)}
-                                onDeleteReaction={(id) => handleDeleteReaction(id)}
-                                onClose={() => setReactionMenu(null)}
-                            />
-
-                            {isGroupChat && reactionUsersList.length > 0 && (
-                                <div style={{ marginTop: 6, background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 12, overflow: 'hidden', minWidth: 220, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
-                                    <div style={{ padding: '7px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)', fontFamily: 'Vazir, sans-serif' }}>
-                                        واکنش‌ها
-                                        ({reactionUsersList.length})
-                                    </div>
-                                    <div style={{ maxHeight: 260, overflowY: 'auto' }}>
-                                        {reactionUsersList.map((ru, i) => (
-                                            <div key={i}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setReactionMenu(null);
-                                                    openMember(ru.userId);
-                                                }}
-                                                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderTop: i > 0 ? '1px solid var(--border-primary)' : 'none', cursor: 'pointer', transition: 'background 0.12s' }}
-                                                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary, rgba(0,0,0,0.04))')}
-                                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                                            >
-                                                <div style={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
-                                                    <Avatar name={ru.name} size="xs" src={ru.avatar} />
-                                                </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
-                                                    <span style={{ fontSize: 13, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                        {ru.name}
-                                                    </span>
-                                                    {ru.verified && <VerifiedBadge size={13} />}
-                                                </div>
-                                                <span style={{ fontSize: 18, flexShrink: 0 }}>{ru.emoji}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    );
-                })()}
-
-                {(newMsgCount > 0 || showScrollBtn) && (
-                    <button type="button" aria-label="Jump to latest messages"
-                        onClick={() => { scrollToBottom(true); setNewMsgCount(0); setShowScrollBtn(false); }}
-                        style={{ position: 'absolute', right: 16, bottom: 96, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid rgba(0,0,0,0.12)', background: '#fff', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px' }}>
-                        <ArrowDown size={16} />
-                        {newMsgCount > 0 && (
-                            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{newMsgCount}</span>
-                                <span style={{ width: 6, height: 6, borderRadius: 999, background: '#2F80ED', marginTop: 4 }} />
-                            </span>
-                        )}
-                    </button>
-                )}
-
-                <div className="chat-room__input-area">
-                    {(replyTo || editingId) && (
-                        <div className="chat-room__reply-edit-box">
-                            <div style={{ minWidth: 0 }}>
-                                <div className="chat-room__reply-edit-box__title">{editingId ? 'در حال ویرایش' : 'در حال پاسخ'}</div>
-                                {!editingId && replyTo && <div className="chat-room__reply-edit-box__text">{replyTo.text}</div>}
-                            </div>
-                            <button type="button" className="icon-btn" aria-label="Cancel" onClick={() => { setReplyTo(null); setEditingId(null); setText(''); }}>
-                                <X size={18} />
-                            </button>
-                        </div>
-                    )}
-                    {uploadedFile && (
-                        <div className="chat-room__reply-edit-box">
-                            <div style={{ minWidth: 0 }}>
-                                <div className="chat-room__reply-edit-box__title">فایل آپلود شده</div>
-                                <div className="chat-room__reply-edit-box__text">{uploadedFile.fileName}</div>
-                            </div>
-                            <button type="button" className="icon-btn" aria-label="Remove file" onClick={() => setUploadedFile(null)}><X size={18} /></button>
-                        </div>
-                    )}
-                    <div className="chat-room__input-wrapper">
-                        <FileUpload token={token} onFileUploaded={handleFileUploaded} />
-                        <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
-                            value={text} onChange={(e) => setText(e.target.value)}
-                            onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
-                            onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }}
-                            rows={1}
+                return (
+                    <div ref={reactionMenuRef}
+                        style={{ top: reactionMenu.top, left: reactionMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
+                        onClick={(e) => e.stopPropagation()}>
+                        <ReactionPicker
+                            messageId={reactionMsg.id}
+                            currentReaction={myReaction?.emoji}
+                            onReact={(id, emoji) => handleReact(id, emoji)}
+                            onDeleteReaction={(id) => handleDeleteReaction(id)}
+                            onClose={() => setReactionMenu(null)}
                         />
-                        <button
-                            className={text.trim() || uploadedFile ? 'chat-room__send-btn chat-room__send-btn--active' : 'chat-room__send-btn chat-room__send-btn--disabled'}
-                            onClick={submit} disabled={!text.trim() && !uploadedFile} aria-label="Send" type="button">
-                            <SendHorizontal size={18} />
+
+                        {isGroupChat && reactionUsersList.length > 0 && (
+                            <div style={{ marginTop: 6, background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 12, overflow: 'hidden', minWidth: 220, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+                                <div style={{ padding: '7px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)', fontFamily: 'Vazir, sans-serif' }}>
+                                    واکنش‌ها
+                                    ({reactionUsersList.length})
+                                </div>
+                                <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                                    {reactionUsersList.map((ru, i) => (
+                                        <div key={i}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setReactionMenu(null);
+                                                openMember(ru.userId);
+                                            }}
+                                            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderTop: i > 0 ? '1px solid var(--border-primary)' : 'none', cursor: 'pointer', transition: 'background 0.12s' }}
+                                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary, rgba(0,0,0,0.04))')}
+                                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                        >
+                                            <div style={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
+                                                <Avatar name={ru.name} size="xs" src={ru.avatar} />
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
+                                                <span style={{ fontSize: 13, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    {ru.name}
+                                                </span>
+                                                {ru.verified && <VerifiedBadge size={13} />}
+                                            </div>
+                                            <span style={{ fontSize: 18, flexShrink: 0 }}>{ru.emoji}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            })()}
+
+            {(newMsgCount > 0 || showScrollBtn) && (
+                <button type="button" aria-label="Jump to latest messages"
+                    onClick={() => { scrollToBottom(true); setNewMsgCount(0); setShowScrollBtn(false); }}
+                    style={{ position: 'absolute', right: 16, bottom: 96, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid rgba(0,0,0,0.12)', background: '#fff', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px' }}>
+                    <ArrowDown size={16} />
+                    {newMsgCount > 0 && (
+                        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{newMsgCount}</span>
+                            <span style={{ width: 6, height: 6, borderRadius: 999, background: '#2F80ED', marginTop: 4 }} />
+                        </span>
+                    )}
+                </button>
+            )}
+
+            <div className="chat-room__input-area">
+                {(replyTo || editingId) && (
+                    <div className="chat-room__reply-edit-box">
+                        <div style={{ minWidth: 0 }}>
+                            <div className="chat-room__reply-edit-box__title">{editingId ? 'در حال ویرایش' : 'در حال پاسخ'}</div>
+                            {!editingId && replyTo && <div className="chat-room__reply-edit-box__text">{replyTo.text}</div>}
+                        </div>
+                        <button type="button" className="icon-btn" aria-label="Cancel" onClick={() => { setReplyTo(null); setEditingId(null); setText(''); }}>
+                            <X size={18} />
                         </button>
                     </div>
+                )}
+                {uploadedFile && (
+                    <div className="chat-room__reply-edit-box">
+                        <div style={{ minWidth: 0 }}>
+                            <div className="chat-room__reply-edit-box__title">فایل آپلود شده</div>
+                            <div className="chat-room__reply-edit-box__text">{uploadedFile.fileName}</div>
+                        </div>
+                        <button type="button" className="icon-btn" aria-label="Remove file" onClick={() => setUploadedFile(null)}><X size={18} /></button>
+                    </div>
+                )}
+                <div className="chat-room__input-wrapper">
+                    <FileUpload token={token} onFileUploaded={handleFileUploaded} />
+                    <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
+                        value={text} onChange={(e) => setText(e.target.value)}
+                        onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }}
+                        rows={1}
+                    />
+                    <button
+                        className={text.trim() || uploadedFile ? 'chat-room__send-btn chat-room__send-btn--active' : 'chat-room__send-btn chat-room__send-btn--disabled'}
+                        onClick={submit} disabled={!text.trim() && !uploadedFile} aria-label="Send" type="button">
+                        <SendHorizontal size={18} />
+                    </button>
                 </div>
+            </div>
 
-                <ForwardModal isOpen={forwardModalOpen} chats={chats} currentUserId={currentUserId}
-                    onClose={() => setForwardModalOpen(false)} onForward={handleForwardMessage} onSelectChat={onSelectChat} />
+            <ForwardModal isOpen={forwardModalOpen} chats={chats} currentUserId={currentUserId}
+                onClose={() => setForwardModalOpen(false)} onForward={handleForwardMessage} onSelectChat={onSelectChat} />
 
-                {confirmDeleteChat && (
-                    <div className="chat-room-modal-overlay" ref={confirmDeleteChatRef}>
-                        <div className="chat-room-confirm-modal">
-                            <h3 className="chat-room-confirm-modal__title">{isGroupChat ? 'گروه حذف شود؟' : 'گفتگو حذف شود؟'}</h3>
-                            <p className="chat-room-confirm-modal__text">
-                                {isGroupChat ? 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.' : 'این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'}
-                            </p>
-                            <div className="chat-room-confirm-modal__actions">
-                                <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteChat(false)} type="button">لغو</button>
-                                <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doDeleteChat} type="button">حذف</button>
-                            </div>
+            {confirmDeleteChat && (
+                <div className="chat-room-modal-overlay" ref={confirmDeleteChatRef}>
+                    <div className="chat-room-confirm-modal">
+                        <h3 className="chat-room-confirm-modal__title">{isGroupChat ? 'گروه حذف شود؟' : 'گفتگو حذف شود؟'}</h3>
+                        <p className="chat-room-confirm-modal__text">
+                            {isGroupChat ? 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.' : 'این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'}
+                        </p>
+                        <div className="chat-room-confirm-modal__actions">
+                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteChat(false)} type="button">لغو</button>
+                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doDeleteChat} type="button">حذف</button>
                         </div>
                     </div>
-                )}
+                </div>
+            )}
 
-                {confirmLeaveGroup && (
-                    <div className="chat-room-modal-overlay" ref={confirmLeaveGroupRef}>
-                        <div className="chat-room-confirm-modal">
-                            <h3 className="chat-room-confirm-modal__title">خروج از گروه؟</h3>
-                            <p className="chat-room-confirm-modal__text">آیا می‌خواهید از گروه خارج شوید؟ گروه برای شما حذف خواهد شد.</p>
-                            <div className="chat-room-confirm-modal__actions">
-                                <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmLeaveGroup(false)} type="button">لغو</button>
-                                <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doLeaveGroup} type="button">خروج</button>
-                            </div>
+            {confirmLeaveGroup && (
+                <div className="chat-room-modal-overlay" ref={confirmLeaveGroupRef}>
+                    <div className="chat-room-confirm-modal">
+                        <h3 className="chat-room-confirm-modal__title">خروج از گروه؟</h3>
+                        <p className="chat-room-confirm-modal__text">آیا می‌خواهید از گروه خارج شوید؟ گروه برای شما حذف خواهد شد.</p>
+                        <div className="chat-room-confirm-modal__actions">
+                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmLeaveGroup(false)} type="button">لغو</button>
+                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doLeaveGroup} type="button">خروج</button>
                         </div>
                     </div>
-                )}
+                </div>
+            )}
 
-                {confirmDeleteMsg && (
-                    <div className="chat-room-modal-overlay" ref={confirmDeleteMsgRef}>
-                        <div className="chat-room-confirm-modal">
-                            <h3 className="chat-room-confirm-modal__title">این پیام حذف شود؟</h3>
-                            <p className="chat-room-confirm-modal__text">این عمل پیام را کامل حذف میکند.</p>
-                            <div className="chat-room-confirm-modal__actions">
-                                <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteMsg(null)} type="button">لغو</button>
-                                <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={confirmDeleteMessage} type="button">حذف</button>
-                            </div>
+            {confirmDeleteMsg && (
+                <div className="chat-room-modal-overlay" ref={confirmDeleteMsgRef}>
+                    <div className="chat-room-confirm-modal">
+                        <h3 className="chat-room-confirm-modal__title">این پیام حذف شود؟</h3>
+                        <p className="chat-room-confirm-modal__text">این عمل پیام را کامل حذف میکند.</p>
+                        <div className="chat-room-confirm-modal__actions">
+                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteMsg(null)} type="button">لغو</button>
+                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={confirmDeleteMessage} type="button">حذف</button>
                         </div>
                     </div>
-                )}
+                </div>
+            )}
         </motion.div>
     );
 }
