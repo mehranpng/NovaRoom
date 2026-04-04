@@ -15,6 +15,7 @@ export function ReactionPicker({ messageId, currentReaction, onReact, onDeleteRe
     const isPointerDownRef = useRef(false);
     const dragStartXRef = useRef(0);
     const startScrollLeftRef = useRef(0);
+    const dragFactorRef = useRef(1.2);
 
     const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
         const container = emojisRef.current;
@@ -22,6 +23,7 @@ export function ReactionPicker({ messageId, currentReaction, onReact, onDeleteRe
         isPointerDownRef.current = true;
         dragStartXRef.current = e.clientX;
         startScrollLeftRef.current = container.scrollLeft;
+        dragFactorRef.current = e.pointerType === 'touch' ? 2.4 : 1.2;
         container.setPointerCapture?.(e.pointerId);
         container.classList.add('reaction-picker__emojis--dragging');
     };
@@ -31,7 +33,7 @@ export function ReactionPicker({ messageId, currentReaction, onReact, onDeleteRe
         const container = emojisRef.current;
         if (!container) return;
         const dx = e.clientX - dragStartXRef.current;
-        container.scrollLeft = startScrollLeftRef.current - dx;
+        container.scrollLeft = startScrollLeftRef.current - (dx * dragFactorRef.current);
     };
 
     const stopDragging = (e: PointerEvent<HTMLDivElement>) => {
