@@ -517,9 +517,26 @@ export function ChatRoom({
         const room = roomRef.current;
         if (!room) return;
         const vv = (window as any).visualViewport as VisualViewport | undefined;
+<<<<<<< HEAD
         if (!vv) return;
         let raf: number | null = null;
         const update = () => {
+=======
+        if (!vv) { room.style.setProperty('--keyboard-offset', '0px'); return; }
+        const ua = navigator.userAgent || '';
+        const isIOSWebKit = /iP(ad|hone|od)/i.test(ua) || (/Macintosh/i.test(ua) && 'ontouchend' in document);
+        const isChromeLikeOnIOS = /CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
+        const shouldUseViewportKeyboardOffset = isIOSWebKit && !isChromeLikeOnIOS;
+        let raf: number | null = null;
+        const update = () => {
+            const el = roomRef.current;
+            if (!el) return;
+            const offsetTop = typeof vv.offsetTop === 'number' ? vv.offsetTop : 0;
+            const keyboard = shouldUseViewportKeyboardOffset
+                ? Math.max(0, window.innerHeight - vv.height - offsetTop)
+                : 0;
+            el.style.setProperty('--keyboard-offset', `${Math.round(keyboard)}px`);
+>>>>>>> 0905a45e05ef835fd0c69e2c1b40a78868cc8784
             if (isAtBottomRef.current) {
                 if (raf) cancelAnimationFrame(raf);
                 raf = requestAnimationFrame(() => scrollToBottom(false));
