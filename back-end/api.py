@@ -1773,7 +1773,15 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
         while True:
             try:
-                data = await websocket.receive_json()
+                data = await asyncio.wait_for(websocket.receive_json(), timeout=70)
+            except asyncio.TimeoutError:
+                # Proactively probe silent/stale connections so online status
+                # doesn't stay "stuck" for a long time on abrupt network drops.
+                try:
+                    await websocket.send_json({"type": "ping"})
+                except Exception:
+                    break
+                continue
             except ValueError:
                 continue
 
@@ -2057,6 +2065,139 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                                 "byUserId": chat_id,
                             },
                         )
+
+            elif data.get("type") == "get_chats":
+                request_id = data.get("requestId")
+                try:
+                    chats_data = await get_chat_list(current_user=user)
+                    await websocket.send_json(
+                        {
+                            "type": "chats",
+                            "requestId": request_id,
+                            "chats": chats_data,
+                        }
+                    )
+                except HTTPException as e:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "requestId": request_id,
+                            "error": str(e.detail),
+                        }
+                    )
+
+            elif data.get("type") == "get_messages":
+                request_id = data.get("requestId")
+                chat_id_target = data.get("chatId")
+                raw_limit = data.get("limit", 100)
+                try:
+                    limit = int(raw_limit)
+                except Exception:
+                    limit = 100
+                limit = max(1, min(limit, 200))
+
+                if not chat_id_target or not isinstance(chat_id_target, str):
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "requestId": request_id,
+                            "error": "chatId is required",
+                        }
+                    )
+                    continue
+
+                try:
+                    msgs = await get_messages(
+                        chat_id=chat_id_target,
+                        limit=limit,
+                        current_user=user,
+                    )
+                    await websocket.send_json(
+                        {
+                            "type": "messages",
+                            "requestId": request_id,
+                            "chatId": chat_id_target,
+                            "messages": msgs,
+                        }
+                    )
+                except HTTPException as e:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "requestId": request_id,
+                            "error": str(e.detail),
+                        }
+                    )
+
+            elif data.get("type") == "react_message":
+                request_id = data.get("requestId")
+                chat_id_target = data.get("chatId")
+                message_id = data.get("messageId")
+                emoji = data.get("emoji")
+                try:
+                    result = await add_reaction(
+                        chat_id=chat_id_target,
+                        message_id=message_id,
+                        req=ReactionRequest(emoji=str(emoji or "")),
+                        current_user=user,
+                    )
+                    await websocket.send_json(
+                        {"type": "react_message_ack", "requestId": request_id, **result}
+                    )
+                except HTTPException as e:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "requestId": request_id,
+                            "error": str(e.detail),
+                        }
+                    )
+
+            elif data.get("type") == "unreact_message":
+                request_id = data.get("requestId")
+                chat_id_target = data.get("chatId")
+                message_id = data.get("messageId")
+                try:
+                    result = await remove_reaction(
+                        chat_id=chat_id_target,
+                        message_id=message_id,
+                        current_user=user,
+                    )
+                    await websocket.send_json(
+                        {"type": "unreact_message_ack", "requestId": request_id, **result}
+                    )
+                except HTTPException as e:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "requestId": request_id,
+                            "error": str(e.detail),
+                        }
+                    )
+
+            elif data.get("type") == "forward_message":
+                request_id = data.get("requestId")
+                message_id = data.get("messageId")
+                target_chat_id = data.get("targetChatId")
+                try:
+                    result = await forward_message(
+                        req=ForwardMessageRequest(
+                            messageId=str(message_id or ""),
+                            targetChatId=str(target_chat_id or ""),
+                        ),
+                        current_user=user,
+                    )
+                    await websocket.send_json(
+                        {"type": "forward_message_ack", "requestId": request_id, **result}
+                    )
+                except HTTPException as e:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "requestId": request_id,
+                            "error": str(e.detail),
+                        }
+                    )
 
             elif data.get("type") == "ping":
                 await websocket.send_json({"type": "pong"})

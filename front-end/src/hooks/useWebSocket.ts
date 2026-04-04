@@ -20,6 +20,11 @@ type OutgoingEvent =
     | { type: 'edit_message'; chatId: string; messageId: string; text: string }
     | { type: 'delete_message'; chatId: string; messageId: string }
     | { type: 'seen'; chatId: string }
+    | { type: 'get_chats'; requestId: string }
+    | { type: 'get_messages'; requestId: string; chatId: string; limit?: number }
+    | { type: 'react_message'; requestId: string; chatId: string; messageId: string; emoji: string }
+    | { type: 'unreact_message'; requestId: string; chatId: string; messageId: string }
+    | { type: 'forward_message'; requestId: string; messageId: string; targetChatId: string }
     | { type: 'ping' };
 
 const WS_RECONNECT_DELAY_MS = 1500;
@@ -49,6 +54,16 @@ export function useWebSocket({
     const shouldReconnectRef = useRef(true);
     const reconnectAttemptsRef = useRef(0);
     const lastPongAtRef = useRef<number>(Date.now());
+    const pendingRequestsRef = useRef<Map<string, { resolve: (data: any) => void; reject: (error: Error) => void; timeoutId: number }>>(new Map());
+    const requestCounterRef = useRef(0);
+
+    const rejectAllPendingRequests = useCallback((reason: string) => {
+        for (const [, pending] of pendingRequestsRef.current) {
+            window.clearTimeout(pending.timeoutId);
+            pending.reject(new Error(reason));
+        }
+        pendingRequestsRef.current.clear();
+    }, []);
 
     const clearReconnectTimer = () => {
         if (reconnectTimerRef.current != null) {
@@ -133,6 +148,20 @@ export function useWebSocket({
                     onReactionUpdated?.(data.chatId, data.messageId, data.reactions);
                 } else if (data.type === 'pong') {
                     lastPongAtRef.current = Date.now();
+                } else if (data.type === 'error' && data.requestId) {
+                    const pending = pendingRequestsRef.current.get(data.requestId);
+                    if (pending) {
+                        window.clearTimeout(pending.timeoutId);
+                        pendingRequestsRef.current.delete(data.requestId);
+                        pending.reject(new Error(data.error || 'WebSocket request failed'));
+                    }
+                } else if (data.requestId) {
+                    const pending = pendingRequestsRef.current.get(data.requestId);
+                    if (pending) {
+                        window.clearTimeout(pending.timeoutId);
+                        pendingRequestsRef.current.delete(data.requestId);
+                        pending.resolve(data);
+                    }
                 }
             } catch (err) {
                 console.error('WebSocket message parse error:', err);
@@ -146,6 +175,7 @@ export function useWebSocket({
 
             // Important: release ref so connect() can create a new socket.
             socketRef.current = null;
+            rejectAllPendingRequests('WebSocket disconnected');
 
             // Reconnect (single timer) to restore realtime status/seen updates.
             scheduleReconnect();
@@ -156,7 +186,7 @@ export function useWebSocket({
         };
 
         socketRef.current = ws;
-    }, [token, onNewMessage, onMessageEdited, onMessageDeleted, onUserStatusChange, onMessagesSeen, onReactionUpdated, onConnectionChange, scheduleReconnect]);
+    }, [token, onNewMessage, onMessageEdited, onMessageDeleted, onUserStatusChange, onMessagesSeen, onReactionUpdated, onConnectionChange, scheduleReconnect, rejectAllPendingRequests]);
 
     const send = useCallback(
         (event: OutgoingEvent): boolean => {
@@ -223,11 +253,60 @@ export function useWebSocket({
             socketRef.current?.close();
         } finally {
             socketRef.current = null;
+            rejectAllPendingRequests('WebSocket disconnected');
             isConnectedRef.current = false;
             setConnectionState('disconnected');
             onConnectionChange?.(false);
         }
-    }, [onConnectionChange]);
+    }, [onConnectionChange, rejectAllPendingRequests]);
+
+    const sendRequest = useCallback((event: OutgoingEvent & { requestId: string }, timeoutMs = 10000) => {
+        return new Promise<any>((resolve, reject) => {
+            const timeoutId = window.setTimeout(() => {
+                pendingRequestsRef.current.delete(event.requestId);
+                reject(new Error('WebSocket request timeout'));
+            }, timeoutMs);
+
+            pendingRequestsRef.current.set(event.requestId, { resolve, reject, timeoutId });
+            const ok = send(event);
+            if (!ok) {
+                // keep pending; it may flush after reconnect.
+                connect();
+            }
+        });
+    }, [send, connect]);
+
+    const makeRequestId = useCallback(() => {
+        requestCounterRef.current += 1;
+        return `${Date.now()}_${requestCounterRef.current}`;
+    }, []);
+
+    const fetchChats = useCallback(async () => {
+        const requestId = makeRequestId();
+        const response = await sendRequest({ type: 'get_chats', requestId });
+        return response.chats || [];
+    }, [makeRequestId, sendRequest]);
+
+    const fetchMessages = useCallback(async (chatId: string, limit = 100) => {
+        const requestId = makeRequestId();
+        const response = await sendRequest({ type: 'get_messages', requestId, chatId, limit });
+        return response.messages || [];
+    }, [makeRequestId, sendRequest]);
+
+    const reactMessage = useCallback(async (chatId: string, messageId: string, emoji: string) => {
+        const requestId = makeRequestId();
+        await sendRequest({ type: 'react_message', requestId, chatId, messageId, emoji });
+    }, [makeRequestId, sendRequest]);
+
+    const unreactMessage = useCallback(async (chatId: string, messageId: string) => {
+        const requestId = makeRequestId();
+        await sendRequest({ type: 'unreact_message', requestId, chatId, messageId });
+    }, [makeRequestId, sendRequest]);
+
+    const forwardMessage = useCallback(async (messageId: string, targetChatId: string) => {
+        const requestId = makeRequestId();
+        return await sendRequest({ type: 'forward_message', requestId, messageId, targetChatId });
+    }, [makeRequestId, sendRequest]);
 
     const reconnectNow = useCallback(() => {
         shouldReconnectRef.current = true;
@@ -281,6 +360,11 @@ export function useWebSocket({
         editMessage,
         deleteMessage,
         sendSeen,
+        fetchChats,
+        fetchMessages,
+        reactMessage,
+        unreactMessage,
+        forwardMessage,
         isConnected: isConnectedRef.current,
         connectionState,
         reconnectExhausted,

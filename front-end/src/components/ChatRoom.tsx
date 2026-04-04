@@ -32,6 +32,9 @@ interface ChatRoomProps {
     onOpenProfile?: () => void;
     initialUnreadCount?: number;
     onConsumeInitialUnread?: (chatId: string) => void;
+    onReactMessage?: (chatId: string, messageId: string, emoji: string) => Promise<void>;
+    onUnreactMessage?: (chatId: string, messageId: string) => Promise<void>;
+    onForwardMessage?: (messageId: string, targetChatId: string) => Promise<void>;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000;
@@ -176,6 +179,9 @@ export function ChatRoom({
     onOpenProfile,
     initialUnreadCount = 0,
     onConsumeInitialUnread,
+    onReactMessage,
+    onUnreactMessage,
+    onForwardMessage,
 }: ChatRoomProps) {
     const currentChat = useMemo(
         () => chats.find((c) => c.id === chatId) || null,
@@ -625,7 +631,11 @@ export function ChatRoom({
         // ویبره فقط هنگام ثبت ری‌اکشن جدید (نه toggle off)
         if (!alreadyReacted) triggerHaptic();
         try {
-            await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, { method: 'POST', body: JSON.stringify({ emoji }) });
+            if (onReactMessage) {
+                await onReactMessage(chatId, messageId, emoji);
+            } else {
+                await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, { method: 'POST', body: JSON.stringify({ emoji }) });
+            }
         } catch (e) {
             console.error('Failed to react:', e);
             // rollback on error
@@ -647,7 +657,11 @@ export function ChatRoom({
             [messageId]: applyOptimisticDeleteReaction(currentReactions, currentUserId),
         }));
         try {
-            await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, { method: 'DELETE' });
+            if (onUnreactMessage) {
+                await onUnreactMessage(chatId, messageId);
+            } else {
+                await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, { method: 'DELETE' });
+            }
         } catch (e) {
             console.error('Failed to delete reaction:', e);
             // rollback on error
@@ -668,7 +682,11 @@ export function ChatRoom({
     const handleForwardMessage = async (targetChatId: string) => {
         if (!forwardingMessageId) return;
         try {
-            await apiFetch('/messages/forward', { method: 'POST', body: JSON.stringify({ sourceChatId: chatId, messageId: forwardingMessageId, targetChatId }) });
+            if (onForwardMessage) {
+                await onForwardMessage(forwardingMessageId, targetChatId);
+            } else {
+                await apiFetch('/messages/forward', { method: 'POST', body: JSON.stringify({ sourceChatId: chatId, messageId: forwardingMessageId, targetChatId }) });
+            }
             setForwardingMessageId(null);
         } catch (e) {
             console.error('Failed to forward:', e);

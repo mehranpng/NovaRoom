@@ -168,7 +168,9 @@ export function App() {
         }
 
         try {
-            const data = await apiFetch('/chats');
+            const data = wsConnected
+                ? await fetchChatsViaWS().catch(() => apiFetch('/chats'))
+                : await apiFetch('/chats');
 
             const normalized: Chat[] = (data as any[]).map((c) => {
                 if (!c?.lastMessage) {
@@ -207,7 +209,7 @@ export function App() {
             console.error('Failed to load chats', error);
             setIsInitialChatsLoad(false);
         }
-    }, [isAuthenticated, isInitialChatsLoad]);
+    }, [isAuthenticated, isInitialChatsLoad, wsConnected, fetchChatsViaWS]);
 
     const handleLogout = useCallback(() => {
         localStorage.removeItem('token');
@@ -378,7 +380,19 @@ export function App() {
     }, []);
 
     // WebSocket initialization
-    const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen, reconnectExhausted, reconnectNow } = useWebSocket({
+    const {
+        sendMessage: sendViaWS,
+        editMessage: editViaWS,
+        deleteMessage: deleteViaWS,
+        sendSeen,
+        fetchChats: fetchChatsViaWS,
+        fetchMessages: fetchMessagesViaWS,
+        reactMessage: reactMessageViaWS,
+        unreactMessage: unreactMessageViaWS,
+        forwardMessage: forwardMessageViaWS,
+        reconnectExhausted,
+        reconnectNow
+    } = useWebSocket({
         token: localStorage.getItem('token'),
         onNewMessage: handleNewMessage,
         onMessageEdited: handleMessageEdited,
@@ -400,7 +414,10 @@ export function App() {
         loadChats(false);
 
         if (!activeChatId) return;
-        apiFetch(`/chats/${activeChatId}/messages?limit=100`)
+        const load = wsConnected
+            ? fetchMessagesViaWS(activeChatId, 100).catch(() => apiFetch(`/chats/${activeChatId}/messages?limit=100`))
+            : apiFetch(`/chats/${activeChatId}/messages?limit=100`);
+        load
             .then((msgs) => {
                 setMessages(prev => ({ ...prev, [activeChatId]: msgs }));
                 if (currentUser && activeChatId !== `saved_messages_${currentUser.chatId}`) {
@@ -408,7 +425,7 @@ export function App() {
                 }
             })
             .catch((err) => console.error('Failed to sync messages after reconnect', err));
-    }, [wsConnected, isAuthenticated, loadChats, activeChatId, currentUser, sendSeen]);
+    }, [wsConnected, isAuthenticated, loadChats, activeChatId, currentUser, sendSeen, fetchMessagesViaWS]);
 
     // AI WebSocket initialization
     const { sendMessage: sendAIMessage } = useAIWebSocket({
@@ -476,7 +493,9 @@ export function App() {
         }
 
         try {
-            const msgs = await apiFetch(`/chats/${chatId}/messages?limit=100`);
+            const msgs = wsConnected
+                ? await fetchMessagesViaWS(chatId, 100).catch(() => apiFetch(`/chats/${chatId}/messages?limit=100`))
+                : await apiFetch(`/chats/${chatId}/messages?limit=100`);
             setMessages(prev => ({ ...prev, [chatId]: msgs }));
             setMessagesLoadedOnce(prev => ({ ...prev, [chatId]: true }));
 
@@ -492,7 +511,7 @@ export function App() {
         }
 
         loadChats(false);
-    }, [loadChats, sendSeen, messagesLoadedOnce, currentUser]);
+    }, [loadChats, sendSeen, messagesLoadedOnce, currentUser, wsConnected, fetchMessagesViaWS]);
 
     useEffect(() => {
         if (!activeChatId || !currentUser) return;
@@ -581,6 +600,41 @@ export function App() {
         if (!activeChatId) return;
         deleteViaWS(activeChatId, messageId);
     }, [activeChatId, deleteViaWS]);
+
+    const handleReactMessage = useCallback(async (chatId: string, messageId: string, emoji: string) => {
+        if (!chatId || !messageId || !emoji) return;
+        if (wsConnected) {
+            await reactMessageViaWS(chatId, messageId, emoji);
+            return;
+        }
+        await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, {
+            method: 'POST',
+            body: JSON.stringify({ emoji }),
+        });
+    }, [wsConnected, reactMessageViaWS]);
+
+    const handleUnreactMessage = useCallback(async (chatId: string, messageId: string) => {
+        if (!chatId || !messageId) return;
+        if (wsConnected) {
+            await unreactMessageViaWS(chatId, messageId);
+            return;
+        }
+        await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, {
+            method: 'DELETE',
+        });
+    }, [wsConnected, unreactMessageViaWS]);
+
+    const handleForwardMessage = useCallback(async (messageId: string, targetChatId: string) => {
+        if (!messageId || !targetChatId) return;
+        if (wsConnected) {
+            await forwardMessageViaWS(messageId, targetChatId);
+            return;
+        }
+        await apiFetch('/messages/forward', {
+            method: 'POST',
+            body: JSON.stringify({ messageId, targetChatId }),
+        });
+    }, [wsConnected, forwardMessageViaWS]);
 
     const handleDeleteAIMessage = useCallback(async (messageId: string) => {
         try {
@@ -938,6 +992,9 @@ export function App() {
                                 onOpenProfile={handleOpenProfile}
                                 initialUnreadCount={initialUnreadCount}
                                 onConsumeInitialUnread={consumeOpenChatUnread}
+                                onReactMessage={handleReactMessage}
+                                onUnreactMessage={handleUnreactMessage}
+                                onForwardMessage={handleForwardMessage}
                             />
                         ) : (
                             <EmptyState />
