@@ -3,6 +3,7 @@ import { ArrowDown, ArrowLeft, Copy, Forward, Check } from 'lucide-react';
 import { motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { renderTextWithIosEmoji } from './IosEmoji';
 import type { Components } from 'react-markdown';
 import type { Message, Chat } from '../types';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -456,7 +457,7 @@ export function AIChatRoom({
                                         style={{ cursor: 'pointer' }}
                                     >
                                         {isMine ? (
-                                            <div className="message-text">{message.text}</div>
+                                            <div className="message-text">{message.text ? renderTextWithIosEmoji(message.text, 17) : null}</div>
                                         ) : (
                                             <div className="message-text message-text--markdown">
                                                 <ReactMarkdown

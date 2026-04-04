@@ -5,6 +5,7 @@ import type { User } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { cx } from '../utils/cx';
+import { renderTextWithIosEmoji } from './IosEmoji';
 import { API_BASE_URL, apiFetch } from '../config/api';
 
 interface ProfileProps {
@@ -402,7 +403,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                         ) : (
                             <div className="profile__field-static">
                                 <p className={!user.bio ? 'profile__bio-empty' : ''}>
-                                    {user.bio || 'بیوگرافی وجود ندارد'}
+                                    {user.bio ? renderTextWithIosEmoji(user.bio, 16) : 'بیوگرافی وجود ندارد'}
                                 </p>
                             </div>
                         )}
