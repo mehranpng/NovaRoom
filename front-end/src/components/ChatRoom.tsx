@@ -518,12 +518,18 @@ export function ChatRoom({
         if (!room) return;
         const vv = (window as any).visualViewport as VisualViewport | undefined;
         if (!vv) { room.style.setProperty('--keyboard-offset', '0px'); return; }
+        const ua = navigator.userAgent || '';
+        const isIOSWebKit = /iP(ad|hone|od)/i.test(ua) || (/Macintosh/i.test(ua) && 'ontouchend' in document);
+        const isChromeLikeOnIOS = /CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
+        const shouldUseViewportKeyboardOffset = isIOSWebKit && !isChromeLikeOnIOS;
         let raf: number | null = null;
         const update = () => {
             const el = roomRef.current;
             if (!el) return;
             const offsetTop = typeof vv.offsetTop === 'number' ? vv.offsetTop : 0;
-            const keyboard = Math.max(0, window.innerHeight - vv.height - offsetTop);
+            const keyboard = shouldUseViewportKeyboardOffset
+                ? Math.max(0, window.innerHeight - vv.height - offsetTop)
+                : 0;
             el.style.setProperty('--keyboard-offset', `${Math.round(keyboard)}px`);
             if (isAtBottomRef.current) {
                 if (raf) cancelAnimationFrame(raf);

@@ -1239,7 +1239,10 @@ async def get_messages(
         if sender_id == current_user_id:
             if not participants:
                 return False
-            return all(p in seen_by for p in participants)
+            other_participants = [p for p in participants if p != sender_id]
+            if not other_participants:
+                return False
+            return any(p in seen_by for p in other_participants)
 
         # For incoming messages (only used by UI as theirs), keep it consistent.
         return current_user_id in seen_by
