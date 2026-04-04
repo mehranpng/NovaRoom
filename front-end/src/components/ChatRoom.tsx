@@ -1342,6 +1342,10 @@ export function ChatRoom({
                                 const showUnreadSeparator = Boolean(unreadAnchorId && unreadAnchorId === m.id);
 
                                 const isMenuActive = Boolean(msgMenu && msgMenu.id === m.id);
+                                const seenByCountForMessage = seenByUsersByMessage[m.id]?.length ?? 0;
+                                const isSeenForUi = Boolean(
+                                    m.seen || (isGroupChat && isMine && seenByCountForMessage > 0)
+                                );
 
                                 // FIX: use optimistic reactions if available, fallback to server data
                                 const effectiveReactions = optimisticReactions[m.id] ?? m.reactions;
@@ -1529,8 +1533,8 @@ export function ChatRoom({
                                                     <span className="message-time">{formatMessageTime(m.timestamp)}</span>
                                                     {m.edited && <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>ویرایش شده</span>}
                                                     {isMine && (
-                                                        <span className={m.seen ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
-                                                            {m.seen ? '✓✓' : '✓'}
+                                                        <span className={isSeenForUi ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
+                                                            {isSeenForUi ? '✓✓' : '✓'}
                                                         </span>
                                                     )}
                                                 </div>
