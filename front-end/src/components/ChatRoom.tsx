@@ -12,7 +12,7 @@ import { ForwardModal } from './ForwardModal';
 import { FileUpload } from './FileUpload';
 import { FileMessage } from './FileMessage';
 import { ImageMediaViewer } from './ImageMediaViewer';
-import { containsEmoji, IosEmoji, renderTextWithIosEmoji } from './IosEmoji';
+import { IosEmoji, renderTextWithIosEmoji } from './IosEmoji';
 import './FileComponents.css';
 
 interface ChatRoomProps {
@@ -1781,9 +1781,6 @@ export function ChatRoom({
                         <SendHorizontal size={18} />
                     </button>
                 </div>
-                {text && containsEmoji(text) && (
-                    <div className="chat-room__emoji-preview">{renderTextWithIosEmoji(text, 16)}</div>
-                )}
             </div>
 
             <ForwardModal isOpen={forwardModalOpen} chats={chats} currentUserId={currentUserId}

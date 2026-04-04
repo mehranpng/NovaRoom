@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 
-const EMOJI_CDN_BASE = 'https://cdn.jsdelivr.net/npm/emoji-datasource-apple@15.1.2/img/apple/64';
+const EMOJI_CDN_BASE = 'https://emojicdn.elk.sh';
 const emojiRegex = /(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*)/gu;
 const FE0F = 'fe0f';
 const preloadCache = new Set<string>();
@@ -12,16 +12,17 @@ function toCodePoints(emoji: string): string[] {
 }
 
 function buildEmojiUrls(emoji: string): string[] {
-    const codePoints = toCodePoints(emoji);
-    if (codePoints.length === 0) return [];
-
+    if (!emoji) return [];
     const variants = new Set<string>();
-    variants.add(codePoints.join('-'));
+    variants.add(emoji);
 
-    const noVs16 = codePoints.filter((cp) => cp !== FE0F);
-    if (noVs16.length > 0) variants.add(noVs16.join('-'));
+    const noVs16 = toCodePoints(emoji).filter((cp) => cp !== FE0F);
+    if (noVs16.length > 0) {
+        const stripped = String.fromCodePoint(...noVs16.map((cp) => parseInt(cp, 16)));
+        variants.add(stripped);
+    }
 
-    return Array.from(variants).map((unified) => `${EMOJI_CDN_BASE}/${unified}.png`);
+    return Array.from(variants).map((value) => `${EMOJI_CDN_BASE}/${encodeURIComponent(value)}?style=apple`);
 }
 
 export function preloadIosEmojiAssets(emojis: string[]): void {
@@ -40,7 +41,8 @@ export const COMMON_IOS_EMOJIS_TO_PRELOAD = [
     '👍', '👎', '🤣', '😢', '❤️', '💔', '😐',
     '⚠️', '🎬', '🎵', '✅',
     '🖼️', '🎥', '📄', '📦', '📝', '📊', '📽️', '📃', '📎',
-    '☕', '🧘‍♀️', '🎨', '👋', '🙏',
+    '☕', '🧘‍♀️', '🎨', '👋', '🙏', '😀', '😁', '😂', '😅', '😊', '😍', '😘', '😎', '😡', '😭',
+    '🤔', '🙌', '👏', '🔥', '✨', '✅', '❌', '⭐', '🎉', '💯',
 ];
 
 export function IosEmoji({ emoji, size = 18, className, style }: { emoji: string; size?: number; className?: string; style?: CSSProperties }) {
@@ -68,6 +70,7 @@ export function IosEmoji({ emoji, size = 18, className, style }: { emoji: string
             className={className}
             style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
             loading="eager"
+            decoding="async"
             draggable={false}
             onError={() => {
                 const next = urlIndex + 1;
@@ -90,9 +93,4 @@ export function renderTextWithIosEmoji(text: string, size = 18): ReactNode[] {
         }
         return <span key={`text-${index}`}>{part}</span>;
     });
-}
-
-
-export function containsEmoji(text: string): boolean {
-    return /\p{Extended_Pictographic}/u.test(text);
 }

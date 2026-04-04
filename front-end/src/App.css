@@ -2792,16 +2792,3 @@ body[data-music-player='active'] .app {
   padding-top: 62px;
 }
 
-
-.chat-room__emoji-preview {
-  margin-top: 6px;
-  padding: 6px 10px;
-  border-radius: 10px;
-  border: 1px dashed var(--border-primary);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
