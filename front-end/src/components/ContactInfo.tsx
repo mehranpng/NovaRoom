@@ -20,6 +20,12 @@ function extractUploadedFileId(res: any): string {
     return String(file.fileId || file.id || file.file_id || file.path || '').trim();
 }
 
+function resolveVerified(val: any): boolean {
+    if (val === null || val === undefined) return false;
+    if (val === false || val === 0 || val === 'false' || val === '0') return false;
+    return true;
+}
+
 export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: ContactInfoProps) {
     const [copied, setCopied] = useState(false);
     const [canEditGroup, setCanEditGroup] = useState(false);
@@ -138,7 +144,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
         apiFetch('/profile/me')
             .then((me) => {
                 if (cancelled) return;
-                setCanEditGroup(Boolean(me?.verified));
+                setCanEditGroup(resolveVerified(me?.verified ?? me?.user?.verified));
             })
             .catch(() => {
                 if (cancelled) return;
