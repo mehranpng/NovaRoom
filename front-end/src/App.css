@@ -2629,11 +2629,15 @@ textarea {
 }
 
 .reaction-picker__emojis {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   padding: 12px;
   border-bottom: 1px solid var(--border-primary);
-  justify-content: center;
+  max-height: 180px;
+  overflow-y: auto;
+  mask-image: linear-gradient(to bottom, transparent 0, black 10px, black calc(100% - 10px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 10px, black calc(100% - 10px), transparent 100%);
 }
 
 .reaction-picker__emoji {
