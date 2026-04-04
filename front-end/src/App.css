@@ -2624,7 +2624,8 @@ textarea {
   border-radius: 16px;
   box-shadow: var(--shadow-lg);
   overflow: hidden;
-  min-width: 320px;
+  width: 268px;
+  max-width: calc(100vw - 32px);
   animation: popover-in 0.15s ease-out;
 }
 
@@ -2632,11 +2633,49 @@ textarea {
   display: flex;
   gap: 8px;
   padding: 12px;
-  border-bottom: 1px solid var(--border-primary);
-  justify-content: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  position: relative;
+  cursor: grab;
+  mask-image: linear-gradient(to right, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
+}
+
+.reaction-picker__emojis::-webkit-scrollbar {
+  display: none;
+}
+
+.reaction-picker__emojis::before,
+.reaction-picker__emojis::after {
+  content: '';
+  position: sticky;
+  top: 0;
+  width: 14px;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.reaction-picker__emojis::before {
+  left: 0;
+  background: linear-gradient(to right, var(--bg-primary), rgba(255,255,255,0));
+}
+
+.reaction-picker__emojis::after {
+  right: 0;
+  margin-left: auto;
+  background: linear-gradient(to left, var(--bg-primary), rgba(255,255,255,0));
+}
+
+.reaction-picker__emojis--dragging {
+  cursor: grabbing;
 }
 
 .reaction-picker__emoji {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
