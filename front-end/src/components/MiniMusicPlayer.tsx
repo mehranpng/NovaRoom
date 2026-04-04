@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { useMusicPlayer } from '../contexts/MusicPlayerContext';
 import { Pause, Play, X, SkipBack, SkipForward } from 'lucide-react';
+import { IosEmoji } from './IosEmoji';
 
 function formatTime(t: number): string {
   if (!isFinite(t) || isNaN(t)) return '0:00';
@@ -61,7 +62,7 @@ export const MiniMusicPlayer: React.FC = () => {
           flexShrink: 0,
           fontSize: 16,
         }}>
-          🎵
+          <IosEmoji emoji="🎵" size={18} />
         </div>
 
         {/* Track name */}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
+import { renderTextWithIosEmoji } from './IosEmoji';
 import { apiFetch } from '../config/api';
 
 interface ContactInfoProps {
@@ -547,7 +548,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
                     <div className="contact-info__card">
                         <div className="contact-info__label">بیوگرافی</div>
                         <div className={displayBio ? 'contact-info__bio' : 'contact-info__bio contact-info__bio--empty'}>
-                            {displayBio || 'بدون بیوگرافی'}
+                            {displayBio ? renderTextWithIosEmoji(displayBio, 16) : 'بدون بیوگرافی'}
                         </div>
                     </div>
                 )}

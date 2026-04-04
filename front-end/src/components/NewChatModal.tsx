@@ -5,6 +5,7 @@ import { apiFetch } from '../config/api';
 import { type User } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
+import { IosEmoji } from './IosEmoji';
 
 interface NewChatModalProps {
     isOpen: boolean;
@@ -289,7 +290,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
                                             alignItems: 'center',
                                             gap: 6,
                                         }}>
-                                            ✅ گروه ساخته شد — لینک دعوت:
+                                            <IosEmoji emoji="✅" size={16} /> گروه ساخته شد — لینک دعوت:
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                             <span style={{
