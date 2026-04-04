@@ -2633,10 +2633,23 @@ textarea {
   gap: 8px;
   padding: 12px;
   border-bottom: 1px solid var(--border-primary);
-  justify-content: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  cursor: grab;
+  mask-image: linear-gradient(to right, transparent 0, black 10px, black calc(100% - 10px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, black 10px, black calc(100% - 10px), transparent 100%);
+}
+
+.reaction-picker__emojis:active {
+  cursor: grabbing;
+}
+
+.reaction-picker__emojis::-webkit-scrollbar {
+  display: none;
 }
 
 .reaction-picker__emoji {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
