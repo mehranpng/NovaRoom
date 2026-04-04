@@ -3,7 +3,7 @@ import { ArrowDown, ArrowLeft, Copy, Forward, Check } from 'lucide-react';
 import { motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { renderTextWithIosEmoji } from './IosEmoji';
+import { containsEmoji, renderTextWithIosEmoji } from './IosEmoji';
 import type { Components } from 'react-markdown';
 import type { Message, Chat } from '../types';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -611,6 +611,9 @@ export function AIChatRoom({
                         </svg>
                     </button>
                 </div>
+                {text && containsEmoji(text) && (
+                    <div className="chat-room__emoji-preview">{renderTextWithIosEmoji(text, 16)}</div>
+                )}
             </div>
 
             <style>{`

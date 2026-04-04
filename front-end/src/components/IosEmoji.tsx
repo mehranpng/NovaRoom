@@ -91,3 +91,8 @@ export function renderTextWithIosEmoji(text: string, size = 18): ReactNode[] {
         return <span key={`text-${index}`}>{part}</span>;
     });
 }
+
+
+export function containsEmoji(text: string): boolean {
+    return /\p{Extended_Pictographic}/u.test(text);
+}

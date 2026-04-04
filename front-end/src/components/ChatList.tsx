@@ -8,6 +8,7 @@ import { EmptyState } from './EmptyState';
 import { ChatListSkeleton } from './ChatListSkeleton';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { API_BASE_URL } from '../config/api';
+import { renderTextWithIosEmoji } from './IosEmoji';
 
 interface ChatListProps {
     chats: Chat[];
@@ -790,7 +791,7 @@ export function ChatList({
                                         </div>
                                         <div className="chat-list__item-preview">
                                             <p className="chat-list__item-text">
-                                                {chat.lastMessage?.text || 'پیام‌های ذخیره شده شما'}
+                                                {chat.lastMessage?.text ? renderTextWithIosEmoji(chat.lastMessage.text, 15) : 'پیام‌های ذخیره شده شما'}
                                             </p>
                                             {chat.unreadCount > 0 && (
                                                 <span className="chat-list__unread-badge">{chat.unreadCount}</span>
@@ -835,7 +836,7 @@ export function ChatList({
                                                     style={{ opacity: 0.9 }}
                                                 />
                                             ) : null}
-                                            {contact.name}
+                                            {renderTextWithIosEmoji(contact.name, 15)}
                                             {contact.verified ? <VerifiedBadge size={14} /> : null}
                                             {pinned ? (
                                                 <PinFilledSharpIcon
@@ -876,7 +877,7 @@ export function ChatList({
                                     <div className="chat-list__item-preview">
                                         <p className="chat-list__item-text">
                                             {isMine && <span className="chat-list__item-text-prefix">شما: </span>}
-                                            {chat.lastMessage?.text || 'هنوز پیامی ارسال نشده'}
+                                            {chat.lastMessage?.text ? renderTextWithIosEmoji(chat.lastMessage.text, 15) : 'هنوز پیامی ارسال نشده'}
                                         </p>
                                         {unreadCount > 0 && (
                                             <span className="chat-list__unread-badge">{unreadCount}</span>
