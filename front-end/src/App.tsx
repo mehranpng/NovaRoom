@@ -64,6 +64,7 @@ export function App() {
     const [isInitialChatsLoad, setIsInitialChatsLoad] = useState(true);
     const [messagesLoadedOnce, setMessagesLoadedOnce] = useState<Record<string, boolean>>({});
     const [messagesLoading, setMessagesLoading] = useState<Record<string, boolean>>({});
+    const fetchChatsViaWSRef = useRef<null | (() => Promise<any[]>)>(null);
 
     const sendSoundRef = useRef<HTMLAudioElement | null>(null);
     const receiveSoundRef = useRef<HTMLAudioElement | null>(null);
@@ -168,8 +169,11 @@ export function App() {
         }
 
         try {
+            const fetchChatsViaWS = fetchChatsViaWSRef.current;
             const data = wsConnected
-                ? await fetchChatsViaWS().catch(() => apiFetch('/chats'))
+                ? (fetchChatsViaWS
+                    ? await fetchChatsViaWS().catch(() => apiFetch('/chats'))
+                    : await apiFetch('/chats'))
                 : await apiFetch('/chats');
 
             const normalized: Chat[] = (data as any[]).map((c) => {
@@ -209,7 +213,7 @@ export function App() {
             console.error('Failed to load chats', error);
             setIsInitialChatsLoad(false);
         }
-    }, [isAuthenticated, isInitialChatsLoad, wsConnected, fetchChatsViaWS]);
+    }, [isAuthenticated, isInitialChatsLoad, wsConnected]);
 
     const handleLogout = useCallback(() => {
         localStorage.removeItem('token');
@@ -403,6 +407,10 @@ export function App() {
         onConnectionChange: setWsConnected,
         onReconnectExhausted: handleWsReconnectExhausted,
     });
+
+    useEffect(() => {
+        fetchChatsViaWSRef.current = fetchChatsViaWS;
+    }, [fetchChatsViaWS]);
 
     useEffect(() => {
         setWsReconnectExhausted(reconnectExhausted);
