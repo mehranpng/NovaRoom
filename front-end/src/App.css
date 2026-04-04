@@ -2415,8 +2415,12 @@ textarea {
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
+  padding: 12px;
+  height: var(--app-height, 100dvh);
+  overscroll-behavior: none;
+  overflow: hidden;
   z-index: 1000;
   backdrop-filter: blur(2px);
 }
@@ -2427,9 +2431,17 @@ textarea {
   width: 100%;
   max-width: 420px;
   font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  max-height: 85vh;
+  max-height: min(85vh, calc(var(--app-height, 100dvh) - 24px));
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   box-shadow: var(--shadow-lg);
+}
+
+@media (min-width: 768px) {
+  .modal-overlay {
+    align-items: center;
+  }
 }
 
 .modal-header {
@@ -2560,7 +2572,11 @@ textarea {
 
 .results {
   max-height: 420px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  background: var(--bg-primary);
+  overscroll-behavior-y: contain;
 }
 
 .loading {

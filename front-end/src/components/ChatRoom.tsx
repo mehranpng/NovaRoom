@@ -202,6 +202,7 @@ export function ChatRoom({
     const [seenByMenu, setSeenByMenu] = useState<null | { id: string; top: number; left: number }>(null);
     const [seenByUsersByMessage, setSeenByUsersByMessage] = useState<Record<string, SeenByUser[]>>({});
     const [seenByLoadingMessageId, setSeenByLoadingMessageId] = useState<string | null>(null);
+    const [groupSeenByAny, setGroupSeenByAny] = useState<Record<string, boolean>>({});
 
     // Optimistic reactions: messageId -> overridden reactions array
     const [optimisticReactions, setOptimisticReactions] = useState<Record<string, ReactionEntry[]>>({});
@@ -686,6 +687,44 @@ export function ChatRoom({
     };
 
     const handleFileUploaded = (file: FileMetadata) => setUploadedFile(file);
+
+    useEffect(() => {
+        setGroupSeenByAny({});
+    }, [chatId]);
+
+    useEffect(() => {
+        if (!isGroupChat) return;
+        let cancelled = false;
+
+        const refreshSeenStatus = async () => {
+            const minePending = messages
+                .filter((m) => m.senderId === currentUserId && !m.seen && !groupSeenByAny[m.id])
+                .slice(-12);
+
+            if (minePending.length === 0) return;
+
+            await Promise.all(minePending.map(async (m) => {
+                try {
+                    const res = await getMessageSeenBy(chatId, m.id);
+                    const rows = Array.isArray((res as any)?.seenBy) ? (res as any).seenBy : [];
+                    const seenByOthers = rows.some((u: any) => (u?.chatId || u?.userId) && (u.chatId || u.userId) !== currentUserId);
+                    if (cancelled) return;
+                    if (seenByOthers) {
+                        setGroupSeenByAny((prev) => (prev[m.id] ? prev : ({ ...prev, [m.id]: true })));
+                    }
+                } catch {
+                    // ignore polling errors
+                }
+            }));
+        };
+
+        refreshSeenStatus();
+        const timer = window.setInterval(refreshSeenStatus, 4000);
+        return () => {
+            cancelled = true;
+            window.clearInterval(timer);
+        };
+    }, [isGroupChat, chatId, messages, currentUserId, groupSeenByAny]);
 
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
@@ -1517,8 +1556,8 @@ export function ChatRoom({
                                                     <span className="message-time">{formatMessageTime(m.timestamp)}</span>
                                                     {m.edited && <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>ویرایش شده</span>}
                                                     {isMine && (
-                                                        <span className={m.seen ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
-                                                            {m.seen ? '✓✓' : '✓'}
+                                                        <span className={(m.seen || (isGroupChat && groupSeenByAny[m.id])) ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
+                                                            {(m.seen || (isGroupChat && groupSeenByAny[m.id])) ? '✓✓' : '✓'}
                                                         </span>
                                                     )}
                                                 </div>
