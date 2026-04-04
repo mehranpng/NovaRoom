@@ -80,7 +80,22 @@ active_connections: Dict[str, List[WebSocket]] = {}
 security = HTTPBearer()
 
 # Valid emojis for reactions
-VALID_REACTIONS = ["👍", "👎", "🤣", "😢", "❤️", "💔", "😐"]
+VALID_REACTIONS = [
+    "👍",
+    "👎",
+    "🤣",
+    "😢",
+    "❤️",
+    "💔",
+    "😐",
+    "😍",
+    "🤔",
+    "✅️",
+    "❌️",
+    "💩",
+    "😡",
+    "🖕",
+]
 
 # Pin settings
 MAX_PINNED_CHATS = 20
@@ -1405,7 +1420,9 @@ async def get_message_seen_by(
         raise HTTPException(status_code=403, detail="Not allowed")
 
     if chat.get("chatType") != "group":
-        raise HTTPException(status_code=400, detail="Seen-by is only available in groups")
+        raise HTTPException(
+            status_code=400, detail="Seen-by is only available in groups"
+        )
 
     oid = await try_object_id(message_id)
     if not oid:
@@ -2217,6 +2234,7 @@ async def delete_ai_message(
     await cl_ai_messages.delete_one({"_id": oid})
 
     return {"success": True, "message": "Message deleted successfully"}
+
 
 if __name__ == "__main__":
     import uvicorn
