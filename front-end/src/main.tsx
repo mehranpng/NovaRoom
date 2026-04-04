@@ -5,7 +5,7 @@ import "./index.css";
 import { App } from "./App";
 import { COMMON_IOS_EMOJIS_TO_PRELOAD, preloadIosEmojiAssets } from "./components/IosEmoji";
 
-preloadIosEmojiAssets(COMMON_IOS_EMOJIS_TO_PRELOAD);
+void preloadIosEmojiAssets(COMMON_IOS_EMOJIS_TO_PRELOAD);
 
 createRoot(document.getElementById("root")!).render(
     <StrictMode>

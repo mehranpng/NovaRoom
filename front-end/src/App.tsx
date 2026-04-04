@@ -16,6 +16,7 @@ import { NewChatModal } from './components/NewChatModal';
 import { MiniMusicPlayer } from './components/MiniMusicPlayer';
 import { MusicPlayerProvider } from './contexts/MusicPlayerContext';
 import { cx } from './utils/cx';
+import { preloadIosEmojiAssets } from './components/IosEmoji';
 import './App.css';
 
 const normalizeTimestamp = (ts: unknown): number => {
@@ -84,6 +85,36 @@ export function App() {
     const lastSeenAckMessageIdRef = useRef<Record<string, string>>({});
     useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
     useEffect(() => { viewRef.current = view; }, [view]);
+
+    useEffect(() => {
+        const emojiPattern = /\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*/gu;
+        const found = new Set<string>();
+
+        const pushFromText = (value: string | undefined | null) => {
+            if (!value) return;
+            const matches = value.match(emojiPattern);
+            if (!matches) return;
+            matches.forEach((emoji) => found.add(emoji));
+        };
+
+        chats.forEach((chat) => {
+            pushFromText(chat?.otherUser?.name);
+            pushFromText(chat?.otherUser?.bio);
+            pushFromText(chat?.lastMessage?.text);
+        });
+
+        Object.values(messages).forEach((rows) => {
+            rows.slice(-200).forEach((message) => {
+                pushFromText(message.text);
+                pushFromText(message.replyTo?.text);
+                pushFromText(message.reactions?.map((r: any) => r.emoji).join(' '));
+            });
+        });
+
+        if (found.size > 0) {
+            void preloadIosEmojiAssets(Array.from(found));
+        }
+    }, [chats, messages]);
 
     useEffect(() => {
         sendSoundRef.current = new Audio('/sounds/send.mp3');

@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 
-const EMOJI_CDN_BASE = 'https://emojicdn.elk.sh';
 const emojiRegex = /(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*)/gu;
 const FE0F = 'fe0f';
-const preloadCache = new Set<string>();
+const cache = new Map<string, string | null>();
+const pending = new Map<string, Promise<string | null>>();
 
 function toCodePoints(emoji: string): string[] {
     return Array.from(emoji)
@@ -11,30 +11,75 @@ function toCodePoints(emoji: string): string[] {
         .filter((codePoint): codePoint is string => Boolean(codePoint));
 }
 
-function buildEmojiUrls(emoji: string): string[] {
+function buildEmojiVariants(emoji: string): string[] {
     if (!emoji) return [];
+
     const variants = new Set<string>();
     variants.add(emoji);
 
     const noVs16 = toCodePoints(emoji).filter((cp) => cp !== FE0F);
     if (noVs16.length > 0) {
-        const stripped = String.fromCodePoint(...noVs16.map((cp) => parseInt(cp, 16)));
-        variants.add(stripped);
+        variants.add(String.fromCodePoint(...noVs16.map((cp) => parseInt(cp, 16))));
     }
 
-    return Array.from(variants).map((value) => `${EMOJI_CDN_BASE}/${encodeURIComponent(value)}?style=apple`);
+    return Array.from(variants);
 }
 
-export function preloadIosEmojiAssets(emojis: string[]): void {
-    emojis.forEach((emoji) => {
-        const [firstUrl] = buildEmojiUrls(emoji);
-        if (!firstUrl || preloadCache.has(firstUrl)) return;
+function buildUrls(emoji: string): string[] {
+    const variants = buildEmojiVariants(emoji);
+    const urls: string[] = [];
 
-        preloadCache.add(firstUrl);
+    for (const variant of variants) {
+        const encoded = encodeURIComponent(variant);
+        urls.push(`https://emojicdn.elk.sh/${encoded}?style=apple`);
+    }
+
+    const unifiedVariants = variants.map((item) => toCodePoints(item).join('-')).filter(Boolean);
+    for (const unified of unifiedVariants) {
+        urls.push(`https://cdn.jsdelivr.net/npm/emoji-datasource-apple@15.1.2/img/apple/64/${unified}.png`);
+        urls.push(`https://unpkg.com/emoji-datasource-apple@15.1.2/img/apple/64/${unified}.png`);
+    }
+
+    return Array.from(new Set(urls));
+}
+
+function loadImage(url: string): Promise<boolean> {
+    return new Promise((resolve) => {
         const image = new Image();
         image.decoding = 'async';
-        image.src = firstUrl;
+        image.onload = () => resolve(true);
+        image.onerror = () => resolve(false);
+        image.src = url;
     });
+}
+
+async function resolveEmojiUrl(emoji: string): Promise<string | null> {
+    if (cache.has(emoji)) return cache.get(emoji) ?? null;
+    if (pending.has(emoji)) return pending.get(emoji)!;
+
+    const task = (async () => {
+        const urls = buildUrls(emoji);
+        for (const url of urls) {
+            const ok = await loadImage(url);
+            if (ok) {
+                cache.set(emoji, url);
+                return url;
+            }
+        }
+
+        cache.set(emoji, null);
+        return null;
+    })();
+
+    pending.set(emoji, task);
+    const result = await task;
+    pending.delete(emoji);
+    return result;
+}
+
+export async function preloadIosEmojiAssets(emojis: string[]): Promise<void> {
+    const unique = Array.from(new Set(emojis));
+    await Promise.all(unique.map((emoji) => resolveEmojiUrl(emoji)));
 }
 
 export const COMMON_IOS_EMOJIS_TO_PRELOAD = [
@@ -42,28 +87,30 @@ export const COMMON_IOS_EMOJIS_TO_PRELOAD = [
     '⚠️', '🎬', '🎵', '✅',
     '🖼️', '🎥', '📄', '📦', '📝', '📊', '📽️', '📃', '📎',
     '☕', '🧘‍♀️', '🎨', '👋', '🙏', '😀', '😁', '😂', '😅', '😊', '😍', '😘', '😎', '😡', '😭',
-    '🤔', '🙌', '👏', '🔥', '✨', '✅', '❌', '⭐', '🎉', '💯',
+    '🤔', '🙌', '👏', '🔥', '✨', '❌', '⭐', '🎉', '💯',
 ];
 
 export function IosEmoji({ emoji, size = 18, className, style }: { emoji: string; size?: number; className?: string; style?: CSSProperties }) {
-    const urls = useMemo(() => buildEmojiUrls(emoji), [emoji]);
-    const [urlIndex, setUrlIndex] = useState(0);
-    const [showNative, setShowNative] = useState(false);
-
+    const [resolvedUrl, setResolvedUrl] = useState<string | null>(() => cache.get(emoji) ?? null);
 
     useEffect(() => {
-        setUrlIndex(0);
-        setShowNative(false);
-    }, [emoji]);
-    const activeUrl = urls[urlIndex];
+        let cancelled = false;
+        setResolvedUrl(cache.get(emoji) ?? null);
 
-    if (showNative || !activeUrl) {
+        resolveEmojiUrl(emoji).then((url) => {
+            if (!cancelled) setResolvedUrl(url);
+        });
+
+        return () => { cancelled = true; };
+    }, [emoji]);
+
+    if (!resolvedUrl) {
         return <span style={{ fontSize: size, lineHeight: 1, ...style }}>{emoji}</span>;
     }
 
     return (
         <img
-            src={activeUrl}
+            src={resolvedUrl}
             alt={emoji}
             width={size}
             height={size}
@@ -72,14 +119,6 @@ export function IosEmoji({ emoji, size = 18, className, style }: { emoji: string
             loading="eager"
             decoding="async"
             draggable={false}
-            onError={() => {
-                const next = urlIndex + 1;
-                if (next < urls.length) {
-                    setUrlIndex(next);
-                    return;
-                }
-                setShowNative(true);
-            }}
         />
     );
 }
