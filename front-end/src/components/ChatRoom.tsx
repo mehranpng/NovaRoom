@@ -12,6 +12,7 @@ import { ForwardModal } from './ForwardModal';
 import { FileUpload } from './FileUpload';
 import { FileMessage } from './FileMessage';
 import { ImageMediaViewer } from './ImageMediaViewer';
+import { IosEmoji, renderTextWithIosEmoji } from './IosEmoji';
 import './FileComponents.css';
 
 interface ChatRoomProps {
@@ -1525,11 +1526,11 @@ export function ChatRoom({
                                                     className="message-reply-box"
                                                     style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
                                                     <div className="message-reply-box__label">پاسخ</div>
-                                                    <div className="message-reply-box__text">{m.replyTo.text}</div>
+                                                    <div className="message-reply-box__text">{renderTextWithIosEmoji(m.replyTo.text, 16)}</div>
                                                 </div>
                                             )}
 
-                                            {m.text && <div className="message-text">{m.text}</div>}
+                                            {m.text && <div className="message-text">{renderTextWithIosEmoji(m.text, 17)}</div>}
                                             {m.file && (
                                                 <FileMessage
                                                     file={m.file}
@@ -1550,7 +1551,7 @@ export function ChatRoom({
                                                                 onClick={(e) => { e.stopPropagation(); if (isMyReaction) handleDeleteReaction(m.id); else handleReact(m.id, reaction.emoji); }}
                                                                 type="button"
                                                             >
-                                                                <span className="message-reaction__emoji">{reaction.emoji}</span>
+                                                                <span className="message-reaction__emoji"><IosEmoji emoji={reaction.emoji} size={16} /></span>
                                                                 {reaction.count > 1 && <span className="message-reaction__count">{reaction.count}</span>}
                                                             </button>
                                                         );

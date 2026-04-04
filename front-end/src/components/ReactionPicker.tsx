@@ -1,3 +1,5 @@
+import { IosEmoji } from './IosEmoji';
+
 interface ReactionPickerProps {
     messageId: string;
     currentReaction?: string;
@@ -25,7 +27,7 @@ export function ReactionPicker({ messageId, currentReaction, onReact, onDeleteRe
                         }}
                         type="button"
                     >
-                        {emoji}
+                        <IosEmoji emoji={emoji} size={20} />
                     </button>
                 ))}
             </div>

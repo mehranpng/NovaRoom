@@ -4,6 +4,7 @@ import { Download, Play, Pause } from 'lucide-react';
 import { API_BASE_URL } from '../config/api';
 import { useState, useEffect, useRef } from 'react';
 import { useMusicPlayer } from '../contexts/MusicPlayerContext';
+import { IosEmoji } from './IosEmoji';
 
 interface FileMessageProps {
     file: FileMetadata;
@@ -162,7 +163,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick }: FileMess
                         </div>
                     ) : imageError || !imageUrl ? (
                         <div className="file-error" style={{ minHeight: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '8px' }}>
-                            <span>⚠️</span>
+                            <IosEmoji emoji="⚠️" size={18} />
                             <span style={{ fontSize: '12px' }}>خطا در بارگذاری تصویر</span>
                         </div>
                     ) : (
@@ -191,7 +192,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick }: FileMess
                         </div>
                     ) : videoError || !videoUrl ? (
                         <div style={{ minHeight: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8 }}>
-                            <span>⚠️</span>
+                            <IosEmoji emoji="⚠️" size={18} />
                             <span style={{ fontSize: 12 }}>خطا در بارگذاری ویدیو</span>
                         </div>
                     ) : (
@@ -205,7 +206,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick }: FileMess
                         />
                     )}
                     <div className="file-video-footer">
-                        <span className="file-video-name">🎬 {file.fileName}</span>
+                        <span className="file-video-name"><IosEmoji emoji="🎬" size={16} /> {file.fileName}</span>
                         <button onClick={handleDownload} className="file-download-btn" type="button">
                             <Download size={16} />
                         </button>
@@ -239,7 +240,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick }: FileMess
                         ) : isThisPlaying ? <Pause size={18} /> : <Play size={18} />}
                     </button>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🎵 {file.fileName}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><IosEmoji emoji="🎵" size={16} /> {file.fileName}</div>
                         {audioError && <div style={{ fontSize: 11, color: '#e55' }}>پخش ممکن نشد</div>}
                         {isCurrentTrack && musicPlayer.duration > 0 && (
                             <div style={{ fontSize: 11, color: '#888' }}>
@@ -253,7 +254,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick }: FileMess
                 </div>
             ) : (
                 <div className="file-attachment" onClick={handleDownload}>
-                    <div className="file-icon">{getFileIcon(file.mimeType)}</div>
+                    <div className="file-icon"><IosEmoji emoji={getFileIcon(file.mimeType)} size={20} /></div>
                     <div className="file-info">
                         <div className="file-name">{file.fileName}</div>
                         <div className="file-size">{formatFileSize(file.fileSize)}</div>
