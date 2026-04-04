@@ -749,6 +749,9 @@ export function ChatRoom({
         prevLenRef.current = messages.length;
         setNewMsgCount(0); setShowScrollBtn(false);
         isAtBottomRef.current = true;
+        setShowContactInfo(false);
+        setShowMembersList(false);
+        setViewingMemberId(null);
         setReplyTo(null); setEditingId(null);
         setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
         setText(''); setUploadedFile(null);

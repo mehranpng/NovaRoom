@@ -1,4 +1,4 @@
-import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, MoreVertical, Trash2 } from 'lucide-react';
+import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, MoreVertical, Trash2, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';
@@ -7,6 +7,7 @@ import { cx } from '../utils/cx';
 import { EmptyState } from './EmptyState';
 import { ChatListSkeleton } from './ChatListSkeleton';
 import { useDarkMode } from '../hooks/useDarkMode';
+import { API_BASE_URL } from '../config/api';
 
 interface ChatListProps {
     chats: Chat[];
@@ -256,7 +257,7 @@ function resolveVerified(val: any): boolean {
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const token = localStorage.getItem('token');
-    const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://png.runflare.run'}${path}`, {
+    const res = await fetch(`${API_BASE_URL}${path}`, {
         ...init,
         headers: {
             'Content-Type': 'application/json',
@@ -540,7 +541,7 @@ export function ChatList({
         }
     };
 
-    const openActionMenu = (chatId: string, btnEl: HTMLElement) => {
+    const openActionMenu = (chatId: string, btnEl: HTMLElement, menuItemCount: number) => {
         const container = chatItemsRef.current;
         if (!container) return;
 
@@ -548,8 +549,8 @@ export function ChatList({
         const r = btnEl.getBoundingClientRect();
 
         const menuWidth = 190;
-        // Height estimate: pin + (delete OR leave+delete)
-        const menuHeight = 156;
+        // Estimate by item count to avoid large offset when opening upward.
+        const menuHeight = (menuItemCount * 40) + 14;
         const padding = 8;
 
         // IMPORTANT: popover is absolutely positioned inside the scrollable chat list,
@@ -563,7 +564,7 @@ export function ChatList({
         // Position under button by default (decision based on visible space).
         const spaceBelow = c.bottom - r.bottom;
         let top = spaceBelow < menuHeight + 12
-            ? btnTop - menuHeight - 8
+            ? btnTop - menuHeight - 2
             : btnBottom + 6;
 
         // Keep menu within the visible part of the list.
@@ -649,7 +650,7 @@ export function ChatList({
                                     window.location.reload();
                                 }}
                             >
-                                Refresh
+                                <RefreshCw size={16} />
                             </button>
                         )}
                     </div>
@@ -861,7 +862,10 @@ export function ChatList({
                                                     e.preventDefault();
                                                     e.stopPropagation();
                                                     chatActionBtnRef.current = e.currentTarget;
-                                                    openActionMenu(chat.id, e.currentTarget);
+                                                    const menuItemCount = group
+                                                        ? (isVerifiedUser ? 3 : 2)
+                                                        : 2;
+                                                    openActionMenu(chat.id, e.currentTarget, menuItemCount);
                                                 }}
                                             >
                                                 <MoreVertical size={16} />
