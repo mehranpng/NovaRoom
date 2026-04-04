@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Minus, Plus, X } from 'lucide-react';
+import { Download, Minus, Plus, X } from 'lucide-react';
 
 interface ImageMediaViewerProps {
     imageUrl: string;
@@ -8,6 +8,7 @@ interface ImageMediaViewerProps {
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
+const TOGGLE_ZOOM_SCALE = 2.5;
 
 export function ImageMediaViewer({ imageUrl, onClose }: ImageMediaViewerProps) {
     const [scale, setScale] = useState(1);
@@ -48,6 +49,15 @@ export function ImageMediaViewer({ imageUrl, onClose }: ImageMediaViewerProps) {
     };
     const zoomIn = () => applyScale(scale + 0.25);
     const zoomOut = () => applyScale(scale - 0.25);
+    const toggleZoom = () => applyScale(scale > MIN_SCALE ? MIN_SCALE : TOGGLE_ZOOM_SCALE);
+    const downloadImage = () => {
+        const link = document.createElement('a');
+        link.href = imageUrl;
+        link.download = 'image';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+    };
 
     return (
         <div className="image-media-viewer" onClick={onClose} role="dialog" aria-modal="true">
@@ -108,6 +118,9 @@ export function ImageMediaViewer({ imageUrl, onClose }: ImageMediaViewerProps) {
                 }}
             >
                 <div className="image-media-viewer__controls" onClick={(e) => e.stopPropagation()}>
+                    <button type="button" className="image-media-viewer__btn" onClick={downloadImage} aria-label="Download image">
+                        <Download size={18} />
+                    </button>
                     <button type="button" className="image-media-viewer__btn" onClick={zoomOut} aria-label="Zoom out">
                         <Minus size={18} />
                     </button>
@@ -123,6 +136,7 @@ export function ImageMediaViewer({ imageUrl, onClose }: ImageMediaViewerProps) {
                     src={imageUrl}
                     alt="media viewer"
                     className="image-media-viewer__image"
+                    onClick={toggleZoom}
                     onMouseDown={(e) => {
                         if (scale <= 1) return;
                         dragStartRef.current = { x: e.clientX, y: e.clientY, offsetX: offset.x, offsetY: offset.y };
