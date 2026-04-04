@@ -11,6 +11,8 @@ interface ContactInfoProps {
     onBack: () => void;
     onOpenChat?: (user: User) => void;
     onOpenMembers?: () => void;
+    autoOpenMembers?: boolean;
+    startInEditMode?: boolean;
 }
 
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
@@ -26,7 +28,7 @@ function resolveVerified(val: any): boolean {
     return true;
 }
 
-export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: ContactInfoProps) {
+export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenMembers = true, startInEditMode = false }: ContactInfoProps) {
     const [copied, setCopied] = useState(false);
     const [canEditGroup, setCanEditGroup] = useState(false);
     const [editingGroup, setEditingGroup] = useState(false);
@@ -58,7 +60,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
 
     useEffect(() => {
         // Reset group edit state when user changes
-        setEditingGroup(false);
+        setEditingGroup(isGroup ? startInEditMode : false);
         setSaving(false);
         setError(null);
         setGroupName(String(user.name ?? ''));
@@ -66,7 +68,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
         setAvatarTouched(false);
         setResolvedRegistrationDate(String(user.registrationDate ?? '').trim());
         setRegistrationLoading(false);
-    }, [user.chatId, user.name, user.avatar]);
+    }, [isGroup, startInEditMode, user.chatId, user.name, user.avatar]);
 
     useEffect(() => {
         if (isGroup) {
@@ -157,9 +159,9 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
     }, [isGroup]);
 
     useEffect(() => {
-        if (!isGroup || !onOpenMembers) return;
+        if (!isGroup || !onOpenMembers || !autoOpenMembers) return;
         onOpenMembers();
-    }, [isGroup, onOpenMembers, user.chatId]);
+    }, [autoOpenMembers, isGroup, onOpenMembers, user.chatId]);
 
     const handleCopy = () => {
         const un = (user.username || '').trim();
@@ -219,7 +221,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
 
             // Ask App to refresh /chats so sidebar + header get updated.
             window.dispatchEvent(new Event('novaroom:refresh_chats'));
-            setEditingGroup(false);
+            setEditingGroup(isGroup ? startInEditMode : false);
         } catch (e) {
             console.error(e);
             setError('ویرایش گروه با خطا مواجه شد');
@@ -483,7 +485,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers }: Contact
                                         setGroupName(String(user.name ?? ''));
                                         setGroupAvatar(String(user.avatar ?? ''));
                                         setAvatarTouched(false);
-                                        setEditingGroup(false);
+                                        setEditingGroup(isGroup ? startInEditMode : false);
                                     }}
                                     disabled={saving}
                                     style={{

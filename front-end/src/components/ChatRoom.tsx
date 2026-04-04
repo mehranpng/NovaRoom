@@ -238,6 +238,7 @@ export function ChatRoom({
     const [membersLoading, setMembersLoading] = useState(false);
     const [viewingMemberId, setViewingMemberId] = useState<string | null>(null);
     const [showMembersList, setShowMembersList] = useState(false);
+    const [openGroupEditorFromMembers, setOpenGroupEditorFromMembers] = useState(false);
     const [memberSearch, setMemberSearch] = useState('');
     const isAtBottomRef = useRef(true);
 
@@ -1052,12 +1053,21 @@ export function ChatRoom({
         return (
             <ContactInfo
                 user={infoUser}
-                onBack={() => { setShowContactInfo(false); }}
+                onBack={() => {
+                    setShowContactInfo(false);
+                    if (openGroupEditorFromMembers) {
+                        setShowMembersList(true);
+                        setOpenGroupEditorFromMembers(false);
+                    }
+                }}
                 onOpenMembers={isGroupChat ? () => {
+                    setOpenGroupEditorFromMembers(false);
                     setShowContactInfo(false);
                     setMemberSearch('');
                     setShowMembersList(true);
                 } : undefined}
+                autoOpenMembers={!openGroupEditorFromMembers}
+                startInEditMode={openGroupEditorFromMembers}
                 onOpenChat={(u) => {
                     if (u.chatId === currentUserId) {
                         onOpenProfile?.();
@@ -1114,6 +1124,21 @@ export function ChatRoom({
                     <button className="contact-info__back" onClick={() => { setShowMembersList(false); }} type="button"><ArrowLeft size={20} /></button>
                     <div className="contact-info__title">اطلاعات گروه</div>
                     <div className="contact-info__spacer" />
+                    {isVerifiedUser && (
+                        <button
+                            type="button"
+                            className="icon-btn"
+                            aria-label="Edit group"
+                            title="ویرایش گروه"
+                            onClick={() => {
+                                setOpenGroupEditorFromMembers(true);
+                                setShowMembersList(false);
+                                setShowContactInfo(true);
+                            }}
+                        >
+                            <Pencil size={18} />
+                        </button>
+                    )}
                 </div>
 
                 <div className="contact-info__content">
@@ -1221,6 +1246,7 @@ export function ChatRoom({
                     onClick={() => {
                         if (isSavedMessages) return;
                         maybeSaveScroll(chatId);
+                        setOpenGroupEditorFromMembers(false);
                         setShowContactInfo(true);
                     }}
                     aria-label={isSavedMessages ? '' : 'Open contact info'}
