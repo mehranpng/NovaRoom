@@ -51,16 +51,13 @@ export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token = '' }
         setScale(clampedScale);
         setOffset((prev) => clampOffset(prev.x, prev.y, clampedScale));
     };
-    const zoomIn = () => applyScale(scale + 0.25);
-    const zoomOut = () => applyScale(scale - 0.25);
-    const toggleZoomAtPoint = (clientX: number, clientY: number) => {
+    const applyScaleAtPoint = (next: number, clientX: number, clientY: number) => {
         const stageEl = stageRef.current;
+        const clampedScale = clampScale(next);
         if (!stageEl) {
-            applyScale(scale > MIN_SCALE ? MIN_SCALE : TOGGLE_ZOOM_SCALE);
+            setScale(clampedScale);
             return;
         }
-        const nextScale = scale > MIN_SCALE ? MIN_SCALE : TOGGLE_ZOOM_SCALE;
-        const clampedScale = clampScale(nextScale);
         const stageRect = stageEl.getBoundingClientRect();
         const pointX = clientX - (stageRect.left + stageRect.width / 2);
         const pointY = clientY - (stageRect.top + stageRect.height / 2);
@@ -72,6 +69,12 @@ export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token = '' }
         );
         setScale(clampedScale);
         setOffset(nextOffset);
+    };
+    const zoomIn = () => applyScale(scale + 0.25);
+    const zoomOut = () => applyScale(scale - 0.25);
+    const toggleZoomAtPoint = (clientX: number, clientY: number) => {
+        const nextScale = scale > MIN_SCALE ? MIN_SCALE : TOGGLE_ZOOM_SCALE;
+        applyScaleAtPoint(nextScale, clientX, clientY);
     };
     const downloadImage = async () => {
         try {
@@ -135,7 +138,9 @@ export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token = '' }
                     const [t1, t2] = Array.from(e.touches);
                     const distance = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
                     const ratio = distance / pinchDistanceRef.current;
-                    applyScale(pinchStartScaleRef.current * ratio);
+                    const midX = (t1.clientX + t2.clientX) / 2;
+                    const midY = (t1.clientY + t2.clientY) / 2;
+                    applyScaleAtPoint(pinchStartScaleRef.current * ratio, midX, midY);
                 }}
                 onTouchMoveCapture={(e) => {
                     if (e.touches.length !== 1 || !dragStartRef.current || scale <= 1) return;
