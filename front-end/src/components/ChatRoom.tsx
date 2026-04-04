@@ -866,8 +866,15 @@ export function ChatRoom({
 
         if (!initialScrollDoneRef.current) {
             if (messages.length > 0 && !loading) {
-                initialMediaPendingIdsRef.current = collectInitialMediaPendingIds();
-                initialMediaFollowupDoneRef.current = initialMediaPendingIdsRef.current.size === 0;
+                // فقط در سناریوی لود اولیه‌ای که قبلاً لیست پیام‌ها خالی بوده بود،
+                // pendingها را دوباره همگام‌سازی کن تا اسکرول follow-up از دست نرود.
+                if (initialMediaFollowupDoneRef.current && initialMediaPendingIdsRef.current.size === 0) {
+                    const pendingIds = collectInitialMediaPendingIds();
+                    if (pendingIds.size > 0) {
+                        initialMediaPendingIdsRef.current = pendingIds;
+                        initialMediaFollowupDoneRef.current = false;
+                    }
+                }
                 const raf = requestAnimationFrame(() => {
                     applyInitialScroll();
 
