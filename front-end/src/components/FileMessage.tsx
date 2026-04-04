@@ -9,7 +9,7 @@ interface FileMessageProps {
     file: FileMetadata;
     token: string;
     onMediaLoad?: () => void;
-    onImageClick?: (imageUrl: string) => void;
+    onImageClick?: (imageUrl: string, file: FileMetadata) => void;
 }
 
 export function FileMessage({ file, token, onMediaLoad, onImageClick }: FileMessageProps) {
@@ -171,7 +171,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick }: FileMess
                             alt={file.fileName}
                             onClick={(e) => {
                                 e.stopPropagation();
-                                onImageClick?.(imageUrl);
+                                onImageClick?.(imageUrl, file);
                             }}
                             style={{ cursor: 'zoom-in' }}
                             onLoad={onMediaLoad}

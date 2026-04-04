@@ -265,7 +265,7 @@ export function ChatRoom({
 
     // Keep unread count used for UI stable, even if App "consumes" initialUnreadCount afterwards.
     const [displayUnreadCount, setDisplayUnreadCount] = useState<number>(initialUnreadCount);
-    const [openedImageUrl, setOpenedImageUrl] = useState<string | null>(null);
+    const [openedImage, setOpenedImage] = useState<{ url: string; file: FileMetadata | null } | null>(null);
 
     // Auto-jump bookkeeping to avoid saving an automatic scroll position as user's scroll memory.
     const autoJumpedToUnreadRef = useRef(false);
@@ -1553,7 +1553,7 @@ export function ChatRoom({
                                                     file={m.file}
                                                     token={token}
                                                     onMediaLoad={() => handleInitialMediaReady(m.id)}
-                                                    onImageClick={(imageUrl) => setOpenedImageUrl(imageUrl)}
+                                                    onImageClick={(imageUrl, file) => setOpenedImage({ url: imageUrl, file })}
                                                 />
                                             )}
 
@@ -1667,10 +1667,12 @@ export function ChatRoom({
                 );
             })()}
 
-            {openedImageUrl && (
+            {openedImage && (
                 <ImageMediaViewer
-                    imageUrl={openedImageUrl}
-                    onClose={() => setOpenedImageUrl(null)}
+                    imageUrl={openedImage.url}
+                    downloadFile={openedImage.file}
+                    token={token}
+                    onClose={() => setOpenedImage(null)}
                 />
             )}
 

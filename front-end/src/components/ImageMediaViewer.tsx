@@ -1,16 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { Download, Minus, Plus, X } from 'lucide-react';
+import { API_BASE_URL } from '../config/api';
+import type { FileMetadata } from '../types';
 
 interface ImageMediaViewerProps {
     imageUrl: string;
     onClose: () => void;
+    downloadFile?: Pick<FileMetadata, 'fileId' | 'fileName'> | null;
+    token?: string;
 }
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
 const TOGGLE_ZOOM_SCALE = 2;
 
-export function ImageMediaViewer({ imageUrl, onClose }: ImageMediaViewerProps) {
+export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token = '' }: ImageMediaViewerProps) {
     const [scale, setScale] = useState(1);
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const pinchDistanceRef = useRef<number | null>(null);
@@ -71,14 +75,18 @@ export function ImageMediaViewer({ imageUrl, onClose }: ImageMediaViewerProps) {
     };
     const downloadImage = async () => {
         try {
-            const response = await fetch(imageUrl);
+            const response = downloadFile?.fileId
+                ? await fetch(`${API_BASE_URL}/files/${downloadFile.fileId}`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                })
+                : await fetch(imageUrl);
             if (!response.ok) throw new Error('Download failed');
             const blob = await response.blob();
             const extension = blob.type.split('/')[1] || 'jpg';
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `image.${extension}`;
+            link.download = downloadFile?.fileName || `image.${extension}`;
             document.body.appendChild(link);
             link.click();
             window.URL.revokeObjectURL(url);
