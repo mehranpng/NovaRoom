@@ -541,7 +541,7 @@ export function ChatList({
         }
     };
 
-    const openActionMenu = (chatId: string, btnEl: HTMLElement) => {
+    const openActionMenu = (chatId: string, btnEl: HTMLElement, menuItemCount: number) => {
         const container = chatItemsRef.current;
         if (!container) return;
 
@@ -549,8 +549,8 @@ export function ChatList({
         const r = btnEl.getBoundingClientRect();
 
         const menuWidth = 190;
-        // Height estimate: pin + (delete OR leave+delete)
-        const menuHeight = 156;
+        // Estimate by item count to avoid large offset when opening upward.
+        const menuHeight = (menuItemCount * 40) + 14;
         const padding = 8;
 
         // IMPORTANT: popover is absolutely positioned inside the scrollable chat list,
@@ -862,7 +862,10 @@ export function ChatList({
                                                     e.preventDefault();
                                                     e.stopPropagation();
                                                     chatActionBtnRef.current = e.currentTarget;
-                                                    openActionMenu(chat.id, e.currentTarget);
+                                                    const menuItemCount = group
+                                                        ? (isVerifiedUser ? 3 : 2)
+                                                        : 2;
+                                                    openActionMenu(chat.id, e.currentTarget, menuItemCount);
                                                 }}
                                             >
                                                 <MoreVertical size={16} />
