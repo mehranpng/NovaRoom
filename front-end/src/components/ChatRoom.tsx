@@ -292,7 +292,16 @@ export function ChatRoom({
         initialMediaPendingIdsRef.current.delete(messageId);
         if (initialMediaPendingIdsRef.current.size === 0) {
             initialMediaFollowupDoneRef.current = true;
-            requestAnimationFrame(() => scrollToBottom(true));
+            requestAnimationFrame(() => {
+                if (displayUnreadCount > 0) {
+                    const anchor = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
+                    if (anchor) {
+                        scrollToMessageTop(anchor);
+                        return;
+                    }
+                }
+                scrollToBottom(true);
+            });
         }
     };
 
