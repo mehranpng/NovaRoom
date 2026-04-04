@@ -8,7 +8,7 @@ interface ImageMediaViewerProps {
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
-const TOGGLE_ZOOM_SCALE = 2.5;
+const TOGGLE_ZOOM_SCALE = 2;
 
 export function ImageMediaViewer({ imageUrl, onClose }: ImageMediaViewerProps) {
     const [scale, setScale] = useState(1);
@@ -49,14 +49,44 @@ export function ImageMediaViewer({ imageUrl, onClose }: ImageMediaViewerProps) {
     };
     const zoomIn = () => applyScale(scale + 0.25);
     const zoomOut = () => applyScale(scale - 0.25);
-    const toggleZoom = () => applyScale(scale > MIN_SCALE ? MIN_SCALE : TOGGLE_ZOOM_SCALE);
-    const downloadImage = () => {
-        const link = document.createElement('a');
-        link.href = imageUrl;
-        link.download = 'image';
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
+    const toggleZoomAtPoint = (clientX: number, clientY: number) => {
+        const stageEl = stageRef.current;
+        if (!stageEl) {
+            applyScale(scale > MIN_SCALE ? MIN_SCALE : TOGGLE_ZOOM_SCALE);
+            return;
+        }
+        const nextScale = scale > MIN_SCALE ? MIN_SCALE : TOGGLE_ZOOM_SCALE;
+        const clampedScale = clampScale(nextScale);
+        const stageRect = stageEl.getBoundingClientRect();
+        const pointX = clientX - (stageRect.left + stageRect.width / 2);
+        const pointY = clientY - (stageRect.top + stageRect.height / 2);
+        const ratio = clampedScale / scale;
+        const nextOffset = clampOffset(
+            pointX - (pointX - offset.x) * ratio,
+            pointY - (pointY - offset.y) * ratio,
+            clampedScale,
+        );
+        setScale(clampedScale);
+        setOffset(nextOffset);
+    };
+    const downloadImage = async () => {
+        try {
+            const response = await fetch(imageUrl);
+            if (!response.ok) throw new Error('Download failed');
+            const blob = await response.blob();
+            const extension = blob.type.split('/')[1] || 'jpg';
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `image.${extension}`;
+            document.body.appendChild(link);
+            link.click();
+            window.URL.revokeObjectURL(url);
+            link.remove();
+        } catch (error) {
+            console.error('Error downloading image:', error);
+            alert('خطا در دانلود تصویر');
+        }
     };
 
     return (
@@ -136,7 +166,7 @@ export function ImageMediaViewer({ imageUrl, onClose }: ImageMediaViewerProps) {
                     src={imageUrl}
                     alt="media viewer"
                     className="image-media-viewer__image"
-                    onClick={toggleZoom}
+                    onDoubleClick={(e) => toggleZoomAtPoint(e.clientX, e.clientY)}
                     onMouseDown={(e) => {
                         if (scale <= 1) return;
                         dragStartRef.current = { x: e.clientX, y: e.clientY, offsetX: offset.x, offsetY: offset.y };
