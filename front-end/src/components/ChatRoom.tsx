@@ -277,6 +277,15 @@ export function ChatRoom({
         programmaticScrollEventsRef.current += 2;
     };
 
+    const collectInitialMediaPendingIds = () => new Set(
+        messages
+            .filter((m) => {
+                const mt = (m.file?.mimeType || '').toLowerCase();
+                return Boolean(m.file && (mt.startsWith('image/') || mt.startsWith('video/')));
+            })
+            .map((m) => m.id)
+    );
+
     const handleInitialMediaReady = (messageId: string) => {
         if (initialMediaFollowupDoneRef.current) return;
         if (!initialMediaPendingIdsRef.current.has(messageId)) return;
@@ -786,14 +795,7 @@ export function ChatRoom({
         userHasScrolledRef.current = false;
         unreadConsumedInSessionRef.current = false;
         initialMediaFollowupDoneRef.current = false;
-        initialMediaPendingIdsRef.current = new Set(
-            messages
-                .filter((m) => {
-                    const mt = (m.file?.mimeType || '').toLowerCase();
-                    return Boolean(m.file && (mt.startsWith('image/') || mt.startsWith('video/')));
-                })
-                .map((m) => m.id)
-        );
+        initialMediaPendingIdsRef.current = collectInitialMediaPendingIds();
         if (initialMediaPendingIdsRef.current.size === 0) {
             initialMediaFollowupDoneRef.current = true;
         }
@@ -864,6 +866,8 @@ export function ChatRoom({
 
         if (!initialScrollDoneRef.current) {
             if (messages.length > 0 && !loading) {
+                initialMediaPendingIdsRef.current = collectInitialMediaPendingIds();
+                initialMediaFollowupDoneRef.current = initialMediaPendingIdsRef.current.size === 0;
                 const raf = requestAnimationFrame(() => {
                     applyInitialScroll();
 
