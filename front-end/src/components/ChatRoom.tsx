@@ -517,14 +517,9 @@ export function ChatRoom({
         const room = roomRef.current;
         if (!room) return;
         const vv = (window as any).visualViewport as VisualViewport | undefined;
-        if (!vv) { room.style.setProperty('--keyboard-offset', '0px'); return; }
+        if (!vv) return;
         let raf: number | null = null;
         const update = () => {
-            const el = roomRef.current;
-            if (!el) return;
-            const offsetTop = typeof vv.offsetTop === 'number' ? vv.offsetTop : 0;
-            const keyboard = Math.max(0, window.innerHeight - vv.height - offsetTop);
-            el.style.setProperty('--keyboard-offset', `${Math.round(keyboard)}px`);
             if (isAtBottomRef.current) {
                 if (raf) cancelAnimationFrame(raf);
                 raf = requestAnimationFrame(() => scrollToBottom(false));
@@ -539,7 +534,6 @@ export function ChatRoom({
             vv.removeEventListener('scroll', update);
             window.removeEventListener('orientationchange', update);
             if (raf) cancelAnimationFrame(raf);
-            room.style.removeProperty('--keyboard-offset');
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
