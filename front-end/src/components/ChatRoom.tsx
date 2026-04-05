@@ -1394,11 +1394,11 @@ export function ChatRoom({
             <ContactInfo
                 user={infoUser}
                 onBack={() => {
+                    setShowContactInfo(false);
                     if (onCloseForcedContactInfo) {
                         onCloseForcedContactInfo(chatId);
                         return;
                     }
-                    setShowContactInfo(false);
                     if (openGroupEditorFromMembers) {
                         setShowMembersList(true);
                         setOpenGroupEditorFromMembers(false);
@@ -1484,11 +1484,11 @@ export function ChatRoom({
             <div className="contact-info">
                 <div className="contact-info__header">
                     <button className="contact-info__back" onClick={() => {
+                        setShowMembersList(false);
                         if (onCloseForcedContactInfo) {
                             onCloseForcedContactInfo(chatId);
                             return;
                         }
-                        setShowMembersList(false);
                     }} type="button"><ArrowLeft size={20} /></button>
                     <div className="contact-info__title">اطلاعات گروه</div>
                     <div className="contact-info__spacer" />
