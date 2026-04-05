@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X, Search, MessageCircle, Bookmark } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import type { Chat } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -9,14 +10,24 @@ interface ForwardModalProps {
     chats: Chat[];
     currentUserId: string;
     onClose: () => void;
-    onForward: (chatId: string) => void;
+    onForward?: (chatId: string) => void;
+    onSelectTargetChat?: (chatId: string) => void;
     onSelectChat?: (chatId: string) => void;
 }
 
-export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward, onSelectChat }: ForwardModalProps) {
+export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward, onSelectTargetChat, onSelectChat }: ForwardModalProps) {
     const [searchQuery, setSearchQuery] = useState('');
 
-    if (!isOpen) return null;
+    const handlePickChat = (chatId: string) => {
+        if (onSelectTargetChat) {
+            onSelectTargetChat(chatId);
+            onClose();
+            return;
+        }
+        onForward?.(chatId);
+        if (onSelectChat) onSelectChat(chatId);
+        onClose();
+    };
 
     // Build saved messages chat object
     const savedMessagesChat = {
@@ -45,8 +56,24 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward,
     const showSavedMessages = !searchQuery;
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="forward-modal" onClick={(e) => e.stopPropagation()}>
+        <AnimatePresence>
+            {isOpen && (
+                <motion.div
+                    className="modal-overlay"
+                    onClick={onClose}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.18 }}
+                >
+                    <motion.div
+                        className="forward-modal"
+                        onClick={(e) => e.stopPropagation()}
+                        initial={{ y: 26, opacity: 0, scale: 0.98 }}
+                        animate={{ y: 0, opacity: 1, scale: 1 }}
+                        exit={{ y: 16, opacity: 0, scale: 0.98 }}
+                        transition={{ duration: 0.2, ease: 'easeOut' }}
+                    >
                 <div className="modal-header">
                     <h2>فوروارد پیام</h2>
                     <button className="icon-btn" onClick={onClose} type="button" aria-label="Close">
@@ -69,16 +96,12 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward,
                         <button
                             key={savedMessagesChat.id}
                             className="user-item"
-                            onClick={() => {
-                                onForward(savedMessagesChat.id);
-                                if (onSelectChat) onSelectChat(savedMessagesChat.id);
-                                onClose();
-                            }}
+                            onClick={() => handlePickChat(savedMessagesChat.id)}
                             type="button"
                         >
                             <Avatar name="" size="md" online={false} savedMessages />
                             <div className="user-item-info">
-                                <div className="user-name" style={{ fontFamily: 'Vazir, sans-serif' }}>
+                                <div className="user-name" style={{ fontFamily: "'Vazir', sans-serif" }}>
                                     {savedMessagesChat.name}
                                 </div>
                             </div>
@@ -99,20 +122,16 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward,
                                 <button
                                     key={chat.id}
                                     className="user-item"
-                                    onClick={() => {
-                                        onForward(chat.id);
-                                        if (onSelectChat) onSelectChat(chat.id);
-                                        onClose();
-                                    }}
+                                    onClick={() => handlePickChat(chat.id)}
                                     type="button"
                                 >
                                     <Avatar name={user.name || user.username} size="md" online={user.online} src={user.avatar} />
                                     <div className="user-item-info">
-                                        <div className="user-name" style={{ fontFamily: 'Vazir, sans-serif', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        <div className="user-name" style={{ fontFamily: "'Vazir', sans-serif", display: 'flex', alignItems: 'center', gap: 4 }}>
                                             {user.name}
                                             {user.verified && <VerifiedBadge size={14} />}
                                         </div>
-                                        <div className="user-username" style={{ fontFamily: 'Vazir, sans-serif' }}>@{user.username}</div>
+                                        <div className="user-username" style={{ fontFamily: "'Vazir', sans-serif" }}>@{user.username}</div>
                                     </div>
                                     <MessageCircle size={18} style={{ color: 'var(--text-tertiary)', marginLeft: 'auto' }} />
                                 </button>
@@ -120,7 +139,9 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward,
                         })
                     )}
                 </div>
-            </div>
-        </div>
+                    </motion.div>
+                </motion.div>
+            )}
+        </AnimatePresence>
     );
 }

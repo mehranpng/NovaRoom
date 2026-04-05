@@ -71,6 +71,7 @@ export function App() {
     // When user is selected from search, we open the room but do NOT create the chat
     // until the first message is sent.
     const [pendingUser, setPendingUser] = useState<User | null>(null);
+    const [pendingForwardDrafts, setPendingForwardDrafts] = useState<Record<string, { sourceChatId: string; messageId: string }>>({});
 
     const chatsRef = useRef<Chat[]>([]);
     useEffect(() => {
@@ -223,6 +224,7 @@ export function App() {
         setMessagesLoadedOnce({});
         setShowAIChat(false);
         setAIMessages([]);
+        setPendingForwardDrafts({});
         newGroupTimestamps.current = {};
         setOpenChatUnread(null);
         navigate('/login', { replace: true });
@@ -582,6 +584,28 @@ export function App() {
         deleteViaWS(activeChatId, messageId);
     }, [activeChatId, deleteViaWS]);
 
+    const handleForwardMessage = useCallback(async (sourceChatId: string, messageId: string, targetChatId: string) => {
+        await apiFetch('/messages/forward', {
+            method: 'POST',
+            body: JSON.stringify({ sourceChatId, messageId, targetChatId }),
+        });
+    }, []);
+
+    const handleSetPendingForwardDraft = useCallback((targetChatId: string, draft: { sourceChatId: string; messageId: string }) => {
+        if (!targetChatId || !draft?.sourceChatId || !draft?.messageId) return;
+        setPendingForwardDrafts((prev) => ({ ...prev, [targetChatId]: draft }));
+    }, []);
+
+    const handleClearPendingForwardDraft = useCallback((targetChatId: string) => {
+        if (!targetChatId) return;
+        setPendingForwardDrafts((prev) => {
+            if (!prev[targetChatId]) return prev;
+            const next = { ...prev };
+            delete next[targetChatId];
+            return next;
+        });
+    }, []);
+
     const handleDeleteAIMessage = useCallback(async (messageId: string) => {
         try {
             await apiFetch(`/ai/messages/${encodeURIComponent(messageId)}`, { method: 'DELETE' });
@@ -939,6 +963,10 @@ export function App() {
                                 onOpenAIChat={handleOpenAIChat}
                                 initialUnreadCount={initialUnreadCount}
                                 onConsumeInitialUnread={consumeOpenChatUnread}
+                                onForwardMessage={handleForwardMessage}
+                                pendingForwardDraft={activeChatId ? (pendingForwardDrafts[activeChatId] || null) : null}
+                                onSetPendingForwardDraft={handleSetPendingForwardDraft}
+                                onClearPendingForwardDraft={handleClearPendingForwardDraft}
                             />
                         ) : (
                             <EmptyState />

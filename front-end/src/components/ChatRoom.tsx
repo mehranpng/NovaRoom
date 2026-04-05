@@ -38,7 +38,10 @@ interface ChatRoomProps {
     onConsumeInitialUnread?: (chatId: string) => void;
     onReactMessage?: (chatId: string, messageId: string, emoji: string) => Promise<void>;
     onUnreactMessage?: (chatId: string, messageId: string) => Promise<void>;
-    onForwardMessage?: (messageId: string, targetChatId: string) => Promise<void>;
+    onForwardMessage?: (sourceChatId: string, messageId: string, targetChatId: string) => Promise<void>;
+    pendingForwardDraft?: { sourceChatId: string; messageId: string } | null;
+    onSetPendingForwardDraft?: (targetChatId: string, draft: { sourceChatId: string; messageId: string }) => void;
+    onClearPendingForwardDraft?: (targetChatId: string) => void;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000;
@@ -263,6 +266,9 @@ export function ChatRoom({
     onReactMessage,
     onUnreactMessage,
     onForwardMessage,
+    pendingForwardDraft = null,
+    onSetPendingForwardDraft,
+    onClearPendingForwardDraft,
 }: ChatRoomProps) {
     const currentChat = useMemo(
         () => chats.find((c) => c.id === chatId) || null,
@@ -280,6 +286,7 @@ export function ChatRoom({
     const [showContactInfo, setShowContactInfo] = useState(false);
     const [forwardModalOpen, setForwardModalOpen] = useState(false);
     const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
+    const [forwardSourceUser, setForwardSourceUser] = useState<User | null>(null);
 
     const [replyTo, setReplyTo] = useState<MessageReplyType | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -568,25 +575,19 @@ export function ChatRoom({
             return;
         }
 
-        const sourceChat = chats.find((c) =>
-            c.chatType === 'direct' && Array.isArray(c.participantIds) && c.participantIds.includes(sourceId)
-        );
-        if (sourceChat?.id && onSelectChat) {
-            maybeSaveScroll(chatId);
-            onSelectChat(sourceChat.id);
-            return;
-        }
+        const sourceChat = chats.find((c) => c.chatType === 'direct' && c.otherUser?.chatId === sourceId);
+        const sourceUser: User = sourceChat?.otherUser || {
+            chatId: sourceId,
+            username: m.forwardedFrom?.username || '',
+            name: m.forwardedFrom?.name || m.forwardedFrom?.username || sourceId,
+            bio: '',
+            avatar: '',
+            online: false,
+        };
 
-        if (onOpenDirectChat) {
-            onOpenDirectChat({
-                chatId: sourceId,
-                username: m.forwardedFrom?.username || '',
-                name: m.forwardedFrom?.name || m.forwardedFrom?.username || sourceId,
-                bio: '',
-                avatar: '',
-                online: false,
-            });
-        }
+        maybeSaveScroll(chatId);
+        restoringFromInfoRef.current = true;
+        setForwardSourceUser(sourceUser);
     };
 
     const openMember = (memberId: string) => {
@@ -854,19 +855,25 @@ export function ChatRoom({
         });
     }, [messages]);
 
-    const handleForwardMessage = async (targetChatId: string) => {
-        if (!forwardingMessageId) return;
+    const handleForwardMessage = async (sourceChatId: string, messageId: string, targetChatId: string) => {
         try {
             if (onForwardMessage) {
-                await onForwardMessage(forwardingMessageId, targetChatId);
+                await onForwardMessage(sourceChatId, messageId, targetChatId);
             } else {
-                await apiFetch('/messages/forward', { method: 'POST', body: JSON.stringify({ sourceChatId: chatId, messageId: forwardingMessageId, targetChatId }) });
+                await apiFetch('/messages/forward', { method: 'POST', body: JSON.stringify({ sourceChatId, messageId, targetChatId }) });
             }
-            setForwardingMessageId(null);
+            onClearPendingForwardDraft?.(targetChatId);
         } catch (e) {
             console.error('Failed to forward:', e);
             alert('فوروارد پیام با خطا مواجه شد');
         }
+    };
+
+    const handleForwardFromModal = (targetChatId: string) => {
+        if (!forwardingMessageId) return;
+        onSetPendingForwardDraft?.(targetChatId, { sourceChatId: chatId, messageId: forwardingMessageId });
+        setForwardingMessageId(null);
+        onSelectChat?.(targetChatId);
     };
 
     const openForwardModal = (messageId: string) => {
@@ -946,6 +953,7 @@ export function ChatRoom({
         setShowContactInfo(false);
         setShowMembersList(false);
         setViewingMemberId(null);
+        setForwardSourceUser(null);
         setReplyTo(null); setEditingId(null);
         setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
         setText(''); setUploadedFile(null);
@@ -1137,9 +1145,14 @@ export function ChatRoom({
 
     const submit = () => {
         const t = text.trim();
-        if (!t && !uploadedFile) return;
+        if (!t && !uploadedFile && (!pendingForwardDraft || Boolean(editingId))) return;
         triggerHaptic();
-        onSendMessage({ text: t || '', replyToId: replyTo?.id, editMessageId: editingId ?? undefined, file: uploadedFile ?? undefined });
+        if (t || uploadedFile) {
+            onSendMessage({ text: t || '', replyToId: replyTo?.id, editMessageId: editingId ?? undefined, file: uploadedFile ?? undefined });
+        }
+        if (pendingForwardDraft && !editingId) {
+            void handleForwardMessage(pendingForwardDraft.sourceChatId, pendingForwardDraft.messageId, chatId);
+        }
         setText(''); setUploadedFile(null); setReplyTo(null); setEditingId(null);
         requestAnimationFrame(() => scrollToBottom(true));
     };
@@ -1281,6 +1294,24 @@ export function ChatRoom({
                     }
                     onOpenDirectChat?.(u);
                     setShowContactInfo(false);
+                }}
+            />
+        );
+    }
+
+    if (forwardSourceUser) {
+        return (
+            <ContactInfo
+                user={forwardSourceUser}
+                onBack={() => setForwardSourceUser(null)}
+                onOpenChat={(u) => {
+                    if (u.chatId === currentUserId) {
+                        onOpenProfile?.();
+                        setForwardSourceUser(null);
+                        return;
+                    }
+                    onOpenDirectChat?.(u);
+                    setForwardSourceUser(null);
                 }}
             />
         );
@@ -1990,6 +2021,22 @@ export function ChatRoom({
                         <button type="button" className="icon-btn" aria-label="Remove file" onClick={() => setUploadedFile(null)}><X size={18} /></button>
                     </div>
                 )}
+                {pendingForwardDraft && (
+                    <div className="chat-room__reply-edit-box">
+                        <div style={{ minWidth: 0 }}>
+                            <div className="chat-room__reply-edit-box__title">در حال فوروارد پیام</div>
+                            <div className="chat-room__reply-edit-box__text">پیام بعد از ارسال شما فوروارد خواهد شد.</div>
+                        </div>
+                        <button
+                            type="button"
+                            className="icon-btn"
+                            aria-label="Cancel forward"
+                            onClick={() => onClearPendingForwardDraft?.(chatId)}
+                        >
+                            <X size={18} />
+                        </button>
+                    </div>
+                )}
                 <div className="chat-room__input-wrapper">
                     <FileUpload token={token} onFileUploaded={handleFileUploaded} />
                     <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
@@ -2006,15 +2053,15 @@ export function ChatRoom({
                         rows={1}
                     />
                     <button
-                        className={text.trim() || uploadedFile ? 'chat-room__send-btn chat-room__send-btn--active' : 'chat-room__send-btn chat-room__send-btn--disabled'}
-                        onClick={submit} disabled={!text.trim() && !uploadedFile} aria-label="Send" type="button">
+                        className={text.trim() || uploadedFile || (pendingForwardDraft && !editingId) ? 'chat-room__send-btn chat-room__send-btn--active' : 'chat-room__send-btn chat-room__send-btn--disabled'}
+                        onClick={submit} disabled={!text.trim() && !uploadedFile && (!pendingForwardDraft || Boolean(editingId))} aria-label="Send" type="button">
                         <SendHorizontal size={18} />
                     </button>
                 </div>
             </div>
 
             <ForwardModal isOpen={forwardModalOpen} chats={chats} currentUserId={currentUserId}
-                onClose={() => setForwardModalOpen(false)} onForward={handleForwardMessage} onSelectChat={onSelectChat} />
+                onClose={() => setForwardModalOpen(false)} onSelectTargetChat={handleForwardFromModal} onSelectChat={onSelectChat} />
 
             {confirmDeleteChat && (
                 <div className="chat-room-modal-overlay" ref={confirmDeleteChatRef}>
