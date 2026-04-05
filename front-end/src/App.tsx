@@ -275,9 +275,11 @@ export function App() {
 
     // WebSocket handlers wrapped in useCallback to prevent infinite reconnection loops
     const handleNewMessage = useCallback((chatId: string, newMsg: Message) => {
+        let isDuplicateMessage = false;
         setMessages(prev => {
             const currentMessages = prev[chatId] || [];
             if (currentMessages.some(m => m.id === newMsg.id)) {
+                isDuplicateMessage = true;
                 return prev;
             }
             return {
@@ -285,6 +287,10 @@ export function App() {
                 [chatId]: [...currentMessages, newMsg]
             };
         });
+
+        // Prevent double unread increments / duplicated chat-lastMessage updates
+        // when the same message event is delivered more than once.
+        if (isDuplicateMessage) return;
 
         const hasChat = chatsRef.current.some(c => c.id === chatId);
         if (!hasChat) {

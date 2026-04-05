@@ -1151,6 +1151,10 @@ export function ChatRoom({
         if (displayUnreadCount <= 0) return;
         if (loading) return;
         if (!messages.length) return;
+        // Do not auto-consume immediately on open/reflow; this can make the
+        // unread separator flash and disappear (seen mostly on desktop Chrome).
+        // We only consume after real user scroll interaction.
+        if (!userHasScrolledRef.current) return;
         const raf = requestAnimationFrame(() => {
             if (computeNearBottom()) consumeUnreadForOpenSession();
         });
