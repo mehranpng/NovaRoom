@@ -10,10 +10,12 @@
   background: none;
   cursor: pointer;
   font-family: inherit;
+  transition: background var(--motion-fast, 0.18s) ease, transform var(--motion-fast, 0.18s) ease;
 }
 
 .user-item:hover {
   background: var(--hover-bg-light);
+  transform: translateY(-1px);
 }
 
 .user-item-info {
