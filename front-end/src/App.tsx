@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import type { Message, View, User, Chat, ChatLastMessage, FileMetadata } from './types';
 import { apiFetch } from './config/api';
 import { useWebSocket } from './hooks/useWebSocket';
@@ -8,6 +8,7 @@ import { ChatList } from './components/ChatList';
 import { ChatRoom } from './components/ChatRoom';
 import { AIChatRoom } from './components/AIChatRoom';
 import { Profile } from './components/Profile';
+import { ContactInfo } from './components/ContactInfo';
 import { EmptyState } from './components/EmptyState';
 import { Login } from './components/Login';
 import { Register } from './components/Register';
@@ -30,6 +31,7 @@ const normalizeTimestamp = (ts: unknown): number => {
 
 export function App() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [view, setView] = useState<View>('chatList');
@@ -524,7 +526,8 @@ export function App() {
         return () => window.removeEventListener('novaroom:refresh_chats', handler as any);
     }, [isAuthenticated, loadChats]);
 
-    const handleSelectChat = useCallback(async (chatId: string) => {
+    const handleSelectChat = useCallback(async (chatId: string, options?: { navigateToRoute?: boolean }) => {
+        const shouldNavigate = options?.navigateToRoute ?? true;
         const requestId = ++chatLoadRequestRef.current;
         setPendingUser(null);
         setShowAIChat(false);
@@ -535,6 +538,7 @@ export function App() {
 
         setActiveChatId(chatId);
         setView('chatRoom');
+        if (shouldNavigate) navigate(`/chat/${encodeURIComponent(chatId)}`);
 
         setChats(prev => prev.map(c => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
 
@@ -567,7 +571,77 @@ export function App() {
         }
 
         loadChats(false);
-    }, [loadChats, sendSeen, messagesLoadedOnce, currentUser]);
+    }, [loadChats, sendSeen, messagesLoadedOnce, currentUser, navigate]);
+
+
+    useEffect(() => {
+        if (!isAuthenticated) return;
+
+        const pathname = location.pathname;
+        if (pathname.startsWith('/login') || pathname.startsWith('/register') || pathname.startsWith('/forgot-password')) return;
+
+        if (pathname === '/' || pathname === '') {
+            setView('chatList');
+            setShowAIChat(false);
+            setPendingUser(null);
+            setActiveChatId(null);
+            return;
+        }
+
+        if (pathname === '/profile') {
+            setView('profile');
+            return;
+        }
+
+        if (pathname === '/ai') {
+            setActiveChatId(null);
+            setPendingUser(null);
+            setShowAIChat(true);
+            setView('chatRoom');
+            return;
+        }
+
+        if (pathname === '/save-message') {
+            if (!currentUser) return;
+            const savedMessagesId = `saved_messages_${currentUser.chatId}`;
+            if (activeChatId !== savedMessagesId || view !== 'chatRoom') {
+                handleSelectChat(savedMessagesId, { navigateToRoute: false });
+            }
+            return;
+        }
+
+        const chatMatch = pathname.match(/^\/chat\/(.+)$/);
+        if (chatMatch?.[1]) {
+            const decodedChatId = decodeURIComponent(chatMatch[1]);
+            if (activeChatId !== decodedChatId || view !== 'chatRoom' || showAIChat) {
+                handleSelectChat(decodedChatId, { navigateToRoute: false });
+            }
+            return;
+        }
+
+        const infoMatch = pathname.match(/^\/info\/(.+)$/);
+        if (infoMatch?.[1]) {
+            const decodedChatId = decodeURIComponent(infoMatch[1]);
+            setShowAIChat(false);
+            setPendingUser(null);
+            setView('chatRoom');
+            if (activeChatId !== decodedChatId) {
+                handleSelectChat(decodedChatId, { navigateToRoute: false });
+            }
+            return;
+        }
+
+        navigate('/', { replace: true });
+    }, [
+        isAuthenticated,
+        location.pathname,
+        currentUser,
+        activeChatId,
+        view,
+        showAIChat,
+        handleSelectChat,
+        navigate,
+    ]);
 
     useEffect(() => {
         if (!activeChatId || !currentUser) return;
@@ -810,12 +884,16 @@ export function App() {
         window.history.replaceState({}, '', `${url.pathname}${url.search}`);
     }, [isAuthenticated, handleJoinGroup]);
 
-    const handleOpenProfile = () => setView('profile');
+    const handleOpenProfile = () => {
+        setView('profile');
+        navigate('/profile');
+    };
     const handleBack = () => {
         setView('chatList');
         setPendingUser(null);
         setShowAIChat(false);
         setActiveChatId(null);
+        navigate('/');
     };
 
     const handleCloseChat = () => {
@@ -823,6 +901,7 @@ export function App() {
         setPendingUser(null);
         setShowAIChat(false);
         setView('chatRoom');
+        navigate('/');
     };
 
     const handleChatDeleted = (chatId: string) => {
@@ -848,13 +927,15 @@ export function App() {
         setPendingUser(null);
         setShowAIChat(true);
         setView('chatRoom');
+        navigate('/ai');
     };
 
     const handleOpenSavedMessages = useCallback(() => {
         if (!currentUser) return;
         const savedMessagesId = `saved_messages_${currentUser.chatId}`;
-        handleSelectChat(savedMessagesId);
-    }, [currentUser, handleSelectChat]);
+        navigate('/save-message');
+        handleSelectChat(savedMessagesId, { navigateToRoute: false });
+    }, [currentUser, handleSelectChat, navigate]);
 
     const handleSendAIMessage = useCallback((text: string) => {
         if (!currentUser) return;
@@ -954,7 +1035,7 @@ export function App() {
 
     // --- Authenticated: redirect away from auth pages ---
     const authPages = ['/login', '/register', '/forgot-password'];
-    const isOnAuthPage = authPages.some(p => window.location.pathname.startsWith(p));
+    const isOnAuthPage = authPages.some(p => location.pathname.startsWith(p));
     if (isOnAuthPage) {
         return <Navigate to="/" replace />;
     }
@@ -967,6 +1048,10 @@ export function App() {
     const initialUnreadCount = openChatUnread?.chatId && openChatUnread.chatId === (activeChatId || 'pending')
         ? openChatUnread.count
         : 0;
+
+    const infoRouteMatch = location.pathname.match(/^\/info\/(.+)$/);
+    const infoRouteChatId = infoRouteMatch?.[1] ? decodeURIComponent(infoRouteMatch[1]) : null;
+    const isInfoRouteActive = Boolean(infoRouteChatId) && view !== 'profile';
 
     return (
         <MusicPlayerProvider>
@@ -1007,7 +1092,29 @@ export function App() {
 
                 {view !== 'profile' && (
                     <div className={cx('app__main', view === 'chatList' && 'app__main--hidden-mobile')}>
-                        {view === 'chatRoom' && showAIChat ? (
+                        {isInfoRouteActive && (activeChat || isSavedMessagesActive) ? (
+                            <ContactInfo
+                                user={(activeChat?.chatType === 'group'
+                                    ? { ...getActiveContact(), chatId: infoRouteChatId || activeChatId || '', isGroup: true }
+                                    : getActiveContact()) as any}
+                                onBack={() => {
+                                    const backChatId = infoRouteChatId || activeChatId;
+                                    if (backChatId) {
+                                        navigate(`/chat/${encodeURIComponent(backChatId)}`);
+                                    } else {
+                                        navigate('/');
+                                    }
+                                }}
+                                onOpenChat={(u) => {
+                                    if (u.chatId === currentUser?.chatId) {
+                                        handleOpenProfile();
+                                        return;
+                                    }
+                                    handleUserSelectedFromModal(u);
+                                }}
+                                autoOpenMembers={false}
+                            />
+                        ) : view === 'chatRoom' && showAIChat ? (
                             <AIChatRoom
                                 messages={aiMessages}
                                 currentUserId={currentUser!.chatId}
@@ -1038,6 +1145,7 @@ export function App() {
                                 onOpenDirectChat={(user) => handleUserSelectedFromModal(user)}
                                 onOpenProfile={handleOpenProfile}
                                 onOpenAIChat={handleOpenAIChat}
+                                onOpenContactInfo={(targetChatId) => navigate(`/info/${encodeURIComponent(targetChatId)}`)}
                                 initialUnreadCount={initialUnreadCount}
                                 onConsumeInitialUnread={consumeOpenChatUnread}
                                 onForwardMessage={handleForwardMessage}

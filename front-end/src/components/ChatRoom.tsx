@@ -34,6 +34,7 @@ interface ChatRoomProps {
     onOpenDirectChat?: (user: User) => void;
     onOpenProfile?: () => void;
     onOpenAIChat?: () => void;
+    onOpenContactInfo?: (chatId: string) => void;
     initialUnreadCount?: number;
     onConsumeInitialUnread?: (chatId: string) => void;
     onReactMessage?: (chatId: string, messageId: string, emoji: string) => Promise<void>;
@@ -261,6 +262,7 @@ export function ChatRoom({
     onOpenDirectChat,
     onOpenProfile,
     onOpenAIChat,
+    onOpenContactInfo,
     initialUnreadCount = 0,
     onConsumeInitialUnread,
     onReactMessage,
@@ -1593,6 +1595,10 @@ export function ChatRoom({
                     onClick={() => {
                         if (isSavedMessages) return;
                         maybeSaveScroll(chatId);
+                        if (onOpenContactInfo) {
+                            onOpenContactInfo(chatId);
+                            return;
+                        }
                         restoringFromInfoRef.current = true;
                         setOpenGroupEditorFromMembers(false);
                         setShowContactInfo(true);
