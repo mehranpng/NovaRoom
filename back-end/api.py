@@ -1587,16 +1587,38 @@ async def forward_message(
         }
         message_text = original_msg.get("content", "")
     else:
-        existing_forwarded_from = original_msg.get("forwardedFrom")
-        if isinstance(existing_forwarded_from, dict) and existing_forwarded_from.get(
-            "originalSenderId"
-        ):
+        existing_forwarded_from = (
+            original_msg.get("forwardedFrom")
+            or original_msg.get("forwarded_from")
+            or original_msg.get("forwardedfrom")
+        )
+        existing_original_sender_id = ""
+        existing_name = "Unknown"
+        existing_username = ""
+        if isinstance(existing_forwarded_from, dict):
+            existing_original_sender_id = str(
+                existing_forwarded_from.get("originalSenderId")
+                or existing_forwarded_from.get("original_sender_id")
+                or ""
+            ).strip()
+            existing_name = str(
+                existing_forwarded_from.get("name")
+                or existing_forwarded_from.get("fullName")
+                or "Unknown"
+            ).strip() or "Unknown"
+            existing_username = str(
+                existing_forwarded_from.get("username")
+                or existing_forwarded_from.get("userName")
+                or ""
+            ).strip()
+
+        if existing_original_sender_id:
             # Preserve the original forwarded label chain:
             # if message is already forwarded, keep its first source.
             forwarded_from_info = {
-                "originalSenderId": existing_forwarded_from.get("originalSenderId", ""),
-                "name": existing_forwarded_from.get("name", "Unknown"),
-                "username": existing_forwarded_from.get("username", ""),
+                "originalSenderId": existing_original_sender_id,
+                "name": existing_name,
+                "username": existing_username,
             }
         else:
             original_sender_id = original_msg.get("senderId")
