@@ -1,20 +1,32 @@
-import { Moon, Sun } from 'lucide-react';
+import { Laptop, Moon, Sun } from 'lucide-react';
+import { type ThemeMode } from '../hooks/useDarkMode';
 
 interface DarkModeToggleProps {
-  isDarkMode: boolean;
+  themeMode: ThemeMode;
   onToggle: () => void;
 }
 
-export function DarkModeToggle({ isDarkMode, onToggle }: DarkModeToggleProps) {
+export function DarkModeToggle({ themeMode, onToggle }: DarkModeToggleProps) {
+  const nextMode: ThemeMode =
+    themeMode === 'system' ? 'light' : themeMode === 'light' ? 'dark' : 'system';
+
+  const labelByMode: Record<ThemeMode, string> = {
+    system: 'سیستم',
+    light: 'روشن',
+    dark: 'تاریک',
+  };
+
   return (
     <button
       className="icon-btn"
       onClick={onToggle}
-      aria-label={isDarkMode ? 'حالت روشن' : 'حالت تاریک'}
-      title={isDarkMode ? 'حالت روشن' : 'حالت تاریک'}
+      aria-label={`تم فعلی: ${labelByMode[themeMode]} | بعدی: ${labelByMode[nextMode]}`}
+      title={`تم فعلی: ${labelByMode[themeMode]} | بعدی: ${labelByMode[nextMode]}`}
       type="button"
     >
-      {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+      {themeMode === 'system' && <Laptop size={20} />}
+      {themeMode === 'light' && <Sun size={20} />}
+      {themeMode === 'dark' && <Moon size={20} />}
     </button>
   );
 }

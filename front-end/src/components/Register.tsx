@@ -17,7 +17,13 @@ type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
     const navigate = useNavigate();
     const location = useLocation();
-    const { isDarkMode, toggleDarkMode } = useDarkMode();
+    const { themeMode, setThemeMode } = useDarkMode();
+
+    const handleToggleTheme = () => {
+        setThemeMode((prevMode) =>
+            prevMode === 'system' ? 'light' : prevMode === 'light' ? 'dark' : 'system'
+        );
+    };
     
     // Determine step from URL path
     const getStepFromPath = (): Step => {
@@ -302,7 +308,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
     return (
         <div className="login-page">
             <div className="login-page__dark-toggle">
-                <DarkModeToggle isDarkMode={isDarkMode} onToggle={toggleDarkMode} />
+                <DarkModeToggle themeMode={themeMode} onToggle={handleToggleTheme} />
             </div>
             
             <div className="login-container">

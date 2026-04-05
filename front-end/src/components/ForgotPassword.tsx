@@ -15,7 +15,13 @@ type Step = 'email' | 'reset';
 export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPasswordProps) {
     const navigate = useNavigate();
     const location = useLocation();
-    const { isDarkMode, toggleDarkMode } = useDarkMode();
+    const { themeMode, setThemeMode } = useDarkMode();
+
+    const handleToggleTheme = () => {
+        setThemeMode((prevMode) =>
+            prevMode === 'system' ? 'light' : prevMode === 'light' ? 'dark' : 'system'
+        );
+    };
     
     // Determine step from URL path
     const getStepFromPath = (): Step => {
@@ -185,7 +191,7 @@ export function ForgotPassword({ onBackToLogin, onResetSuccess }: ForgotPassword
     return (
         <div className="login-page">
             <div className="login-page__dark-toggle">
-                <DarkModeToggle isDarkMode={isDarkMode} onToggle={toggleDarkMode} />
+                <DarkModeToggle themeMode={themeMode} onToggle={handleToggleTheme} />
             </div>
             
             <div className="login-container">

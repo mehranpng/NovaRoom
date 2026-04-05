@@ -16,7 +16,13 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const { isDarkMode, toggleDarkMode } = useDarkMode();
+    const { themeMode, setThemeMode } = useDarkMode();
+
+    const handleToggleTheme = () => {
+        setThemeMode((prevMode) =>
+            prevMode === 'system' ? 'light' : prevMode === 'light' ? 'dark' : 'system'
+        );
+    };
 
     // Farsi error messages
     const getErrorMessage = (err: any): string => {
@@ -88,7 +94,7 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
     return (
         <div className="login-page">
             <div className="login-page__dark-toggle">
-                <DarkModeToggle isDarkMode={isDarkMode} onToggle={toggleDarkMode} />
+                <DarkModeToggle themeMode={themeMode} onToggle={handleToggleTheme} />
             </div>
 
             <div className="login-container">
