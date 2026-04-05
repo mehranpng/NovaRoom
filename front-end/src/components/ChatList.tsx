@@ -1,5 +1,6 @@
 import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, Laptop, ChevronDown, MoreVertical, Trash2, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -730,22 +731,32 @@ export function ChatList({
                                         <ChevronDown size={14} style={{ transform: themeMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }} />
                                     </button>
 
-                                    {themeMenuOpen && (
-                                        <div style={{ padding: '4px 0 0' }}>
-                                            <button className="popover__item" onClick={() => { setThemeMode('system'); setMenuOpen(false); }} type="button" style={{ paddingInlineStart: 28 }}>
-                                                <Laptop size={16} />
-                                                حالت سیستم{themeMode === 'system' ? ' ✓' : ''}
-                                            </button>
-                                            <button className="popover__item" onClick={() => { setThemeMode('light'); setMenuOpen(false); }} type="button" style={{ paddingInlineStart: 28 }}>
-                                                <Sun size={16} />
-                                                حالت روشن{themeMode === 'light' ? ' ✓' : ''}
-                                            </button>
-                                            <button className="popover__item" onClick={() => { setThemeMode('dark'); setMenuOpen(false); }} type="button" style={{ paddingInlineStart: 28 }}>
-                                                <Moon size={16} />
-                                                حالت تاریک{themeMode === 'dark' ? ' ✓' : ''}
-                                            </button>
-                                        </div>
-                                    )}
+                                    <AnimatePresence initial={false}>
+                                        {themeMenuOpen && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: 'auto', opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                transition={{ duration: 0.2, ease: 'easeInOut' }}
+                                                style={{ overflow: 'hidden' }}
+                                            >
+                                                <div style={{ padding: '4px 0 0' }}>
+                                                    <button className="popover__item" onClick={() => { setThemeMode('system'); setMenuOpen(false); }} type="button" style={{ paddingInlineStart: 28 }}>
+                                                        <Laptop size={16} />
+                                                        سیستم{themeMode === 'system' ? ' ✓' : ''}
+                                                    </button>
+                                                    <button className="popover__item" onClick={() => { setThemeMode('light'); setMenuOpen(false); }} type="button" style={{ paddingInlineStart: 28 }}>
+                                                        <Sun size={16} />
+                                                        روشن{themeMode === 'light' ? ' ✓' : ''}
+                                                    </button>
+                                                    <button className="popover__item" onClick={() => { setThemeMode('dark'); setMenuOpen(false); }} type="button" style={{ paddingInlineStart: 28 }}>
+                                                        <Moon size={16} />
+                                                        تاریک{themeMode === 'dark' ? ' ✓' : ''}
+                                                    </button>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                 </div>
                                 <button className="popover__item popover__item--danger" onClick={() => { setMenuOpen(false); onLogout(); }} type="button">
                                     <LogOut size={16} />

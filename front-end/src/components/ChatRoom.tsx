@@ -1394,7 +1394,7 @@ export function ChatRoom({
             <ContactInfo
                 user={infoUser}
                 onBack={() => {
-                    if (forceContactInfoOpen && onCloseForcedContactInfo) {
+                    if (onCloseForcedContactInfo) {
                         onCloseForcedContactInfo();
                         return;
                     }
@@ -1613,7 +1613,6 @@ export function ChatRoom({
                         maybeSaveScroll(chatId);
                         if (onOpenContactInfo) {
                             onOpenContactInfo(chatId);
-                            return;
                         }
                         restoringFromInfoRef.current = true;
                         setOpenGroupEditorFromMembers(false);
