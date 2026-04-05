@@ -422,6 +422,21 @@ export function App() {
         setAITyping(false);
     }, []);
 
+    const handleAIUserMessageSaved = useCallback((message: any, clientId?: string) => {
+        const messageWithChatId: Message = {
+            ...message,
+            chatId: 'ai_chat',
+            seen: true,
+        };
+        setAIMessages(prev => {
+            const idx = clientId ? prev.findIndex((m) => m.id === clientId) : -1;
+            if (idx === -1) return [...prev, messageWithChatId];
+            const next = [...prev];
+            next[idx] = messageWithChatId;
+            return next;
+        });
+    }, []);
+
     // WebSocket initialization
     const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen, reconnectExhausted, reconnectNow } = useWebSocket({
         token: localStorage.getItem('token'),
@@ -459,6 +474,7 @@ export function App() {
     const { sendMessage: sendAIMessage } = useAIWebSocket({
         token: localStorage.getItem('token'),
         onNewMessage: handleNewAIMessage,
+        onUserMessageSaved: handleAIUserMessageSaved,
     });
 
     // Check auth on mount
@@ -836,9 +852,10 @@ export function App() {
 
     const handleSendAIMessage = useCallback((text: string) => {
         if (!currentUser) return;
+        const clientId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
         const userMessage: Message = {
-            id: `temp-${Date.now()}`,
+            id: clientId,
             chatId: 'ai_chat',
             senderId: currentUser.chatId,
             text,
@@ -849,7 +866,7 @@ export function App() {
         setAIMessages(prev => [...prev, userMessage]);
         setAITyping(true);
 
-        const success = sendAIMessage(text);
+        const success = sendAIMessage(text, clientId);
         if (!success) {
             console.warn('Failed to send message to AI');
             setAITyping(false);

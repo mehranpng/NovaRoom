@@ -613,7 +613,7 @@ export function AIChatRoom({
                         className="chat-room__text-input"
                         placeholder="پیام خود را بنویسید..."
                         value={text}
-                        onChange={(e) => setText(e.target.value.slice(0, MAX_AI_MESSAGE_LENGTH))}
+                        onChange={(e) => setText(e.target.value)}
                         onFocus={() => {
                             setTimeout(() => {
                                 if (computeNearBottom()) scrollToBottom(false);
@@ -628,9 +628,6 @@ export function AIChatRoom({
                         rows={1}
                         disabled={isTyping}
                     />
-                    <div style={{ position: 'absolute', bottom: 6, left: 48, fontSize: 11, color: text.length > MAX_AI_MESSAGE_LENGTH * 0.9 ? '#ef4444' : 'var(--text-secondary)', pointerEvents: 'none' }}>
-                        {text.length}/{MAX_AI_MESSAGE_LENGTH}
-                    </div>
                     <button
                         className={
                             text.trim() && !isTyping

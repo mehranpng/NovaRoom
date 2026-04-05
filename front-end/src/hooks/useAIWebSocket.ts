@@ -5,9 +5,10 @@ import { API_WS_URL } from '../config/api';
 interface UseAIWebSocketProps {
     token: string | null;
     onNewMessage: (message: Message) => void;
+    onUserMessageSaved?: (message: Message, clientId?: string) => void;
 }
 
-export function useAIWebSocket({ token, onNewMessage }: UseAIWebSocketProps) {
+export function useAIWebSocket({ token, onNewMessage, onUserMessageSaved }: UseAIWebSocketProps) {
     const MAX_AI_MESSAGE_LENGTH = 3000;
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<number | undefined>(undefined);
@@ -43,6 +44,8 @@ export function useAIWebSocket({ token, onNewMessage }: UseAIWebSocketProps) {
 
                 if (data.type === 'ai_response') {
                     onNewMessage(data.message);
+                } else if (data.type === 'ai_user_message_saved') {
+                    onUserMessageSaved?.(data.message, data.clientId);
                 } else if (data.type === 'pong') {
                     // Keep-alive response
                 }
@@ -70,7 +73,7 @@ export function useAIWebSocket({ token, onNewMessage }: UseAIWebSocketProps) {
         };
 
         wsRef.current = ws;
-    }, [token, onNewMessage]);
+    }, [token, onNewMessage, onUserMessageSaved]);
 
     useEffect(() => {
         connect();
@@ -86,7 +89,7 @@ export function useAIWebSocket({ token, onNewMessage }: UseAIWebSocketProps) {
         };
     }, [connect]);
 
-    const sendMessage = useCallback((text: string) => {
+    const sendMessage = useCallback((text: string, clientId?: string) => {
         if (typeof text !== 'string' || !text.trim() || text.length > MAX_AI_MESSAGE_LENGTH) {
             return false;
         }
@@ -99,6 +102,7 @@ export function useAIWebSocket({ token, onNewMessage }: UseAIWebSocketProps) {
             JSON.stringify({
                 type: 'ai_message',
                 text,
+                clientId,
             })
         );
         return true;

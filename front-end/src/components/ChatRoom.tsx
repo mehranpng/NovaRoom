@@ -2145,7 +2145,7 @@ export function ChatRoom({
                 <div className="chat-room__input-wrapper">
                     <FileUpload token={token} onFileUploaded={handleFileUploaded} />
                     <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
-                        value={text} onChange={(e) => setText(e.target.value.slice(0, MAX_CHAT_MESSAGE_LENGTH))}
+                        value={text} onChange={(e) => setText(e.target.value)}
                         onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
                         onKeyDown={(e) => {
                             if (e.key !== 'Enter') return;
@@ -2157,9 +2157,6 @@ export function ChatRoom({
                         }}
                         rows={1}
                     />
-                    <div style={{ position: 'absolute', bottom: 6, left: 48, fontSize: 11, color: text.length > MAX_CHAT_MESSAGE_LENGTH * 0.9 ? '#ef4444' : 'var(--text-secondary)', pointerEvents: 'none' }}>
-                        {text.length}/{MAX_CHAT_MESSAGE_LENGTH}
-                    </div>
                     <button
                         className={text.trim() || uploadedFile || (pendingForwardDraft && !editingId) ? 'chat-room__send-btn chat-room__send-btn--active' : 'chat-room__send-btn chat-room__send-btn--disabled'}
                         onClick={submit} disabled={!text.trim() && !uploadedFile && (!pendingForwardDraft || Boolean(editingId))} aria-label="Send" type="button">

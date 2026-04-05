@@ -2323,6 +2323,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
 
             if data.get("type") == "ai_message":
                 text = data.get("text")
+                client_id = data.get("clientId")
 
                 if not isinstance(text, str) or not text.strip():
                     continue
@@ -2336,7 +2337,19 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     "content": text,
                     "timestamp": utc_now(),
                 }
-                await cl_ai_messages.insert_one(user_message_doc)
+                user_insert = await cl_ai_messages.insert_one(user_message_doc)
+                await websocket.send_json(
+                    {
+                        "type": "ai_user_message_saved",
+                        "clientId": client_id if isinstance(client_id, str) else None,
+                        "message": {
+                            "id": str(user_insert.inserted_id),
+                            "senderId": user_id,
+                            "text": text,
+                            "timestamp": dt_to_epoch_ms(user_message_doc["timestamp"]),
+                        },
+                    }
+                )
 
                 # Get conversation history (last 20 messages)
                 history_docs = (
