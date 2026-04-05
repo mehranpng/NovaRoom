@@ -1165,6 +1165,14 @@ export function ChatRoom({
     const onMessagesScroll = () => {
         const container = messagesContainerRef.current;
         if (!container) return;
+
+        // Ignore programmatic scroll events first (initial unread jump / restore / auto-scroll).
+        // These events should not consume unread state.
+        if (programmaticScrollEventsRef.current > 0) {
+            programmaticScrollEventsRef.current -= 1;
+            return;
+        }
+
         if (msgMenu || reactionMenu || seenByMenu) {
             setMsgMenu(null);
             setReactionMenu(null);
@@ -1178,12 +1186,6 @@ export function ChatRoom({
             consumeUnreadForOpenSession();
         }
         else setShowScrollBtn(container.scrollHeight - container.scrollTop - container.clientHeight > 300);
-
-        // Ignore programmatic scroll events (initial jumps / restore / scrollToBottom).
-        if (programmaticScrollEventsRef.current > 0) {
-            programmaticScrollEventsRef.current -= 1;
-            return;
-        }
 
         userHasScrolledRef.current = true;
 

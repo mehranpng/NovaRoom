@@ -2610,7 +2610,7 @@ body,
 }
 
 .results {
-  max-height: min(420px, calc(var(--app-height, 100dvh) - 270px));
+  max-height: min(520px, calc(var(--app-height, 100dvh) - 220px));
   overflow-y: auto;
 }
 
@@ -2651,8 +2651,14 @@ body,
   }
 
   .new-chat-modal {
-    max-height: min(85vh, calc(100dvh - 20px));
+    max-height: calc(var(--app-height, 100dvh) - 12px);
     border-radius: 18px;
+    margin-top: calc(var(--keyboard-offset, 0px) * -0.25);
+    transition: margin-top 0.2s ease;
+  }
+
+  .results {
+    max-height: calc(var(--app-height, 100dvh) - 190px);
   }
 }
 
