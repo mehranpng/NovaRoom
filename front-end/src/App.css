@@ -825,6 +825,30 @@ textarea {
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
 }
 
+.message-forwarded-label {
+  display: block;
+  margin: 0 0 6px auto;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.12);
+  color: inherit;
+  font-size: 11px;
+  font-style: normal;
+  font-family: 'Vazir, sans-serif';
+  font-weight: 700;
+  direction: rtl;
+  unicode-bidi: plaintext;
+  text-align: right;
+  cursor: pointer;
+  opacity: 0.95;
+}
+
+.message-forwarded-label:hover {
+  opacity: 1;
+  background: rgba(15, 23, 42, 0.18);
+}
+
 /* Grouping shapes - mine */
 .message-bubble--mine.msg-shape--single { border-radius: 16px; }
 .message-bubble--mine.msg-shape--first { border-radius: 16px; border-bottom-right-radius: 8px; }
@@ -2613,6 +2637,18 @@ textarea {
   max-height: 85vh;
   overflow: hidden;
   box-shadow: var(--shadow-lg);
+  animation: forward-modal-enter 0.2s ease-out;
+}
+
+@keyframes forward-modal-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* ========================================

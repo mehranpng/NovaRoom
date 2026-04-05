@@ -10,10 +10,9 @@ interface ForwardModalProps {
     currentUserId: string;
     onClose: () => void;
     onForward: (chatId: string) => void;
-    onSelectChat?: (chatId: string) => void;
 }
 
-export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward, onSelectChat }: ForwardModalProps) {
+export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward }: ForwardModalProps) {
     const [searchQuery, setSearchQuery] = useState('');
 
     if (!isOpen) return null;
@@ -71,7 +70,6 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward,
                             className="user-item"
                             onClick={() => {
                                 onForward(savedMessagesChat.id);
-                                if (onSelectChat) onSelectChat(savedMessagesChat.id);
                                 onClose();
                             }}
                             type="button"
@@ -101,7 +99,6 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward,
                                     className="user-item"
                                     onClick={() => {
                                         onForward(chat.id);
-                                        if (onSelectChat) onSelectChat(chat.id);
                                         onClose();
                                     }}
                                     type="button"

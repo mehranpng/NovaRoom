@@ -64,6 +64,7 @@ export function App() {
     const [isInitialChatsLoad, setIsInitialChatsLoad] = useState(true);
     const [messagesLoadedOnce, setMessagesLoadedOnce] = useState<Record<string, boolean>>({});
     const [messagesLoading, setMessagesLoading] = useState<Record<string, boolean>>({});
+    const [pendingForwardByChat, setPendingForwardByChat] = useState<Record<string, { sourceChatId: string; messageId: string; previewText?: string }>>({});
 
     const sendSoundRef = useRef<HTMLAudioElement | null>(null);
     const receiveSoundRef = useRef<HTMLAudioElement | null>(null);
@@ -225,6 +226,7 @@ export function App() {
         setAIMessages([]);
         newGroupTimestamps.current = {};
         setOpenChatUnread(null);
+        setPendingForwardByChat({});
         navigate('/login', { replace: true });
     }, [navigate]);
 
@@ -867,6 +869,7 @@ export function App() {
     const initialUnreadCount = openChatUnread?.chatId && openChatUnread.chatId === (activeChatId || 'pending')
         ? openChatUnread.count
         : 0;
+    const activePendingForward = activeChatId ? pendingForwardByChat[activeChatId] || null : null;
 
     return (
         <MusicPlayerProvider>
@@ -936,6 +939,19 @@ export function App() {
                                 onSelectChat={handleSelectChat}
                                 onOpenDirectChat={(user) => handleUserSelectedFromModal(user)}
                                 onOpenProfile={handleOpenProfile}
+                                onOpenAIChat={handleOpenAIChat}
+                                pendingForward={activePendingForward}
+                                onPrepareForward={(targetChatId, payload) => {
+                                    setPendingForwardByChat((prev) => ({ ...prev, [targetChatId]: payload }));
+                                }}
+                                onClearPendingForward={(targetChatId) => {
+                                    setPendingForwardByChat((prev) => {
+                                        if (!prev[targetChatId]) return prev;
+                                        const next = { ...prev };
+                                        delete next[targetChatId];
+                                        return next;
+                                    });
+                                }}
                                 initialUnreadCount={initialUnreadCount}
                                 onConsumeInitialUnread={consumeOpenChatUnread}
                             />

@@ -30,11 +30,15 @@ interface ChatRoomProps {
     onSelectChat?: (chatId: string) => void;
     onOpenDirectChat?: (user: User) => void;
     onOpenProfile?: () => void;
+    onOpenAIChat?: () => void;
     initialUnreadCount?: number;
     onConsumeInitialUnread?: (chatId: string) => void;
     onReactMessage?: (chatId: string, messageId: string, emoji: string) => Promise<void>;
     onUnreactMessage?: (chatId: string, messageId: string) => Promise<void>;
     onForwardMessage?: (messageId: string, targetChatId: string) => Promise<void>;
+    pendingForward?: { sourceChatId: string; messageId: string; previewText?: string } | null;
+    onPrepareForward?: (targetChatId: string, payload: { sourceChatId: string; messageId: string; previewText?: string }) => void;
+    onClearPendingForward?: (chatId: string) => void;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000;
@@ -177,11 +181,15 @@ export function ChatRoom({
     onSelectChat,
     onOpenDirectChat,
     onOpenProfile,
+    onOpenAIChat,
     initialUnreadCount = 0,
     onConsumeInitialUnread,
     onReactMessage,
     onUnreactMessage,
     onForwardMessage,
+    pendingForward = null,
+    onPrepareForward,
+    onClearPendingForward,
 }: ChatRoomProps) {
     const currentChat = useMemo(
         () => chats.find((c) => c.id === chatId) || null,
@@ -199,6 +207,7 @@ export function ChatRoom({
     const [showContactInfo, setShowContactInfo] = useState(false);
     const [forwardModalOpen, setForwardModalOpen] = useState(false);
     const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
+    const [queuedForward, setQueuedForward] = useState<{ sourceChatId: string; messageId: string; previewText?: string } | null>(null);
 
     const [replyTo, setReplyTo] = useState<MessageReplyType | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -254,6 +263,8 @@ export function ChatRoom({
     const initialMediaPendingIdsRef = useRef<Set<string>>(new Set());
     const initialMediaFollowupDoneRef = useRef(false);
     const unreadConsumedInSessionRef = useRef(false);
+    const restoringFromInfoRef = useRef(false);
+    const restoreTopAfterInfoRef = useRef<number | null>(null);
 
     // Scroll memory: keep per-chat scroll position in memory until refresh.
     // IMPORTANT: only restore exact scrollTop if user actually scrolled in that chat (prevents "always open at top").
@@ -287,6 +298,13 @@ export function ChatRoom({
     );
 
     const handleInitialMediaReady = (messageId: string) => {
+        if (restoringFromInfoRef.current && restoreTopAfterInfoRef.current !== null) {
+            const container = messagesContainerRef.current;
+            if (container) {
+                markProgrammaticScroll();
+                container.scrollTop = restoreTopAfterInfoRef.current;
+            }
+        }
         if (initialMediaFollowupDoneRef.current) return;
         if (!initialMediaPendingIdsRef.current.has(messageId)) return;
         initialMediaPendingIdsRef.current.delete(messageId);
@@ -452,9 +470,81 @@ export function ChatRoom({
         if (c.scrollTop < 20) scrollToBottom(false);
     };
 
+    const getReplyPreviewText = (reply: MessageReplyType | null | undefined) => {
+        if (!reply) return '';
+        const repliedMessage = messages.find((msg) => msg.id === reply.id);
+        const repliedFile = repliedMessage?.file;
+        const fileMime = (repliedFile?.mimeType || '').toLowerCase();
+        const fallbackText = (reply.text || '').trim();
+
+        if (!repliedFile) return fallbackText;
+
+        let prefix = '📎 فایل';
+        if (fileMime.startsWith('image/')) prefix = '🖼️ تصویر';
+        else if (fileMime.startsWith('video/')) prefix = '🎥 ویدیو';
+        else if (fileMime.startsWith('audio/')) prefix = '🎵 صوت';
+
+        return fallbackText ? `${prefix} • ${fallbackText}` : prefix;
+    };
+
+    const getMessagePreviewText = (m: Message) => {
+        const caption = (m.text || '').trim();
+        const mime = (m.file?.mimeType || '').toLowerCase();
+        if (!m.file) return caption || 'پیام';
+        let prefix = '📎 فایل';
+        if (mime.startsWith('image/')) prefix = '🖼️ تصویر';
+        else if (mime.startsWith('video/')) prefix = '🎥 ویدیو';
+        else if (mime.startsWith('audio/')) prefix = '🎵 صوت';
+        return caption ? `${prefix} • ${caption}` : prefix;
+    };
+
+    const openForwardSource = (m: Message) => {
+        const sourceId = m.forwardedFrom?.originalSenderId;
+        if (!sourceId) return;
+
+        if (sourceId === 'ai') {
+            onOpenAIChat?.();
+            return;
+        }
+
+        const sourceChat = chats.find((c) =>
+            c.chatType === 'direct' && Array.isArray(c.participantIds) && c.participantIds.includes(sourceId)
+        );
+        const sourceUser = sourceChat?.otherUser;
+        const sourceContact: User = {
+            chatId: sourceId,
+            username: sourceUser?.username || m.forwardedFrom?.username || '',
+            name: sourceUser?.name || m.forwardedFrom?.name || m.forwardedFrom?.username || sourceId,
+            bio: sourceUser?.bio || '',
+            avatar: sourceUser?.avatar || '',
+            online: Boolean(sourceUser?.online),
+            verified: sourceUser?.verified,
+        };
+        maybeSaveScroll(chatId);
+        restoringFromInfoRef.current = true;
+        if (sourceContact.chatId === currentUserId) {
+            onOpenProfile?.();
+            return;
+        }
+        setViewingMemberId(sourceContact.chatId);
+        setGroupMembers((prev) => ({
+            ...prev,
+            [sourceContact.chatId]: {
+                chatId: sourceContact.chatId,
+                name: sourceContact.name,
+                username: sourceContact.username,
+                avatar: sourceContact.avatar,
+                bio: sourceContact.bio,
+                verified: sourceContact.verified,
+                online: sourceContact.online,
+            },
+        }));
+    };
+
     const openMember = (memberId: string) => {
         if (!memberId) return;
         maybeSaveScroll(chatId);
+        restoringFromInfoRef.current = true;
         if (memberId === currentUserId) {
             onOpenProfile?.();
             return;
@@ -692,24 +782,72 @@ export function ChatRoom({
     };
     // ─────────────────────────────────────────────────────────────────────────
 
-    // Clear optimistic reactions when server messages update (server is source of truth)
+    // Keep optimistic entries only until that specific message is synced from server.
     useEffect(() => {
-        setOptimisticReactions({});
+        setOptimisticReactions((prev) => {
+            if (!Object.keys(prev).length) return prev;
+            const next = { ...prev };
+            let changed = false;
+            Object.keys(prev).forEach((messageId) => {
+                const msg = messages.find((m) => m.id === messageId);
+                if (!msg) {
+                    delete next[messageId];
+                    changed = true;
+                    return;
+                }
+                const serverReactions = (msg.reactions as ReactionEntry[] | undefined) ?? [];
+                const optimistic = prev[messageId] ?? [];
+                if (JSON.stringify(serverReactions) === JSON.stringify(optimistic)) {
+                    delete next[messageId];
+                    changed = true;
+                }
+            });
+            return changed ? next : prev;
+        });
     }, [messages]);
 
-    const handleForwardMessage = async (targetChatId: string) => {
-        if (!forwardingMessageId) return;
+    const sendQueuedForward = async (payload: { sourceChatId: string; messageId: string }) => {
         try {
-            if (onForwardMessage) {
-                await onForwardMessage(forwardingMessageId, targetChatId);
+            if (onForwardMessage && payload.sourceChatId === chatId) {
+                await onForwardMessage(payload.messageId, chatId);
             } else {
-                await apiFetch('/messages/forward', { method: 'POST', body: JSON.stringify({ sourceChatId: chatId, messageId: forwardingMessageId, targetChatId }) });
+                await apiFetch('/messages/forward', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        sourceChatId: payload.sourceChatId,
+                        messageId: payload.messageId,
+                        targetChatId: chatId,
+                    }),
+                });
             }
-            setForwardingMessageId(null);
+            setQueuedForward(null);
+            onClearPendingForward?.(chatId);
         } catch (e) {
             console.error('Failed to forward:', e);
             alert('فوروارد پیام با خطا مواجه شد');
         }
+    };
+
+    const handleForwardMessage = (targetChatId: string) => {
+        if (!forwardingMessageId) return;
+        const sourceMessage = messages.find((m) => m.id === forwardingMessageId);
+        const payload = {
+            sourceChatId: chatId,
+            messageId: forwardingMessageId,
+            previewText: sourceMessage ? getMessagePreviewText(sourceMessage) : 'پیام فورواردی',
+        };
+
+        setForwardingMessageId(null);
+        setForwardModalOpen(false);
+
+        if (targetChatId === chatId) {
+            setQueuedForward(payload);
+            onClearPendingForward?.(chatId);
+            return;
+        }
+
+        onPrepareForward?.(targetChatId, payload);
+        onSelectChat?.(targetChatId);
     };
 
     const openForwardModal = (messageId: string) => {
@@ -789,6 +927,7 @@ export function ChatRoom({
         setShowContactInfo(false);
         setShowMembersList(false);
         setViewingMemberId(null);
+        setQueuedForward(null);
         setReplyTo(null); setEditingId(null);
         setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
         setText(''); setUploadedFile(null);
@@ -803,6 +942,8 @@ export function ChatRoom({
         consumedInitialUnreadRef.current = false;
         userHasScrolledRef.current = false;
         unreadConsumedInSessionRef.current = false;
+        restoringFromInfoRef.current = false;
+        restoreTopAfterInfoRef.current = null;
         initialMediaFollowupDoneRef.current = false;
         initialMediaPendingIdsRef.current = collectInitialMediaPendingIds();
         if (initialMediaPendingIdsRef.current.size === 0) {
@@ -810,6 +951,11 @@ export function ChatRoom({
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
+
+    useEffect(() => {
+        if (!pendingForward) return;
+        setQueuedForward(pendingForward);
+    }, [pendingForward]);
 
     // If initialUnreadCount arrives late (edge cases), capture it once for UI.
     useEffect(() => {
@@ -849,16 +995,21 @@ export function ChatRoom({
         if (showContactInfo || viewingMemberId || showMembersList) return;
         const mem = scrollMemoryRef.current[chatId];
         if (!mem) return;
+        restoringFromInfoRef.current = false;
+        restoreTopAfterInfoRef.current = mem.atBottom ? null : mem.top;
         const raf = requestAnimationFrame(() => restoreScroll(chatId));
 
-        // If user was at bottom, keep sticking to the real bottom for a short period.
-        // This fixes "a little above bottom" after late-loading media from ContactInfo route.
         const timers = mem.atBottom
             ? [60, 160, 320, 520, 820].map((delay) => window.setTimeout(() => {
                 if (shouldPreserveExactScroll()) return;
                 scrollToBottom(false);
             }, delay))
-            : [];
+            : [60, 160, 320, 520, 820].map((delay) => window.setTimeout(() => {
+                const c = messagesContainerRef.current;
+                if (!c || restoreTopAfterInfoRef.current === null) return;
+                markProgrammaticScroll();
+                c.scrollTop = restoreTopAfterInfoRef.current;
+            }, delay));
 
         return () => {
             cancelAnimationFrame(raf);
@@ -971,12 +1122,21 @@ export function ChatRoom({
         return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender) };
     }), [messages, currentUserId]);
 
-    const submit = () => {
+    const submit = async () => {
         const t = text.trim();
-        if (!t && !uploadedFile) return;
-        triggerHaptic();
-        onSendMessage({ text: t || '', replyToId: replyTo?.id, editMessageId: editingId ?? undefined, file: uploadedFile ?? undefined });
-        setText(''); setUploadedFile(null); setReplyTo(null); setEditingId(null);
+        if (!t && !uploadedFile && !queuedForward) return;
+
+        if (t || uploadedFile) {
+            triggerHaptic();
+            onSendMessage({ text: t || '', replyToId: replyTo?.id, editMessageId: editingId ?? undefined, file: uploadedFile ?? undefined });
+            setText('');
+            setUploadedFile(null);
+            setReplyTo(null);
+            setEditingId(null);
+        }
+        if (queuedForward) {
+            await sendQueuedForward({ sourceChatId: queuedForward.sourceChatId, messageId: queuedForward.messageId });
+        }
         requestAnimationFrame(() => scrollToBottom(true));
     };
 
@@ -1233,7 +1393,10 @@ export function ChatRoom({
                                     onClick={() => {
                                         setShowMembersList(false);
                                         if (member.chatId === currentUserId) onOpenProfile?.();
-                                        else setViewingMemberId(member.chatId);
+                                        else {
+                                            restoringFromInfoRef.current = true;
+                                            setViewingMemberId(member.chatId);
+                                        }
                                     }}
                                     style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer', borderTop: idx > 0 ? '1px solid var(--border-primary)' : 'none', transition: 'background 0.15s' }}
                                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
@@ -1287,6 +1450,7 @@ export function ChatRoom({
                     onClick={() => {
                         if (isSavedMessages) return;
                         maybeSaveScroll(chatId);
+                        restoringFromInfoRef.current = true;
                         setOpenGroupEditorFromMembers(false);
                         setShowContactInfo(true);
                     }}
@@ -1551,9 +1715,16 @@ export function ChatRoom({
                                             })()}
 
                                             {m.forwardedFrom && (
-                                                <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4, fontStyle: 'italic', fontFamily: 'Vazir, sans-serif' }}>
+                                                <button
+                                                    type="button"
+                                                    className="message-forwarded-label"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        openForwardSource(m);
+                                                    }}
+                                                >
                                                     فوروارد شده از: {m.forwardedFrom.name || m.forwardedFrom.username || 'ناشناس'}
-                                                </div>
+                                                </button>
                                             )}
 
                                             {m.replyTo && (
@@ -1563,7 +1734,7 @@ export function ChatRoom({
                                                     className="message-reply-box"
                                                     style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
                                                     <div className="message-reply-box__label">پاسخ</div>
-                                                    <div className="message-reply-box__text">{m.replyTo.text}</div>
+                                                    <div className="message-reply-box__text">{getReplyPreviewText(m.replyTo)}</div>
                                                 </div>
                                             )}
 
@@ -1790,7 +1961,7 @@ export function ChatRoom({
                     <div className="chat-room__reply-edit-box">
                         <div style={{ minWidth: 0 }}>
                             <div className="chat-room__reply-edit-box__title">{editingId ? 'در حال ویرایش' : 'در حال پاسخ'}</div>
-                            {!editingId && replyTo && <div className="chat-room__reply-edit-box__text">{replyTo.text}</div>}
+                            {!editingId && replyTo && <div className="chat-room__reply-edit-box__text">{getReplyPreviewText(replyTo)}</div>}
                         </div>
                         <button type="button" className="icon-btn" aria-label="Cancel" onClick={() => { setReplyTo(null); setEditingId(null); setText(''); }}>
                             <X size={18} />
@@ -1806,24 +1977,50 @@ export function ChatRoom({
                         <button type="button" className="icon-btn" aria-label="Remove file" onClick={() => setUploadedFile(null)}><X size={18} /></button>
                     </div>
                 )}
+                {queuedForward && (
+                    <div className="chat-room__reply-edit-box">
+                        <div style={{ minWidth: 0 }}>
+                            <div className="chat-room__reply-edit-box__title">در انتظار فوروارد</div>
+                            <div className="chat-room__reply-edit-box__text">{queuedForward.previewText || 'پیام فورواردی'}</div>
+                        </div>
+                        <button
+                            type="button"
+                            className="icon-btn"
+                            aria-label="Cancel forward"
+                            onClick={() => {
+                                setQueuedForward(null);
+                                onClearPendingForward?.(chatId);
+                            }}
+                        >
+                            <X size={18} />
+                        </button>
+                    </div>
+                )}
                 <div className="chat-room__input-wrapper">
                     <FileUpload token={token} onFileUploaded={handleFileUploaded} />
                     <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
                         value={text} onChange={(e) => setText(e.target.value)}
                         onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }}
+                        onKeyDown={(e) => {
+                            if (e.key !== 'Enter') return;
+                            const isDesktop = typeof window !== 'undefined' && window.matchMedia('(pointer:fine)').matches;
+                            if (!isDesktop) return;
+                            if (e.shiftKey || e.ctrlKey || e.metaKey) return;
+                            e.preventDefault();
+                            void submit();
+                        }}
                         rows={1}
                     />
                     <button
-                        className={text.trim() || uploadedFile ? 'chat-room__send-btn chat-room__send-btn--active' : 'chat-room__send-btn chat-room__send-btn--disabled'}
-                        onClick={submit} disabled={!text.trim() && !uploadedFile} aria-label="Send" type="button">
+                        className={text.trim() || uploadedFile || queuedForward ? 'chat-room__send-btn chat-room__send-btn--active' : 'chat-room__send-btn chat-room__send-btn--disabled'}
+                        onClick={() => { void submit(); }} disabled={!text.trim() && !uploadedFile && !queuedForward} aria-label="Send" type="button">
                         <SendHorizontal size={18} />
                     </button>
                 </div>
             </div>
 
             <ForwardModal isOpen={forwardModalOpen} chats={chats} currentUserId={currentUserId}
-                onClose={() => setForwardModalOpen(false)} onForward={handleForwardMessage} onSelectChat={onSelectChat} />
+                onClose={() => setForwardModalOpen(false)} onForward={handleForwardMessage} />
 
             {confirmDeleteChat && (
                 <div className="chat-room-modal-overlay" ref={confirmDeleteChatRef}>
