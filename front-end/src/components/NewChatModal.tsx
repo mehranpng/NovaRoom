@@ -16,6 +16,7 @@ interface NewChatModalProps {
 }
 
 export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, onJoinGroup, currentUser }: NewChatModalProps) {
+    const EXIT_ANIMATION_MS = 200;
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
@@ -26,8 +27,42 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
     const [copied, setCopied] = useState(false);
     const [groupError, setGroupError] = useState<string>('');
     const [joinError, setJoinError] = useState<string>('');
+    const [shouldRender, setShouldRender] = useState(isOpen);
+    const [isClosing, setIsClosing] = useState(false);
 
     const inputRef = useRef<HTMLInputElement | null>(null);
+
+    useEffect(() => {
+        if (isOpen) {
+            setShouldRender(true);
+            setIsClosing(false);
+            return;
+        }
+
+        if (!shouldRender) return;
+        setIsClosing(true);
+        const t = window.setTimeout(() => {
+            setShouldRender(false);
+            setIsClosing(false);
+        }, EXIT_ANIMATION_MS);
+        return () => window.clearTimeout(t);
+    }, [isOpen, shouldRender]);
+
+    useEffect(() => {
+        if (!shouldRender) return;
+        const prevBodyOverflow = document.body.style.overflow;
+        const prevBodyOverscroll = document.body.style.overscrollBehavior;
+        const prevHtmlOverflow = document.documentElement.style.overflow;
+        document.body.style.overflow = 'hidden';
+        document.body.style.overscrollBehavior = 'contain';
+        document.documentElement.style.overflow = 'hidden';
+
+        return () => {
+            document.body.style.overflow = prevBodyOverflow;
+            document.body.style.overscrollBehavior = prevBodyOverscroll;
+            document.documentElement.style.overflow = prevHtmlOverflow;
+        };
+    }, [shouldRender]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -57,7 +92,11 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
             setLoading(true);
             try {
                 const users = await apiFetch(`/users/search?query=${encodeURIComponent(q)}`);
-                setResults(users);
+                const usernameQuery = q.toLowerCase();
+                const usernameOnly = (Array.isArray(users) ? users : []).filter((user: User) =>
+                    String(user?.username || '').toLowerCase().includes(usernameQuery)
+                );
+                setResults(usernameOnly);
             } catch (err) {
                 console.error(err);
             } finally {
@@ -127,7 +166,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
         setTimeout(() => setCopied(false), 2000);
     };
 
-    if (!isOpen) return null;
+    if (!shouldRender) return null;
 
     const isVerified = Boolean(currentUser?.verified);
 
@@ -140,7 +179,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
 
     return (
         <div
-            className="modal-overlay"
+            className={`modal-overlay modal-overlay--new-chat ${isClosing ? 'modal-overlay--closing' : ''}`}
             role="dialog"
             aria-modal="true"
             onClick={(e) => {
@@ -153,8 +192,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
                 className="new-chat-modal"
                 variants={toastVariants}
                 initial="hidden"
-                animate="visible"
-                exit="exit"
+                animate={isClosing ? 'exit' : 'visible'}
             >
                 <div className="modal-header">
                     <h2>گفتگوی جدید</h2>
@@ -192,11 +230,6 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
                                 placeholder="جستجو با نام کاربری..."
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
-                                onFocus={() => {
-                                    setTimeout(() => {
-                                        inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                    }, 150);
-                                }}
                                 autoFocus
                             />
                         </div>
@@ -221,7 +254,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
                                             }
                                         }}
                                     >
-                                        <Avatar name={user.name} size="md" online={user.online} />
+                                        <Avatar name={user.name} size="md" online={user.online} src={user.avatar} />
                                         <div style={{ flex: 1 }}>
                                             <div
                                                 className="user-name"

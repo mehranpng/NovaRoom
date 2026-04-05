@@ -306,7 +306,33 @@ export function ChatList({
 
     // Keep a local copy so we can remove deleted/left chats immediately.
     const [localChats, setLocalChats] = useState<Chat[]>(chats);
-    useEffect(() => { setLocalChats(chats); }, [chats]);
+    useEffect(() => {
+        setLocalChats((prev) => {
+            const prevById = new Map(prev.map((c) => [c.id, c]));
+            return chats.map((chat) => {
+                const prevChat = prevById.get(chat.id);
+                if (!prevChat) return chat;
+
+                const incomingUnread = Number(chat.unreadCount || 0);
+                const previousUnread = Number(prevChat.unreadCount || 0);
+                const isActive = Boolean(activeChatId) && chat.id === activeChatId;
+                const sameLastMessageId = Boolean(
+                    prevChat.lastMessage?.id &&
+                    chat.lastMessage?.id &&
+                    prevChat.lastMessage.id === chat.lastMessage.id
+                );
+
+                // Guard against intermittent stale unread=0 payloads that can make
+                // another chat's unread badge disappear until full refresh.
+                const shouldKeepPreviousUnread = !isActive && sameLastMessageId && incomingUnread === 0 && previousUnread > 0;
+
+                return {
+                    ...chat,
+                    unreadCount: shouldKeepPreviousUnread ? previousUnread : incomingUnread,
+                };
+            });
+        });
+    }, [chats, activeChatId]);
 
     const isVerifiedUser = resolveVerified((currentUser as any)?.verified);
 
@@ -637,10 +663,12 @@ export function ChatList({
             <div className="chat-list__header">
                 <div className="chat-list__header-left">
                     <button onClick={onOpenProfile}>
-                        <Avatar name={currentUser.name} size="sm" online={true} src={currentUser.avatar} />
+                        <Avatar name={currentUser.name} size="sm" src={currentUser.avatar} />
                     </button>
                     <div className="chat-list__title-wrap">
-                        <h1 className="chat-list__title">{wsConnected ? 'NovaRoom' : 'Connecting...'}</h1>
+                        <h1 className="chat-list__title">
+                            {wsConnected ? 'NovaRoom' : (wsReconnectExhausted ? 'Disconnected' : 'Connecting...')}
+                        </h1>
                         {!wsConnected && wsReconnectExhausted && (
                             <button
                                 type="button"
