@@ -1587,18 +1587,29 @@ async def forward_message(
         }
         message_text = original_msg.get("content", "")
     else:
-        original_sender_id = original_msg.get("senderId")
-        original_sender = await cl_users.find_one({"chatId": original_sender_id})
-
-        forwarded_from_info = {
-            "originalSenderId": original_sender_id,
-            "name": (
-                original_sender["profile"]["name"] if original_sender else "Unknown"
-            ),
-            "username": (
-                original_sender["profile"]["username"] if original_sender else ""
-            ),
-        }
+        existing_forwarded_from = original_msg.get("forwardedFrom")
+        if isinstance(existing_forwarded_from, dict) and existing_forwarded_from.get(
+            "originalSenderId"
+        ):
+            # Preserve the original forwarded label chain:
+            # if message is already forwarded, keep its first source.
+            forwarded_from_info = {
+                "originalSenderId": existing_forwarded_from.get("originalSenderId", ""),
+                "name": existing_forwarded_from.get("name", "Unknown"),
+                "username": existing_forwarded_from.get("username", ""),
+            }
+        else:
+            original_sender_id = original_msg.get("senderId")
+            original_sender = await cl_users.find_one({"chatId": original_sender_id})
+            forwarded_from_info = {
+                "originalSenderId": original_sender_id,
+                "name": (
+                    original_sender["profile"]["name"] if original_sender else "Unknown"
+                ),
+                "username": (
+                    original_sender["profile"]["username"] if original_sender else ""
+                ),
+            }
         message_text = original_msg.get("text", "")
         file_data = original_msg.get("file")
 

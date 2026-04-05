@@ -985,6 +985,7 @@ export function App() {
                                 isTyping={aiTyping}
                                 chats={chats}
                                 onSelectChat={handleSelectChat}
+                                onSetPendingForwardDraft={handleSetPendingForwardDraft}
                             />
                         ) : view === 'chatRoom' && (activeChat || pendingUser || isSavedMessagesActive) ? (
                             <ChatRoom

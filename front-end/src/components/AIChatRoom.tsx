@@ -8,7 +8,6 @@ import type { Message, Chat } from '../types';
 import { VerifiedBadge } from './VerifiedBadge';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
 import { ForwardModal } from './ForwardModal';
-import { apiFetch } from '../config/api';
 
 interface AIChatRoomProps {
     messages: Message[];
@@ -20,6 +19,7 @@ interface AIChatRoomProps {
     isTyping?: boolean;
     chats: Chat[];
     onSelectChat?: (chatId: string) => void;
+    onSetPendingForwardDraft?: (targetChatId: string, draft: { sourceChatId: string; messageId: string }) => void;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000; // +03:30
@@ -134,6 +134,7 @@ export function AIChatRoom({
     isTyping = false,
     chats,
     onSelectChat,
+    onSetPendingForwardDraft,
 }: AIChatRoomProps) {
     const [text, setText] = useState('');
     const [msgMenu, setMsgMenu] = useState<{ id: string; top: number; left: number } | null>(null);
@@ -383,30 +384,12 @@ export function AIChatRoom({
         setMsgMenu(null);
     };
 
-    const handleForwardMessage = async (targetChatId: string) => {
+    const handleForwardFromModal = (targetChatId: string) => {
         if (!forwardingMessageId) return;
-
-        try {
-            const aiChatId = `ai_chat_${currentUserId}`;
-
-            await apiFetch('/messages/forward', {
-                method: 'POST',
-                body: JSON.stringify({
-                    messageId: forwardingMessageId,
-                    targetChatId,
-                }),
-            });
-
-            setForwardingMessageId(null);
-            setForwardModalOpen(false);
-
-            if (onSelectChat && targetChatId !== aiChatId) {
-                onSelectChat(targetChatId);
-            }
-        } catch (error) {
-            console.error('Failed to forward message:', error);
-            alert('فوروارد پیام با خطا مواجه شد');
-        }
+        onSetPendingForwardDraft?.(targetChatId, { sourceChatId: `ai_chat_${currentUserId}`, messageId: forwardingMessageId });
+        setForwardingMessageId(null);
+        setForwardModalOpen(false);
+        onSelectChat?.(targetChatId);
     };
 
     const activeMsg = msgMenu ? messages.find((m) => m.id === msgMenu.id) : null;
@@ -557,7 +540,7 @@ export function AIChatRoom({
                 chats={chats}
                 currentUserId={currentUserId}
                 onClose={() => setForwardModalOpen(false)}
-                onForward={handleForwardMessage}
+                onSelectTargetChat={handleForwardFromModal}
                 onSelectChat={onSelectChat}
             />
 
