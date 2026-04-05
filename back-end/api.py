@@ -1597,12 +1597,22 @@ async def forward_message(
     # Get original sender info and file data
     file_data = None
     if is_ai_message:
-        # For AI messages, the sender is AI
-        forwarded_from_info = {
-            "originalSenderId": "ai",
-            "name": "NovaRoom AI",
-            "username": "novaroom_ai",
-        }
+        ai_role = str(original_msg.get("role") or "").strip().lower()
+        if ai_role == "assistant":
+            forwarded_from_info = {
+                "originalSenderId": "ai",
+                "name": "NovaRoom AI",
+                "username": "novaroom_ai",
+            }
+        else:
+            # AI history also stores user's own messages with role="user".
+            # Preserve user as original source so re-forwarding keeps this label.
+            profile = current_user.get("profile", {})
+            forwarded_from_info = {
+                "originalSenderId": user_id,
+                "name": profile.get("name") or profile.get("username") or user_id,
+                "username": profile.get("username", ""),
+            }
         message_text = original_msg.get("content", "")
     else:
         existing_forwarded_from = (
