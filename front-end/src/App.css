@@ -825,6 +825,28 @@ textarea {
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
 }
 
+.message-forwarded-label {
+  display: block;
+  margin: 0 0 6px auto;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.12);
+  color: inherit;
+  font-size: 11px;
+  font-style: normal;
+  font-family: 'Vazir, sans-serif';
+  font-weight: 700;
+  text-align: right;
+  cursor: pointer;
+  opacity: 0.95;
+}
+
+.message-forwarded-label:hover {
+  opacity: 1;
+  background: rgba(15, 23, 42, 0.18);
+}
+
 /* Grouping shapes - mine */
 .message-bubble--mine.msg-shape--single { border-radius: 16px; }
 .message-bubble--mine.msg-shape--first { border-radius: 16px; border-bottom-right-radius: 8px; }

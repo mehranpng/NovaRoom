@@ -936,6 +936,7 @@ export function App() {
                                 onSelectChat={handleSelectChat}
                                 onOpenDirectChat={(user) => handleUserSelectedFromModal(user)}
                                 onOpenProfile={handleOpenProfile}
+                                onOpenAIChat={handleOpenAIChat}
                                 initialUnreadCount={initialUnreadCount}
                                 onConsumeInitialUnread={consumeOpenChatUnread}
                             />

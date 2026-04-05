@@ -33,6 +33,7 @@ interface ChatRoomProps {
     onSelectChat?: (chatId: string) => void;
     onOpenDirectChat?: (user: User) => void;
     onOpenProfile?: () => void;
+    onOpenAIChat?: () => void;
     initialUnreadCount?: number;
     onConsumeInitialUnread?: (chatId: string) => void;
     onReactMessage?: (chatId: string, messageId: string, emoji: string) => Promise<void>;
@@ -256,6 +257,7 @@ export function ChatRoom({
     onSelectChat,
     onOpenDirectChat,
     onOpenProfile,
+    onOpenAIChat,
     initialUnreadCount = 0,
     onConsumeInitialUnread,
     onReactMessage,
@@ -333,6 +335,8 @@ export function ChatRoom({
     const initialMediaPendingIdsRef = useRef<Set<string>>(new Set());
     const initialMediaFollowupDoneRef = useRef(false);
     const unreadConsumedInSessionRef = useRef(false);
+    const restoringFromInfoRef = useRef(false);
+    const restoreTopAfterInfoRef = useRef<number | null>(null);
 
     // Scroll memory: keep per-chat scroll position in memory until refresh.
     // IMPORTANT: only restore exact scrollTop if user actually scrolled in that chat (prevents "always open at top").
@@ -366,6 +370,13 @@ export function ChatRoom({
     );
 
     const handleInitialMediaReady = (messageId: string) => {
+        if (restoringFromInfoRef.current && restoreTopAfterInfoRef.current !== null) {
+            const container = messagesContainerRef.current;
+            if (container) {
+                markProgrammaticScroll();
+                container.scrollTop = restoreTopAfterInfoRef.current;
+            }
+        }
         if (initialMediaFollowupDoneRef.current) return;
         if (!initialMediaPendingIdsRef.current.has(messageId)) return;
         initialMediaPendingIdsRef.current.delete(messageId);
@@ -531,9 +542,57 @@ export function ChatRoom({
         if (c.scrollTop < 20) scrollToBottom(false);
     };
 
+    const getReplyPreviewText = (reply: MessageReplyType | null | undefined) => {
+        if (!reply) return '';
+        const repliedMessage = messages.find((msg) => msg.id === reply.id);
+        const repliedFile = repliedMessage?.file;
+        const fileMime = (repliedFile?.mimeType || '').toLowerCase();
+        const fallbackText = (reply.text || '').trim();
+
+        if (!repliedFile) return fallbackText;
+
+        let prefix = '📎 فایل';
+        if (fileMime.startsWith('image/')) prefix = '🖼️ تصویر';
+        else if (fileMime.startsWith('video/')) prefix = '🎥 ویدیو';
+        else if (fileMime.startsWith('audio/')) prefix = '🎵 صوت';
+
+        return fallbackText ? `${prefix} • ${fallbackText}` : prefix;
+    };
+
+    const openForwardSource = (m: Message) => {
+        const sourceId = m.forwardedFrom?.originalSenderId;
+        if (!sourceId) return;
+
+        if (sourceId === 'ai') {
+            onOpenAIChat?.();
+            return;
+        }
+
+        const sourceChat = chats.find((c) =>
+            c.chatType === 'direct' && Array.isArray(c.participantIds) && c.participantIds.includes(sourceId)
+        );
+        if (sourceChat?.id && onSelectChat) {
+            maybeSaveScroll(chatId);
+            onSelectChat(sourceChat.id);
+            return;
+        }
+
+        if (onOpenDirectChat) {
+            onOpenDirectChat({
+                chatId: sourceId,
+                username: m.forwardedFrom?.username || '',
+                name: m.forwardedFrom?.name || m.forwardedFrom?.username || sourceId,
+                bio: '',
+                avatar: '',
+                online: false,
+            });
+        }
+    };
+
     const openMember = (memberId: string) => {
         if (!memberId) return;
         maybeSaveScroll(chatId);
+        restoringFromInfoRef.current = true;
         if (memberId === currentUserId) {
             onOpenProfile?.();
             return;
@@ -771,9 +830,28 @@ export function ChatRoom({
     };
     // ─────────────────────────────────────────────────────────────────────────
 
-    // Clear optimistic reactions when server messages update (server is source of truth)
+    // Keep optimistic entries only until that specific message is synced from server.
     useEffect(() => {
-        setOptimisticReactions({});
+        setOptimisticReactions((prev) => {
+            if (!Object.keys(prev).length) return prev;
+            const next = { ...prev };
+            let changed = false;
+            Object.keys(prev).forEach((messageId) => {
+                const msg = messages.find((m) => m.id === messageId);
+                if (!msg) {
+                    delete next[messageId];
+                    changed = true;
+                    return;
+                }
+                const serverReactions = (msg.reactions as ReactionEntry[] | undefined) ?? [];
+                const optimistic = prev[messageId] ?? [];
+                if (JSON.stringify(serverReactions) === JSON.stringify(optimistic)) {
+                    delete next[messageId];
+                    changed = true;
+                }
+            });
+            return changed ? next : prev;
+        });
     }, [messages]);
 
     const handleForwardMessage = async (targetChatId: string) => {
@@ -882,6 +960,8 @@ export function ChatRoom({
         consumedInitialUnreadRef.current = false;
         userHasScrolledRef.current = false;
         unreadConsumedInSessionRef.current = false;
+        restoringFromInfoRef.current = false;
+        restoreTopAfterInfoRef.current = null;
         initialMediaFollowupDoneRef.current = false;
         initialMediaPendingIdsRef.current = collectInitialMediaPendingIds();
         if (initialMediaPendingIdsRef.current.size === 0) {
@@ -928,16 +1008,21 @@ export function ChatRoom({
         if (showContactInfo || viewingMemberId || showMembersList) return;
         const mem = scrollMemoryRef.current[chatId];
         if (!mem) return;
+        restoringFromInfoRef.current = false;
+        restoreTopAfterInfoRef.current = mem.atBottom ? null : mem.top;
         const raf = requestAnimationFrame(() => restoreScroll(chatId));
 
-        // If user was at bottom, keep sticking to the real bottom for a short period.
-        // This fixes "a little above bottom" after late-loading media from ContactInfo route.
         const timers = mem.atBottom
             ? [60, 160, 320, 520, 820].map((delay) => window.setTimeout(() => {
                 if (shouldPreserveExactScroll()) return;
                 scrollToBottom(false);
             }, delay))
-            : [];
+            : [60, 160, 320, 520, 820].map((delay) => window.setTimeout(() => {
+                const c = messagesContainerRef.current;
+                if (!c || restoreTopAfterInfoRef.current === null) return;
+                markProgrammaticScroll();
+                c.scrollTop = restoreTopAfterInfoRef.current;
+            }, delay));
 
         return () => {
             cancelAnimationFrame(raf);
@@ -1312,7 +1397,10 @@ export function ChatRoom({
                                     onClick={() => {
                                         setShowMembersList(false);
                                         if (member.chatId === currentUserId) onOpenProfile?.();
-                                        else setViewingMemberId(member.chatId);
+                                        else {
+                                            restoringFromInfoRef.current = true;
+                                            setViewingMemberId(member.chatId);
+                                        }
                                     }}
                                     style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer', borderTop: idx > 0 ? '1px solid var(--border-primary)' : 'none', transition: 'background 0.15s' }}
                                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
@@ -1366,6 +1454,7 @@ export function ChatRoom({
                     onClick={() => {
                         if (isSavedMessages) return;
                         maybeSaveScroll(chatId);
+                        restoringFromInfoRef.current = true;
                         setOpenGroupEditorFromMembers(false);
                         setShowContactInfo(true);
                     }}
@@ -1630,9 +1719,16 @@ export function ChatRoom({
                                             })()}
 
                                             {m.forwardedFrom && (
-                                                <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4, fontStyle: 'italic', fontFamily: 'Vazir, sans-serif' }}>
+                                                <button
+                                                    type="button"
+                                                    className="message-forwarded-label"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        openForwardSource(m);
+                                                    }}
+                                                >
                                                     فوروارد شده از: {m.forwardedFrom.name || m.forwardedFrom.username || 'ناشناس'}
-                                                </div>
+                                                </button>
                                             )}
 
                                             {m.replyTo && (
@@ -1642,7 +1738,7 @@ export function ChatRoom({
                                                     className="message-reply-box"
                                                     style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
                                                     <div className="message-reply-box__label">پاسخ</div>
-                                                    <div className="message-reply-box__text">{m.replyTo.text}</div>
+                                                    <div className="message-reply-box__text">{getReplyPreviewText(m.replyTo)}</div>
                                                 </div>
                                             )}
 
@@ -1878,7 +1974,7 @@ export function ChatRoom({
                     <div className="chat-room__reply-edit-box">
                         <div style={{ minWidth: 0 }}>
                             <div className="chat-room__reply-edit-box__title">{editingId ? 'در حال ویرایش' : 'در حال پاسخ'}</div>
-                            {!editingId && replyTo && <div className="chat-room__reply-edit-box__text">{replyTo.text}</div>}
+                            {!editingId && replyTo && <div className="chat-room__reply-edit-box__text">{getReplyPreviewText(replyTo)}</div>}
                         </div>
                         <button type="button" className="icon-btn" aria-label="Cancel" onClick={() => { setReplyTo(null); setEditingId(null); setText(''); }}>
                             <X size={18} />
@@ -1899,7 +1995,14 @@ export function ChatRoom({
                     <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
                         value={text} onChange={(e) => setText(e.target.value)}
                         onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }}
+                        onKeyDown={(e) => {
+                            if (e.key !== 'Enter') return;
+                            const isDesktop = typeof window !== 'undefined' && window.matchMedia('(pointer:fine)').matches;
+                            if (!isDesktop) return;
+                            if (e.shiftKey || e.ctrlKey || e.metaKey) return;
+                            e.preventDefault();
+                            submit();
+                        }}
                         rows={1}
                     />
                     <button
