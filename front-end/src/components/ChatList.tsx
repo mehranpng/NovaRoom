@@ -1,4 +1,4 @@
-import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, Laptop, MoreVertical, Trash2, RefreshCw } from 'lucide-react';
+import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, Laptop, ChevronDown, MoreVertical, Trash2, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';
@@ -299,6 +299,7 @@ export function ChatList({
 }: ChatListProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const [menuOpen, setMenuOpen] = useState(false);
+    const [themeMenuOpen, setThemeMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement | null>(null);
     const { themeMode, setThemeMode } = useDarkMode();
 
@@ -401,11 +402,16 @@ export function ChatList({
             if (!menuRef.current) return;
             if (menuRef.current.contains(e.target as Node)) return;
             setMenuOpen(false);
+            setThemeMenuOpen(false);
         };
         if (menuOpen) {
             document.addEventListener('mousedown', onDocClick);
         }
         return () => document.removeEventListener('mousedown', onDocClick);
+    }, [menuOpen]);
+
+    useEffect(() => {
+        if (!menuOpen) setThemeMenuOpen(false);
     }, [menuOpen]);
 
     useEffect(() => {
@@ -710,21 +716,37 @@ export function ChatList({
                                     <Bookmark size={16} />
                                     پیام‌های ذخیره شده
                                 </button>
-                                <button className="popover__item" onClick={() => { setThemeMode('system'); setMenuOpen(false); }} type="button">
-                                    <Laptop size={16} />
-                                    حالت سیستم
-                                    {themeMode === 'system' ? ' ✓' : ''}
-                                </button>
-                                <button className="popover__item" onClick={() => { setThemeMode('light'); setMenuOpen(false); }} type="button">
-                                    <Sun size={16} />
-                                    حالت روشن
-                                    {themeMode === 'light' ? ' ✓' : ''}
-                                </button>
-                                <button className="popover__item" onClick={() => { setThemeMode('dark'); setMenuOpen(false); }} type="button">
-                                    <Moon size={16} />
-                                    حالت تاریک
-                                    {themeMode === 'dark' ? ' ✓' : ''}
-                                </button>
+                                <div style={{ width: '100%' }}>
+                                    <button
+                                        className="popover__item"
+                                        onClick={() => setThemeMenuOpen((v) => !v)}
+                                        type="button"
+                                        style={{ justifyContent: 'space-between' }}
+                                    >
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                                            <Laptop size={16} />
+                                            حالت نمایش
+                                        </span>
+                                        <ChevronDown size={14} style={{ transform: themeMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }} />
+                                    </button>
+
+                                    {themeMenuOpen && (
+                                        <div style={{ padding: '4px 0 0' }}>
+                                            <button className="popover__item" onClick={() => { setThemeMode('system'); setMenuOpen(false); }} type="button" style={{ paddingInlineStart: 28 }}>
+                                                <Laptop size={16} />
+                                                حالت سیستم{themeMode === 'system' ? ' ✓' : ''}
+                                            </button>
+                                            <button className="popover__item" onClick={() => { setThemeMode('light'); setMenuOpen(false); }} type="button" style={{ paddingInlineStart: 28 }}>
+                                                <Sun size={16} />
+                                                حالت روشن{themeMode === 'light' ? ' ✓' : ''}
+                                            </button>
+                                            <button className="popover__item" onClick={() => { setThemeMode('dark'); setMenuOpen(false); }} type="button" style={{ paddingInlineStart: 28 }}>
+                                                <Moon size={16} />
+                                                حالت تاریک{themeMode === 'dark' ? ' ✓' : ''}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                                 <button className="popover__item popover__item--danger" onClick={() => { setMenuOpen(false); onLogout(); }} type="button">
                                     <LogOut size={16} />
                                     خروج

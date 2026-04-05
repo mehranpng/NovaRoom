@@ -8,7 +8,6 @@ import { ChatList } from './components/ChatList';
 import { ChatRoom } from './components/ChatRoom';
 import { AIChatRoom } from './components/AIChatRoom';
 import { Profile } from './components/Profile';
-import { ContactInfo } from './components/ContactInfo';
 import { EmptyState } from './components/EmptyState';
 import { Login } from './components/Login';
 import { Register } from './components/Register';
@@ -1092,29 +1091,7 @@ export function App() {
 
                 {view !== 'profile' && (
                     <div className={cx('app__main', view === 'chatList' && 'app__main--hidden-mobile')}>
-                        {isInfoRouteActive && (activeChat || isSavedMessagesActive) ? (
-                            <ContactInfo
-                                user={(activeChat?.chatType === 'group'
-                                    ? { ...getActiveContact(), chatId: infoRouteChatId || activeChatId || '', isGroup: true }
-                                    : getActiveContact()) as any}
-                                onBack={() => {
-                                    const backChatId = infoRouteChatId || activeChatId;
-                                    if (backChatId) {
-                                        navigate(`/chat/${encodeURIComponent(backChatId)}`);
-                                    } else {
-                                        navigate('/');
-                                    }
-                                }}
-                                onOpenChat={(u) => {
-                                    if (u.chatId === currentUser?.chatId) {
-                                        handleOpenProfile();
-                                        return;
-                                    }
-                                    handleUserSelectedFromModal(u);
-                                }}
-                                autoOpenMembers={false}
-                            />
-                        ) : view === 'chatRoom' && showAIChat ? (
+                        {view === 'chatRoom' && showAIChat ? (
                             <AIChatRoom
                                 messages={aiMessages}
                                 currentUserId={currentUser!.chatId}
@@ -1145,7 +1122,12 @@ export function App() {
                                 onOpenDirectChat={(user) => handleUserSelectedFromModal(user)}
                                 onOpenProfile={handleOpenProfile}
                                 onOpenAIChat={handleOpenAIChat}
-                                onOpenContactInfo={(targetChatId) => navigate(`/info/${encodeURIComponent(targetChatId)}`)}
+                                onOpenContactInfo={(targetChatId) => navigate(`/info/${encodeURIComponent(targetChatId)}`, { replace: true })}
+                                forceContactInfoOpen={isInfoRouteActive}
+                                onCloseForcedContactInfo={() => {
+                                    const backChatId = infoRouteChatId || activeChatId;
+                                    if (backChatId) navigate(`/chat/${encodeURIComponent(backChatId)}`, { replace: true });
+                                }}
                                 initialUnreadCount={initialUnreadCount}
                                 onConsumeInitialUnread={consumeOpenChatUnread}
                                 onForwardMessage={handleForwardMessage}

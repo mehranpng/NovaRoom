@@ -35,6 +35,8 @@ interface ChatRoomProps {
     onOpenProfile?: () => void;
     onOpenAIChat?: () => void;
     onOpenContactInfo?: (chatId: string) => void;
+    forceContactInfoOpen?: boolean;
+    onCloseForcedContactInfo?: () => void;
     initialUnreadCount?: number;
     onConsumeInitialUnread?: (chatId: string) => void;
     onReactMessage?: (chatId: string, messageId: string, emoji: string) => Promise<void>;
@@ -263,6 +265,8 @@ export function ChatRoom({
     onOpenProfile,
     onOpenAIChat,
     onOpenContactInfo,
+    forceContactInfoOpen = false,
+    onCloseForcedContactInfo,
     initialUnreadCount = 0,
     onConsumeInitialUnread,
     onReactMessage,
@@ -352,6 +356,14 @@ export function ChatRoom({
     // Scroll memory: keep per-chat scroll position in memory until refresh.
     // IMPORTANT: only restore exact scrollTop if user actually scrolled in that chat (prevents "always open at top").
     const scrollMemoryRef = useRef<Record<string, { top: number; atBottom: boolean; userInteracted: boolean }>>({});
+
+    useEffect(() => {
+        if (!forceContactInfoOpen) return;
+        restoringFromInfoRef.current = true;
+        setOpenGroupEditorFromMembers(false);
+        setShowContactInfo(true);
+    }, [forceContactInfoOpen, chatId]);
+
     const userHasScrolledRef = useRef(false);
 
     // Unread separator anchor for the current open session.
@@ -1382,6 +1394,10 @@ export function ChatRoom({
             <ContactInfo
                 user={infoUser}
                 onBack={() => {
+                    if (forceContactInfoOpen && onCloseForcedContactInfo) {
+                        onCloseForcedContactInfo();
+                        return;
+                    }
                     setShowContactInfo(false);
                     if (openGroupEditorFromMembers) {
                         setShowMembersList(true);
