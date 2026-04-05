@@ -1483,7 +1483,13 @@ export function ChatRoom({
         return (
             <div className="contact-info">
                 <div className="contact-info__header">
-                    <button className="contact-info__back" onClick={() => { setShowMembersList(false); }} type="button"><ArrowLeft size={20} /></button>
+                    <button className="contact-info__back" onClick={() => {
+                        if (onCloseForcedContactInfo) {
+                            onCloseForcedContactInfo();
+                            return;
+                        }
+                        setShowMembersList(false);
+                    }} type="button"><ArrowLeft size={20} /></button>
                     <div className="contact-info__title">اطلاعات گروه</div>
                     <div className="contact-info__spacer" />
                     {isVerifiedUser && (

@@ -642,6 +642,19 @@ export function App() {
         navigate,
     ]);
 
+
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        if (location.pathname !== '/') return;
+
+        const keepAtChatList = () => {
+            navigate('/', { replace: true });
+        };
+
+        window.addEventListener('popstate', keepAtChatList);
+        return () => window.removeEventListener('popstate', keepAtChatList);
+    }, [isAuthenticated, location.pathname, navigate]);
+
     useEffect(() => {
         if (!activeChatId || !currentUser) return;
         if (view !== 'chatRoom') return;
@@ -892,7 +905,7 @@ export function App() {
         setPendingUser(null);
         setShowAIChat(false);
         setActiveChatId(null);
-        navigate('/');
+        navigate('/', { replace: true });
     };
 
     const handleCloseChat = () => {
@@ -900,7 +913,7 @@ export function App() {
         setPendingUser(null);
         setShowAIChat(false);
         setView('chatRoom');
-        navigate('/');
+        navigate('/', { replace: true });
     };
 
     const handleChatDeleted = (chatId: string) => {
@@ -918,6 +931,7 @@ export function App() {
         setPendingUser(null);
         setShowAIChat(false);
         setView('chatList');
+        navigate('/', { replace: true });
         loadChats(false);
     };
 
