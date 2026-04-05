@@ -136,6 +136,7 @@ export function AIChatRoom({
     onSelectChat,
     onSetPendingForwardDraft,
 }: AIChatRoomProps) {
+    const MAX_AI_MESSAGE_LENGTH = 3000;
     const [text, setText] = useState('');
     const [msgMenu, setMsgMenu] = useState<{ id: string; top: number; left: number } | null>(null);
     const [newMsgCount, setNewMsgCount] = useState(0);
@@ -311,6 +312,7 @@ export function AIChatRoom({
     const onMessagesScroll = () => {
         const container = messagesContainerRef.current;
         if (!container) return;
+        if (msgMenu) setMsgMenu(null);
 
         const nearBottom = computeNearBottom();
         isAtBottomRef.current = nearBottom;
@@ -325,6 +327,10 @@ export function AIChatRoom({
 
     const submit = () => {
         const t = text.trim();
+        if (t.length > MAX_AI_MESSAGE_LENGTH) {
+            alert(`حداکثر طول پیام ${MAX_AI_MESSAGE_LENGTH} کاراکتر است`);
+            return;
+        }
         if (!t || isTyping) return;
 
         onSendMessage(t);
@@ -333,15 +339,20 @@ export function AIChatRoom({
         requestAnimationFrame(() => scrollToBottom(true));
     };
 
-    const openMessageMenu = (messageId: string, targetEl: HTMLElement) => {
+    const openMessageMenu = (messageId: string, targetEl: HTMLElement, clientX?: number, clientY?: number) => {
         const room = roomRef.current;
         if (!room) return;
+        if (msgMenu?.id === messageId) {
+            setMsgMenu(null);
+            return;
+        }
 
         const roomRect = room.getBoundingClientRect();
         const r = targetEl.getBoundingClientRect();
-
-        let top = r.top - roomRect.top;
-        let left = r.left - roomRect.left;
+        const clickX = typeof clientX === 'number' ? clientX : r.left + 12;
+        const clickY = typeof clientY === 'number' ? clientY : r.bottom;
+        let top = clickY - roomRect.top + 8;
+        let left = clickX - roomRect.left - 12;
 
         const menuHeight = 80;
         const menuWidth = 180;
@@ -475,7 +486,10 @@ export function AIChatRoom({
                                                 ? 'message-bubble message-bubble--mine msg-shape--single'
                                                 : 'message-bubble message-bubble--theirs msg-shape--single'
                                         }
-                                        onClick={(e) => openMessageMenu(message.id, e.currentTarget)}
+                                        onClick={(e) => {
+                                            const ne = e.nativeEvent as MouseEvent;
+                                            openMessageMenu(message.id, e.currentTarget, ne.clientX, ne.clientY);
+                                        }}
                                         role="button"
                                         tabIndex={0}
                                         onKeyDown={(e) => {
@@ -532,12 +546,10 @@ export function AIChatRoom({
                         <Copy size={16} />
                         کپی
                     </button>
-                    {activeMsg.senderId !== currentUserId && (
-                        <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button">
-                            <Forward size={16} />
-                            فوروارد
-                        </button>
-                    )}
+                    <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button">
+                        <Forward size={16} />
+                        فوروارد
+                    </button>
                 </div>
             )}
 
@@ -601,7 +613,7 @@ export function AIChatRoom({
                         className="chat-room__text-input"
                         placeholder="پیام خود را بنویسید..."
                         value={text}
-                        onChange={(e) => setText(e.target.value)}
+                        onChange={(e) => setText(e.target.value.slice(0, MAX_AI_MESSAGE_LENGTH))}
                         onFocus={() => {
                             setTimeout(() => {
                                 if (computeNearBottom()) scrollToBottom(false);
@@ -616,6 +628,9 @@ export function AIChatRoom({
                         rows={1}
                         disabled={isTyping}
                     />
+                    <div style={{ position: 'absolute', bottom: 6, left: 48, fontSize: 11, color: text.length > MAX_AI_MESSAGE_LENGTH * 0.9 ? '#ef4444' : 'var(--text-secondary)', pointerEvents: 'none' }}>
+                        {text.length}/{MAX_AI_MESSAGE_LENGTH}
+                    </div>
                     <button
                         className={
                             text.trim() && !isTyping

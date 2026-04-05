@@ -83,6 +83,7 @@ export function App() {
     const activeChatIdRef = useRef<string | null>(null);
     const viewRef = useRef<View>('chatList');
     const lastSeenAckMessageIdRef = useRef<Record<string, string>>({});
+    const chatLoadRequestRef = useRef(0);
     useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
     useEffect(() => { viewRef.current = view; }, [view]);
 
@@ -502,6 +503,7 @@ export function App() {
     }, [isAuthenticated, loadChats]);
 
     const handleSelectChat = useCallback(async (chatId: string) => {
+        const requestId = ++chatLoadRequestRef.current;
         setPendingUser(null);
         setShowAIChat(false);
 
@@ -520,7 +522,13 @@ export function App() {
         }
 
         try {
-            const msgs = await apiFetch(`/chats/${chatId}/messages?limit=100`);
+            let msgs = await apiFetch(`/chats/${chatId}/messages?limit=100`);
+            if ((!Array.isArray(msgs) || msgs.length === 0) && chatLoadRequestRef.current === requestId) {
+                // Retry once for occasional race/network hiccups when rapidly switching chats.
+                await new Promise((resolve) => window.setTimeout(resolve, 180));
+                msgs = await apiFetch(`/chats/${chatId}/messages?limit=100`);
+            }
+            if (chatLoadRequestRef.current !== requestId) return;
             setMessages(prev => ({ ...prev, [chatId]: msgs }));
             setMessagesLoadedOnce(prev => ({ ...prev, [chatId]: true }));
 
@@ -530,6 +538,7 @@ export function App() {
         } catch (err) {
             console.error(err);
         } finally {
+            if (chatLoadRequestRef.current !== requestId) return;
             if (shouldShowSkeleton) {
                 setMessagesLoading(prev => ({ ...prev, [chatId]: false }));
             }

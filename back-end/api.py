@@ -99,6 +99,8 @@ VALID_REACTIONS = [
 
 # Pin settings
 MAX_PINNED_CHATS = 20
+MAX_CHAT_MESSAGE_LENGTH = 6000
+MAX_AI_MESSAGE_LENGTH = 3000
 
 
 def utc_now() -> datetime:
@@ -1300,6 +1302,7 @@ async def upload_file(
         file_metadata = await save_uploaded_file(
             file_content, file.filename or "unnamed"
         )
+        file_metadata["uploadedBy"] = current_user["chatId"]
 
         return {"success": True, "file": file_metadata}
     except ValueError as e:
@@ -1326,6 +1329,21 @@ async def download_file(
     return FileResponse(
         path=str(file_path), filename=file_id, media_type="application/octet-stream"
     )
+
+
+@app.delete("/files/{file_id}")
+async def remove_uploaded_file(
+    file_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    file_doc = await cl_messages.find_one({"file.fileId": file_id}, {"_id": 1})
+    if file_doc:
+        raise HTTPException(status_code=409, detail="File is already attached to a message")
+
+    deleted = await delete_file(file_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="File not found")
+    return {"success": True}
 
 
 @app.post("/chats/{chat_id}/messages/{message_id}/react")
@@ -1823,6 +1841,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 text = data.get("text", "")
                 reply_to_id = data.get("replyToId")
                 file_data = data.get("file")  # File metadata from upload endpoint
+                if not isinstance(text, str):
+                    continue
+                if len(text) > MAX_CHAT_MESSAGE_LENGTH:
+                    continue
 
                 # Allow empty text if file is present
                 if not chat_id_target or (not text.strip() and not file_data):
@@ -1927,6 +1949,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     or not isinstance(new_text, str)
                     or not new_text.strip()
                 ):
+                    continue
+                if len(new_text) > MAX_CHAT_MESSAGE_LENGTH:
                     continue
 
                 oid = await try_object_id(message_id)
@@ -2301,6 +2325,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 text = data.get("text")
 
                 if not isinstance(text, str) or not text.strip():
+                    continue
+                if len(text) > MAX_AI_MESSAGE_LENGTH:
                     continue
 
                 # Save user message

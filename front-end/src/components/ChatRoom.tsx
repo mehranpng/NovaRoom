@@ -270,6 +270,7 @@ export function ChatRoom({
     onSetPendingForwardDraft,
     onClearPendingForwardDraft,
 }: ChatRoomProps) {
+    const MAX_CHAT_MESSAGE_LENGTH = 6000;
     const currentChat = useMemo(
         () => chats.find((c) => c.id === chatId) || null,
         [chats, chatId]
@@ -933,6 +934,15 @@ export function ChatRoom({
 
     const handleFileUploaded = (file: FileMetadata) => setUploadedFile(file);
 
+    const cleanupUploadedFile = async (file: FileMetadata | null) => {
+        if (!file?.fileId) return;
+        try {
+            await apiFetch(`/files/${encodeURIComponent(file.fileId)}`, { method: 'DELETE' });
+        } catch {
+            // ignore cleanup failures
+        }
+    };
+
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
             const target = e.target as Node;
@@ -968,6 +978,15 @@ export function ChatRoom({
         };
     }, []);
 
+    useEffect(() => {
+        return () => {
+            if (uploadedFile) {
+                void cleanupUploadedFile(uploadedFile);
+            }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [uploadedFile?.fileId]);
+
     // Save scroll when leaving current chatId (unmount or switching to another chat).
     useEffect(() => {
         return () => {
@@ -989,6 +1008,7 @@ export function ChatRoom({
         setForwardSourceUser(null);
         setReplyTo(null); setEditingId(null);
         setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
+        if (uploadedFile) void cleanupUploadedFile(uploadedFile);
         setText(''); setUploadedFile(null);
         setUnreadAnchorId(null);
         setOptimisticReactions({});
@@ -1141,6 +1161,11 @@ export function ChatRoom({
     const onMessagesScroll = () => {
         const container = messagesContainerRef.current;
         if (!container) return;
+        if (msgMenu || reactionMenu || seenByMenu) {
+            setMsgMenu(null);
+            setReactionMenu(null);
+            setSeenByMenu(null);
+        }
 
         const nearBottom = computeNearBottom();
         isAtBottomRef.current = nearBottom;
@@ -1178,6 +1203,10 @@ export function ChatRoom({
 
     const submit = () => {
         const t = text.trim();
+        if (t.length > MAX_CHAT_MESSAGE_LENGTH) {
+            alert(`حداکثر طول پیام ${MAX_CHAT_MESSAGE_LENGTH} کاراکتر است`);
+            return;
+        }
         if (!t && !uploadedFile && (!pendingForwardDraft || Boolean(editingId))) return;
         triggerHaptic();
         if (t || uploadedFile) {
@@ -1211,7 +1240,7 @@ export function ChatRoom({
         if (!room) return;
 
         // Toggle: clicking the same message while menu is open closes it.
-        if (msgMenu?.id === messageId) {
+        if (msgMenu?.id === messageId || reactionMenu?.id === messageId || seenByMenu?.id === messageId) {
             setMsgMenu(null);
             setReactionMenu(null);
             setSeenByMenu(null);
@@ -1263,15 +1292,55 @@ export function ChatRoom({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [msgMenu?.id, msgMenu?.top, msgMenu?.left]);
 
-    const openReactionMenu = (messageId: string, targetEl: HTMLElement) => {
+    useLayoutEffect(() => {
+        if (!reactionMenu) return;
+        const room = roomRef.current;
+        const menu = reactionMenuRef.current;
+        if (!room || !menu) return;
+
+        const rr = room.getBoundingClientRect();
+        const mr = menu.getBoundingClientRect();
+        const padding = 12;
+        const minTop = 64;
+        const maxLeft = rr.width - mr.width - padding;
+        const maxTop = rr.height - mr.height - padding;
+        const clampedLeft = Math.min(Math.max(reactionMenu.left, padding), Math.max(padding, maxLeft));
+        const clampedTop = Math.min(Math.max(reactionMenu.top, minTop), Math.max(minTop, maxTop));
+        if (clampedLeft !== reactionMenu.left || clampedTop !== reactionMenu.top) {
+            setReactionMenu((s) => (s ? { ...s, left: clampedLeft, top: clampedTop } : s));
+        }
+    }, [reactionMenu?.id, reactionMenu?.top, reactionMenu?.left]);
+
+    useLayoutEffect(() => {
+        if (!seenByMenu) return;
+        const room = roomRef.current;
+        const menu = seenByMenuRef.current;
+        if (!room || !menu) return;
+
+        const rr = room.getBoundingClientRect();
+        const mr = menu.getBoundingClientRect();
+        const padding = 12;
+        const minTop = 64;
+        const maxLeft = rr.width - mr.width - padding;
+        const maxTop = rr.height - mr.height - padding;
+        const clampedLeft = Math.min(Math.max(seenByMenu.left, padding), Math.max(padding, maxLeft));
+        const clampedTop = Math.min(Math.max(seenByMenu.top, minTop), Math.max(minTop, maxTop));
+        if (clampedLeft !== seenByMenu.left || clampedTop !== seenByMenu.top) {
+            setSeenByMenu((s) => (s ? { ...s, left: clampedLeft, top: clampedTop } : s));
+        }
+    }, [seenByMenu?.id, seenByMenu?.top, seenByMenu?.left]);
+
+    const openReactionMenu = (messageId: string, targetEl: HTMLElement, anchor?: { top: number; left: number }) => {
         const room = roomRef.current;
         if (!room) return;
         const roomRect = room.getBoundingClientRect();
         const r = targetEl.getBoundingClientRect();
         const pickerHeight = 200; const pickerWidth = 320;
-        const spaceBelow = roomRect.height - (r.bottom - roomRect.top);
-        const top = spaceBelow < pickerHeight + 16 ? Math.max(64, (r.bottom - roomRect.top) - pickerHeight) : r.bottom - roomRect.top;
-        const finalLeft = Math.max(12, Math.min(r.left - roomRect.left, roomRect.width - pickerWidth - 16));
+        const anchorTop = anchor?.top ?? (r.bottom - roomRect.top);
+        const anchorLeft = anchor?.left ?? (r.left - roomRect.left);
+        const spaceBelow = roomRect.height - anchorTop;
+        const top = spaceBelow < pickerHeight + 16 ? Math.max(64, anchorTop - pickerHeight) : anchorTop;
+        const finalLeft = Math.max(12, Math.min(anchorLeft, roomRect.width - pickerWidth - 16));
         setReactionMenu({ id: messageId, top, left: finalLeft });
         setMsgMenu(null);
         setSeenByMenu(null);
@@ -1882,7 +1951,7 @@ export function ChatRoom({
                                 <Eye size={16} />دیده شده توسط
                             </button>
                         )}
-                        <button className="popover__item" onClick={() => { const el = messageElsRef.current.get(activeMsg.id); if (el) openReactionMenu(activeMsg.id, el); }} type="button">
+                        <button className="popover__item" onClick={() => { const el = messageElsRef.current.get(activeMsg.id); if (el) openReactionMenu(activeMsg.id, el, { top: msgMenu.top, left: msgMenu.left }); }} type="button">
                             <Smile size={16} />واکنش
                         </button>
                         <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><Reply size={16} />پاسخ</button>
@@ -2051,7 +2120,10 @@ export function ChatRoom({
                             <div className="chat-room__reply-edit-box__title">فایل آپلود شده</div>
                             <div className="chat-room__reply-edit-box__text">{uploadedFile.fileName}</div>
                         </div>
-                        <button type="button" className="icon-btn" aria-label="Remove file" onClick={() => setUploadedFile(null)}><X size={18} /></button>
+                        <button type="button" className="icon-btn" aria-label="Remove file" onClick={() => {
+                            if (uploadedFile) void cleanupUploadedFile(uploadedFile);
+                            setUploadedFile(null);
+                        }}><X size={18} /></button>
                     </div>
                 )}
                 {pendingForwardDraft && (
@@ -2073,7 +2145,7 @@ export function ChatRoom({
                 <div className="chat-room__input-wrapper">
                     <FileUpload token={token} onFileUploaded={handleFileUploaded} />
                     <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
-                        value={text} onChange={(e) => setText(e.target.value)}
+                        value={text} onChange={(e) => setText(e.target.value.slice(0, MAX_CHAT_MESSAGE_LENGTH))}
                         onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
                         onKeyDown={(e) => {
                             if (e.key !== 'Enter') return;
@@ -2085,6 +2157,9 @@ export function ChatRoom({
                         }}
                         rows={1}
                     />
+                    <div style={{ position: 'absolute', bottom: 6, left: 48, fontSize: 11, color: text.length > MAX_CHAT_MESSAGE_LENGTH * 0.9 ? '#ef4444' : 'var(--text-secondary)', pointerEvents: 'none' }}>
+                        {text.length}/{MAX_CHAT_MESSAGE_LENGTH}
+                    </div>
                     <button
                         className={text.trim() || uploadedFile || (pendingForwardDraft && !editingId) ? 'chat-room__send-btn chat-room__send-btn--active' : 'chat-room__send-btn chat-room__send-btn--disabled'}
                         onClick={submit} disabled={!text.trim() && !uploadedFile && (!pendingForwardDraft || Boolean(editingId))} aria-label="Send" type="button">

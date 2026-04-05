@@ -30,6 +30,7 @@ type OutgoingEvent =
 const WS_RECONNECT_DELAY_MS = 1500;
 const WS_PONG_TIMEOUT_MS = 45000;
 const WS_MAX_RECONNECT_ATTEMPTS = 8;
+const MAX_CHAT_MESSAGE_LENGTH = 6000;
 
 export function useWebSocket({
     token,
@@ -215,6 +216,8 @@ export function useWebSocket({
 
     const sendMessage = useCallback(
         (chatId: string, text: string, replyToId?: string, file?: FileMetadata) => {
+            if (typeof text !== 'string') return false;
+            if (text.length > MAX_CHAT_MESSAGE_LENGTH) return false;
             if (!chatId || (!text.trim() && !file)) return false;
             return send({ type: 'message', chatId, text, replyToId, file });
         },
@@ -223,6 +226,8 @@ export function useWebSocket({
 
     const editMessage = useCallback(
         (chatId: string, messageId: string, text: string) => {
+            if (typeof text !== 'string') return false;
+            if (text.length > MAX_CHAT_MESSAGE_LENGTH) return false;
             if (!chatId || !messageId || !text.trim()) return false;
             return send({ type: 'edit_message', chatId, messageId, text });
         },

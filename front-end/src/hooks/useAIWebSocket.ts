@@ -8,6 +8,7 @@ interface UseAIWebSocketProps {
 }
 
 export function useAIWebSocket({ token, onNewMessage }: UseAIWebSocketProps) {
+    const MAX_AI_MESSAGE_LENGTH = 3000;
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<number | undefined>(undefined);
     const reconnectAttemptsRef = useRef(0);
@@ -86,6 +87,9 @@ export function useAIWebSocket({ token, onNewMessage }: UseAIWebSocketProps) {
     }, [connect]);
 
     const sendMessage = useCallback((text: string) => {
+        if (typeof text !== 'string' || !text.trim() || text.length > MAX_AI_MESSAGE_LENGTH) {
+            return false;
+        }
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
             console.warn('AI WebSocket not connected');
             return false;
