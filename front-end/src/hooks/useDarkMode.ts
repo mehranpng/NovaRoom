@@ -50,14 +50,20 @@ export function useDarkMode() {
     localStorage.setItem(STORAGE_KEY, themeMode);
 
     // Keep mobile browser chrome color in sync with app theme.
-    const themeColor = isDarkMode ? '#1f2937' : '#ffffff';
-    let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
-    if (!meta) {
-      meta = document.createElement('meta');
-      meta.name = 'theme-color';
-      document.head.appendChild(meta);
-    }
-    meta.setAttribute('content', themeColor);
+    const themeColor = isDarkMode ? '#111827' : '#ffffff';
+    const ensureMeta = (name: string) => {
+      let m = document.querySelector(`meta[name=\"${name}\"]`) as HTMLMetaElement | null;
+      if (!m) {
+        m = document.createElement('meta');
+        m.name = name;
+        document.head.appendChild(m);
+      }
+      m.setAttribute('content', themeColor);
+    };
+
+    ensureMeta('theme-color');
+    ensureMeta('msapplication-navbutton-color');
+    (document.documentElement.style as any).colorScheme = isDarkMode ? 'dark' : 'light';
   }, [isDarkMode, themeMode]);
 
   return {

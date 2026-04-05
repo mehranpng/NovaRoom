@@ -1138,9 +1138,13 @@ export function App() {
                                 onOpenAIChat={handleOpenAIChat}
                                 onOpenContactInfo={(targetChatId) => navigate(`/info/${encodeURIComponent(targetChatId)}`, { replace: true })}
                                 forceContactInfoOpen={isInfoRouteActive}
-                                onCloseForcedContactInfo={() => {
-                                    const backChatId = infoRouteChatId || activeChatId;
-                                    if (backChatId) navigate(`/chat/${encodeURIComponent(backChatId)}`, { replace: true });
+                                onCloseForcedContactInfo={(currentChatId) => {
+                                    const backChatId = currentChatId || infoRouteChatId || activeChatId;
+                                    if (backChatId && backChatId !== 'pending') {
+                                        navigate(`/chat/${encodeURIComponent(backChatId)}`, { replace: true });
+                                        return;
+                                    }
+                                    navigate('/', { replace: true });
                                 }}
                                 initialUnreadCount={initialUnreadCount}
                                 onConsumeInitialUnread={consumeOpenChatUnread}

@@ -36,7 +36,7 @@ interface ChatRoomProps {
     onOpenAIChat?: () => void;
     onOpenContactInfo?: (chatId: string) => void;
     forceContactInfoOpen?: boolean;
-    onCloseForcedContactInfo?: () => void;
+    onCloseForcedContactInfo?: (chatId: string) => void;
     initialUnreadCount?: number;
     onConsumeInitialUnread?: (chatId: string) => void;
     onReactMessage?: (chatId: string, messageId: string, emoji: string) => Promise<void>;
@@ -1395,7 +1395,7 @@ export function ChatRoom({
                 user={infoUser}
                 onBack={() => {
                     if (onCloseForcedContactInfo) {
-                        onCloseForcedContactInfo();
+                        onCloseForcedContactInfo(chatId);
                         return;
                     }
                     setShowContactInfo(false);
@@ -1485,7 +1485,7 @@ export function ChatRoom({
                 <div className="contact-info__header">
                     <button className="contact-info__back" onClick={() => {
                         if (onCloseForcedContactInfo) {
-                            onCloseForcedContactInfo();
+                            onCloseForcedContactInfo(chatId);
                             return;
                         }
                         setShowMembersList(false);
