@@ -570,6 +570,11 @@ export function ChatRoom({
         const sourceId = m.forwardedFrom?.originalSenderId;
         if (!sourceId) return;
 
+        if (sourceId === currentUserId) {
+            onOpenProfile?.();
+            return;
+        }
+
         if (sourceId === 'ai') {
             onOpenAIChat?.();
             return;

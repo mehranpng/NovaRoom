@@ -89,10 +89,52 @@ export function App() {
     useEffect(() => {
         sendSoundRef.current = new Audio('/sounds/send.mp3');
         receiveSoundRef.current = new Audio('/sounds/receive.mp3');
+        sendSoundRef.current.preload = 'auto';
+        receiveSoundRef.current.preload = 'auto';
+        sendSoundRef.current.load();
+        receiveSoundRef.current.load();
 
         return () => {
             sendSoundRef.current = null;
             receiveSoundRef.current = null;
+        };
+    }, []);
+
+    useEffect(() => {
+        let primed = false;
+        const primeAudio = () => {
+            if (primed) return;
+            primed = true;
+            const audios = [sendSoundRef.current, receiveSoundRef.current].filter(Boolean) as HTMLAudioElement[];
+            audios.forEach((audio) => {
+                try {
+                    audio.muted = true;
+                    const p = audio.play();
+                    if (p && typeof p.then === 'function') {
+                        p.then(() => {
+                            audio.pause();
+                            audio.currentTime = 0;
+                            audio.muted = false;
+                        }).catch(() => {
+                            audio.muted = false;
+                        });
+                    } else {
+                        audio.pause();
+                        audio.currentTime = 0;
+                        audio.muted = false;
+                    }
+                } catch {
+                    audio.muted = false;
+                }
+            });
+            document.removeEventListener('pointerdown', primeAudio, true);
+            document.removeEventListener('keydown', primeAudio, true);
+        };
+        document.addEventListener('pointerdown', primeAudio, true);
+        document.addEventListener('keydown', primeAudio, true);
+        return () => {
+            document.removeEventListener('pointerdown', primeAudio, true);
+            document.removeEventListener('keydown', primeAudio, true);
         };
     }, []);
 
@@ -589,7 +631,8 @@ export function App() {
             method: 'POST',
             body: JSON.stringify({ sourceChatId, messageId, targetChatId }),
         });
-    }, []);
+        playChatSound('send');
+    }, [playChatSound]);
 
     const handleSetPendingForwardDraft = useCallback((targetChatId: string, draft: { sourceChatId: string; messageId: string }) => {
         if (!targetChatId || !draft?.sourceChatId || !draft?.messageId) return;
