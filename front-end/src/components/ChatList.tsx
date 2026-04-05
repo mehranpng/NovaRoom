@@ -568,44 +568,41 @@ export function ChatList({
     };
 
     const openActionMenu = (chatId: string, btnEl: HTMLElement, menuItemCount: number) => {
-        const container = chatItemsRef.current;
-        if (!container) return;
-
-        const c = container.getBoundingClientRect();
         const r = btnEl.getBoundingClientRect();
-
         const menuWidth = 190;
-        // Estimate by item count to avoid large offset when opening upward.
         const menuHeight = (menuItemCount * 40) + 14;
         const padding = 8;
+        const viewportHeight = window.innerHeight;
+        const viewportWidth = window.innerWidth;
 
-        // IMPORTANT: popover is absolutely positioned inside the scrollable chat list,
-        // so we must include scrollTop/scrollLeft in coordinate calculations.
-        const scrollTop = container.scrollTop;
-        const scrollLeft = container.scrollLeft;
+        const preferredTop = r.bottom + 6;
+        const preferredBottomTop = r.top - menuHeight - 6;
+        const top = preferredTop + menuHeight <= viewportHeight - padding
+            ? preferredTop
+            : Math.max(padding, preferredBottomTop);
 
-        const btnTop = (r.top - c.top) + scrollTop;
-        const btnBottom = (r.bottom - c.top) + scrollTop;
-
-        // Position under button by default (decision based on visible space).
-        const spaceBelow = c.bottom - r.bottom;
-        let top = spaceBelow < menuHeight + 12
-            ? btnTop - menuHeight - 2
-            : btnBottom + 6;
-
-        // Keep menu within the visible part of the list.
-        const minTop = scrollTop + padding;
-        const maxTop = scrollTop + container.clientHeight - menuHeight - padding;
-        top = Math.max(minTop, Math.min(top, maxTop));
-
-        // Align menu to the button's right edge.
-        let left = ((r.right - c.left) + scrollLeft) - menuWidth;
-        const minLeft = scrollLeft + padding;
-        const maxLeft = scrollLeft + container.clientWidth - menuWidth - padding;
-        left = Math.max(minLeft, Math.min(left, maxLeft));
+        const preferredLeft = r.right - menuWidth;
+        const left = Math.max(padding, Math.min(preferredLeft, viewportWidth - menuWidth - padding));
 
         setChatActionMenu((prev) => (prev?.chatId === chatId ? null : { chatId, top, left }));
     };
+
+    useEffect(() => {
+        if (!chatActionMenu) return;
+
+        const closeMenu = () => setChatActionMenu(null);
+        const listEl = chatItemsRef.current;
+
+        window.addEventListener('resize', closeMenu);
+        window.addEventListener('scroll', closeMenu, true);
+        listEl?.addEventListener('scroll', closeMenu);
+
+        return () => {
+            window.removeEventListener('resize', closeMenu);
+            window.removeEventListener('scroll', closeMenu, true);
+            listEl?.removeEventListener('scroll', closeMenu);
+        };
+    }, [chatActionMenu]);
 
     const isGroupChat = (chat: Chat) => {
         const anyChat = chat as any;
@@ -656,6 +653,11 @@ export function ChatList({
     const showAIChat = !searchQuery || 'NovaRoom AI'.includes(searchQuery.toLowerCase()) || 'دستیار'.includes(searchQuery);
 
     const confirmBusy = confirmAction ? Boolean(actionBusy[confirmAction.chatId]) : false;
+    const actionMenuChat = chatActionMenu
+        ? localChats.find((chat) => chat.id === chatActionMenu.chatId) || null
+        : null;
+    const actionMenuPinned = actionMenuChat ? isPinned(actionMenuChat.id) : false;
+    const actionMenuGroup = actionMenuChat ? isGroupChat(actionMenuChat) : false;
 
     return (
         <div className="chat-list" style={{ position: 'relative' }}>
@@ -912,93 +914,93 @@ export function ChatList({
                                     </div>
                                 </div>
 
-                                {chatActionMenu?.chatId === chat.id && (
-                                    <div
-                                        ref={chatActionMenuRef}
-                                        className="popover popover--mini"
-                                        style={{ top: chatActionMenu.top, left: chatActionMenu.left, right: 'auto', position: 'absolute', zIndex: 60 }}
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                        }}
-                                    >
-                                        <button
-                                            className="popover__item"
-                                            type="button"
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                // close immediately (before async request)
-                                                setChatActionMenu(null);
-                                                togglePin(chat.id);
-                                            }}
-                                            disabled={Boolean(pinBusy[chat.id])}
-                                            style={pinBusy[chat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
-                                        >
-                                            {pinned ? <UnpinFilledSharpIcon size={16} /> : <PinOutlineSharpIcon size={16} />}
-                                            {pinned ? 'برداشتن سنجاق' : 'سنجاق'}
-                                        </button>
-
-                                        {group ? (
-                                            <>
-                                                <button
-                                                    className="popover__item popover__item--danger"
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        setChatActionMenu(null);
-                                                        requestLeaveGroup(chat.id);
-                                                    }}
-                                                    disabled={Boolean(actionBusy[chat.id])}
-                                                    style={actionBusy[chat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
-                                                >
-                                                    <LogOut size={16} />
-                                                    خروج از گروه
-                                                </button>
-
-                                                {isVerifiedUser && (
-                                                    <button
-                                                        className="popover__item popover__item--danger"
-                                                        type="button"
-                                                        onClick={(e) => {
-                                                            e.preventDefault();
-                                                            e.stopPropagation();
-                                                            setChatActionMenu(null);
-                                                            requestDeleteChat(chat.id, true);
-                                                        }}
-                                                        disabled={Boolean(actionBusy[chat.id])}
-                                                        style={actionBusy[chat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
-                                                    >
-                                                        <Trash2 size={16} />
-                                                        حذف گروه
-                                                    </button>
-                                                )}
-                                            </>
-                                        ) : (
-                                            <button
-                                                className="popover__item popover__item--danger"
-                                                type="button"
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    setChatActionMenu(null);
-                                                    requestDeleteChat(chat.id, false);
-                                                }}
-                                                disabled={Boolean(actionBusy[chat.id])}
-                                                style={actionBusy[chat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
-                                            >
-                                                <Trash2 size={16} />
-                                                حذف گفتگو
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
                             </button>
                         );
                     })
                 )}
             </div>
+
+            {chatActionMenu && actionMenuChat && (
+                <div
+                    ref={chatActionMenuRef}
+                    className="popover popover--mini"
+                    style={{ top: chatActionMenu.top, left: chatActionMenu.left, right: 'auto', position: 'fixed', zIndex: 120 }}
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }}
+                >
+                    <button
+                        className="popover__item"
+                        type="button"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setChatActionMenu(null);
+                            togglePin(actionMenuChat.id);
+                        }}
+                        disabled={Boolean(pinBusy[actionMenuChat.id])}
+                        style={pinBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
+                    >
+                        {actionMenuPinned ? <UnpinFilledSharpIcon size={16} /> : <PinOutlineSharpIcon size={16} />}
+                        {actionMenuPinned ? 'برداشتن سنجاق' : 'سنجاق'}
+                    </button>
+
+                    {actionMenuGroup ? (
+                        <>
+                            <button
+                                className="popover__item popover__item--danger"
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setChatActionMenu(null);
+                                    requestLeaveGroup(actionMenuChat.id);
+                                }}
+                                disabled={Boolean(actionBusy[actionMenuChat.id])}
+                                style={actionBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
+                            >
+                                <LogOut size={16} />
+                                خروج از گروه
+                            </button>
+
+                            {isVerifiedUser && (
+                                <button
+                                    className="popover__item popover__item--danger"
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setChatActionMenu(null);
+                                        requestDeleteChat(actionMenuChat.id, true);
+                                    }}
+                                    disabled={Boolean(actionBusy[actionMenuChat.id])}
+                                    style={actionBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
+                                >
+                                    <Trash2 size={16} />
+                                    حذف گروه
+                                </button>
+                            )}
+                        </>
+                    ) : (
+                        <button
+                            className="popover__item popover__item--danger"
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setChatActionMenu(null);
+                                requestDeleteChat(actionMenuChat.id, false);
+                            }}
+                            disabled={Boolean(actionBusy[actionMenuChat.id])}
+                            style={actionBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
+                        >
+                            <Trash2 size={16} />
+                            حذف گفتگو
+                        </button>
+                    )}
+                </div>
+            )}
 
             {/* Custom confirm modal (same classes as ChatRoom) */}
             {confirmAction && confirmMeta && (

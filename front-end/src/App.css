@@ -551,8 +551,8 @@ body,
 }
 
 .chat-list__item:hover {
-  background: var(--hover-bg-light);
-  transform: translateY(-1px);
+  background: none;
+  transform: none;
 }
 
 .chat-list__item--active {
