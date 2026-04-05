@@ -4,7 +4,7 @@ import { motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
-import type { Message, Chat } from '../types';
+import type { Message, Chat, FileMetadata } from '../types';
 import { VerifiedBadge } from './VerifiedBadge';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
 import { ForwardModal } from './ForwardModal';
@@ -19,7 +19,7 @@ interface AIChatRoomProps {
     isTyping?: boolean;
     chats: Chat[];
     onSelectChat?: (chatId: string) => void;
-    onSetPendingForwardDraft?: (targetChatId: string, draft: { sourceChatId: string; messageId: string }) => void;
+    onSetPendingForwardDraft?: (targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => void;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000; // +03:30
@@ -386,7 +386,13 @@ export function AIChatRoom({
 
     const handleForwardFromModal = (targetChatId: string) => {
         if (!forwardingMessageId) return;
-        onSetPendingForwardDraft?.(targetChatId, { sourceChatId: `ai_chat_${currentUserId}`, messageId: forwardingMessageId });
+        const sourceMessage = messages.find((m) => m.id === forwardingMessageId);
+        onSetPendingForwardDraft?.(targetChatId, {
+            sourceChatId: `ai_chat_${currentUserId}`,
+            messageId: forwardingMessageId,
+            previewText: sourceMessage?.text || '',
+            previewFile: sourceMessage?.file || null,
+        });
         setForwardingMessageId(null);
         setForwardModalOpen(false);
         onSelectChat?.(targetChatId);

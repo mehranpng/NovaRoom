@@ -39,8 +39,8 @@ interface ChatRoomProps {
     onReactMessage?: (chatId: string, messageId: string, emoji: string) => Promise<void>;
     onUnreactMessage?: (chatId: string, messageId: string) => Promise<void>;
     onForwardMessage?: (sourceChatId: string, messageId: string, targetChatId: string) => Promise<void>;
-    pendingForwardDraft?: { sourceChatId: string; messageId: string } | null;
-    onSetPendingForwardDraft?: (targetChatId: string, draft: { sourceChatId: string; messageId: string }) => void;
+    pendingForwardDraft?: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null } | null;
+    onSetPendingForwardDraft?: (targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => void;
     onClearPendingForwardDraft?: (targetChatId: string) => void;
 }
 
@@ -287,6 +287,7 @@ export function ChatRoom({
     const [forwardModalOpen, setForwardModalOpen] = useState(false);
     const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
     const [forwardSourceUser, setForwardSourceUser] = useState<User | null>(null);
+    const forwardingInFlightRef = useRef(false);
 
     const [replyTo, setReplyTo] = useState<MessageReplyType | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -557,6 +558,21 @@ export function ChatRoom({
         const fallbackText = (reply.text || '').trim();
 
         if (!repliedFile) return fallbackText;
+
+        let prefix = '📎 فایل';
+        if (fileMime.startsWith('image/')) prefix = '🖼️ تصویر';
+        else if (fileMime.startsWith('video/')) prefix = '🎥 ویدیو';
+        else if (fileMime.startsWith('audio/')) prefix = '🎵 صوت';
+
+        return fallbackText ? `${prefix} • ${fallbackText}` : prefix;
+    };
+
+    const getForwardPreviewText = (draft: { previewText?: string; previewFile?: FileMetadata | null } | null | undefined) => {
+        if (!draft) return '';
+        const fallbackText = (draft.previewText || '').trim();
+        const fileMime = (draft.previewFile?.mimeType || '').toLowerCase();
+
+        if (!draft.previewFile) return fallbackText || 'پیام';
 
         let prefix = '📎 فایل';
         if (fileMime.startsWith('image/')) prefix = '🖼️ تصویر';
@@ -861,22 +877,34 @@ export function ChatRoom({
     }, [messages]);
 
     const handleForwardMessage = async (sourceChatId: string, messageId: string, targetChatId: string) => {
+        if (forwardingInFlightRef.current) return;
+        forwardingInFlightRef.current = true;
+        const draftSnapshot = pendingForwardDraft;
+        onClearPendingForwardDraft?.(targetChatId);
         try {
             if (onForwardMessage) {
                 await onForwardMessage(sourceChatId, messageId, targetChatId);
             } else {
                 await apiFetch('/messages/forward', { method: 'POST', body: JSON.stringify({ sourceChatId, messageId, targetChatId }) });
             }
-            onClearPendingForwardDraft?.(targetChatId);
         } catch (e) {
+            if (draftSnapshot) onSetPendingForwardDraft?.(targetChatId, draftSnapshot);
             console.error('Failed to forward:', e);
             alert('فوروارد پیام با خطا مواجه شد');
+        } finally {
+            forwardingInFlightRef.current = false;
         }
     };
 
     const handleForwardFromModal = (targetChatId: string) => {
         if (!forwardingMessageId) return;
-        onSetPendingForwardDraft?.(targetChatId, { sourceChatId: chatId, messageId: forwardingMessageId });
+        const sourceMessage = messages.find((m) => m.id === forwardingMessageId);
+        onSetPendingForwardDraft?.(targetChatId, {
+            sourceChatId: chatId,
+            messageId: forwardingMessageId,
+            previewText: sourceMessage?.text || '',
+            previewFile: sourceMessage?.file || null,
+        });
         setForwardingMessageId(null);
         onSelectChat?.(targetChatId);
     };
@@ -2030,7 +2058,7 @@ export function ChatRoom({
                     <div className="chat-room__reply-edit-box">
                         <div style={{ minWidth: 0 }}>
                             <div className="chat-room__reply-edit-box__title">در حال فوروارد پیام</div>
-                            <div className="chat-room__reply-edit-box__text">پیام بعد از ارسال شما فوروارد خواهد شد.</div>
+                            <div className="chat-room__reply-edit-box__text">{getForwardPreviewText(pendingForwardDraft)}</div>
                         </div>
                         <button
                             type="button"

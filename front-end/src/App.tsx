@@ -71,7 +71,7 @@ export function App() {
     // When user is selected from search, we open the room but do NOT create the chat
     // until the first message is sent.
     const [pendingUser, setPendingUser] = useState<User | null>(null);
-    const [pendingForwardDrafts, setPendingForwardDrafts] = useState<Record<string, { sourceChatId: string; messageId: string }>>({});
+    const [pendingForwardDrafts, setPendingForwardDrafts] = useState<Record<string, { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }>>({});
 
     const chatsRef = useRef<Chat[]>([]);
     useEffect(() => {
@@ -560,6 +560,13 @@ export function App() {
         if (!currentUser) return;
         const text = payload.text;
 
+        if (payload.editMessageId) {
+            if (!activeChatId) return;
+            const success = editViaWS(activeChatId, payload.editMessageId, text);
+            if (!success) console.warn('WebSocket not connected');
+            return;
+        }
+
         const savedMessagesId = `saved_messages_${currentUser.chatId}`;
         if (activeChatId === savedMessagesId) {
             const success = sendViaWS(savedMessagesId, text, payload.replyToId, payload.file);
@@ -610,12 +617,6 @@ export function App() {
 
         if (!activeChatId) return;
 
-        if (payload.editMessageId) {
-            const success = editViaWS(activeChatId, payload.editMessageId, text);
-            if (!success) console.warn('WebSocket not connected');
-            return;
-        }
-
         const success = sendViaWS(activeChatId, text, payload.replyToId, payload.file);
         if (!success) console.warn('WebSocket not connected');
         if (success) playChatSound('send');
@@ -634,7 +635,7 @@ export function App() {
         playChatSound('send');
     }, [playChatSound]);
 
-    const handleSetPendingForwardDraft = useCallback((targetChatId: string, draft: { sourceChatId: string; messageId: string }) => {
+    const handleSetPendingForwardDraft = useCallback((targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => {
         if (!targetChatId || !draft?.sourceChatId || !draft?.messageId) return;
         setPendingForwardDrafts((prev) => ({ ...prev, [targetChatId]: draft }));
     }, []);
