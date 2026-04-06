@@ -863,13 +863,14 @@ body,
 
 .ai-chat-drawer__new-chat {
     border: none;
-    border-radius: 12px;
+    border-radius: 10px;
     background: var(--bg-secondary);
     color: var(--text-primary);
-    height: 40px;
-    padding: 0 12px;
+    height: 36px;
+    padding: 0 10px;
     font: inherit;
-    font-weight: 700;
+    font-weight: 650;
+    font-size: 16px;
     display: inline-flex;
     align-items: center;
     justify-content: flex-start;
@@ -898,18 +899,23 @@ body,
 .ai-chat-drawer__item {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
 }
 
 .ai-chat-drawer__item-title {
     flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
     text-align: right;
     border: none;
-    border-radius: 10px;
+    border-radius: 9px;
     background: transparent;
     color: var(--text-primary);
-    padding: 8px 10px;
+    padding: 7px 9px;
     font: inherit;
+    font-size: 14px;
     cursor: pointer;
     transition: all 0.2s ease;
 }
@@ -924,8 +930,8 @@ body,
 }
 
 .ai-chat-drawer__delete {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     border: none;
     border-radius: 10px;
     background: transparent;
@@ -939,6 +945,34 @@ body,
 
 .ai-chat-drawer__delete:hover {
     background: rgba(239, 68, 68, 0.12);
+}
+
+.ai-chat-drawer__loader {
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    border: 2px solid rgba(47, 128, 237, 0.26);
+    border-top-color: #2f80ed;
+    animation: ai-chat-drawer-spin 0.8s linear infinite;
+    flex: 0 0 auto;
+}
+
+@keyframes ai-chat-drawer-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.ai-chat-empty-state {
+    min-height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    padding: 20px;
 }
 
 .chat-room__back-btn {

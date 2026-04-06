@@ -29,6 +29,7 @@ interface AIChatRoomProps {
     onCreateAIChat: () => void;
     onSelectAIChat: (chatId: string) => void;
     onDeleteAIChat: (chatId: string) => void;
+    respondingAIChatId?: string | null;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000; // +03:30
@@ -153,6 +154,7 @@ export function AIChatRoom({
     onCreateAIChat,
     onSelectAIChat,
     onDeleteAIChat,
+    respondingAIChatId = null,
 }: AIChatRoomProps) {
     const MAX_AI_MESSAGE_LENGTH = 3000;
     const [text, setText] = useState('');
@@ -545,6 +547,10 @@ export function AIChatRoom({
                 <div className="chat-room__messages-inner">
                     {loading ? (
                         <ChatMessagesSkeleton />
+                    ) : messages.length === 0 ? (
+                        <div className="ai-chat-empty-state">
+                            درمورد چه چیزی سوال دارید؟
+                        </div>
                     ) : (
                         messages.map((message) => {
                             const isMine = message.senderId === currentUserId;
@@ -665,6 +671,9 @@ export function AIChatRoom({
                                                 setAIChatsDrawerOpen(false);
                                             }}
                                         >
+                                            {respondingAIChatId === chat.id && (
+                                                <span className="ai-chat-drawer__loader" />
+                                            )}
                                             {chat.title || 'گفت‌وگوی جدید'}
                                         </button>
                                         <button
