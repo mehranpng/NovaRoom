@@ -50,6 +50,8 @@
     box-shadow: 0 8px 26px rgba(0, 0, 0, 0.16);
     padding: 6px;
     z-index: 12;
+    transform-origin: bottom left;
+    will-change: transform, opacity;
 }
 
 .file-upload-picker-item {
@@ -62,11 +64,17 @@
     text-align: right;
     padding: 8px 10px;
     cursor: pointer;
-    transition: background 0.12s ease;
+    transition: background 0.16s ease, color 0.16s ease;
 }
 
 .file-upload-picker-item:hover {
     background: var(--hover-bg);
+}
+
+.file-upload-picker-item__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .chat-room__input-wrapper {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Paperclip } from 'lucide-react';
+import { File, Image, Paperclip, Video } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import type { FileMetadata } from '../types';
 import { API_BASE_URL } from '../config/api';
 import { validateFileSize } from '../utils/fileUtils';
@@ -182,19 +183,31 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
                 <Paperclip size={20} />
             </button>
 
-            {pickerMenuOpen && !uploading && (
-                <div className="file-upload-picker-menu" ref={menuRef}>
-                    <button type="button" className="file-upload-picker-item" onClick={() => imageInputRef.current?.click()}>
-                        تصویر
-                    </button>
-                    <button type="button" className="file-upload-picker-item" onClick={() => videoInputRef.current?.click()}>
-                        ویدیو
-                    </button>
-                    <button type="button" className="file-upload-picker-item" onClick={() => fileInputRef.current?.click()}>
-                        فایل
-                    </button>
-                </div>
-            )}
+            <AnimatePresence>
+                {pickerMenuOpen && !uploading && (
+                    <motion.div
+                        ref={menuRef}
+                        className="file-upload-picker-menu"
+                        initial={{ opacity: 0, y: 10, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.97 }}
+                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                    >
+                        <motion.button type="button" className="file-upload-picker-item" onClick={() => imageInputRef.current?.click()}
+                            whileHover={{ x: -2 }} whileTap={{ scale: 0.98 }}>
+                            <span className="file-upload-picker-item__label"><Image size={16} />تصویر</span>
+                        </motion.button>
+                        <motion.button type="button" className="file-upload-picker-item" onClick={() => videoInputRef.current?.click()}
+                            whileHover={{ x: -2 }} whileTap={{ scale: 0.98 }}>
+                            <span className="file-upload-picker-item__label"><Video size={16} />ویدیو</span>
+                        </motion.button>
+                        <motion.button type="button" className="file-upload-picker-item" onClick={() => fileInputRef.current?.click()}
+                            whileHover={{ x: -2 }} whileTap={{ scale: 0.98 }}>
+                            <span className="file-upload-picker-item__label"><File size={16} />فایل</span>
+                        </motion.button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {uploading && selectedFile && (
                 <div

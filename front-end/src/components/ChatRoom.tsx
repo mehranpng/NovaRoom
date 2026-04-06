@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, Copy, Eye, MoreVertical, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Eye, MoreVertical, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight } from 'lucide-react';
 import { motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1991,8 +1991,8 @@ export function ChatRoom({
                         <button className="popover__item" onClick={() => { const el = messageElsRef.current.get(activeMsg.id); if (el) openReactionMenu(activeMsg.id, el, { top: msgMenu.top, left: msgMenu.left }); }} type="button">
                             <Smile size={16} />واکنش
                         </button>
-                        <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><ArrowRight size={16} />پاسخ</button>
-                        <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><ArrowLeft size={16} />فوروارد</button>
+                        <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><CornerUpRight size={16} />پاسخ</button>
+                        <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><CornerUpLeft size={16} />فوروارد</button>
                         {activeMsg.senderId === currentUserId && !activeMsg.forwardedFrom && (
                             <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
                         )}
