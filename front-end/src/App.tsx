@@ -517,7 +517,6 @@ export function App() {
         if (!messageId) return;
         if (!aiStreamStartedRef.current[messageId]) {
             aiStreamStartedRef.current[messageId] = true;
-            vibrate([25, 35, 25, 35, 25]);
             setAITyping(false);
             setAIReasoningPending(false);
         }
@@ -541,7 +540,7 @@ export function App() {
             next[idx] = { ...next[idx], text, seen: true };
             return { ...prev, [aiChatId]: next };
         });
-    }, [vibrate, activeAIChatId]);
+    }, [activeAIChatId]);
 
     const handleAIStreamDone = useCallback((message: any) => {
         const aiChatId = String(message.aiChatId || activeAIChatId || '');

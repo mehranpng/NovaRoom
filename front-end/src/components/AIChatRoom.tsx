@@ -203,11 +203,11 @@ export function AIChatRoom({
             return;
         }
 
-        if (isResponding) {
-            navigator.vibrate([18, 140, 18]);
+        if (isResponding && isReasoningPending) {
+            navigator.vibrate([26, 120, 26]);
             responseVibrationIntervalRef.current = window.setInterval(() => {
-                navigator.vibrate([18, 140, 18]);
-            }, 1800);
+                navigator.vibrate([26, 120, 26]);
+            }, 1200);
         } else {
             if (responseVibrationIntervalRef.current) {
                 clearInterval(responseVibrationIntervalRef.current);
@@ -221,7 +221,7 @@ export function AIChatRoom({
                 responseVibrationIntervalRef.current = null;
             }
         };
-    }, [isResponding]);
+    }, [isResponding, isReasoningPending]);
 
     useEffect(() => {
         setReasoningEnabled(false);
@@ -881,10 +881,8 @@ export function AIChatRoom({
                     height: 8px;
                     border-radius: 50%;
                     background: #9ca3af;
-                    animation: typing-bounce 1.4s infinite ease-in-out;
+                    opacity: 0.7;
                 }
-                .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
-                .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
                 .thinking-indicator {
                     display: inline-flex;
                     align-items: center;
