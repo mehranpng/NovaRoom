@@ -1,4 +1,5 @@
 import os
+import json
 from openai import AsyncOpenAI
 from typing import List, Dict, AsyncIterator
 from dotenv import load_dotenv
@@ -11,7 +12,12 @@ client = AsyncOpenAI(
 )
 
 
-def get_system_prompt(user_name: str = "") -> str:
+def get_system_prompt(
+    user_name: str = "",
+    username: str = "",
+    chat_id: str = "",
+    bio: str = "",
+) -> str:
     return f"""
     ## هویت
     تو NovaRoom هستی؛ دستیار فارسی، حرفه‌ای، دوستانه و کمی شیطنت‌آمیز.
@@ -26,13 +32,16 @@ def get_system_prompt(user_name: str = "") -> str:
 
     ## زبان و سبک
     - همیشه فارسی پاسخ بده (فقط در کدنویسی انگلیسی مجاز است).
-    - پاسخ‌ها معمولاً کوتاه و مفید باشند؛ حداکثر حدود 600 کلمه.
+    - پاسخ‌ها معمولاً کوتاه و مفید باشند؛ حداکثر حدود 1200 کلمه.
     - لحن را با کاربر هماهنگ کن: دوستانه، صمیمی و حرفه‌ای.
     - از تکرار و حاشیه‌روی پرهیز کن.
     - اگر سؤال مبهم بود، کوتاه سؤال شفاف‌کننده بپرس.
 
     ## شخصی‌سازی
     نام کاربر: {user_name if user_name else "نامشخص"}
+    یوزرنیم: {username if username else "نامشخص"}
+    chatId: {chat_id if chat_id else "نامشخص"}
+    بیوگرافی: {bio if bio else "نامشخص"}
     اگر نام مشخص بود، طبیعی و به‌اندازه از آن استفاده کن.
 
     ## پاسخ ثابت درباره NovaRoom
@@ -45,11 +54,37 @@ def get_system_prompt(user_name: str = "") -> str:
 
 
 async def generate_ai_response_stream(
-    messages: List[Dict[str, str]], user_name: str = ""
+    messages: List[Dict[str, str]],
+    user_name: str = "",
+    username: str = "",
+    chat_id: str = "",
+    bio: str = "",
+    conversation_summary: str = "",
 ) -> AsyncIterator[str]:
     try:
+        summary_context = (
+            conversation_summary.strip()
+            if isinstance(conversation_summary, str)
+            else ""
+        )
         full_messages = [
-            {"role": "system", "content": get_system_prompt(user_name)},
+            {
+                "role": "system",
+                "content": get_system_prompt(user_name, username, chat_id, bio),
+            },
+            *(
+                [
+                    {
+                        "role": "system",
+                        "content": (
+                            "خلاصه گفت‌وگوی قبلی برای حافظه (فقط برای زمینه): "
+                            f"{summary_context}"
+                        ),
+                    }
+                ]
+                if summary_context
+                else []
+            ),
             *messages,
         ]
 
@@ -76,3 +111,58 @@ async def generate_ai_response_stream(
     except Exception as e:
         print(f"AI generation error: {e}")
         yield "متأسفم، خطایی رخ داده است. لطفاً دوباره تلاش کنید."
+
+
+async def generate_conversation_summary(
+    messages: List[Dict[str, str]],
+    previous_summary: str = "",
+    user_name: str = "",
+    username: str = "",
+    chat_id: str = "",
+    bio: str = "",
+) -> str:
+    try:
+        summary_input = {
+            "previous_summary": previous_summary or "",
+            "messages": messages,
+            "user_profile": {
+                "name": user_name or "",
+                "username": username or "",
+                "chat_id": chat_id or "",
+                "bio": bio or "",
+            },
+        }
+        summary_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a summarizer. Return valid json only. "
+                    'Output format: {"summary":"..."} . '
+                    "The summary must be Persian, max 500 characters."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "json summary request. Merge previous summary with new messages and "
+                    "produce compact memory summary.\n"
+                    f"{json.dumps(summary_input, ensure_ascii=False)}"
+                ),
+            },
+        ]
+
+        response = await client.chat.completions.create(
+            model="deepseek-chat",
+            messages=summary_messages,
+            response_format={"type": "json_object"},
+            max_tokens=400,
+        )
+        raw = response.choices[0].message.content or ""
+        data = json.loads(raw)
+        summary = str(data.get("summary") or "").strip()
+        if not summary:
+            return (previous_summary or "")[:500]
+        return summary[:500]
+    except Exception as e:
+        print(f"Summary generation error: {e}")
+        return (previous_summary or "")[:500]

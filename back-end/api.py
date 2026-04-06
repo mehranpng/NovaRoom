@@ -26,7 +26,7 @@ from bson import ObjectId
 import re
 import uuid
 import jdatetime
-from ai_service import generate_ai_response_stream
+from ai_service import generate_ai_response_stream, generate_conversation_summary
 from email_service import (
     send_verification_email,
     verify_code,
@@ -73,6 +73,7 @@ cl_users = db["users"]
 cl_chats = db["chats"]
 cl_messages = db["messages"]
 cl_ai_messages = db["ai_messages"]
+cl_ai_state = db["ai_state"]
 
 # Store active connections (multiple tabs/devices per user)
 active_connections: Dict[str, List[WebSocket]] = {}
@@ -336,6 +337,7 @@ async def startup_db():
     await cl_messages.create_index([("chatId", 1), ("timestamp", -1)])
     await cl_ai_messages.create_index("userId")
     await cl_ai_messages.create_index([("userId", 1), ("timestamp", -1)])
+    await cl_ai_state.create_index("userId", unique=True)
 
 
 @app.get("/profile/me/pins")
@@ -2314,6 +2316,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
     await websocket.accept()
     user_id: Optional[str] = None
+    current_stream_task: Optional[asyncio.Task] = None
 
     try:
         try:
@@ -2332,7 +2335,101 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
             await websocket.close(code=1008)
             return
 
-        user_name = user.get("profile", {}).get("name", "")
+        profile = user.get("profile", {}) if isinstance(user.get("profile"), dict) else {}
+        user_name = profile.get("name", "")
+        username = profile.get("username", "")
+        user_bio = profile.get("bio", "")
+
+        async def stream_ai_reply(
+            prompt_messages: List[Dict[str, str]],
+            memory_summary: str,
+        ):
+            ai_message_doc = {
+                "userId": user_id,
+                "role": "assistant",
+                "content": "",
+                "timestamp": utc_now(),
+            }
+            result = await cl_ai_messages.insert_one(ai_message_doc)
+            ai_msg_id = str(result.inserted_id)
+            message_ts_ms = dt_to_epoch_ms(ai_message_doc["timestamp"])
+
+            await websocket.send_json(
+                {
+                    "type": "ai_response_start",
+                    "message": {
+                        "id": ai_msg_id,
+                        "senderId": "ai",
+                        "text": "",
+                        "timestamp": message_ts_ms,
+                    },
+                }
+            )
+
+            stopped = False
+            full_ai_response = ""
+            try:
+                async for chunk in generate_ai_response_stream(
+                    prompt_messages,
+                    user_name=user_name,
+                    username=username,
+                    chat_id=user_id,
+                    bio=user_bio,
+                    conversation_summary=memory_summary,
+                ):
+                    full_ai_response += chunk
+                    await websocket.send_json(
+                        {
+                            "type": "ai_response_chunk",
+                            "messageId": ai_msg_id,
+                            "chunk": chunk,
+                            "text": full_ai_response,
+                        }
+                    )
+            except asyncio.CancelledError:
+                stopped = True
+                raise
+            finally:
+                await cl_ai_messages.update_one(
+                    {"_id": result.inserted_id},
+                    {"$set": {"content": full_ai_response}},
+                )
+
+                conversation_for_summary = [
+                    *prompt_messages,
+                    {"role": "assistant", "content": full_ai_response},
+                ]
+                next_summary = await generate_conversation_summary(
+                    conversation_for_summary,
+                    previous_summary=memory_summary,
+                    user_name=user_name,
+                    username=username,
+                    chat_id=user_id,
+                    bio=user_bio,
+                )
+                await cl_ai_state.update_one(
+                    {"userId": user_id},
+                    {
+                        "$set": {
+                            "summary": next_summary,
+                            "updatedAt": utc_now(),
+                        }
+                    },
+                    upsert=True,
+                )
+
+                await websocket.send_json(
+                    {
+                        "type": "ai_response_done",
+                        "stopped": stopped,
+                        "message": {
+                            "id": ai_msg_id,
+                            "senderId": "ai",
+                            "text": full_ai_response,
+                            "timestamp": message_ts_ms,
+                        },
+                    }
+                )
 
         while True:
             try:
@@ -2370,12 +2467,17 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     }
                 )
 
-                # Get conversation history (last 20 messages)
+                ai_state_doc = await cl_ai_state.find_one({"userId": user_id})
+                memory_summary = ""
+                if ai_state_doc and isinstance(ai_state_doc.get("summary"), str):
+                    memory_summary = ai_state_doc.get("summary", "").strip()
+
+                # Get conversation history (last 3 messages)
                 history_docs = (
                     await cl_ai_messages.find({"userId": user_id})
                     .sort("timestamp", -1)
-                    .limit(2)
-                    .to_list(2)
+                    .limit(3)
+                    .to_list(3)
                 )
                 history_docs.reverse()
 
@@ -2385,56 +2487,24 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     for doc in history_docs
                 ]
 
-                # Create AI message placeholder and stream tokens live
-                ai_message_doc = {
-                    "userId": user_id,
-                    "role": "assistant",
-                    "content": "",
-                    "timestamp": utc_now(),
-                }
-                result = await cl_ai_messages.insert_one(ai_message_doc)
-                ai_msg_id = str(result.inserted_id)
+                if current_stream_task and not current_stream_task.done():
+                    current_stream_task.cancel()
+                    try:
+                        await current_stream_task
+                    except asyncio.CancelledError:
+                        pass
 
-                await websocket.send_json(
-                    {
-                        "type": "ai_response_start",
-                        "message": {
-                            "id": ai_msg_id,
-                            "senderId": "ai",
-                            "text": "",
-                            "timestamp": dt_to_epoch_ms(ai_message_doc["timestamp"]),
-                        },
-                    }
+                current_stream_task = asyncio.create_task(
+                    stream_ai_reply(messages, memory_summary)
                 )
 
-                full_ai_response = ""
-                async for chunk in generate_ai_response_stream(messages, user_name):
-                    full_ai_response += chunk
-                    await websocket.send_json(
-                        {
-                            "type": "ai_response_chunk",
-                            "messageId": ai_msg_id,
-                            "chunk": chunk,
-                            "text": full_ai_response,
-                        }
-                    )
-
-                await cl_ai_messages.update_one(
-                    {"_id": result.inserted_id},
-                    {"$set": {"content": full_ai_response}},
-                )
-
-                await websocket.send_json(
-                    {
-                        "type": "ai_response_done",
-                        "message": {
-                            "id": ai_msg_id,
-                            "senderId": "ai",
-                            "text": full_ai_response,
-                            "timestamp": dt_to_epoch_ms(ai_message_doc["timestamp"]),
-                        },
-                    }
-                )
+            elif data.get("type") == "ai_stop":
+                if current_stream_task and not current_stream_task.done():
+                    current_stream_task.cancel()
+                    try:
+                        await current_stream_task
+                    except asyncio.CancelledError:
+                        pass
 
             elif data.get("type") == "ping":
                 await websocket.send_json({"type": "pong"})
@@ -2443,6 +2513,9 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
         pass
     except Exception:
         print(f"AI WebSocket Error for {user_id}: {traceback.format_exc()}")
+    finally:
+        if current_stream_task and not current_stream_task.done():
+            current_stream_task.cancel()
 
 
 @app.get("/ai/messages")

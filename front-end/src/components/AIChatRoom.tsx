@@ -13,10 +13,12 @@ interface AIChatRoomProps {
     messages: Message[];
     currentUserId: string;
     onSendMessage: (text: string) => void;
+    onStopGenerating?: () => void;
     onDeleteMessage: (messageId: string) => void;
     onBack: () => void;
     loading?: boolean;
     isTyping?: boolean;
+    isResponding?: boolean;
     chats: Chat[];
     onSelectChat?: (chatId: string) => void;
     onSetPendingForwardDraft?: (targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => void;
@@ -129,9 +131,11 @@ export function AIChatRoom({
     messages,
     currentUserId,
     onSendMessage,
+    onStopGenerating,
     onBack,
     loading = false,
     isTyping = false,
+    isResponding = false,
     chats,
     onSelectChat,
     onSetPendingForwardDraft,
@@ -331,7 +335,7 @@ export function AIChatRoom({
             alert(`حداکثر طول پیام ${MAX_AI_MESSAGE_LENGTH} کاراکتر است`);
             return;
         }
-        if (!t || isTyping) return;
+        if (!t || isResponding) return;
 
         onSendMessage(t);
         playChatSound('send');
@@ -627,20 +631,32 @@ export function AIChatRoom({
                             }
                         }}
                         rows={1}
-                        disabled={isTyping}
+                        disabled={false}
                     />
                     <button
                         className={
-                            text.trim() && !isTyping
+                            isResponding || (text.trim() && !isResponding)
                                 ? 'chat-room__send-btn chat-room__send-btn--active'
                                 : 'chat-room__send-btn chat-room__send-btn--disabled'
                         }
-                        onClick={submit}
-                        disabled={!text.trim() || isTyping}
-                        aria-label="Send"
+                        onClick={isResponding ? onStopGenerating : submit}
+                        disabled={isResponding ? false : !text.trim()}
+                        aria-label={isResponding ? 'Stop response' : 'Send'}
                         type="button"
                     >
-                        <SendHorizontal size={18} />
+                        {isResponding ? (
+                            <span
+                                style={{
+                                    width: 12,
+                                    height: 12,
+                                    borderRadius: 4,
+                                    background: 'currentColor',
+                                    display: 'inline-block',
+                                }}
+                            />
+                        ) : (
+                            <SendHorizontal size={18} />
+                        )}
                     </button>
                 </div>
             </div>

@@ -62,6 +62,7 @@ export function App() {
     const [aiMessages, setAIMessages] = useState<Message[]>([]);
     const [aiLoading, setAILoading] = useState(true);
     const [aiTyping, setAITyping] = useState(false);
+    const [aiResponding, setAIResponding] = useState(false);
 
     // Track if this is the initial load (show skeleton only once)
     const [isInitialChatsLoad, setIsInitialChatsLoad] = useState(true);
@@ -437,6 +438,7 @@ export function App() {
         };
         setAIMessages(prev => [...prev, messageWithChatId]);
         setAITyping(false);
+        setAIResponding(false);
     }, []);
 
     const vibrate = useCallback((pattern: number | number[]) => {
@@ -453,6 +455,7 @@ export function App() {
         aiStreamStartedRef.current[messageWithChatId.id] = false;
         aiPendingStreamMetaRef.current[messageWithChatId.id] = messageWithChatId;
         setAITyping(true);
+        setAIResponding(true);
     }, []);
 
     const handleAIStreamChunk = useCallback((messageId: string, text: string) => {
@@ -495,6 +498,7 @@ export function App() {
             return next;
         });
         setAITyping(false);
+        setAIResponding(false);
         delete aiStreamStartedRef.current[messageWithChatId.id];
         delete aiPendingStreamMetaRef.current[messageWithChatId.id];
         vibrate(120);
@@ -549,7 +553,7 @@ export function App() {
     }, [wsConnected, isAuthenticated, loadChats, activeChatId, currentUser, sendSeen]);
 
     // AI WebSocket initialization
-    const { sendMessage: sendAIMessage } = useAIWebSocket({
+    const { sendMessage: sendAIMessage, stopGeneration: stopAIGeneration } = useAIWebSocket({
         token: localStorage.getItem('token'),
         onNewMessage: handleNewAIMessage,
         onUserMessageSaved: handleAIUserMessageSaved,
@@ -1074,13 +1078,22 @@ export function App() {
 
         setAIMessages(prev => [...prev, userMessage]);
         setAITyping(true);
+        setAIResponding(true);
 
         const success = sendAIMessage(text, clientId);
         if (!success) {
             console.warn('Failed to send message to AI');
             setAITyping(false);
+            setAIResponding(false);
         }
     }, [currentUser, sendAIMessage]);
+
+    const handleStopAIResponse = useCallback(() => {
+        const success = stopAIGeneration();
+        if (!success) return;
+        setAITyping(false);
+        setAIResponding(false);
+    }, [stopAIGeneration]);
 
     const getActiveContact = (): User => {
         if (pendingUser) return pendingUser;
@@ -1219,10 +1232,12 @@ export function App() {
                                 messages={aiMessages}
                                 currentUserId={currentUser!.chatId}
                                 onSendMessage={handleSendAIMessage}
+                                onStopGenerating={handleStopAIResponse}
                                 onDeleteMessage={handleDeleteAIMessage}
                                 onBack={handleBack}
                                 loading={aiLoading}
                                 isTyping={aiTyping}
+                                isResponding={aiResponding}
                                 chats={chats}
                                 onSelectChat={handleSelectChat}
                                 onSetPendingForwardDraft={handleSetPendingForwardDraft}
