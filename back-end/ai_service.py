@@ -210,7 +210,7 @@ async def generate_chat_title(first_user_message: str) -> str:
                 "content": (
                     "Return valid json only. "
                     'Output format: {"title":"..."} . '
-                    "Create a very short Persian chat title (max 32 chars) based on the first user message. "
+                    "Create a short Persian chat title (max 56 chars) based on the first user message. "
                     "No punctuation-heavy text. No emojis. No quotes."
                 ),
             },
@@ -233,9 +233,9 @@ async def generate_chat_title(first_user_message: str) -> str:
         parsed = json.loads(payload)
         title = str(parsed.get("title") or "").strip()
         if not title:
-            return (raw_message[:32]).strip() or "گفت‌وگوی جدید"
-        return title[:32]
+            return (raw_message[:56]).strip() or "گفت‌وگوی جدید"
+        return title[:56]
     except Exception as e:
         print(f"Title generation error: {e}")
         fallback = (first_user_message or "").strip()
-        return (fallback[:32]).strip() or "گفت‌وگوی جدید"
+        return (fallback[:56]).strip() or "گفت‌وگوی جدید"

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Forward, Check, SendHorizontal, Brain, PanelRightOpen, Plus, Trash2, X } from 'lucide-react';
-import { motion, type Variants } from "framer-motion";
+import { ArrowDown, ArrowLeft, Copy, Forward, Check, SendHorizontal, Brain, PanelRight, PanelRightClose, PencilLine, Trash2 } from 'lucide-react';
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
@@ -163,6 +163,7 @@ export function AIChatRoom({
     const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
     const [reasoningEnabled, setReasoningEnabled] = useState(false);
     const [aiChatsDrawerOpen, setAIChatsDrawerOpen] = useState(false);
+    const [pendingDeleteChat, setPendingDeleteChat] = useState<AIChatSummary | null>(null);
 
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -223,6 +224,10 @@ export function AIChatRoom({
     useEffect(() => {
         setReasoningEnabled(false);
     }, []);
+
+    useEffect(() => {
+        setReasoningEnabled(false);
+    }, [activeAIChatId]);
 
     const playChatSound = (kind: 'send' | 'receive') => {
         const audio = kind === 'send' ? sendSoundRef.current : receiveSoundRef.current;
@@ -528,7 +533,7 @@ export function AIChatRoom({
                     aria-label="AI chats menu"
                     style={{ display: 'flex' }}
                 >
-                    <PanelRightOpen size={18} />
+                    <PanelRight size={18} />
                 </button>
             </div>
 
@@ -587,66 +592,124 @@ export function AIChatRoom({
                         })
                     )}
 
+                    {isTyping && (
+                        <div className="message-row message-row--theirs">
+                            <div className="message-bubble message-bubble--theirs msg-shape--single">
+                                {isReasoningPending ? (
+                                    <div className="thinking-indicator">
+                                        <span className="thinking-indicator__text">در حال فکر</span>
+                                    </div>
+                                ) : (
+                                    <div className="typing-indicator">
+                                        <span></span>
+                                        <span></span>
+                                        <span></span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     <div ref={messagesEndRef} />
                 </div>
             </div>
 
-            {aiChatsDrawerOpen && (
-                <div
-                    className="ai-chat-drawer__overlay"
-                    onClick={() => setAIChatsDrawerOpen(false)}
-                    role="presentation"
-                >
-                    <aside className="ai-chat-drawer" onClick={(e) => e.stopPropagation()}>
-                        <button
-                            type="button"
-                            className="ai-chat-drawer__icon-btn"
-                            onClick={() => setAIChatsDrawerOpen(false)}
-                            aria-label="بستن منوی گفت‌وگوها"
+            <AnimatePresence>
+                {aiChatsDrawerOpen && (
+                    <motion.div
+                        className="ai-chat-drawer__overlay"
+                        onClick={() => setAIChatsDrawerOpen(false)}
+                        role="presentation"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                    >
+                        <motion.aside
+                            className="ai-chat-drawer"
+                            onClick={(e) => e.stopPropagation()}
+                            initial={{ x: 280, opacity: 0.95 }}
+                            animate={{ x: 0, opacity: 1 }}
+                            exit={{ x: 280, opacity: 0.9 }}
+                            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
                         >
-                            <X size={18} />
-                        </button>
+                            <button
+                                type="button"
+                                className="ai-chat-drawer__icon-btn"
+                                onClick={() => setAIChatsDrawerOpen(false)}
+                                aria-label="بستن منوی گفت‌وگوها"
+                            >
+                                <PanelRightClose size={18} />
+                            </button>
 
-                        <button
-                            type="button"
-                            className="ai-chat-drawer__new-chat"
-                            onClick={() => {
-                                onCreateAIChat();
-                                setAIChatsDrawerOpen(false);
-                            }}
-                        >
-                            <Plus size={16} />
-                            گفت‌وگوی جدید
-                        </button>
+                            <button
+                                type="button"
+                                className="ai-chat-drawer__new-chat"
+                                onClick={() => {
+                                    onCreateAIChat();
+                                    setAIChatsDrawerOpen(false);
+                                }}
+                            >
+                                <span>گفت‌وگوی جدید</span>
+                                <PencilLine size={16} />
+                            </button>
 
-                        <div className="ai-chat-drawer__list">
-                            {aiChats.map((chat) => (
-                                <div key={chat.id} className="ai-chat-drawer__item">
-                                    <button
-                                        type="button"
-                                        className={chat.id === activeAIChatId ? 'ai-chat-drawer__item-title ai-chat-drawer__item-title--active' : 'ai-chat-drawer__item-title'}
-                                        onClick={() => {
-                                            onSelectAIChat(chat.id);
-                                            setAIChatsDrawerOpen(false);
-                                        }}
-                                    >
-                                        {chat.title || 'گفت‌وگوی جدید'}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="ai-chat-drawer__delete"
-                                        onClick={() => {
-                                            const ok = window.confirm('این گفت‌وگو حذف شود؟');
-                                            if (ok) onDeleteAIChat(chat.id);
-                                        }}
-                                        aria-label="حذف گفت‌وگو"
-                                    >
-                                        <Trash2 size={15} />
-                                    </button>
-                                </div>
-                            ))}
+                            <div className="ai-chat-drawer__list">
+                                {aiChats.map((chat) => (
+                                    <div key={chat.id} className="ai-chat-drawer__item">
+                                        <button
+                                            type="button"
+                                            className={chat.id === activeAIChatId ? 'ai-chat-drawer__item-title ai-chat-drawer__item-title--active' : 'ai-chat-drawer__item-title'}
+                                            onClick={() => {
+                                                onSelectAIChat(chat.id);
+                                                setAIChatsDrawerOpen(false);
+                                            }}
+                                        >
+                                            {chat.title || 'گفت‌وگوی جدید'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="ai-chat-drawer__delete"
+                                            onClick={() => setPendingDeleteChat(chat)}
+                                            aria-label="حذف گفت‌وگو"
+                                        >
+                                            <Trash2 size={15} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </motion.aside>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {pendingDeleteChat && (
+                <div className="chat-room-modal-overlay" style={{ zIndex: 120 }}>
+                    <div className="chat-room-confirm-modal" role="dialog" aria-modal="true">
+                        <h3 className="chat-room-confirm-modal__title">حذف گفت‌وگو؟</h3>
+                        <p className="chat-room-confirm-modal__text">
+                            {`گفت‌وگوی «${pendingDeleteChat.title || 'گفت‌وگوی جدید'}» حذف شود؟`}
+                        </p>
+                        <div className="chat-room-confirm-modal__actions">
+                            <button
+                                className="chat-room-confirm-modal__btn"
+                                type="button"
+                                onClick={() => setPendingDeleteChat(null)}
+                            >
+                                انصراف
+                            </button>
+                            <button
+                                className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger"
+                                type="button"
+                                onClick={() => {
+                                    onDeleteAIChat(pendingDeleteChat.id);
+                                    setPendingDeleteChat(null);
+                                }}
+                            >
+                                حذف
+                            </button>
                         </div>
-                    </aside>
+                    </div>
                 </div>
             )}
 
