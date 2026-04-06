@@ -9,12 +9,9 @@ type NotificationItem = {
   message: string;
   type: NotificationType;
   durationMs: number;
-  leaving?: boolean;
-  dismissDirection?: -1 | 0 | 1;
 };
 
 const EXIT_MS = 220;
-const DRAG_DISMISS_THRESHOLD = 46;
 
 const IconGlyph = ({ type }: { type: NotificationType }) => {
   if (type === 'success') {
@@ -46,15 +43,7 @@ const getTypeClassName = (type: NotificationType) => {
   return 'notification--error';
 };
 
-const NotificationCard = ({
-  item,
-  stackIndex,
-  onDismiss,
-}: {
-  item: NotificationItem;
-  stackIndex: number;
-  onDismiss: (id: string, direction?: -1 | 0 | 1) => void;
-}) => {
+const NotificationCard = ({ item, stackIndex }: { item: NotificationItem; stackIndex: number }) => {
   const typeClass = useMemo(() => getTypeClassName(item.type), [item.type]);
 
   return (
@@ -62,23 +51,9 @@ const NotificationCard = ({
       className={`notification ${typeClass}`}
       style={{ zIndex: 1000 - stackIndex }}
       initial={{ y: -26, opacity: 0, scale: 0.97 }}
-      animate={{
-        y: stackIndex * 10,
-        opacity: 1,
-        scale: 1,
-        x: item.leaving ? (item.dismissDirection === 1 ? 520 : item.dismissDirection === -1 ? -520 : 0) : 0,
-      }}
+      animate={{ y: stackIndex * 10, opacity: 1, scale: 1, x: 0 }}
       exit={{ y: -24, opacity: 0, scale: 0.97 }}
       transition={{ duration: 0.2, ease: 'linear' }}
-      drag={item.leaving ? false : 'x'}
-      dragElastic={0.2}
-      dragMomentum={false}
-      whileDrag={{ scale: 0.99, cursor: 'grabbing' }}
-      onDragEnd={(_, info) => {
-        if (Math.abs(info.offset.x) >= DRAG_DISMISS_THRESHOLD) {
-          onDismiss(item.id, info.offset.x > 0 ? 1 : -1);
-        }
-      }}
     >
       <span className="notification__icon" aria-hidden="true">
         <IconGlyph type={item.type} />
@@ -92,8 +67,7 @@ export const NotificationCenter = () => {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const removalTimersRef = useRef<Record<string, number>>({});
 
-  const dismissNotification = (id: string, direction: -1 | 0 | 1 = 0) => {
-    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, leaving: true, dismissDirection: direction } : n)));
+  const dismissNotification = (id: string) => {
     if (removalTimersRef.current[id]) return;
 
     removalTimersRef.current[id] = window.setTimeout(() => {
@@ -110,7 +84,7 @@ export const NotificationCenter = () => {
         navigator.vibrate(42);
       }
 
-      window.setTimeout(() => dismissNotification(incoming.id, 0), incoming.durationMs);
+      window.setTimeout(() => dismissNotification(incoming.id), incoming.durationMs);
     });
 
     return () => {
@@ -128,7 +102,6 @@ export const NotificationCenter = () => {
             key={item.id}
             item={item}
             stackIndex={index}
-            onDismiss={dismissNotification}
           />
         ))}
       </AnimatePresence>
