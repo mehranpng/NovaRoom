@@ -1138,16 +1138,11 @@ export function App() {
         setPendingUser(null);
         setShowAIChat(true);
         setView('chatRoom');
-        if (!activeAIChatId && aiChats.length > 0) {
-            setActiveAIChatId(aiChats[0].id);
-        }
+        setActiveAIChatId(aiRespondingChatId || null);
         navigate('/ai');
     };
 
     const handleCreateAIChat = useCallback(() => {
-        setAITyping(false);
-        setAIResponding(false);
-        setAIReasoningPending(false);
         setActiveAIChatId(null);
     }, []);
 
@@ -1190,7 +1185,7 @@ export function App() {
     const handleSendAIMessage = useCallback(async (text: string, useReasoner = false) => {
         if (!currentUser) return;
 
-        if (aiResponding && aiRespondingChatId && activeAIChatId !== aiRespondingChatId) {
+        if (aiRespondingChatId && activeAIChatId !== aiRespondingChatId) {
             const respondingTitle = aiChats.find((c) => c.id === aiRespondingChatId)?.title || 'گفت‌وگوی در حال پاسخ';
             notify({ message: `گفت‌وگوی «${respondingTitle}» هنوز تکمیل نشده است.`, type: 'info' });
             return;
@@ -1217,8 +1212,11 @@ export function App() {
                 return;
             }
         }
+        if (!targetChatId) return;
 
-        const currentAIChatMessages = aiMessagesByChat[targetChatId] || [];
+        const finalChatId = targetChatId;
+
+        const currentAIChatMessages = aiMessagesByChat[finalChatId] || [];
         const sentCount = currentAIChatMessages.filter((m) => m.senderId === currentUser.chatId).length;
         if (sentCount >= 30) {
             alert('حداکثر 30 پیام در هر گفت‌وگو مجاز است. لطفاً یک چت جدید باز کنید.');
@@ -1228,7 +1226,7 @@ export function App() {
 
         const userMessage: Message = {
             id: clientId,
-            chatId: targetChatId,
+            chatId: finalChatId,
             senderId: currentUser.chatId,
             text,
             timestamp: Date.now(),
@@ -1237,11 +1235,11 @@ export function App() {
 
         setAIMessagesByChat((prev) => ({
             ...prev,
-            [targetChatId]: [...(prev[targetChatId] || []), userMessage],
+            [finalChatId]: [...(prev[finalChatId] || []), userMessage],
         }));
-        setAIRespondingChatId(targetChatId);
+        setAIRespondingChatId(finalChatId);
 
-        const success = sendAIMessage(text, targetChatId, clientId, useReasoner);
+        const success = sendAIMessage(text, finalChatId, clientId, useReasoner);
         if (!success) {
             console.warn('Failed to send message to AI');
             setAITyping(false);
@@ -1249,7 +1247,7 @@ export function App() {
             setAIReasoningPending(false);
             setAIRespondingChatId(null);
         }
-    }, [currentUser, activeAIChatId, aiMessagesByChat, sendAIMessage, aiResponding, aiRespondingChatId, aiChats]);
+    }, [currentUser, activeAIChatId, aiMessagesByChat, sendAIMessage, aiRespondingChatId, aiChats]);
 
     const handleStopAIResponse = useCallback(() => {
         const success = stopAIGeneration();
@@ -1346,6 +1344,7 @@ export function App() {
     const isSavedMessagesActive = currentUser && activeChatId === `saved_messages_${currentUser.chatId}`;
     const aiMessages = activeAIChatId ? aiMessagesByChat[activeAIChatId] || [] : [];
     const activeAIChat = aiChats.find((c) => c.id === activeAIChatId) || null;
+    const isActiveAIResponding = Boolean(activeAIChatId && aiRespondingChatId && activeAIChatId === aiRespondingChatId);
 
     const initialUnreadCount = openChatUnread?.chatId && openChatUnread.chatId === (activeChatId || 'pending')
         ? openChatUnread.count
@@ -1403,9 +1402,9 @@ export function App() {
                                 onDeleteMessage={handleDeleteAIMessage}
                                 onBack={handleBack}
                                 loading={aiLoading}
-                                isTyping={aiTyping}
-                                isResponding={aiResponding}
-                                isReasoningPending={aiReasoningPending}
+                                isTyping={isActiveAIResponding ? aiTyping : false}
+                                isResponding={isActiveAIResponding ? aiResponding : false}
+                                isReasoningPending={isActiveAIResponding ? aiReasoningPending : false}
                                 chats={chats}
                                 onSelectChat={handleSelectChat}
                                 onSetPendingForwardDraft={handleSetPendingForwardDraft}
