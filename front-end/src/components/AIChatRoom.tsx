@@ -231,6 +231,15 @@ export function AIChatRoom({
         setReasoningEnabled(false);
     }, [activeAIChatId]);
 
+    useEffect(() => {
+        prevLenRef.current = messages.length;
+        prevLastMessageRef.current = messages[messages.length - 1] ?? null;
+        initialScrollDoneRef.current = false;
+        setNewMsgCount(0);
+        setShowScrollBtn(false);
+        requestAnimationFrame(() => scrollToBottom(false));
+    }, [activeAIChatId]);
+
     const playChatSound = (kind: 'send' | 'receive') => {
         const audio = kind === 'send' ? sendSoundRef.current : receiveSoundRef.current;
         if (!audio) return;

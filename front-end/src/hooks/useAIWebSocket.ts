@@ -26,8 +26,21 @@ export function useAIWebSocket({
     const reconnectTimeoutRef = useRef<number | undefined>(undefined);
     const reconnectAttemptsRef = useRef(0);
     const pendingMessagesRef = useRef<Array<{ text: string; aiChatId: string; clientId?: string; useReasoner: boolean }>>([]);
+    const onNewMessageRef = useRef(onNewMessage);
+    const onErrorRef = useRef(onError);
+    const onUserMessageSavedRef = useRef(onUserMessageSaved);
+    const onAIStreamStartRef = useRef(onAIStreamStart);
+    const onAIStreamChunkRef = useRef(onAIStreamChunk);
+    const onAIStreamDoneRef = useRef(onAIStreamDone);
     const MAX_RECONNECT_ATTEMPTS = 5;
     const RECONNECT_DELAY = 2000;
+
+    useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
+    useEffect(() => { onErrorRef.current = onError; }, [onError]);
+    useEffect(() => { onUserMessageSavedRef.current = onUserMessageSaved; }, [onUserMessageSaved]);
+    useEffect(() => { onAIStreamStartRef.current = onAIStreamStart; }, [onAIStreamStart]);
+    useEffect(() => { onAIStreamChunkRef.current = onAIStreamChunk; }, [onAIStreamChunk]);
+    useEffect(() => { onAIStreamDoneRef.current = onAIStreamDone; }, [onAIStreamDone]);
 
     const connect = useCallback(() => {
         if (!token) return;
@@ -70,17 +83,17 @@ export function useAIWebSocket({
                 const data = JSON.parse(event.data);
 
                 if (data.type === 'ai_response') {
-                    onNewMessage(data.message);
+                    onNewMessageRef.current(data.message);
                 } else if (data.type === 'ai_response_start') {
-                    onAIStreamStart?.(data.message);
+                    onAIStreamStartRef.current?.(data.message);
                 } else if (data.type === 'ai_response_chunk') {
-                    onAIStreamChunk?.(data.messageId, data.text ?? '');
+                    onAIStreamChunkRef.current?.(data.messageId, data.text ?? '');
                 } else if (data.type === 'ai_response_done') {
-                    onAIStreamDone?.(data.message);
+                    onAIStreamDoneRef.current?.(data.message);
                 } else if (data.type === 'ai_user_message_saved') {
-                    onUserMessageSaved?.(data.message, data.clientId, data.title);
+                    onUserMessageSavedRef.current?.(data.message, data.clientId, data.title);
                 } else if (data.type === 'ai_error') {
-                    onError?.(String(data.message || 'خطا در سرویس هوش مصنوعی'));
+                    onErrorRef.current?.(String(data.message || 'خطا در سرویس هوش مصنوعی'));
                 } else if (data.type === 'pong') {
                     // Keep-alive response
                 }
@@ -108,7 +121,7 @@ export function useAIWebSocket({
         };
 
         wsRef.current = ws;
-    }, [token, onNewMessage, onError, onUserMessageSaved, onAIStreamStart, onAIStreamChunk, onAIStreamDone]);
+    }, [token]);
 
     useEffect(() => {
         connect();

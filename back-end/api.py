@@ -2535,7 +2535,13 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 generated_title = ""
                 if user_msg_count == 0:
-                    generated_title = await generate_chat_title(text)
+                    try:
+                        generated_title = await asyncio.wait_for(
+                            generate_chat_title(text),
+                            timeout=2.2,
+                        )
+                    except Exception:
+                        generated_title = (text or "").strip()[:56] or "گفت‌وگوی جدید"
                     await cl_ai_chats.update_one(
                         {"_id": ai_chat["_id"], "userId": user_id},
                         {
