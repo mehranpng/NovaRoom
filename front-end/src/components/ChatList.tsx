@@ -281,7 +281,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     return (await res.json()) as T;
 }
 
-type ConfirmAction = null | { kind: 'delete_chat' | 'delete_group' | 'leave_group'; chatId: string };
+type ConfirmAction = null | { kind: 'delete_chat' | 'delete_group' | 'leave_group' | 'logout'; chatId: string };
 
 export function ChatList({
     chats,
@@ -366,6 +366,13 @@ export function ChatList({
                 title: 'گروه حذف شود؟',
                 text: 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.',
                 confirmLabel: 'حذف',
+            };
+        }
+        if (confirmAction.kind === 'logout') {
+            return {
+                title: 'خروج از حساب؟',
+                text: 'آیا می‌خواهید از حساب کاربری خارج شوید؟',
+                confirmLabel: 'خروج',
             };
         }
         return {
@@ -550,6 +557,10 @@ export function ChatList({
         setConfirmAction({ kind: 'leave_group', chatId });
     };
 
+    const requestLogout = () => {
+        setConfirmAction({ kind: 'logout', chatId: '__logout__' });
+    };
+
     const runConfirmAction = async () => {
         if (!confirmAction) return;
         const { kind, chatId } = confirmAction;
@@ -557,7 +568,9 @@ export function ChatList({
 
         setActionBusy((m) => ({ ...m, [chatId]: true }));
         try {
-            if (kind === 'leave_group') {
+            if (kind === 'logout') {
+                onLogout();
+            } else if (kind === 'leave_group') {
                 await apiFetch(`/groups/${encodeURIComponent(chatId)}/leave`, { method: 'POST' });
                 removeChatLocally(chatId);
             } else {
@@ -568,6 +581,7 @@ export function ChatList({
         } catch {
             if (kind === 'leave_group') alert('خروج از گروه با خطا مواجه شد');
             else if (kind === 'delete_group') alert('حذف گروه با خطا مواجه شد');
+            else if (kind === 'logout') alert('خروج از حساب با خطا مواجه شد');
             else alert('حذف گفتگو با خطا مواجه شد');
         } finally {
             setActionBusy((m) => ({ ...m, [chatId]: false }));
@@ -758,7 +772,7 @@ export function ChatList({
                                         )}
                                     </AnimatePresence>
                                 </div>
-                                <button className="popover__item popover__item--danger" onClick={() => { setMenuOpen(false); onLogout(); }} type="button">
+                                <button className="popover__item popover__item--danger" onClick={() => { setMenuOpen(false); requestLogout(); }} type="button">
                                     <LogOut size={16} />
                                     خروج
                                 </button>

@@ -734,6 +734,7 @@ export function App() {
                 setActiveChatId(createdChatId);
                 setPendingUser(null);
                 setView('chatRoom');
+                navigate(`/chat/${encodeURIComponent(createdChatId)}`, { replace: true });
 
                 const success = sendViaWS(createdChatId, text, payload.replyToId, payload.file);
                 if (!success) console.warn('WebSocket not connected');
@@ -753,7 +754,7 @@ export function App() {
         const success = sendViaWS(activeChatId, text, payload.replyToId, payload.file);
         if (!success) console.warn('WebSocket not connected');
         if (success) playChatSound('send');
-    }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, playChatSound]);
+    }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, playChatSound, navigate]);
 
     const handleDeleteMessage = useCallback((messageId: string) => {
         if (!activeChatId) return;

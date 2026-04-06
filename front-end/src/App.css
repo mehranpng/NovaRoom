@@ -472,12 +472,10 @@ body,
 @keyframes overlay-soft-in {
     from {
         opacity: 0;
-        backdrop-filter: blur(0px);
     }
 
     to {
         opacity: 1;
-        backdrop-filter: blur(2px);
     }
 }
 
@@ -1507,10 +1505,11 @@ body,
     border: 1px solid var(--reply-box-border);
     display: flex;
     align-items: center;
-    justify-content: end;
+    justify-content: flex-start;
     gap: 10px;
     direction: rtl;
     text-align: right;
+    flex-direction: row-reverse;
 }
 
 .chat-room__reply-edit-box__title {

@@ -1078,9 +1078,9 @@ export function ChatRoom({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId, loading, messages.length, displayUnreadCount]);
 
-    // Restore scroll after coming back from ContactInfo / member info / members list.
+    // Restore scroll after coming back from ContactInfo / forward-source info / member info / members list.
     useEffect(() => {
-        if (showContactInfo || viewingMemberId || showMembersList) return;
+        if (showContactInfo || forwardSourceUser || viewingMemberId || showMembersList) return;
         const mem = scrollMemoryRef.current[chatId];
         if (!mem) return;
         restoringFromInfoRef.current = false;
@@ -1104,7 +1104,7 @@ export function ChatRoom({
             timers.forEach((t) => window.clearTimeout(t));
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [showContactInfo, viewingMemberId, showMembersList, chatId]);
+    }, [showContactInfo, forwardSourceUser, viewingMemberId, showMembersList, chatId]);
 
     useEffect(() => {
         const container = messagesContainerRef.current;
@@ -2128,7 +2128,7 @@ export function ChatRoom({
             {(newMsgCount > 0 || showScrollBtn) && (
                 <button type="button" aria-label="Jump to latest messages"
                     onClick={() => { scrollToBottom(true); setNewMsgCount(0); setShowScrollBtn(false); }}
-                    style={{ position: 'absolute', right: 16, bottom: 110, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px' }}>
+                    style={{ position: 'absolute', right: 16, bottom: 118, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px' }}>
                     <ArrowDown size={16} color="currentColor" />
                     {newMsgCount > 0 && (
                         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>

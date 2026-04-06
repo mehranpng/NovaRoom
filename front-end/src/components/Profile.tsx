@@ -266,10 +266,6 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                         {user.verified ? <VerifiedBadge size={16} /> : null}
                     </h2>
                     <p className="profile__username-display">@{user.username}</p>
-                    <span className="profile__online-badge">
-                        <span className="profile__online-dot" />
-                        آنلاین
-                    </span>
                 </div>
 
                 <div className="profile__fields">
