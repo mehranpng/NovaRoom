@@ -733,8 +733,8 @@ export function AIChatRoom({
                     min-height: 24px;
                 }
                 .thinking-indicator__text {
-                    font-size: 13px;
-                    font-weight: 600;
+                    font-size: 15px;
+                    font-weight: 700;
                     background: linear-gradient(
                         90deg,
                         rgba(156,163,175,0.25) 0%,
