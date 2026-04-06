@@ -1509,6 +1509,8 @@ body,
     align-items: center;
     justify-content: end;
     gap: 10px;
+    direction: rtl;
+    text-align: right;
 }
 
 .chat-room__reply-edit-box__title {
@@ -1525,6 +1527,8 @@ body,
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 520px;
+    direction: rtl;
+    text-align: right;
 }
 
 /* ChatRoom modals - scoped to chat room only */

@@ -73,6 +73,7 @@ export function App() {
     // until the first message is sent.
     const [pendingUser, setPendingUser] = useState<User | null>(null);
     const [pendingForwardDrafts, setPendingForwardDrafts] = useState<Record<string, { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }>>({});
+    const pendingForwardSendHintsRef = useRef<Record<string, number>>({});
 
     const chatsRef = useRef<Chat[]>([]);
     useEffect(() => {
@@ -307,7 +308,11 @@ export function App() {
 
         setChats(prev => {
             const myId = currentUser?.chatId;
-            const isIncoming = Boolean(myId) && newMsg.senderId !== myId;
+            const hasForwardSendHint = Boolean(newMsg.forwardedFrom) && (pendingForwardSendHintsRef.current[chatId] || 0) > 0;
+            if (hasForwardSendHint) {
+                pendingForwardSendHintsRef.current[chatId] = Math.max(0, (pendingForwardSendHintsRef.current[chatId] || 0) - 1);
+            }
+            const isIncoming = Boolean(myId) && newMsg.senderId !== myId && !hasForwardSendHint;
             const isActiveChat = activeChatIdRef.current === chatId && viewRef.current === 'chatRoom';
             const shouldIncrementUnread = isIncoming && !isActiveChat;
 
@@ -537,7 +542,14 @@ export function App() {
 
         setActiveChatId(chatId);
         setView('chatRoom');
-        if (shouldNavigate) navigate(`/chat/${encodeURIComponent(chatId)}`);
+        if (shouldNavigate) {
+            const savedMessagesId = currentUser ? `saved_messages_${currentUser.chatId}` : '';
+            if (savedMessagesId && chatId === savedMessagesId) {
+                navigate('/save-message');
+            } else {
+                navigate(`/chat/${encodeURIComponent(chatId)}`);
+            }
+        }
 
         setChats(prev => prev.map(c => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
 
@@ -609,22 +621,25 @@ export function App() {
             return;
         }
 
-        const chatMatch = pathname.match(/^\/chat\/(.+)$/);
-        if (chatMatch?.[1]) {
-            const decodedChatId = decodeURIComponent(chatMatch[1]);
-            if (activeChatId !== decodedChatId || view !== 'chatRoom' || showAIChat) {
-                handleSelectChat(decodedChatId, { navigateToRoute: false });
+        if (pathname === '/chat/new') {
+            if (!pendingUser) {
+                navigate('/', { replace: true });
+                return;
             }
+            setShowAIChat(false);
+            setActiveChatId(null);
+            setView('chatRoom');
             return;
         }
 
-        const infoMatch = pathname.match(/^\/info\/(.+)$/);
-        if (infoMatch?.[1]) {
-            const decodedChatId = decodeURIComponent(infoMatch[1]);
-            setShowAIChat(false);
-            setPendingUser(null);
-            setView('chatRoom');
-            if (activeChatId !== decodedChatId) {
+        const chatMatch = pathname.match(/^\/chat\/(.+)$/);
+        if (chatMatch?.[1]) {
+            const decodedChatId = decodeURIComponent(chatMatch[1]);
+            if (currentUser && decodedChatId === `saved_messages_${currentUser.chatId}`) {
+                navigate('/save-message', { replace: true });
+                return;
+            }
+            if (activeChatId !== decodedChatId || view !== 'chatRoom' || showAIChat) {
                 handleSelectChat(decodedChatId, { navigateToRoute: false });
             }
             return;
@@ -638,6 +653,7 @@ export function App() {
         activeChatId,
         view,
         showAIChat,
+        pendingUser,
         handleSelectChat,
         navigate,
     ]);
@@ -745,12 +761,21 @@ export function App() {
     }, [activeChatId, deleteViaWS]);
 
     const handleForwardMessage = useCallback(async (sourceChatId: string, messageId: string, targetChatId: string) => {
+        pendingForwardSendHintsRef.current[targetChatId] = (pendingForwardSendHintsRef.current[targetChatId] || 0) + 1;
         await apiFetch('/messages/forward', {
             method: 'POST',
             body: JSON.stringify({ sourceChatId, messageId, targetChatId }),
         });
         playChatSound('send');
-    }, [playChatSound]);
+        try {
+            const targetMessages = await apiFetch(`/chats/${encodeURIComponent(targetChatId)}/messages?limit=100`);
+            setMessages((prev) => ({ ...prev, [targetChatId]: Array.isArray(targetMessages) ? targetMessages : prev[targetChatId] || [] }));
+            setMessagesLoadedOnce((prev) => ({ ...prev, [targetChatId]: true }));
+        } catch (e) {
+            console.error('Failed to refresh forwarded target chat messages', e);
+        }
+        loadChats(false);
+    }, [playChatSound, loadChats]);
 
     const handleSetPendingForwardDraft = useCallback((targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => {
         if (!targetChatId || !draft?.sourceChatId || !draft?.messageId) return;
@@ -812,7 +837,8 @@ export function App() {
         setActiveChatId(null);
         setShowAIChat(false);
         setView('chatRoom');
-    }, [currentUser?.chatId, handleSelectChat]);
+        navigate('/chat/new');
+    }, [currentUser?.chatId, handleSelectChat, navigate]);
 
     const handleCreateGroup = useCallback(async (groupName: string) => {
         try {
@@ -1062,9 +1088,8 @@ export function App() {
         ? openChatUnread.count
         : 0;
 
-    const infoRouteMatch = location.pathname.match(/^\/info\/(.+)$/);
-    const infoRouteChatId = infoRouteMatch?.[1] ? decodeURIComponent(infoRouteMatch[1]) : null;
-    const isInfoRouteActive = Boolean(infoRouteChatId) && view !== 'profile';
+    const currentSearchParams = new URLSearchParams(location.search);
+    const isInfoRouteActive = currentSearchParams.get('panel') === 'info' && view !== 'profile';
 
     return (
         <MusicPlayerProvider>
@@ -1136,10 +1161,10 @@ export function App() {
                                 onOpenDirectChat={(user) => handleUserSelectedFromModal(user)}
                                 onOpenProfile={handleOpenProfile}
                                 onOpenAIChat={handleOpenAIChat}
-                                onOpenContactInfo={(targetChatId) => navigate(`/info/${encodeURIComponent(targetChatId)}`, { replace: true })}
+                                onOpenContactInfo={(targetChatId) => navigate(`/chat/${encodeURIComponent(targetChatId)}?panel=info`, { replace: true })}
                                 forceContactInfoOpen={isInfoRouteActive}
                                 onCloseForcedContactInfo={(currentChatId) => {
-                                    const backChatId = currentChatId || infoRouteChatId || activeChatId;
+                                    const backChatId = currentChatId || activeChatId;
                                     if (backChatId && backChatId !== 'pending') {
                                         navigate(`/chat/${encodeURIComponent(backChatId)}`, { replace: true });
                                         return;

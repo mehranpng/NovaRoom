@@ -229,7 +229,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
             <div className="profile__content">
                 {/* Avatar & Name Section */}
                 <div className="profile__avatar-section">
-                    <Avatar name={user.name} size="xl" online={true} src={user.avatar ? `${API_BASE_URL}/files/${user.avatar}` : ''} />
+                    <Avatar name={user.name} size="xl" src={user.avatar ? `${API_BASE_URL}/files/${user.avatar}` : ''} />
                     <div className="profile__avatar-actions">
                         <label className="profile__avatar-btn" aria-disabled={updatingAvatar}>
                             <Upload size={14} />

@@ -1155,11 +1155,15 @@ export function ChatRoom({
                 prevLenRef.current = messages.length;
                 return () => cancelAnimationFrame(raf);
             }
-            setNewMsgCount((c) => c + added);
+            const recentlyAddedMessages = messages.slice(Math.max(0, prevLenRef.current));
+            const incomingCount = recentlyAddedMessages.filter((msg) => msg.senderId !== currentUserId).length;
+            if (incomingCount > 0) {
+                setNewMsgCount((c) => c + incomingCount);
+            }
         }
         prevLenRef.current = messages.length;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [messages.length, chatId, loading, displayUnreadCount, unreadAnchorId]);
+    }, [messages, messages.length, chatId, loading, displayUnreadCount, unreadAnchorId, currentUserId]);
 
     useEffect(() => {
         if (displayUnreadCount <= 0) return;
@@ -1199,7 +1203,7 @@ export function ChatRoom({
             setNewMsgCount(0); setShowScrollBtn(false);
             consumeUnreadForOpenSession();
         }
-        else setShowScrollBtn(container.scrollHeight - container.scrollTop - container.clientHeight > 300);
+        else setShowScrollBtn(container.scrollHeight - container.scrollTop - container.clientHeight > 180);
 
         userHasScrolledRef.current = true;
 
@@ -2124,8 +2128,8 @@ export function ChatRoom({
             {(newMsgCount > 0 || showScrollBtn) && (
                 <button type="button" aria-label="Jump to latest messages"
                     onClick={() => { scrollToBottom(true); setNewMsgCount(0); setShowScrollBtn(false); }}
-                    style={{ position: 'absolute', right: 16, bottom: 96, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid rgba(0,0,0,0.12)', background: '#fff', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px' }}>
-                    <ArrowDown size={16} />
+                    style={{ position: 'absolute', right: 16, bottom: 110, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px' }}>
+                    <ArrowDown size={16} color="currentColor" />
                     {newMsgCount > 0 && (
                         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                             <span style={{ fontVariantNumeric: 'tabular-nums' }}>{newMsgCount}</span>
