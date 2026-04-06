@@ -125,12 +125,6 @@ async def generate_conversation_summary(
         summary_input = {
             "previous_summary": previous_summary or "",
             "messages": messages,
-            "user_profile": {
-                "name": user_name or "",
-                "username": username or "",
-                "chat_id": chat_id or "",
-                "bio": bio or "",
-            },
         }
         summary_messages = [
             {
@@ -141,6 +135,7 @@ async def generate_conversation_summary(
                     "The summary must be Persian, max 300 characters. "
                     "Keep only critical long-term memory (preferences, constraints, goals, decisions, unresolved tasks). "
                     "Do not include trivial details, greetings, or user's name because it is always available. "
+                    "Do not include static system-prompt facts (assistant identity, creators, fixed product description, default language rules). "
                     "If nothing important was added, keep summary unchanged."
                 ),
             },
@@ -163,6 +158,18 @@ async def generate_conversation_summary(
         raw = response.choices[0].message.content or ""
         data = json.loads(raw)
         summary = str(data.get("summary") or "").strip()
+        banned_markers = [
+            "seytan",
+            "mehran",
+            "palpard",
+            "novaroom",
+            "نوا روم",
+            "دستیار فارسی",
+            "پیام‌رسان بر پایه وب‌سوکت",
+        ]
+        normalized_summary = summary.lower()
+        if any(marker in normalized_summary for marker in banned_markers):
+            return (previous_summary or "")[:300]
         if not summary:
             return (previous_summary or "")[:300]
         return summary[:300]
