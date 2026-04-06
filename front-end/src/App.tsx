@@ -77,6 +77,7 @@ export function App() {
     const [pendingForwardDrafts, setPendingForwardDrafts] = useState<Record<string, { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }>>({});
     const pendingForwardSendHintsRef = useRef<Record<string, number>>({});
     const aiStreamStartedRef = useRef<Record<string, boolean>>({});
+    const aiPendingStreamMetaRef = useRef<Record<string, Message>>({});
 
     const chatsRef = useRef<Chat[]>([]);
     useEffect(() => {
@@ -450,13 +451,7 @@ export function App() {
             seen: true,
         };
         aiStreamStartedRef.current[messageWithChatId.id] = false;
-        setAIMessages(prev => {
-            const idx = prev.findIndex((m) => m.id === messageWithChatId.id);
-            if (idx === -1) return [...prev, messageWithChatId];
-            const next = [...prev];
-            next[idx] = { ...next[idx], ...messageWithChatId };
-            return next;
-        });
+        aiPendingStreamMetaRef.current[messageWithChatId.id] = messageWithChatId;
         setAITyping(true);
     }, []);
 
@@ -464,11 +459,22 @@ export function App() {
         if (!messageId) return;
         if (!aiStreamStartedRef.current[messageId]) {
             aiStreamStartedRef.current[messageId] = true;
-            vibrate([15, 20, 15]);
+            vibrate([25, 35, 25, 35, 25]);
+            setAITyping(false);
         }
         setAIMessages(prev => {
             const idx = prev.findIndex((m) => m.id === messageId);
-            if (idx === -1) return prev;
+            if (idx === -1) {
+                const fallback = aiPendingStreamMetaRef.current[messageId] ?? {
+                    id: messageId,
+                    chatId: 'ai_chat',
+                    senderId: 'ai',
+                    text: '',
+                    timestamp: Date.now(),
+                    seen: true,
+                };
+                return [...prev, { ...fallback, text, seen: true }];
+            }
             const next = [...prev];
             next[idx] = { ...next[idx], text, seen: true };
             return next;
@@ -490,6 +496,7 @@ export function App() {
         });
         setAITyping(false);
         delete aiStreamStartedRef.current[messageWithChatId.id];
+        delete aiPendingStreamMetaRef.current[messageWithChatId.id];
         vibrate(120);
     }, [vibrate]);
 
