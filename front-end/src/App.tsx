@@ -218,6 +218,7 @@ export function App() {
 
     useEffect(() => {
         if (!isAuthenticated || !activeAIChatId) return;
+        if (Object.prototype.hasOwnProperty.call(aiMessagesByChat, activeAIChatId)) return;
         const loadAIMessages = async () => {
             try {
                 setAILoading(true);
@@ -235,7 +236,7 @@ export function App() {
             }
         };
         loadAIMessages();
-    }, [isAuthenticated, activeAIChatId]);
+    }, [isAuthenticated, activeAIChatId, aiMessagesByChat]);
 
     const loadChats = useCallback(async (showLoading = true) => {
         if (!isAuthenticated) return;
@@ -1144,25 +1145,15 @@ export function App() {
     };
 
     const handleCreateAIChat = useCallback(() => {
-        if (aiResponding && aiRespondingChatId) {
-            const respondingTitle = aiChats.find((c) => c.id === aiRespondingChatId)?.title || 'گفت‌وگوی در حال پاسخ';
-            notify({ message: `گفت‌وگوی «${respondingTitle}» هنوز تکمیل نشده است.`, type: 'info' });
-            return;
-        }
         setAITyping(false);
         setAIResponding(false);
         setAIReasoningPending(false);
         setActiveAIChatId(null);
-    }, [aiResponding, aiRespondingChatId, aiChats]);
+    }, []);
 
     const handleSelectAIChat = useCallback((chatId: string) => {
-        if (aiResponding && aiRespondingChatId && aiRespondingChatId !== chatId) {
-            const respondingTitle = aiChats.find((c) => c.id === aiRespondingChatId)?.title || 'گفت‌وگوی در حال پاسخ';
-            notify({ message: `گفت‌وگوی «${respondingTitle}» هنوز تکمیل نشده است.`, type: 'info' });
-            return;
-        }
         setActiveAIChatId(chatId);
-    }, [aiResponding, aiRespondingChatId, aiChats]);
+    }, []);
 
     const handleDeleteAIChat = useCallback(async (chatId: string) => {
         try {
@@ -1199,6 +1190,16 @@ export function App() {
     const handleSendAIMessage = useCallback(async (text: string, useReasoner = false) => {
         if (!currentUser) return;
 
+        if (aiResponding && aiRespondingChatId && activeAIChatId !== aiRespondingChatId) {
+            const respondingTitle = aiChats.find((c) => c.id === aiRespondingChatId)?.title || 'گفت‌وگوی در حال پاسخ';
+            notify({ message: `گفت‌وگوی «${respondingTitle}» هنوز تکمیل نشده است.`, type: 'info' });
+            return;
+        }
+
+        setAITyping(true);
+        setAIResponding(true);
+        setAIReasoningPending(Boolean(useReasoner));
+
         let targetChatId = activeAIChatId;
         if (!targetChatId) {
             try {
@@ -1210,6 +1211,9 @@ export function App() {
             } catch (error) {
                 console.error('Failed to create AI chat', error);
                 alert('ساخت گفت‌وگوی جدید با خطا مواجه شد');
+                setAITyping(false);
+                setAIResponding(false);
+                setAIReasoningPending(false);
                 return;
             }
         }
@@ -1235,10 +1239,7 @@ export function App() {
             ...prev,
             [targetChatId]: [...(prev[targetChatId] || []), userMessage],
         }));
-        setAITyping(true);
-        setAIResponding(true);
         setAIRespondingChatId(targetChatId);
-        setAIReasoningPending(Boolean(useReasoner));
 
         const success = sendAIMessage(text, targetChatId, clientId, useReasoner);
         if (!success) {
@@ -1248,7 +1249,7 @@ export function App() {
             setAIReasoningPending(false);
             setAIRespondingChatId(null);
         }
-    }, [currentUser, activeAIChatId, aiMessagesByChat, sendAIMessage]);
+    }, [currentUser, activeAIChatId, aiMessagesByChat, sendAIMessage, aiResponding, aiRespondingChatId, aiChats]);
 
     const handleStopAIResponse = useCallback(() => {
         const success = stopAIGeneration();

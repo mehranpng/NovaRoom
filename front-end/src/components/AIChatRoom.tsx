@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Forward, Check, SendHorizontal, Brain, PanelRight, PanelRightClose, PencilLine, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Forward, Check, SendHorizontal, Brain, PanelRight, PencilLine, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -547,7 +547,7 @@ export function AIChatRoom({
                 <div className="chat-room__messages-inner">
                     {loading ? (
                         <ChatMessagesSkeleton />
-                    ) : messages.length === 0 ? (
+                    ) : messages.length === 0 && !isResponding && !isTyping ? (
                         <div className="ai-chat-empty-state">
                             درمورد چه چیزی سوال دارید؟
                         </div>
@@ -645,7 +645,7 @@ export function AIChatRoom({
                                 onClick={() => setAIChatsDrawerOpen(false)}
                                 aria-label="بستن منوی گفت‌وگوها"
                             >
-                                <PanelRightClose size={18} />
+                                <PanelRight size={18} />
                             </button>
 
                             <button
@@ -671,9 +671,7 @@ export function AIChatRoom({
                                                 setAIChatsDrawerOpen(false);
                                             }}
                                         >
-                                            {respondingAIChatId === chat.id && (
-                                                <span className="ai-chat-drawer__loader" />
-                                            )}
+                                            {respondingAIChatId === chat.id && <span className="ai-chat-drawer__loader" />}
                                             {chat.title || 'گفت‌وگوی جدید'}
                                         </button>
                                         <button
