@@ -162,6 +162,7 @@ export function AIChatRoom({
     const prevLenRef = useRef(0);
     const initialScrollDoneRef = useRef(false);
     const prevLastMessageRef = useRef<Message | null>(null);
+    const responseVibrationIntervalRef = useRef<number | null>(null);
 
     const resizeTextarea = () => {
         const textarea = textareaRef.current;
@@ -180,6 +181,31 @@ export function AIChatRoom({
             receiveSoundRef.current = null;
         };
     }, []);
+
+    useEffect(() => {
+        if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') {
+            return;
+        }
+
+        if (isResponding) {
+            navigator.vibrate([18, 140, 18]);
+            responseVibrationIntervalRef.current = window.setInterval(() => {
+                navigator.vibrate([18, 140, 18]);
+            }, 1800);
+        } else {
+            if (responseVibrationIntervalRef.current) {
+                clearInterval(responseVibrationIntervalRef.current);
+                responseVibrationIntervalRef.current = null;
+            }
+        }
+
+        return () => {
+            if (responseVibrationIntervalRef.current) {
+                clearInterval(responseVibrationIntervalRef.current);
+                responseVibrationIntervalRef.current = null;
+            }
+        };
+    }, [isResponding]);
 
     useEffect(() => {
         setReasoningEnabled(false);
