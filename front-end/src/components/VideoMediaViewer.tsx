@@ -22,19 +22,11 @@ function formatDuration(seconds: number): string {
 
 export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }: VideoMediaViewerProps) {
     const videoRef = useRef<HTMLVideoElement | null>(null);
-    const controlsTimerRef = useRef<number | null>(null);
+    const ignoreSurfaceClickUntilRef = useRef(0);
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
-    const [controlsVisible, setControlsVisible] = useState(true);
-
-    const showControlsTemporarily = () => {
-        setControlsVisible(true);
-        if (controlsTimerRef.current) window.clearTimeout(controlsTimerRef.current);
-        controlsTimerRef.current = window.setTimeout(() => {
-            setControlsVisible(false);
-        }, 2000);
-    };
+    const playbackControlsVisible = !isPlaying;
 
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
@@ -45,7 +37,6 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
                 if (!video) return;
                 if (video.paused) void video.play();
                 else video.pause();
-                showControlsTemporarily();
             }
         };
         window.addEventListener('keydown', onKeyDown);
@@ -56,12 +47,8 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
         const video = videoRef.current;
         if (!video) return;
         void video.play().catch(() => {
-            setControlsVisible(true);
+            // autoplay may fail without user gesture; keep paused controls visible
         });
-        showControlsTemporarily();
-        return () => {
-            if (controlsTimerRef.current) window.clearTimeout(controlsTimerRef.current);
-        };
     }, []);
 
     const seekBy = (delta: number) => {
@@ -70,7 +57,6 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
         const next = Math.min(Math.max(0, video.currentTime + delta), video.duration || 0);
         video.currentTime = next;
         setCurrentTime(next);
-        showControlsTemporarily();
     };
 
     const togglePlay = async () => {
@@ -81,7 +67,6 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
         } else {
             video.pause();
         }
-        showControlsTemporarily();
     };
 
     const handleDownload = async () => {
@@ -114,51 +99,63 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
             role="dialog"
             aria-modal="true"
         >
+            <div className="video-media-viewer__header">
+                <button type="button" className="image-media-viewer__btn" onClick={handleDownload} aria-label="Download video">
+                    <Download size={18} />
+                </button>
+                <button type="button" className="image-media-viewer__btn image-media-viewer__btn--close" onClick={onClose} aria-label="Close">
+                    <X size={18} />
+                </button>
+            </div>
             <div className="video-media-viewer__stage">
-                <video
-                    ref={videoRef}
-                    src={videoUrl}
-                    className="video-media-viewer__video"
-                    playsInline
-                    onClick={() => {
-                        setControlsVisible((prev) => {
-                            if (!prev) {
-                                showControlsTemporarily();
-                                return true;
-                            }
-                            if (controlsTimerRef.current) window.clearTimeout(controlsTimerRef.current);
-                            return false;
-                        });
+                <div
+                    className="video-media-viewer__surface"
+                    onClick={async () => {
+                        if (Date.now() < ignoreSurfaceClickUntilRef.current) return;
+                        const video = videoRef.current;
+                        if (!video) return;
+                        if (video.paused) {
+                            await video.play();
+                        } else {
+                            video.pause();
+                        }
                     }}
-                    onPlay={() => {
-                        setIsPlaying(true);
-                        showControlsTemporarily();
-                    }}
-                    onPause={() => {
-                        setIsPlaying(false);
-                        setControlsVisible(true);
-                    }}
-                    onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-                    onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
-                    onEnded={() => {
-                        setIsPlaying(false);
-                        setControlsVisible(true);
-                    }}
-                />
+                >
+                    <video
+                        ref={videoRef}
+                        src={videoUrl}
+                        className="video-media-viewer__video"
+                        playsInline
+                        onPlay={() => setIsPlaying(true)}
+                        onPause={() => setIsPlaying(false)}
+                        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+                        onEnded={() => setIsPlaying(false)}
+                    />
 
-                <button type="button" className="video-media-viewer__seek video-media-viewer__seek--left" onDoubleClick={() => seekBy(-5)} aria-label="Seek backward 5 seconds" />
-                <button type="button" className="video-media-viewer__seek video-media-viewer__seek--right" onDoubleClick={() => seekBy(5)} aria-label="Seek forward 5 seconds" />
+                    <button
+                        type="button"
+                        className="video-media-viewer__seek video-media-viewer__seek--left"
+                        onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            ignoreSurfaceClickUntilRef.current = Date.now() + 260;
+                            seekBy(-5);
+                        }}
+                        aria-label="Seek backward 5 seconds"
+                    />
+                    <button
+                        type="button"
+                        className="video-media-viewer__seek video-media-viewer__seek--right"
+                        onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            ignoreSurfaceClickUntilRef.current = Date.now() + 260;
+                            seekBy(5);
+                        }}
+                        aria-label="Seek forward 5 seconds"
+                    />
+                </div>
 
-                <div className={`video-media-viewer__controls ${controlsVisible ? 'is-visible' : ''}`}>
-                    <div className="video-media-viewer__header">
-                        <button type="button" className="image-media-viewer__btn" onClick={handleDownload} aria-label="Download video">
-                            <Download size={18} />
-                        </button>
-                        <button type="button" className="image-media-viewer__btn image-media-viewer__btn--close" onClick={onClose} aria-label="Close">
-                            <X size={18} />
-                        </button>
-                    </div>
-
+                <div className={`video-media-viewer__controls ${playbackControlsVisible ? 'is-visible' : ''}`} onClick={(e) => e.stopPropagation()}>
                     <div className="video-media-viewer__overlay">
                         <button type="button" className="video-media-viewer__play-btn" onClick={togglePlay} aria-label={isPlaying ? 'Pause' : 'Play'}>
                             {isPlaying ? <Pause size={28} /> : <Play size={28} />}
@@ -182,7 +179,6 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
                                 if (!Number.isFinite(next)) return;
                                 if (videoRef.current) videoRef.current.currentTime = next;
                                 setCurrentTime(next);
-                                showControlsTemporarily();
                             }}
                         />
                     </div>

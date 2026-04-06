@@ -329,6 +329,7 @@ export function App() {
                         text: newMsg.text,
                         senderId: newMsg.senderId,
                         timestamp: newMsg.timestamp,
+                        file: newMsg.file,
                     },
                     unreadCount: shouldIncrementUnread ? (chat.unreadCount || 0) + 1 : chat.unreadCount,
                 };

@@ -55,6 +55,7 @@ export interface ChatLastMessage {
     senderId: string;
     /** epoch ms */
     timestamp: number;
+    file?: FileMetadata;
 }
 
 export interface Chat {

@@ -552,6 +552,12 @@
     background: #000;
 }
 
+.video-media-viewer__surface {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
 .video-media-viewer__controls {
     position: absolute;
     inset: 0;
@@ -578,7 +584,9 @@
     height: 70px;
     border-radius: 999px;
     border: 1px solid rgba(255, 255, 255, 0.35);
-    background: rgba(0, 0, 0, 0.55);
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     color: #fff;
     display: flex;
     align-items: center;

@@ -223,6 +223,11 @@ function getLastMessagePreview(lastMessage: any, fallback: string): string {
         const prefix = getFilePreviewLabel(file);
         return text ? `${prefix} • ${text}` : prefix;
     }
+    const normalizedText = text.toLowerCase();
+    if (['[file]', 'file', 'attachment'].includes(normalizedText)) return '📎 فایل';
+    if (['[image]', 'image', 'photo'].includes(normalizedText)) return '🖼️ تصویر';
+    if (['[video]', 'video'].includes(normalizedText)) return '🎥 ویدیو';
+    if (['[audio]', 'audio', 'voice'].includes(normalizedText)) return '🎵 صوت';
     return text || fallback;
 }
 
