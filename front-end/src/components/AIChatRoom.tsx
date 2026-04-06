@@ -12,7 +12,7 @@ import { ForwardModal } from './ForwardModal';
 interface AIChatRoomProps {
     messages: Message[];
     currentUserId: string;
-    onSendMessage: (text: string, useReasoner?: boolean) => void;
+    onSendMessage: (text: string, useReasoner?: boolean) => boolean | Promise<boolean>;
     onStopGenerating?: () => void;
     onDeleteMessage: (messageId: string) => void;
     onBack: () => void;
@@ -382,7 +382,7 @@ export function AIChatRoom({
         }
     };
 
-    const submit = () => {
+    const submit = async () => {
         const t = text.trim();
         if (t.length > MAX_AI_MESSAGE_LENGTH) {
             alert(`حداکثر طول پیام ${MAX_AI_MESSAGE_LENGTH} کاراکتر است`);
@@ -390,7 +390,8 @@ export function AIChatRoom({
         }
         if (!t || isResponding) return;
 
-        onSendMessage(t, reasoningEnabled);
+        const sent = await onSendMessage(t, reasoningEnabled);
+        if (!sent) return;
         playChatSound('send');
         setText('');
         requestAnimationFrame(() => scrollToBottom(true));
@@ -661,6 +662,7 @@ export function AIChatRoom({
                             </button>
 
                             <div className="ai-chat-drawer__list">
+                                <div className="ai-chat-drawer__section-title">تاریخچه</div>
                                 {aiChats.map((chat) => (
                                     <div key={chat.id} className="ai-chat-drawer__item">
                                         <button
@@ -881,8 +883,10 @@ export function AIChatRoom({
                     height: 8px;
                     border-radius: 50%;
                     background: #9ca3af;
-                    opacity: 0.7;
+                    animation: typing-bounce 1.3s infinite ease-in-out;
                 }
+                .typing-indicator span:nth-child(1) { animation-delay: -0.28s; }
+                .typing-indicator span:nth-child(2) { animation-delay: -0.14s; }
                 .thinking-indicator {
                     display: inline-flex;
                     align-items: center;

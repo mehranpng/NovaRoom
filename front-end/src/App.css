@@ -895,6 +895,15 @@ body,
     min-height: 0;
     overflow-y: auto;
     padding-right: 2px;
+    margin-top: 10px;
+}
+
+.ai-chat-drawer__section-title {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 700;
+    padding: 0 6px 4px;
+    text-align: right;
 }
 
 .ai-chat-drawer__item {

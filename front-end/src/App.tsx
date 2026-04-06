@@ -1185,13 +1185,13 @@ export function App() {
         handleSelectChat(savedMessagesId, { navigateToRoute: false });
     }, [currentUser, handleSelectChat, navigate]);
 
-    const handleSendAIMessage = useCallback(async (text: string, useReasoner = false) => {
-        if (!currentUser) return;
+    const handleSendAIMessage = useCallback(async (text: string, useReasoner = false): Promise<boolean> => {
+        if (!currentUser) return false;
 
         if (aiResponding && aiRespondingChatId && activeAIChatId !== aiRespondingChatId) {
             const respondingTitle = aiChats.find((c) => c.id === aiRespondingChatId)?.title || 'گفت‌وگوی در حال پاسخ';
             notify({ message: `گفت‌وگوی «${respondingTitle}» هنوز تکمیل نشده است.`, type: 'info' });
-            return;
+            return false;
         }
 
         setAITyping(true);
@@ -1212,10 +1212,10 @@ export function App() {
                 setAITyping(false);
                 setAIResponding(false);
                 setAIReasoningPending(false);
-                return;
+                return false;
             }
         }
-        if (!targetChatId) return;
+        if (!targetChatId) return false;
 
         const finalChatId = targetChatId;
 
@@ -1223,7 +1223,7 @@ export function App() {
         const sentCount = currentAIChatMessages.filter((m) => m.senderId === currentUser.chatId).length;
         if (sentCount >= 30) {
             alert('حداکثر 30 پیام در هر گفت‌وگو مجاز است. لطفاً یک چت جدید باز کنید.');
-            return;
+            return false;
         }
         const clientId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -1245,11 +1245,18 @@ export function App() {
         const success = sendAIMessage(text, finalChatId, clientId, useReasoner);
         if (!success) {
             console.warn('Failed to send message to AI');
+            setAIMessagesByChat((prev) => ({
+                ...prev,
+                [finalChatId]: (prev[finalChatId] || []).filter((m) => m.id !== clientId),
+            }));
             setAITyping(false);
             setAIResponding(false);
             setAIReasoningPending(false);
             setAIRespondingChatId(null);
+            notify({ message: 'ارتباط با سرویس هوش مصنوعی برقرار نیست. لطفاً دوباره تلاش کنید.', type: 'error' });
+            return false;
         }
+        return true;
     }, [currentUser, activeAIChatId, aiMessagesByChat, sendAIMessage, aiResponding, aiRespondingChatId, aiChats]);
 
     const handleStopAIResponse = useCallback(() => {
