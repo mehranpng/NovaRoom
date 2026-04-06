@@ -10,9 +10,22 @@ interface FileMessageProps {
     token: string;
     onMediaLoad?: () => void;
     onImageClick?: (imageUrl: string, file: FileMetadata) => void;
+    onVideoClick?: (videoUrl: string, file: FileMetadata) => void;
 }
 
-export function FileMessage({ file, token, onMediaLoad, onImageClick }: FileMessageProps) {
+function formatDuration(seconds: number): string {
+    if (!Number.isFinite(seconds) || seconds <= 0) return '00:00';
+    const total = Math.floor(seconds);
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const secs = total % 60;
+    if (hours > 0) {
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+    return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoClick }: FileMessageProps) {
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [imageLoading, setImageLoading] = useState(false);
     const [imageError, setImageError] = useState(false);
@@ -22,6 +35,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick }: FileMess
     const [videoUrl, setVideoUrl] = useState<string | null>(null);
     const [videoLoading, setVideoLoading] = useState(false);
     const [videoError, setVideoError] = useState(false);
+    const [videoDuration, setVideoDuration] = useState(0);
     const videoRef = useRef<HTMLVideoElement | null>(null);
 
     const musicPlayer = useMusicPlayer();
@@ -113,6 +127,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick }: FileMess
                 if (!cancelled) {
                     objectUrl = window.URL.createObjectURL(blob);
                     setVideoUrl(objectUrl);
+                    setVideoDuration(0);
                 }
             } catch (error) {
                 console.error('Failed to load video:', error);
@@ -195,21 +210,32 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick }: FileMess
                             <span style={{ fontSize: 12 }}>خطا در بارگذاری ویدیو</span>
                         </div>
                     ) : (
-                        <video
-                            ref={videoRef}
-                            src={videoUrl}
-                            controls
-                            className="file-video-player"
-                            onLoadedMetadata={onMediaLoad}
-                            preload="metadata"
-                        />
-                    )}
-                    <div className="file-video-footer">
-                        <span className="file-video-name">🎬 {file.fileName}</span>
-                        <button onClick={handleDownload} className="file-download-btn" type="button">
-                            <Download size={16} />
+                        <button
+                            type="button"
+                            className="file-video-thumb"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (videoUrl) onVideoClick?.(videoUrl, file);
+                            }}
+                        >
+                            <video
+                                ref={videoRef}
+                                src={videoUrl}
+                                className="file-video-player"
+                                preload="metadata"
+                                playsInline
+                                muted
+                                onLoadedMetadata={(e) => {
+                                    setVideoDuration(e.currentTarget.duration || 0);
+                                    onMediaLoad?.();
+                                }}
+                            />
+                            <span className="file-video-duration">{formatDuration(videoDuration)}</span>
+                            <span className="file-video-play-badge" aria-hidden="true">
+                                <Play size={20} />
+                            </span>
                         </button>
-                    </div>
+                    )}
                 </div>
             ) : isAudio ? (
                 <div className="file-audio-card" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', minWidth: 200 }}>

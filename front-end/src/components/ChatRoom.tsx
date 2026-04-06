@@ -15,6 +15,7 @@ import { ForwardModal } from './ForwardModal';
 import { FileUpload } from './FileUpload';
 import { FileMessage } from './FileMessage';
 import { ImageMediaViewer } from './ImageMediaViewer';
+import { VideoMediaViewer } from './VideoMediaViewer';
 import './FileComponents.css';
 
 interface ChatRoomProps {
@@ -372,6 +373,7 @@ export function ChatRoom({
     // Keep unread count used for UI stable, even if App "consumes" initialUnreadCount afterwards.
     const [displayUnreadCount, setDisplayUnreadCount] = useState<number>(initialUnreadCount);
     const [openedImage, setOpenedImage] = useState<{ url: string; file: FileMetadata | null } | null>(null);
+    const [openedVideo, setOpenedVideo] = useState<{ url: string; file: FileMetadata | null } | null>(null);
 
     // Auto-jump bookkeeping to avoid saving an automatic scroll position as user's scroll memory.
     const autoJumpedToUnreadRef = useRef(false);
@@ -1928,6 +1930,7 @@ export function ChatRoom({
                                                     token={token}
                                                     onMediaLoad={() => handleInitialMediaReady(m.id)}
                                                     onImageClick={(imageUrl, file) => setOpenedImage({ url: imageUrl, file })}
+                                                    onVideoClick={(videoUrl, file) => setOpenedVideo({ url: videoUrl, file })}
                                                 />
                                             )}
 
@@ -2047,6 +2050,14 @@ export function ChatRoom({
                     downloadFile={openedImage.file}
                     token={token}
                     onClose={() => setOpenedImage(null)}
+                />
+            )}
+            {openedVideo && (
+                <VideoMediaViewer
+                    videoUrl={openedVideo.url}
+                    downloadFile={openedVideo.file}
+                    token={token}
+                    onClose={() => setOpenedVideo(null)}
                 />
             )}
 
