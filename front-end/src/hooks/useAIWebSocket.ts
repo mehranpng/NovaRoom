@@ -6,9 +6,19 @@ interface UseAIWebSocketProps {
     token: string | null;
     onNewMessage: (message: Message) => void;
     onUserMessageSaved?: (message: Message, clientId?: string) => void;
+    onAIStreamStart?: (message: Message) => void;
+    onAIStreamChunk?: (messageId: string, text: string) => void;
+    onAIStreamDone?: (message: Message) => void;
 }
 
-export function useAIWebSocket({ token, onNewMessage, onUserMessageSaved }: UseAIWebSocketProps) {
+export function useAIWebSocket({
+    token,
+    onNewMessage,
+    onUserMessageSaved,
+    onAIStreamStart,
+    onAIStreamChunk,
+    onAIStreamDone,
+}: UseAIWebSocketProps) {
     const MAX_AI_MESSAGE_LENGTH = 3000;
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<number | undefined>(undefined);
@@ -44,6 +54,12 @@ export function useAIWebSocket({ token, onNewMessage, onUserMessageSaved }: UseA
 
                 if (data.type === 'ai_response') {
                     onNewMessage(data.message);
+                } else if (data.type === 'ai_response_start') {
+                    onAIStreamStart?.(data.message);
+                } else if (data.type === 'ai_response_chunk') {
+                    onAIStreamChunk?.(data.messageId, data.text ?? '');
+                } else if (data.type === 'ai_response_done') {
+                    onAIStreamDone?.(data.message);
                 } else if (data.type === 'ai_user_message_saved') {
                     onUserMessageSaved?.(data.message, data.clientId);
                 } else if (data.type === 'pong') {
@@ -73,7 +89,7 @@ export function useAIWebSocket({ token, onNewMessage, onUserMessageSaved }: UseA
         };
 
         wsRef.current = ws;
-    }, [token, onNewMessage, onUserMessageSaved]);
+    }, [token, onNewMessage, onUserMessageSaved, onAIStreamStart, onAIStreamChunk, onAIStreamDone]);
 
     useEffect(() => {
         connect();

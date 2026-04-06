@@ -1,11 +1,11 @@
 import os
-from openai import OpenAI
-from typing import List, Dict
+from openai import AsyncOpenAI
+from typing import List, Dict, AsyncIterator
 from dotenv import load_dotenv
 
 load_dotenv()
 
-client = OpenAI(
+client = AsyncOpenAI(
     api_key=os.environ.get("DEEPSEEK_API_KEY"),
     base_url="https://api.deepseek.com",
 )
@@ -53,25 +53,35 @@ def get_system_prompt(user_name: str = "") -> str:
         """
 
 
-async def generate_ai_response(
+async def generate_ai_response_stream(
     messages: List[Dict[str, str]], user_name: str = ""
-) -> str:
+) -> AsyncIterator[str]:
     try:
         full_messages = [
             {"role": "system", "content": get_system_prompt(user_name)},
             *messages,
         ]
 
-        response = client.chat.completions.create(
+        stream = await client.chat.completions.create(
             model="deepseek-chat",
             messages=full_messages,
             max_tokens=1000,
+            stream=True,
         )
 
-        return (
-            response.choices[0].message.content or "متأسفم، نتوانستم پاسخی تولید کنم."
-        )
+        has_content = False
+        async for chunk in stream:
+            delta = ""
+            if chunk.choices and chunk.choices[0].delta:
+                delta = chunk.choices[0].delta.content or ""
+
+            if delta:
+                has_content = True
+                yield delta
+
+        if not has_content:
+            yield "متأسفم، نتوانستم پاسخی تولید کنم."
 
     except Exception as e:
         print(f"AI generation error: {e}")
-        return "متأسفم، خطایی رخ داده است. لطفاً دوباره تلاش کنید."
+        yield "متأسفم، خطایی رخ داده است. لطفاً دوباره تلاش کنید."

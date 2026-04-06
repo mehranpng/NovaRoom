@@ -76,6 +76,7 @@ export function App() {
     const [pendingUser, setPendingUser] = useState<User | null>(null);
     const [pendingForwardDrafts, setPendingForwardDrafts] = useState<Record<string, { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }>>({});
     const pendingForwardSendHintsRef = useRef<Record<string, number>>({});
+    const aiStreamStartedRef = useRef<Record<string, boolean>>({});
 
     const chatsRef = useRef<Chat[]>([]);
     useEffect(() => {
@@ -437,6 +438,61 @@ export function App() {
         setAITyping(false);
     }, []);
 
+    const vibrate = useCallback((pattern: number | number[]) => {
+        if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return;
+        navigator.vibrate(pattern);
+    }, []);
+
+    const handleAIStreamStart = useCallback((message: any) => {
+        const messageWithChatId: Message = {
+            ...message,
+            chatId: 'ai_chat',
+            seen: true,
+        };
+        aiStreamStartedRef.current[messageWithChatId.id] = false;
+        setAIMessages(prev => {
+            const idx = prev.findIndex((m) => m.id === messageWithChatId.id);
+            if (idx === -1) return [...prev, messageWithChatId];
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...messageWithChatId };
+            return next;
+        });
+        setAITyping(true);
+    }, []);
+
+    const handleAIStreamChunk = useCallback((messageId: string, text: string) => {
+        if (!messageId) return;
+        if (!aiStreamStartedRef.current[messageId]) {
+            aiStreamStartedRef.current[messageId] = true;
+            vibrate([15, 20, 15]);
+        }
+        setAIMessages(prev => {
+            const idx = prev.findIndex((m) => m.id === messageId);
+            if (idx === -1) return prev;
+            const next = [...prev];
+            next[idx] = { ...next[idx], text, seen: true };
+            return next;
+        });
+    }, [vibrate]);
+
+    const handleAIStreamDone = useCallback((message: any) => {
+        const messageWithChatId: Message = {
+            ...message,
+            chatId: 'ai_chat',
+            seen: true,
+        };
+        setAIMessages(prev => {
+            const idx = prev.findIndex((m) => m.id === messageWithChatId.id);
+            if (idx === -1) return [...prev, messageWithChatId];
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...messageWithChatId };
+            return next;
+        });
+        setAITyping(false);
+        delete aiStreamStartedRef.current[messageWithChatId.id];
+        vibrate(120);
+    }, [vibrate]);
+
     const handleAIUserMessageSaved = useCallback((message: any, clientId?: string) => {
         const messageWithChatId: Message = {
             ...message,
@@ -490,6 +546,9 @@ export function App() {
         token: localStorage.getItem('token'),
         onNewMessage: handleNewAIMessage,
         onUserMessageSaved: handleAIUserMessageSaved,
+        onAIStreamStart: handleAIStreamStart,
+        onAIStreamChunk: handleAIStreamChunk,
+        onAIStreamDone: handleAIStreamDone,
     });
 
     // Check auth on mount

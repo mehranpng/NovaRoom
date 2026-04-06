@@ -26,7 +26,7 @@ from bson import ObjectId
 import re
 import uuid
 import jdatetime
-from ai_service import generate_ai_response
+from ai_service import generate_ai_response_stream
 from email_service import (
     send_verification_email,
     verify_code,
@@ -2385,27 +2385,52 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     for doc in history_docs
                 ]
 
-                # Generate AI response
-                ai_response = await generate_ai_response(messages, user_name)
-
-                # Save AI response
+                # Create AI message placeholder and stream tokens live
                 ai_message_doc = {
                     "userId": user_id,
                     "role": "assistant",
-                    "content": ai_response,
+                    "content": "",
                     "timestamp": utc_now(),
                 }
                 result = await cl_ai_messages.insert_one(ai_message_doc)
                 ai_msg_id = str(result.inserted_id)
 
-                # Send response back to user
                 await websocket.send_json(
                     {
-                        "type": "ai_response",
+                        "type": "ai_response_start",
                         "message": {
                             "id": ai_msg_id,
                             "senderId": "ai",
-                            "text": ai_response,
+                            "text": "",
+                            "timestamp": dt_to_epoch_ms(ai_message_doc["timestamp"]),
+                        },
+                    }
+                )
+
+                full_ai_response = ""
+                async for chunk in generate_ai_response_stream(messages, user_name):
+                    full_ai_response += chunk
+                    await websocket.send_json(
+                        {
+                            "type": "ai_response_chunk",
+                            "messageId": ai_msg_id,
+                            "chunk": chunk,
+                            "text": full_ai_response,
+                        }
+                    )
+
+                await cl_ai_messages.update_one(
+                    {"_id": result.inserted_id},
+                    {"$set": {"content": full_ai_response}},
+                )
+
+                await websocket.send_json(
+                    {
+                        "type": "ai_response_done",
+                        "message": {
+                            "id": ai_msg_id,
+                            "senderId": "ai",
+                            "text": full_ai_response,
                             "timestamp": dt_to_epoch_ms(ai_message_doc["timestamp"]),
                         },
                     }
