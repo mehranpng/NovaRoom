@@ -71,8 +71,7 @@ const NotificationCard = ({
       exit={{ y: -24, opacity: 0, scale: 0.97 }}
       transition={{ duration: 0.2, ease: 'linear' }}
       drag={item.leaving ? false : 'x'}
-      dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={0.08}
+      dragElastic={0.2}
       dragMomentum={false}
       whileDrag={{ scale: 0.99, cursor: 'grabbing' }}
       onDragEnd={(_, info) => {
