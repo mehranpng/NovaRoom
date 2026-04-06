@@ -5,7 +5,8 @@ import { API_WS_URL } from '../config/api';
 interface UseAIWebSocketProps {
     token: string | null;
     onNewMessage: (message: Message) => void;
-    onUserMessageSaved?: (message: Message, clientId?: string) => void;
+    onError?: (message: string) => void;
+    onUserMessageSaved?: (message: Message, clientId?: string, title?: string) => void;
     onAIStreamStart?: (message: Message) => void;
     onAIStreamChunk?: (messageId: string, text: string) => void;
     onAIStreamDone?: (message: Message) => void;
@@ -14,6 +15,7 @@ interface UseAIWebSocketProps {
 export function useAIWebSocket({
     token,
     onNewMessage,
+    onError,
     onUserMessageSaved,
     onAIStreamStart,
     onAIStreamChunk,
@@ -61,7 +63,9 @@ export function useAIWebSocket({
                 } else if (data.type === 'ai_response_done') {
                     onAIStreamDone?.(data.message);
                 } else if (data.type === 'ai_user_message_saved') {
-                    onUserMessageSaved?.(data.message, data.clientId);
+                    onUserMessageSaved?.(data.message, data.clientId, data.title);
+                } else if (data.type === 'ai_error') {
+                    onError?.(String(data.message || 'خطا در سرویس هوش مصنوعی'));
                 } else if (data.type === 'pong') {
                     // Keep-alive response
                 }
@@ -89,7 +93,7 @@ export function useAIWebSocket({
         };
 
         wsRef.current = ws;
-    }, [token, onNewMessage, onUserMessageSaved, onAIStreamStart, onAIStreamChunk, onAIStreamDone]);
+    }, [token, onNewMessage, onError, onUserMessageSaved, onAIStreamStart, onAIStreamChunk, onAIStreamDone]);
 
     useEffect(() => {
         connect();
@@ -105,10 +109,11 @@ export function useAIWebSocket({
         };
     }, [connect]);
 
-    const sendMessage = useCallback((text: string, clientId?: string, useReasoner = false) => {
+    const sendMessage = useCallback((text: string, aiChatId: string, clientId?: string, useReasoner = false) => {
         if (typeof text !== 'string' || !text.trim() || text.length > MAX_AI_MESSAGE_LENGTH) {
             return false;
         }
+        if (!aiChatId) return false;
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
             console.warn('AI WebSocket not connected');
             return false;
@@ -118,6 +123,7 @@ export function useAIWebSocket({
             JSON.stringify({
                 type: 'ai_message',
                 text,
+                aiChatId,
                 clientId,
                 useReasoner,
             })

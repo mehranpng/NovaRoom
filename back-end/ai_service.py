@@ -196,3 +196,46 @@ async def generate_conversation_summary(
     except Exception as e:
         print(f"Summary generation error: {e}")
         return (previous_summary or "")[:300]
+
+
+async def generate_chat_title(first_user_message: str) -> str:
+    try:
+        raw_message = (first_user_message or "").strip()
+        if not raw_message:
+            return "گفت‌وگوی جدید"
+
+        title_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Return valid json only. "
+                    'Output format: {"title":"..."} . '
+                    "Create a very short Persian chat title (max 32 chars) based on the first user message. "
+                    "No punctuation-heavy text. No emojis. No quotes."
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {"first_message": raw_message},
+                    ensure_ascii=False,
+                ),
+            },
+        ]
+
+        response = await client.chat.completions.create(
+            model="deepseek-chat",
+            messages=title_messages,
+            response_format={"type": "json_object"},
+            max_tokens=80,
+        )
+        payload = response.choices[0].message.content or ""
+        parsed = json.loads(payload)
+        title = str(parsed.get("title") or "").strip()
+        if not title:
+            return (raw_message[:32]).strip() or "گفت‌وگوی جدید"
+        return title[:32]
+    except Exception as e:
+        print(f"Title generation error: {e}")
+        fallback = (first_user_message or "").strip()
+        return (fallback[:32]).strip() or "گفت‌وگوی جدید"

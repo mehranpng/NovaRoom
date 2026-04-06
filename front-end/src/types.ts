@@ -67,4 +67,11 @@ export interface Chat {
     unreadCount: number;
 }
 
+export interface AIChatSummary {
+    id: string;
+    title: string;
+    summary?: string;
+    updatedAt: number;
+}
+
 export type View = 'chatList' | 'chatRoom' | 'profile';

@@ -26,7 +26,11 @@ from bson import ObjectId
 import re
 import uuid
 import jdatetime
-from ai_service import generate_ai_response_stream, generate_conversation_summary
+from ai_service import (
+    generate_ai_response_stream,
+    generate_conversation_summary,
+    generate_chat_title,
+)
 from email_service import (
     send_verification_email,
     verify_code,
@@ -73,7 +77,7 @@ cl_users = db["users"]
 cl_chats = db["chats"]
 cl_messages = db["messages"]
 cl_ai_messages = db["ai_messages"]
-cl_ai_state = db["ai_state"]
+cl_ai_chats = db["ai_chats"]
 
 # Store active connections (multiple tabs/devices per user)
 active_connections: Dict[str, List[WebSocket]] = {}
@@ -102,6 +106,7 @@ VALID_REACTIONS = [
 MAX_PINNED_CHATS = 20
 MAX_CHAT_MESSAGE_LENGTH = 6000
 MAX_AI_MESSAGE_LENGTH = 3000
+MAX_AI_MESSAGES_PER_CHAT = 30
 
 
 def utc_now() -> datetime:
@@ -336,8 +341,8 @@ async def startup_db():
     await cl_messages.create_index("chatId")
     await cl_messages.create_index([("chatId", 1), ("timestamp", -1)])
     await cl_ai_messages.create_index("userId")
-    await cl_ai_messages.create_index([("userId", 1), ("timestamp", -1)])
-    await cl_ai_state.create_index("userId", unique=True)
+    await cl_ai_messages.create_index([("userId", 1), ("aiChatId", 1), ("timestamp", -1)])
+    await cl_ai_chats.create_index([("userId", 1), ("updatedAt", -1)])
 
 
 @app.get("/profile/me/pins")
@@ -2312,6 +2317,60 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 )
 
 
+async def ensure_ai_chat(user_id: str, ai_chat_id: str) -> dict:
+    oid = await try_object_id(ai_chat_id)
+    if not oid:
+        raise HTTPException(status_code=400, detail="Invalid AI chat ID")
+    chat = await cl_ai_chats.find_one({"_id": oid, "userId": user_id})
+    if not chat:
+        raise HTTPException(status_code=404, detail="AI chat not found")
+    return chat
+
+
+@app.get("/ai/chats")
+async def get_ai_chats(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["chatId"]
+    rows = await cl_ai_chats.find({"userId": user_id}).sort("updatedAt", -1).to_list(200)
+    return [
+        {
+            "id": str(row["_id"]),
+            "title": row.get("title") or "گفت‌وگوی جدید",
+            "summary": row.get("summary") or "",
+            "updatedAt": dt_to_epoch_ms(row.get("updatedAt")),
+        }
+        for row in rows
+    ]
+
+
+@app.post("/ai/chats")
+async def create_ai_chat(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["chatId"]
+    now = utc_now()
+    chat_doc = {
+        "userId": user_id,
+        "title": "گفت‌وگوی جدید",
+        "summary": "",
+        "createdAt": now,
+        "updatedAt": now,
+    }
+    inserted = await cl_ai_chats.insert_one(chat_doc)
+    return {
+        "id": str(inserted.inserted_id),
+        "title": chat_doc["title"],
+        "summary": "",
+        "updatedAt": dt_to_epoch_ms(now),
+    }
+
+
+@app.delete("/ai/chats/{ai_chat_id}")
+async def delete_ai_chat(ai_chat_id: str, current_user: dict = Depends(get_current_user)):
+    user_id = current_user["chatId"]
+    chat = await ensure_ai_chat(user_id, ai_chat_id)
+    await cl_ai_messages.delete_many({"userId": user_id, "aiChatId": ai_chat_id})
+    await cl_ai_chats.delete_one({"_id": chat["_id"]})
+    return {"success": True}
+
+
 @app.websocket("/ws/ai")
 async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
     await websocket.accept()
@@ -2341,6 +2400,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
         user_bio = profile.get("bio", "")
 
         async def stream_ai_reply(
+            ai_chat_id: str,
             prompt_messages: List[Dict[str, str]],
             memory_summary: str,
             model_name: str,
@@ -2348,6 +2408,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
         ):
             ai_message_doc = {
                 "userId": user_id,
+                "aiChatId": ai_chat_id,
                 "role": "assistant",
                 "content": "",
                 "timestamp": utc_now(),
@@ -2361,6 +2422,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     "type": "ai_response_start",
                     "message": {
                         "id": ai_msg_id,
+                        "aiChatId": ai_chat_id,
                         "senderId": "ai",
                         "text": "",
                         "timestamp": message_ts_ms,
@@ -2385,6 +2447,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     await websocket.send_json(
                         {
                             "type": "ai_response_chunk",
+                            "aiChatId": ai_chat_id,
                             "messageId": ai_msg_id,
                             "chunk": chunk,
                             "text": full_ai_response,
@@ -2398,6 +2461,10 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     {"_id": result.inserted_id},
                     {"$set": {"content": full_ai_response}},
                 )
+                await cl_ai_chats.update_one(
+                    {"_id": await try_object_id(ai_chat_id), "userId": user_id},
+                    {"$set": {"updatedAt": utc_now()}},
+                )
 
                 await websocket.send_json(
                     {
@@ -2405,6 +2472,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                         "stopped": stopped,
                         "message": {
                             "id": ai_msg_id,
+                            "aiChatId": ai_chat_id,
                             "senderId": "ai",
                             "text": full_ai_response,
                             "timestamp": message_ts_ms,
@@ -2421,30 +2489,66 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
             if data.get("type") == "ai_message":
                 text = data.get("text")
                 client_id = data.get("clientId")
+                ai_chat_id = str(data.get("aiChatId") or "").strip()
                 use_reasoner = bool(data.get("useReasoner"))
-                model_name = (
-                    "deepseek-reasoner" if use_reasoner else "deepseek-chat"
-                )
+                model_name = "deepseek-reasoner" if use_reasoner else "deepseek-chat"
 
                 if not isinstance(text, str) or not text.strip():
                     continue
                 if len(text) > MAX_AI_MESSAGE_LENGTH:
                     continue
 
+                try:
+                    ai_chat = await ensure_ai_chat(user_id, ai_chat_id)
+                except HTTPException:
+                    await websocket.send_json(
+                        {"type": "ai_error", "message": "گفت‌وگوی انتخاب‌شده معتبر نیست."}
+                    )
+                    continue
+
+                user_msg_count = await cl_ai_messages.count_documents(
+                    {"userId": user_id, "aiChatId": ai_chat_id, "role": "user"}
+                )
+                if user_msg_count >= MAX_AI_MESSAGES_PER_CHAT:
+                    await websocket.send_json(
+                        {
+                            "type": "ai_error",
+                            "message": "حداکثر 30 پیام در هر گفتگو مجاز است. لطفاً گفت‌وگوی جدید باز کنید.",
+                        }
+                    )
+                    continue
+
                 # Save user message
                 user_message_doc = {
                     "userId": user_id,
+                    "aiChatId": ai_chat_id,
                     "role": "user",
                     "content": text,
                     "timestamp": utc_now(),
                 }
                 user_insert = await cl_ai_messages.insert_one(user_message_doc)
+
+                generated_title = ""
+                if user_msg_count == 0:
+                    generated_title = await generate_chat_title(text)
+                    await cl_ai_chats.update_one(
+                        {"_id": ai_chat["_id"], "userId": user_id},
+                        {
+                            "$set": {
+                                "title": generated_title,
+                                "updatedAt": utc_now(),
+                            }
+                        },
+                    )
+
                 await websocket.send_json(
                     {
                         "type": "ai_user_message_saved",
+                        "title": generated_title,
                         "clientId": client_id if isinstance(client_id, str) else None,
                         "message": {
                             "id": str(user_insert.inserted_id),
+                            "aiChatId": ai_chat_id,
                             "senderId": user_id,
                             "text": text,
                             "timestamp": dt_to_epoch_ms(user_message_doc["timestamp"]),
@@ -2452,27 +2556,20 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     }
                 )
 
-                ai_state_doc = await cl_ai_state.find_one({"userId": user_id})
                 memory_summary = ""
-                if ai_state_doc and isinstance(ai_state_doc.get("summary"), str):
-                    memory_summary = ai_state_doc.get("summary", "").strip()
+                if isinstance(ai_chat.get("summary"), str):
+                    memory_summary = ai_chat.get("summary", "").strip()
 
-                # Get conversation history (last 3 messages)
                 history_docs = (
-                    await cl_ai_messages.find({"userId": user_id})
+                    await cl_ai_messages.find({"userId": user_id, "aiChatId": ai_chat_id})
                     .sort("timestamp", -1)
-                    .limit(3)
-                    .to_list(3)
+                    .limit(6)
+                    .to_list(6)
                 )
                 history_docs.reverse()
 
-                # Prepare messages for AI
-                messages = [
-                    {"role": doc["role"], "content": doc["content"]}
-                    for doc in history_docs
-                ]
+                messages = [{"role": doc["role"], "content": doc["content"]} for doc in history_docs]
 
-                # Update memory summary BEFORE generating the assistant response.
                 refreshed_summary = await generate_conversation_summary(
                     messages,
                     previous_summary=memory_summary,
@@ -2481,15 +2578,14 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     chat_id=user_id,
                     bio=user_bio,
                 )
-                await cl_ai_state.update_one(
-                    {"userId": user_id},
+                await cl_ai_chats.update_one(
+                    {"_id": ai_chat["_id"], "userId": user_id},
                     {
                         "$set": {
                             "summary": refreshed_summary,
                             "updatedAt": utc_now(),
                         }
                     },
-                    upsert=True,
                 )
 
                 if current_stream_task and not current_stream_task.done():
@@ -2501,6 +2597,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 current_stream_task = asyncio.create_task(
                     stream_ai_reply(
+                        ai_chat_id,
                         messages,
                         refreshed_summary,
                         model_name,
@@ -2530,12 +2627,15 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
 
 @app.get("/ai/messages")
 async def get_ai_messages(
-    limit: int = 50, current_user: dict = Depends(get_current_user)
+    chatId: str = Query(...),
+    limit: int = 50,
+    current_user: dict = Depends(get_current_user),
 ):
     user_id = current_user["chatId"]
+    await ensure_ai_chat(user_id, chatId)
 
     msgs = (
-        await cl_ai_messages.find({"userId": user_id})
+        await cl_ai_messages.find({"userId": user_id, "aiChatId": chatId})
         .sort("timestamp", -1)
         .limit(limit)
         .to_list(limit)
@@ -2545,6 +2645,7 @@ async def get_ai_messages(
     return [
         {
             "id": str(m["_id"]),
+            "aiChatId": chatId,
             "senderId": "ai" if m["role"] == "assistant" else user_id,
             "text": m.get("content", ""),
             "timestamp": dt_to_epoch_ms(m.get("timestamp")),
@@ -2557,22 +2658,16 @@ async def get_ai_messages(
 async def delete_ai_message(
     message_id: str, current_user: dict = Depends(get_current_user)
 ):
-    """Delete an AI chat message"""
     user_id = current_user["chatId"]
-
-    # Convert message_id to ObjectId
     oid = await try_object_id(message_id)
     if not oid:
         raise HTTPException(status_code=400, detail="Invalid message ID")
 
-    # Find the message
     msg = await cl_ai_messages.find_one({"_id": oid, "userId": user_id})
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
 
-    # Delete the message
     await cl_ai_messages.delete_one({"_id": oid})
-
     return {"success": True, "message": "Message deleted successfully"}
 
 

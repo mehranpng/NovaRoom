@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import type { Message, View, User, Chat, ChatLastMessage, FileMetadata } from './types';
+import type { Message, View, User, Chat, ChatLastMessage, FileMetadata, AIChatSummary } from './types';
 import { apiFetch } from './config/api';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useAIWebSocket } from './hooks/useAIWebSocket';
@@ -59,7 +59,9 @@ export function App() {
 
     // AI Chat state
     const [showAIChat, setShowAIChat] = useState(false);
-    const [aiMessages, setAIMessages] = useState<Message[]>([]);
+    const [aiChats, setAIChats] = useState<AIChatSummary[]>([]);
+    const [activeAIChatId, setActiveAIChatId] = useState<string | null>(null);
+    const [aiMessagesByChat, setAIMessagesByChat] = useState<Record<string, Message[]>>({});
     const [aiLoading, setAILoading] = useState(true);
     const [aiTyping, setAITyping] = useState(false);
     const [aiResponding, setAIResponding] = useState(false);
@@ -188,29 +190,52 @@ export function App() {
         };
     }, []);
 
-    // Load AI chat history
+    // Load AI chat list
     useEffect(() => {
         if (!isAuthenticated) return;
 
+        const loadAIChats = async () => {
+            try {
+                setAILoading(true);
+                const chatRows = await apiFetch('/ai/chats');
+                if (Array.isArray(chatRows) && chatRows.length > 0) {
+                    setAIChats(chatRows);
+                    setActiveAIChatId((prev) => prev || chatRows[0].id);
+                } else {
+                    const created = await apiFetch('/ai/chats', { method: 'POST' });
+                    setAIChats([created]);
+                    setActiveAIChatId(created.id);
+                }
+            } catch (error) {
+                console.error('Failed to load AI chats:', error);
+            } finally {
+                setAILoading(false);
+            }
+        };
+
+        loadAIChats();
+    }, [isAuthenticated]);
+
+    useEffect(() => {
+        if (!isAuthenticated || !activeAIChatId) return;
         const loadAIMessages = async () => {
             try {
                 setAILoading(true);
-                const data = await apiFetch('/ai/messages?limit=100');
-                const messagesWithChatId = data.map((msg: any) => ({
+                const data = await apiFetch(`/ai/messages?chatId=${encodeURIComponent(activeAIChatId)}&limit=100`);
+                const messagesWithChatId = (Array.isArray(data) ? data : []).map((msg: any) => ({
                     ...msg,
-                    chatId: 'ai_chat',
+                    chatId: msg.aiChatId ?? activeAIChatId,
                     seen: true,
                 }));
-                setAIMessages(messagesWithChatId);
+                setAIMessagesByChat((prev) => ({ ...prev, [activeAIChatId]: messagesWithChatId }));
             } catch (error) {
                 console.error('Failed to load AI messages:', error);
             } finally {
                 setAILoading(false);
             }
         };
-
         loadAIMessages();
-    }, [isAuthenticated]);
+    }, [isAuthenticated, activeAIChatId]);
 
     const loadChats = useCallback(async (showLoading = true) => {
         if (!isAuthenticated) return;
@@ -274,7 +299,9 @@ export function App() {
         setIsInitialChatsLoad(true);
         setMessagesLoadedOnce({});
         setShowAIChat(false);
-        setAIMessages([]);
+        setAIChats([]);
+        setActiveAIChatId(null);
+        setAIMessagesByChat({});
         setPendingForwardDrafts({});
         newGroupTimestamps.current = {};
         setOpenChatUnread(null);
@@ -430,18 +457,39 @@ export function App() {
         setWsReconnectExhausted(true);
     }, []);
 
+    const appendAIMessage = useCallback((aiChatId: string, message: Message) => {
+        if (!aiChatId) return;
+        setAIMessagesByChat((prev) => {
+            const existing = prev[aiChatId] || [];
+            if (existing.some((m) => m.id === message.id)) {
+                return prev;
+            }
+            return { ...prev, [aiChatId]: [...existing, message] };
+        });
+        setAIChats((prev) => {
+            const idx = prev.findIndex((c) => c.id === aiChatId);
+            if (idx === -1) return prev;
+            const next = [...prev];
+            next[idx] = { ...next[idx], updatedAt: Date.now() };
+            next.sort((a, b) => b.updatedAt - a.updatedAt);
+            return next;
+        });
+    }, []);
+
     // AI WebSocket handlers
     const handleNewAIMessage = useCallback((message: any) => {
+        const aiChatId = String(message.aiChatId || activeAIChatId || '');
+        if (!aiChatId) return;
         const messageWithChatId: Message = {
             ...message,
-            chatId: 'ai_chat',
+            chatId: aiChatId,
             seen: true,
         };
-        setAIMessages(prev => [...prev, messageWithChatId]);
+        appendAIMessage(aiChatId, messageWithChatId);
         setAITyping(false);
         setAIResponding(false);
         setAIReasoningPending(false);
-    }, []);
+    }, [activeAIChatId, appendAIMessage]);
 
     const vibrate = useCallback((pattern: number | number[]) => {
         if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return;
@@ -449,16 +497,19 @@ export function App() {
     }, []);
 
     const handleAIStreamStart = useCallback((message: any) => {
+        const aiChatId = String(message.aiChatId || activeAIChatId || '');
+        if (!aiChatId) return;
         const messageWithChatId: Message = {
             ...message,
-            chatId: 'ai_chat',
+            chatId: aiChatId,
             seen: true,
         };
         aiStreamStartedRef.current[messageWithChatId.id] = false;
         aiPendingStreamMetaRef.current[messageWithChatId.id] = messageWithChatId;
+        appendAIMessage(aiChatId, messageWithChatId);
         setAITyping(true);
         setAIResponding(true);
-    }, []);
+    }, [activeAIChatId, appendAIMessage]);
 
     const handleAIStreamChunk = useCallback((messageId: string, text: string) => {
         if (!messageId) return;
@@ -468,37 +519,43 @@ export function App() {
             setAITyping(false);
             setAIReasoningPending(false);
         }
-        setAIMessages(prev => {
-            const idx = prev.findIndex((m) => m.id === messageId);
+        setAIMessagesByChat(prev => {
+            const aiChatId = aiPendingStreamMetaRef.current[messageId]?.chatId || activeAIChatId || '';
+            if (!aiChatId) return prev;
+            const current = prev[aiChatId] || [];
+            const idx = current.findIndex((m) => m.id === messageId);
             if (idx === -1) {
                 const fallback = aiPendingStreamMetaRef.current[messageId] ?? {
                     id: messageId,
-                    chatId: 'ai_chat',
+                    chatId: aiChatId,
                     senderId: 'ai',
                     text: '',
                     timestamp: Date.now(),
                     seen: true,
                 };
-                return [...prev, { ...fallback, text, seen: true }];
+                return { ...prev, [aiChatId]: [...current, { ...fallback, text, seen: true }] };
             }
-            const next = [...prev];
+            const next = [...current];
             next[idx] = { ...next[idx], text, seen: true };
-            return next;
+            return { ...prev, [aiChatId]: next };
         });
-    }, [vibrate]);
+    }, [vibrate, activeAIChatId]);
 
     const handleAIStreamDone = useCallback((message: any) => {
+        const aiChatId = String(message.aiChatId || activeAIChatId || '');
+        if (!aiChatId) return;
         const messageWithChatId: Message = {
             ...message,
-            chatId: 'ai_chat',
+            chatId: aiChatId,
             seen: true,
         };
-        setAIMessages(prev => {
-            const idx = prev.findIndex((m) => m.id === messageWithChatId.id);
-            if (idx === -1) return [...prev, messageWithChatId];
-            const next = [...prev];
+        setAIMessagesByChat(prev => {
+            const current = prev[aiChatId] || [];
+            const idx = current.findIndex((m) => m.id === messageWithChatId.id);
+            if (idx === -1) return { ...prev, [aiChatId]: [...current, messageWithChatId] };
+            const next = [...current];
             next[idx] = { ...next[idx], ...messageWithChatId };
-            return next;
+            return { ...prev, [aiChatId]: next };
         });
         setAITyping(false);
         setAIResponding(false);
@@ -506,21 +563,36 @@ export function App() {
         delete aiStreamStartedRef.current[messageWithChatId.id];
         delete aiPendingStreamMetaRef.current[messageWithChatId.id];
         vibrate(120);
-    }, [vibrate]);
+    }, [vibrate, activeAIChatId]);
 
-    const handleAIUserMessageSaved = useCallback((message: any, clientId?: string) => {
+    const handleAIUserMessageSaved = useCallback((message: any, clientId?: string, title?: string) => {
+        const aiChatId = String(message.aiChatId || activeAIChatId || '');
+        if (!aiChatId) return;
         const messageWithChatId: Message = {
             ...message,
-            chatId: 'ai_chat',
+            chatId: aiChatId,
             seen: true,
         };
-        setAIMessages(prev => {
-            const idx = clientId ? prev.findIndex((m) => m.id === clientId) : -1;
-            if (idx === -1) return [...prev, messageWithChatId];
-            const next = [...prev];
+        setAIMessagesByChat(prev => {
+            const current = prev[aiChatId] || [];
+            const idx = clientId ? current.findIndex((m) => m.id === clientId) : -1;
+            if (idx === -1) return { ...prev, [aiChatId]: [...current, messageWithChatId] };
+            const next = [...current];
             next[idx] = messageWithChatId;
-            return next;
+            return { ...prev, [aiChatId]: next };
         });
+        setAIChats(prev => prev.map((c) => (
+            c.id === aiChatId
+                ? { ...c, title: title?.trim() ? title : c.title, updatedAt: Date.now() }
+                : c
+        )));
+    }, [activeAIChatId]);
+
+    const handleAIError = useCallback((message: string) => {
+        alert(message);
+        setAITyping(false);
+        setAIResponding(false);
+        setAIReasoningPending(false);
     }, []);
 
     // WebSocket initialization
@@ -560,6 +632,7 @@ export function App() {
     const { sendMessage: sendAIMessage, stopGeneration: stopAIGeneration } = useAIWebSocket({
         token: localStorage.getItem('token'),
         onNewMessage: handleNewAIMessage,
+        onError: handleAIError,
         onUserMessageSaved: handleAIUserMessageSaved,
         onAIStreamStart: handleAIStreamStart,
         onAIStreamChunk: handleAIStreamChunk,
@@ -886,12 +959,16 @@ export function App() {
     const handleDeleteAIMessage = useCallback(async (messageId: string) => {
         try {
             await apiFetch(`/ai/messages/${encodeURIComponent(messageId)}`, { method: 'DELETE' });
-            setAIMessages(prev => prev.filter(m => m.id !== messageId));
+            if (!activeAIChatId) return;
+            setAIMessagesByChat(prev => ({
+                ...prev,
+                [activeAIChatId]: (prev[activeAIChatId] || []).filter((m) => m.id !== messageId),
+            }));
         } catch (error) {
             console.error('Failed to delete AI message:', error);
             alert('حذف پیام با خطا مواجه شد');
         }
-    }, []);
+    }, [activeAIChatId]);
 
     const handleUserSelectedFromModal = useCallback((user: User) => {
         setNewChatModalOpen(false);
@@ -1057,8 +1134,52 @@ export function App() {
         setPendingUser(null);
         setShowAIChat(true);
         setView('chatRoom');
+        if (!activeAIChatId && aiChats.length > 0) {
+            setActiveAIChatId(aiChats[0].id);
+        }
         navigate('/ai');
     };
+
+    const handleCreateAIChat = useCallback(async () => {
+        try {
+            const created = await apiFetch('/ai/chats', { method: 'POST' });
+            setAIChats((prev) => [created, ...prev]);
+            setActiveAIChatId(created.id);
+            setAIMessagesByChat((prev) => ({ ...prev, [created.id]: [] }));
+        } catch (error) {
+            console.error('Failed to create AI chat', error);
+            alert('ساخت گفت‌وگوی جدید با خطا مواجه شد');
+        }
+    }, []);
+
+    const handleSelectAIChat = useCallback((chatId: string) => {
+        setActiveAIChatId(chatId);
+    }, []);
+
+    const handleDeleteAIChat = useCallback(async (chatId: string) => {
+        try {
+            await apiFetch(`/ai/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
+            setAIChats((prev) => {
+                return prev.filter((c) => c.id !== chatId);
+            });
+            setAIMessagesByChat((prev) => {
+                const next = { ...prev };
+                delete next[chatId];
+                return next;
+            });
+            setActiveAIChatId((prev) => {
+                if (prev !== chatId) return prev;
+                const remaining = aiChats.filter((c) => c.id !== chatId);
+                return remaining[0]?.id || null;
+            });
+            if (aiChats.length === 1) {
+                await handleCreateAIChat();
+            }
+        } catch (error) {
+            console.error('Failed to delete AI chat', error);
+            alert('حذف گفت‌وگو با خطا مواجه شد');
+        }
+    }, [aiChats, handleCreateAIChat]);
 
     const handleOpenSavedMessages = useCallback(() => {
         if (!currentUser) return;
@@ -1068,31 +1189,40 @@ export function App() {
     }, [currentUser, handleSelectChat, navigate]);
 
     const handleSendAIMessage = useCallback((text: string, useReasoner = false) => {
-        if (!currentUser) return;
+        if (!currentUser || !activeAIChatId) return;
+        const currentAIChatMessages = aiMessagesByChat[activeAIChatId] || [];
+        const sentCount = currentAIChatMessages.filter((m) => m.senderId === currentUser.chatId).length;
+        if (sentCount >= 30) {
+            alert('حداکثر 30 پیام در هر گفت‌وگو مجاز است. لطفاً یک چت جدید باز کنید.');
+            return;
+        }
         const clientId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
         const userMessage: Message = {
             id: clientId,
-            chatId: 'ai_chat',
+            chatId: activeAIChatId,
             senderId: currentUser.chatId,
             text,
             timestamp: Date.now(),
             seen: false,
         };
 
-        setAIMessages(prev => [...prev, userMessage]);
+        setAIMessagesByChat((prev) => ({
+            ...prev,
+            [activeAIChatId]: [...(prev[activeAIChatId] || []), userMessage],
+        }));
         setAITyping(true);
         setAIResponding(true);
         setAIReasoningPending(Boolean(useReasoner));
 
-        const success = sendAIMessage(text, clientId, useReasoner);
+        const success = sendAIMessage(text, activeAIChatId, clientId, useReasoner);
         if (!success) {
             console.warn('Failed to send message to AI');
             setAITyping(false);
             setAIResponding(false);
             setAIReasoningPending(false);
         }
-    }, [currentUser, sendAIMessage]);
+    }, [currentUser, activeAIChatId, aiMessagesByChat, sendAIMessage]);
 
     const handleStopAIResponse = useCallback(() => {
         const success = stopAIGeneration();
@@ -1186,6 +1316,8 @@ export function App() {
     const activeMessages = activeChatId ? messages[activeChatId] || [] : [];
     const activeMessagesLoading = activeChatId ? messagesLoading[activeChatId] || false : false;
     const isSavedMessagesActive = currentUser && activeChatId === `saved_messages_${currentUser.chatId}`;
+    const aiMessages = activeAIChatId ? aiMessagesByChat[activeAIChatId] || [] : [];
+    const activeAIChat = aiChats.find((c) => c.id === activeAIChatId) || null;
 
     const initialUnreadCount = openChatUnread?.chatId && openChatUnread.chatId === (activeChatId || 'pending')
         ? openChatUnread.count
@@ -1249,6 +1381,12 @@ export function App() {
                                 chats={chats}
                                 onSelectChat={handleSelectChat}
                                 onSetPendingForwardDraft={handleSetPendingForwardDraft}
+                                aiChats={aiChats}
+                                activeAIChatId={activeAIChatId}
+                                activeAIChatTitle={activeAIChat?.title}
+                                onCreateAIChat={handleCreateAIChat}
+                                onSelectAIChat={handleSelectAIChat}
+                                onDeleteAIChat={handleDeleteAIChat}
                             />
                         ) : view === 'chatRoom' && (activeChat || pendingUser || isSavedMessagesActive) ? (
                             <ChatRoom

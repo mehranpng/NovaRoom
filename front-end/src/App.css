@@ -820,6 +820,100 @@ body,
     position: relative;
 }
 
+.ai-chat-drawer__overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.28);
+    z-index: 70;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.ai-chat-drawer {
+    width: min(88vw, 280px);
+    height: 100%;
+    background: var(--bg-primary);
+    border-left: 1px solid var(--border-primary);
+    box-shadow: var(--shadow-lg);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.ai-chat-drawer__icon-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    border: 1px solid var(--border-secondary);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.ai-chat-drawer__new-chat {
+    border: none;
+    border-radius: 12px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    height: 40px;
+    padding: 0 12px;
+    font: inherit;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.ai-chat-drawer__list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.ai-chat-drawer__item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ai-chat-drawer__item-title {
+    flex: 1;
+    text-align: right;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-primary);
+    padding: 8px 10px;
+    font: inherit;
+    cursor: pointer;
+}
+
+.ai-chat-drawer__item-title--active {
+    background: var(--hover-bg);
+    font-weight: 700;
+}
+
+.ai-chat-drawer__delete {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: #ef4444;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
 .chat-room__back-btn {
     display: flex;
     align-items: center;
