@@ -12,13 +12,37 @@ type NotificationItem = {
   leaving?: boolean;
 };
 
-const EXIT_MS = 220;
-const DRAG_DISMISS_THRESHOLD = 72;
+const EXIT_MS = 260;
+const DRAG_DISMISS_THRESHOLD = 56;
 
-const getTypeMeta = (type: NotificationType) => {
-  if (type === 'success') return { icon: '✓', className: 'notification--success' };
-  if (type === 'info') return { icon: '!', className: 'notification--info' };
-  return { icon: '✕', className: 'notification--error' };
+const IconGlyph = ({ type }: { type: NotificationType }) => {
+  if (type === 'success') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm4.8 7.8-5.6 6a1 1 0 0 1-1.45.02l-2.56-2.56a1 1 0 0 1 1.42-1.42l1.82 1.82 4.87-5.22a1 1 0 0 1 1.46 1.36Z" />
+      </svg>
+    );
+  }
+
+  if (type === 'info') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 14.5a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2Zm1.2-2.9a1 1 0 1 1-2 0V7.4a1 1 0 1 1 2 0v6.2Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm3.6 13.6a1 1 0 0 1-1.4 1.4L12 14.8 9.8 17a1 1 0 1 1-1.4-1.4l2.2-2.2-2.2-2.2a1 1 0 0 1 1.4-1.4l2.2 2.2 2.2-2.2a1 1 0 0 1 1.4 1.4l-2.2 2.2 2.2 2.2Z" />
+    </svg>
+  );
+};
+
+const getTypeClassName = (type: NotificationType) => {
+  if (type === 'success') return 'notification--success';
+  if (type === 'info') return 'notification--info';
+  return 'notification--error';
 };
 
 const NotificationCard = ({
@@ -32,6 +56,7 @@ const NotificationCard = ({
 }) => {
   const [offsetX, setOffsetX] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const offsetRef = useRef(0);
   const dragRef = useRef<{ active: boolean; startX: number; pointerId: number | null }>({
     active: false,
     startX: 0,
@@ -44,45 +69,50 @@ const NotificationCard = ({
     return () => window.clearTimeout(timer);
   }, [item.id, item.leaving, onDismiss]);
 
-  const { icon, className } = useMemo(() => getTypeMeta(item.type), [item.type]);
+  const typeClass = useMemo(() => getTypeClassName(item.type), [item.type]);
 
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     dragRef.current = { active: true, startX: e.clientX, pointerId: e.pointerId };
     setDragging(true);
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    e.currentTarget.setPointerCapture(e.pointerId);
   };
 
   const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!dragRef.current.active) return;
     const next = e.clientX - dragRef.current.startX;
+    offsetRef.current = next;
     setOffsetX(next);
   };
 
-  const finishDrag = (target: HTMLElement | null) => {
-    if (target && dragRef.current.pointerId !== null) {
+  const finishDrag = (target: HTMLElement) => {
+    if (dragRef.current.pointerId !== null) {
       try {
         target.releasePointerCapture(dragRef.current.pointerId);
       } catch {
-        // Ignore release errors.
+        // ignore
       }
     }
 
-    const shouldDismiss = Math.abs(offsetX) > DRAG_DISMISS_THRESHOLD;
+    const distance = Math.abs(offsetRef.current);
     dragRef.current = { active: false, startX: 0, pointerId: null };
+    offsetRef.current = 0;
     setDragging(false);
     setOffsetX(0);
-    if (shouldDismiss) onDismiss(item.id);
+
+    if (distance >= DRAG_DISMISS_THRESHOLD) {
+      onDismiss(item.id);
+    }
   };
 
-  const pointerOpacity = Math.max(0.45, 1 - Math.abs(offsetX) / 220);
-  const dragTilt = Math.max(-8, Math.min(8, offsetX / 22));
+  const pointerOpacity = Math.max(0.35, 1 - Math.abs(offsetX) / 180);
+  const dragTilt = Math.max(-7, Math.min(7, offsetX / 18));
 
   return (
     <div
-      className={`notification ${className} ${item.leaving ? 'notification--leaving' : ''} ${dragging ? 'notification--dragging' : ''}`}
+      className={`notification ${typeClass} ${item.leaving ? 'notification--leaving' : ''} ${dragging ? 'notification--dragging' : ''}`}
       style={{
         zIndex: 1000 - stackIndex,
-        transform: `translateY(${stackIndex * 8}px) translateX(${offsetX}px) rotate(${dragTilt}deg)`,
+        transform: `translateY(${stackIndex * 9}px) translateX(${offsetX}px) rotate(${dragTilt}deg)`,
         opacity: item.leaving ? 0 : pointerOpacity,
       }}
       onPointerDown={handlePointerDown}
@@ -90,7 +120,9 @@ const NotificationCard = ({
       onPointerUp={(e) => finishDrag(e.currentTarget)}
       onPointerCancel={(e) => finishDrag(e.currentTarget)}
     >
-      <span className="notification__icon" aria-hidden="true">{icon}</span>
+      <span className="notification__icon" aria-hidden="true">
+        <IconGlyph type={item.type} />
+      </span>
       <p className="notification__message">{item.message}</p>
     </div>
   );
@@ -102,6 +134,11 @@ export const NotificationCenter = () => {
   useEffect(() => {
     const unsubscribe = subscribeNotifications((incoming) => {
       setItems((prev) => [{ ...incoming }, ...prev]);
+
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(42);
+      }
+
       window.setTimeout(() => {
         setItems((prev) => prev.map((n) => (n.id === incoming.id ? { ...n, leaving: true } : n)));
       }, incoming.durationMs);

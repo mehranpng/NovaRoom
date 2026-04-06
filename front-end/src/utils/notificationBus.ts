@@ -12,14 +12,14 @@ const subscribers = new Set<Subscriber>();
 
 const normalizeInput = (input: string | NotificationInput): Required<NotificationInput> => {
   if (typeof input === 'string') {
-    return { message: input, type: inferNotificationType(input), durationMs: 4200 };
+    return { message: input, type: inferNotificationType(input), durationMs: 6200 };
   }
 
   const message = String(input.message ?? '').trim();
   return {
     message,
     type: input.type ?? inferNotificationType(message),
-    durationMs: input.durationMs ?? 4200,
+    durationMs: input.durationMs ?? 6200,
   };
 };
 

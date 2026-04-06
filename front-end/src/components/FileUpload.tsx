@@ -28,6 +28,8 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
         // Validate file size
         if (!validateFileSize(file.size)) {
             alert('حجم فایل نباید بیشتر از ۱۰ مگابایت باشد');
+            e.currentTarget.value = '';
+            setSelectedFile(null);
             return;
         }
 
