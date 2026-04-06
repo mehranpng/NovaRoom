@@ -1063,7 +1063,7 @@ export function App() {
         handleSelectChat(savedMessagesId, { navigateToRoute: false });
     }, [currentUser, handleSelectChat, navigate]);
 
-    const handleSendAIMessage = useCallback((text: string) => {
+    const handleSendAIMessage = useCallback((text: string, useReasoner = false) => {
         if (!currentUser) return;
         const clientId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -1080,7 +1080,7 @@ export function App() {
         setAITyping(true);
         setAIResponding(true);
 
-        const success = sendAIMessage(text, clientId);
+        const success = sendAIMessage(text, clientId, useReasoner);
         if (!success) {
             console.warn('Failed to send message to AI');
             setAITyping(false);

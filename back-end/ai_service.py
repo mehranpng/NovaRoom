@@ -60,6 +60,7 @@ async def generate_ai_response_stream(
     chat_id: str = "",
     bio: str = "",
     conversation_summary: str = "",
+    model: str = "deepseek-chat",
 ) -> AsyncIterator[str]:
     try:
         summary_context = (
@@ -89,7 +90,7 @@ async def generate_ai_response_stream(
         ]
 
         stream = await client.chat.completions.create(
-            model="deepseek-chat",
+            model=model,
             messages=full_messages,
             max_tokens=2000,
             stream=True,

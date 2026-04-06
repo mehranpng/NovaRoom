@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Forward, Check, SendHorizontal } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Forward, Check, SendHorizontal, Brain } from 'lucide-react';
 import { motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -12,7 +12,7 @@ import { ForwardModal } from './ForwardModal';
 interface AIChatRoomProps {
     messages: Message[];
     currentUserId: string;
-    onSendMessage: (text: string) => void;
+    onSendMessage: (text: string, useReasoner?: boolean) => void;
     onStopGenerating?: () => void;
     onDeleteMessage: (messageId: string) => void;
     onBack: () => void;
@@ -147,6 +147,7 @@ export function AIChatRoom({
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     const [forwardModalOpen, setForwardModalOpen] = useState(false);
     const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
+    const [reasoningEnabled, setReasoningEnabled] = useState(false);
 
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -176,6 +177,10 @@ export function AIChatRoom({
             sendSoundRef.current = null;
             receiveSoundRef.current = null;
         };
+    }, []);
+
+    useEffect(() => {
+        setReasoningEnabled(false);
     }, []);
 
     const playChatSound = (kind: 'send' | 'receive') => {
@@ -337,10 +342,20 @@ export function AIChatRoom({
         }
         if (!t || isResponding) return;
 
-        onSendMessage(t);
+        onSendMessage(t, reasoningEnabled);
         playChatSound('send');
         setText('');
         requestAnimationFrame(() => scrollToBottom(true));
+    };
+
+    const toggleReasoning = () => {
+        setReasoningEnabled((prev) => {
+            const next = !prev;
+            if (next && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                navigator.vibrate([12, 20, 12]);
+            }
+            return next;
+        });
     };
 
     const openMessageMenu = (messageId: string, targetEl: HTMLElement, clientX?: number, clientY?: number) => {
@@ -613,6 +628,28 @@ export function AIChatRoom({
 
             <div className="chat-room__input-area">
                 <div className="chat-room__input-wrapper">
+                    <button
+                        type="button"
+                        onClick={toggleReasoning}
+                        aria-label="Reasoning mode"
+                        title="حالت استدلال"
+                        style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 12,
+                            border: `1px solid ${reasoningEnabled ? 'rgba(47,128,237,0.45)' : 'var(--border-secondary)'}`,
+                            background: reasoningEnabled ? 'rgba(47,128,237,0.16)' : 'var(--bg-secondary)',
+                            color: reasoningEnabled ? '#2F80ED' : 'var(--text-secondary)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                        }}
+                    >
+                        <Brain size={18} />
+                    </button>
                     <textarea
                         ref={textareaRef}
                         className="chat-room__text-input"

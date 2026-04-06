@@ -105,7 +105,7 @@ export function useAIWebSocket({
         };
     }, [connect]);
 
-    const sendMessage = useCallback((text: string, clientId?: string) => {
+    const sendMessage = useCallback((text: string, clientId?: string, useReasoner = false) => {
         if (typeof text !== 'string' || !text.trim() || text.length > MAX_AI_MESSAGE_LENGTH) {
             return false;
         }
@@ -119,6 +119,7 @@ export function useAIWebSocket({
                 type: 'ai_message',
                 text,
                 clientId,
+                useReasoner,
             })
         );
         return true;
