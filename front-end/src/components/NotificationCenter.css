@@ -4,77 +4,46 @@
   left: 12px;
   right: 12px;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0;
+  justify-content: flex-end;
   direction: rtl;
   pointer-events: none;
   z-index: 3000;
 }
 
 .notification {
+  position: absolute;
+  top: 0;
+  right: 0;
   width: min(94vw, 430px);
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 10px;
   border-radius: 14px;
   border: 1px solid transparent;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
   padding: 12px 14px;
-  margin-top: -11px;
   pointer-events: auto;
-  touch-action: none;
+  touch-action: pan-y;
   cursor: grab;
   user-select: none;
-  opacity: 1;
-  animation: notification-enter 240ms var(--motion-ease-standard);
-  transition:
-    transform 180ms linear,
-    opacity 180ms linear,
-    margin-top 180ms linear;
-}
-
-.notification:first-child {
-  margin-top: 0;
-}
-
-.notification--dragging {
-  cursor: grabbing;
-  transition: none;
-}
-
-.notification--leaving {
-  pointer-events: none;
-}
-
-.notification--leaving-up {
-  animation: notification-leave-up 260ms linear forwards;
-}
-
-.notification--leaving-right {
-  animation: notification-leave-right 260ms linear forwards;
-}
-
-.notification--leaving-left {
-  animation: notification-leave-left 260ms linear forwards;
 }
 
 .notification--success {
-  background: linear-gradient(270deg, #0f766e 0%, #5eead4 100%);
+  background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%);
   border-color: #14b8a6;
   color: #f0fdfa;
 }
 
 .notification--info {
-  background: linear-gradient(270deg, #1d4ed8 0%, #93c5fd 100%);
+  background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%);
   border-color: #60a5fa;
   color: #eff6ff;
 }
 
 .notification--error {
-  background: linear-gradient(270deg, #b91c1c 0%, #fca5a5 100%);
+  background: linear-gradient(135deg, #b91c1c 0%, #ef4444 100%);
   border-color: #f87171;
   color: #fff1f2;
 }
@@ -103,52 +72,5 @@
   font-weight: 700;
   letter-spacing: 0.01em;
   word-break: break-word;
-}
-
-@keyframes notification-enter {
-  from {
-    opacity: 0;
-    transform: translateY(-30px) scale(0.96);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes notification-leave-up {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  to {
-    opacity: 0;
-    transform: translateY(-22px);
-  }
-}
-
-@keyframes notification-leave-right {
-  from {
-    opacity: 1;
-    transform: translateX(0);
-  }
-
-  to {
-    opacity: 0;
-    transform: translateX(115%);
-  }
-}
-
-@keyframes notification-leave-left {
-  from {
-    opacity: 1;
-    transform: translateX(0);
-  }
-
-  to {
-    opacity: 0;
-    transform: translateX(-115%);
-  }
+  flex: 1;
 }

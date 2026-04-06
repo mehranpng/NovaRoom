@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import type { NotificationType } from '../utils/notificationBus';
 import { subscribeNotifications } from '../utils/notificationBus';
 import './NotificationCenter.css';
@@ -13,8 +13,8 @@ type NotificationItem = {
   dismissDirection?: -1 | 0 | 1;
 };
 
-const EXIT_MS = 260;
-const DRAG_DISMISS_THRESHOLD = 52;
+const EXIT_MS = 220;
+const DRAG_DISMISS_THRESHOLD = 46;
 
 const IconGlyph = ({ type }: { type: NotificationType }) => {
   if (type === 'success') {
@@ -55,73 +55,37 @@ const NotificationCard = ({
   stackIndex: number;
   onDismiss: (id: string, direction?: -1 | 0 | 1) => void;
 }) => {
-  const [offsetX, setOffsetX] = useState(0);
-  const [dragging, setDragging] = useState(false);
-  const offsetRef = useRef(0);
-  const dragRef = useRef<{ active: boolean; startX: number; pointerId: number | null }>({
-    active: false,
-    startX: 0,
-    pointerId: null,
-  });
-
   const typeClass = useMemo(() => getTypeClassName(item.type), [item.type]);
 
-  const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    dragRef.current = { active: true, startX: e.clientX, pointerId: e.pointerId };
-    offsetRef.current = 0;
-    setDragging(true);
-    e.currentTarget.setPointerCapture(e.pointerId);
-  };
-
-  const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!dragRef.current.active || item.leaving) return;
-    const next = e.clientX - dragRef.current.startX;
-    offsetRef.current = next;
-    setOffsetX(next);
-  };
-
-  const finishDrag = (target: HTMLElement) => {
-    if (dragRef.current.pointerId !== null) {
-      try {
-        target.releasePointerCapture(dragRef.current.pointerId);
-      } catch {
-        // ignore
-      }
-    }
-
-    const distance = offsetRef.current;
-    dragRef.current = { active: false, startX: 0, pointerId: null };
-    offsetRef.current = 0;
-    setDragging(false);
-
-    if (Math.abs(distance) >= DRAG_DISMISS_THRESHOLD) {
-      onDismiss(item.id, distance > 0 ? 1 : -1);
-      return;
-    }
-
-    setOffsetX(0);
-  };
-
-  const pointerOpacity = Math.max(0.35, 1 - Math.abs(offsetX) / 170);
-
   return (
-    <div
-      className={`notification ${typeClass} ${item.leaving ? `notification--leaving notification--leaving-${item.dismissDirection === 1 ? 'right' : item.dismissDirection === -1 ? 'left' : 'up'}` : ''} ${dragging ? 'notification--dragging' : ''}`}
-      style={{
-        zIndex: 1000 - stackIndex,
-        transform: `translateY(${stackIndex * 9}px) translateX(${offsetX}px)`,
-        opacity: item.leaving ? 0 : pointerOpacity,
+    <motion.div
+      className={`notification ${typeClass}`}
+      style={{ zIndex: 1000 - stackIndex }}
+      initial={{ y: -26, opacity: 0, scale: 0.97 }}
+      animate={{
+        y: stackIndex * 10,
+        opacity: 1,
+        scale: 1,
+        x: item.leaving ? (item.dismissDirection === 1 ? 520 : item.dismissDirection === -1 ? -520 : 0) : 0,
       }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={(e) => finishDrag(e.currentTarget)}
-      onPointerCancel={(e) => finishDrag(e.currentTarget)}
+      exit={{ y: -24, opacity: 0, scale: 0.97 }}
+      transition={{ duration: 0.2, ease: 'linear' }}
+      drag={item.leaving ? false : 'x'}
+      dragConstraints={{ left: 0, right: 0 }}
+      dragElastic={0.08}
+      dragMomentum={false}
+      whileDrag={{ scale: 0.99, cursor: 'grabbing' }}
+      onDragEnd={(_, info) => {
+        if (Math.abs(info.offset.x) >= DRAG_DISMISS_THRESHOLD) {
+          onDismiss(item.id, info.offset.x > 0 ? 1 : -1);
+        }
+      }}
     >
       <span className="notification__icon" aria-hidden="true">
         <IconGlyph type={item.type} />
       </span>
       <p className="notification__message">{item.message}</p>
-    </div>
+    </motion.div>
   );
 };
 
@@ -159,14 +123,16 @@ export const NotificationCenter = () => {
 
   return (
     <div className="notification-center" aria-live="polite" aria-atomic="false">
-      {items.map((item, index) => (
-        <NotificationCard
-          key={item.id}
-          item={item}
-          stackIndex={index}
-          onDismiss={dismissNotification}
-        />
-      ))}
+      <AnimatePresence initial={false}>
+        {items.map((item, index) => (
+          <NotificationCard
+            key={item.id}
+            item={item}
+            stackIndex={index}
+            onDismiss={dismissNotification}
+          />
+        ))}
+      </AnimatePresence>
     </div>
   );
 };
