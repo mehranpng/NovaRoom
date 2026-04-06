@@ -19,6 +19,7 @@ interface AIChatRoomProps {
     loading?: boolean;
     isTyping?: boolean;
     isResponding?: boolean;
+    isReasoningPending?: boolean;
     chats: Chat[];
     onSelectChat?: (chatId: string) => void;
     onSetPendingForwardDraft?: (targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => void;
@@ -136,6 +137,7 @@ export function AIChatRoom({
     loading = false,
     isTyping = false,
     isResponding = false,
+    isReasoningPending = false,
     chats,
     onSelectChat,
     onSetPendingForwardDraft,
@@ -541,11 +543,17 @@ export function AIChatRoom({
                     {isTyping && (
                         <div className="message-row message-row--theirs">
                             <div className="message-bubble message-bubble--theirs msg-shape--single">
-                                <div className="typing-indicator">
-                                    <span></span>
-                                    <span></span>
-                                    <span></span>
-                                </div>
+                                {isReasoningPending ? (
+                                    <div className="thinking-indicator">
+                                        <span className="thinking-indicator__text">در حال فکر</span>
+                                    </div>
+                                ) : (
+                                    <div className="typing-indicator">
+                                        <span></span>
+                                        <span></span>
+                                        <span></span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
@@ -634,7 +642,7 @@ export function AIChatRoom({
                         aria-label="Reasoning mode"
                         title="حالت استدلال"
                         style={{
-                            height: 40,
+                            height: 44,
                             padding: '0 10px',
                             borderRadius: 12,
                             border: `1px solid ${reasoningEnabled ? 'rgba(47,128,237,0.45)' : 'var(--border-secondary)'}`,
@@ -649,6 +657,7 @@ export function AIChatRoom({
                             transition: 'all 0.2s ease',
                             fontSize: 12,
                             fontWeight: 600,
+                            fontFamily: 'inherit',
                         }}
                     >
                         <Brain size={15} />
@@ -718,6 +727,30 @@ export function AIChatRoom({
                 }
                 .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
                 .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+                .thinking-indicator {
+                    display: inline-flex;
+                    align-items: center;
+                    min-height: 24px;
+                }
+                .thinking-indicator__text {
+                    font-size: 13px;
+                    font-weight: 600;
+                    background: linear-gradient(
+                        90deg,
+                        rgba(156,163,175,0.25) 0%,
+                        rgba(156,163,175,0.95) 50%,
+                        rgba(156,163,175,0.25) 100%
+                    );
+                    background-size: 220% 100%;
+                    -webkit-background-clip: text;
+                    background-clip: text;
+                    color: transparent;
+                    animation: thinking-shimmer 1.2s linear infinite;
+                }
+                @keyframes thinking-shimmer {
+                    0% { background-position: 220% 0; }
+                    100% { background-position: -220% 0; }
+                }
                 @keyframes typing-bounce {
                     0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
                     40% { transform: scale(1.2); opacity: 1; }

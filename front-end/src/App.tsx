@@ -63,6 +63,7 @@ export function App() {
     const [aiLoading, setAILoading] = useState(true);
     const [aiTyping, setAITyping] = useState(false);
     const [aiResponding, setAIResponding] = useState(false);
+    const [aiReasoningPending, setAIReasoningPending] = useState(false);
 
     // Track if this is the initial load (show skeleton only once)
     const [isInitialChatsLoad, setIsInitialChatsLoad] = useState(true);
@@ -439,6 +440,7 @@ export function App() {
         setAIMessages(prev => [...prev, messageWithChatId]);
         setAITyping(false);
         setAIResponding(false);
+        setAIReasoningPending(false);
     }, []);
 
     const vibrate = useCallback((pattern: number | number[]) => {
@@ -464,6 +466,7 @@ export function App() {
             aiStreamStartedRef.current[messageId] = true;
             vibrate([25, 35, 25, 35, 25]);
             setAITyping(false);
+            setAIReasoningPending(false);
         }
         setAIMessages(prev => {
             const idx = prev.findIndex((m) => m.id === messageId);
@@ -499,6 +502,7 @@ export function App() {
         });
         setAITyping(false);
         setAIResponding(false);
+        setAIReasoningPending(false);
         delete aiStreamStartedRef.current[messageWithChatId.id];
         delete aiPendingStreamMetaRef.current[messageWithChatId.id];
         vibrate(120);
@@ -1079,12 +1083,14 @@ export function App() {
         setAIMessages(prev => [...prev, userMessage]);
         setAITyping(true);
         setAIResponding(true);
+        setAIReasoningPending(Boolean(useReasoner));
 
         const success = sendAIMessage(text, clientId, useReasoner);
         if (!success) {
             console.warn('Failed to send message to AI');
             setAITyping(false);
             setAIResponding(false);
+            setAIReasoningPending(false);
         }
     }, [currentUser, sendAIMessage]);
 
@@ -1093,6 +1099,7 @@ export function App() {
         if (!success) return;
         setAITyping(false);
         setAIResponding(false);
+        setAIReasoningPending(false);
     }, [stopAIGeneration]);
 
     const getActiveContact = (): User => {
@@ -1238,6 +1245,7 @@ export function App() {
                                 loading={aiLoading}
                                 isTyping={aiTyping}
                                 isResponding={aiResponding}
+                                isReasoningPending={aiReasoningPending}
                                 chats={chats}
                                 onSelectChat={handleSelectChat}
                                 onSetPendingForwardDraft={handleSetPendingForwardDraft}
