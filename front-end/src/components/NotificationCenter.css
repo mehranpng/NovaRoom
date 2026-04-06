@@ -15,9 +15,9 @@
 .notification {
   width: min(94vw, 430px);
   display: flex;
-  flex-direction: row-reverse;
+  flex-direction: row;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-end;
   gap: 10px;
   border-radius: 14px;
   border: 1px solid transparent;
@@ -25,15 +25,15 @@
   padding: 12px 14px;
   margin-top: -11px;
   pointer-events: auto;
-  touch-action: pan-y;
+  touch-action: none;
   cursor: grab;
   user-select: none;
   opacity: 1;
   animation: notification-enter 240ms var(--motion-ease-standard);
   transition:
-    transform 190ms ease,
-    opacity 190ms ease,
-    margin-top 190ms ease;
+    transform 180ms linear,
+    opacity 180ms linear,
+    margin-top 180ms linear;
 }
 
 .notification:first-child {
@@ -46,24 +46,35 @@
 }
 
 .notification--leaving {
-  animation: notification-leave 260ms var(--motion-ease-standard) forwards;
   pointer-events: none;
 }
 
+.notification--leaving-up {
+  animation: notification-leave-up 260ms linear forwards;
+}
+
+.notification--leaving-right {
+  animation: notification-leave-right 260ms linear forwards;
+}
+
+.notification--leaving-left {
+  animation: notification-leave-left 260ms linear forwards;
+}
+
 .notification--success {
-  background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%);
+  background: linear-gradient(270deg, #0f766e 0%, #5eead4 100%);
   border-color: #14b8a6;
   color: #f0fdfa;
 }
 
 .notification--info {
-  background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%);
+  background: linear-gradient(270deg, #1d4ed8 0%, #93c5fd 100%);
   border-color: #60a5fa;
   color: #eff6ff;
 }
 
 .notification--error {
-  background: linear-gradient(135deg, #b91c1c 0%, #ef4444 100%);
+  background: linear-gradient(270deg, #b91c1c 0%, #fca5a5 100%);
   border-color: #f87171;
   color: #fff1f2;
 }
@@ -106,14 +117,38 @@
   }
 }
 
-@keyframes notification-leave {
+@keyframes notification-leave-up {
   from {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
 
   to {
     opacity: 0;
-    transform: translateY(-22px) scale(0.97);
+    transform: translateY(-22px);
+  }
+}
+
+@keyframes notification-leave-right {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(115%);
+  }
+}
+
+@keyframes notification-leave-left {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(-115%);
   }
 }

@@ -10,10 +10,11 @@ type NotificationItem = {
   type: NotificationType;
   durationMs: number;
   leaving?: boolean;
+  dismissDirection?: -1 | 0 | 1;
 };
 
 const EXIT_MS = 260;
-const DRAG_DISMISS_THRESHOLD = 56;
+const DRAG_DISMISS_THRESHOLD = 52;
 
 const IconGlyph = ({ type }: { type: NotificationType }) => {
   if (type === 'success') {
@@ -52,7 +53,7 @@ const NotificationCard = ({
 }: {
   item: NotificationItem;
   stackIndex: number;
-  onDismiss: (id: string) => void;
+  onDismiss: (id: string, direction?: -1 | 0 | 1) => void;
 }) => {
   const [offsetX, setOffsetX] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -63,22 +64,17 @@ const NotificationCard = ({
     pointerId: null,
   });
 
-  useEffect(() => {
-    if (!item.leaving) return;
-    const timer = window.setTimeout(() => onDismiss(item.id), EXIT_MS);
-    return () => window.clearTimeout(timer);
-  }, [item.id, item.leaving, onDismiss]);
-
   const typeClass = useMemo(() => getTypeClassName(item.type), [item.type]);
 
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     dragRef.current = { active: true, startX: e.clientX, pointerId: e.pointerId };
+    offsetRef.current = 0;
     setDragging(true);
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
   const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!dragRef.current.active) return;
+    if (!dragRef.current.active || item.leaving) return;
     const next = e.clientX - dragRef.current.startX;
     offsetRef.current = next;
     setOffsetX(next);
@@ -93,26 +89,27 @@ const NotificationCard = ({
       }
     }
 
-    const distance = Math.abs(offsetRef.current);
+    const distance = offsetRef.current;
     dragRef.current = { active: false, startX: 0, pointerId: null };
     offsetRef.current = 0;
     setDragging(false);
-    setOffsetX(0);
 
-    if (distance >= DRAG_DISMISS_THRESHOLD) {
-      onDismiss(item.id);
+    if (Math.abs(distance) >= DRAG_DISMISS_THRESHOLD) {
+      onDismiss(item.id, distance > 0 ? 1 : -1);
+      return;
     }
+
+    setOffsetX(0);
   };
 
-  const pointerOpacity = Math.max(0.35, 1 - Math.abs(offsetX) / 180);
-  const dragTilt = Math.max(-7, Math.min(7, offsetX / 18));
+  const pointerOpacity = Math.max(0.35, 1 - Math.abs(offsetX) / 170);
 
   return (
     <div
-      className={`notification ${typeClass} ${item.leaving ? 'notification--leaving' : ''} ${dragging ? 'notification--dragging' : ''}`}
+      className={`notification ${typeClass} ${item.leaving ? `notification--leaving notification--leaving-${item.dismissDirection === 1 ? 'right' : item.dismissDirection === -1 ? 'left' : 'up'}` : ''} ${dragging ? 'notification--dragging' : ''}`}
       style={{
         zIndex: 1000 - stackIndex,
-        transform: `translateY(${stackIndex * 9}px) translateX(${offsetX}px) rotate(${dragTilt}deg)`,
+        transform: `translateY(${stackIndex * 9}px) translateX(${offsetX}px)`,
         opacity: item.leaving ? 0 : pointerOpacity,
       }}
       onPointerDown={handlePointerDown}
@@ -130,6 +127,17 @@ const NotificationCard = ({
 
 export const NotificationCenter = () => {
   const [items, setItems] = useState<NotificationItem[]>([]);
+  const removalTimersRef = useRef<Record<string, number>>({});
+
+  const dismissNotification = (id: string, direction: -1 | 0 | 1 = 0) => {
+    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, leaving: true, dismissDirection: direction } : n)));
+    if (removalTimersRef.current[id]) return;
+
+    removalTimersRef.current[id] = window.setTimeout(() => {
+      setItems((prev) => prev.filter((n) => n.id !== id));
+      delete removalTimersRef.current[id];
+    }, EXIT_MS);
+  };
 
   useEffect(() => {
     const unsubscribe = subscribeNotifications((incoming) => {
@@ -139,21 +147,15 @@ export const NotificationCenter = () => {
         navigator.vibrate(42);
       }
 
-      window.setTimeout(() => {
-        setItems((prev) => prev.map((n) => (n.id === incoming.id ? { ...n, leaving: true } : n)));
-      }, incoming.durationMs);
+      window.setTimeout(() => dismissNotification(incoming.id, 0), incoming.durationMs);
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      Object.values(removalTimersRef.current).forEach((t) => window.clearTimeout(t));
+      removalTimersRef.current = {};
+    };
   }, []);
-
-  const markDismiss = (id: string) => {
-    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, leaving: true } : n)));
-  };
-
-  const removeDismissed = (id: string) => {
-    setItems((prev) => prev.filter((n) => n.id !== id));
-  };
 
   return (
     <div className="notification-center" aria-live="polite" aria-atomic="false">
@@ -162,13 +164,7 @@ export const NotificationCenter = () => {
           key={item.id}
           item={item}
           stackIndex={index}
-          onDismiss={(id) => {
-            if (item.leaving) {
-              removeDismissed(id);
-            } else {
-              markDismiss(id);
-            }
-          }}
+          onDismiss={dismissNotification}
         />
       ))}
     </div>
