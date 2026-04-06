@@ -16,6 +16,8 @@ import { NewChatModal } from './components/NewChatModal';
 import { MiniMusicPlayer } from './components/MiniMusicPlayer';
 import { MusicPlayerProvider } from './contexts/MusicPlayerContext';
 import { cx } from './utils/cx';
+import { NotificationCenter } from './components/NotificationCenter';
+import { notify } from './utils/notificationBus';
 import './App.css';
 
 const normalizeTimestamp = (ts: unknown): number => {
@@ -520,6 +522,19 @@ export function App() {
     useEffect(() => {
         if (isAuthenticated) loadChats();
     }, [isAuthenticated, loadChats]);
+
+
+    useEffect(() => {
+        const originalAlert = window.alert.bind(window);
+
+        window.alert = (message?: unknown) => {
+            notify(String(message ?? ''));
+        };
+
+        return () => {
+            window.alert = originalAlert;
+        };
+    }, []);
 
     // Allow child components (e.g., ContactInfo group edit) to request a chat-list refresh.
     useEffect(() => {
@@ -1096,6 +1111,7 @@ export function App() {
     return (
         <MusicPlayerProvider>
             <MiniMusicPlayer />
+            <NotificationCenter />
             <div className="app">
                 {view !== 'profile' && (
                     <div className={cx('app__sidebar', view === 'chatRoom' && 'app__sidebar--hidden-mobile')}>

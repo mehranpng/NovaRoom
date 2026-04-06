@@ -1,0 +1,128 @@
+.notification-center {
+  position: fixed;
+  top: 10px;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  pointer-events: none;
+  z-index: 3000;
+  padding: 0 12px;
+}
+
+.notification {
+  width: min(92vw, 460px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  padding: 12px 14px;
+  margin-top: -10px;
+  pointer-events: auto;
+  touch-action: pan-y;
+  cursor: grab;
+  user-select: none;
+  backdrop-filter: blur(8px);
+  opacity: 1;
+  animation: notification-enter 230ms var(--motion-ease-standard);
+  transition:
+    transform 180ms ease,
+    opacity 180ms ease,
+    margin-top 180ms ease;
+}
+
+.notification:first-child {
+  margin-top: 0;
+}
+
+.notification--dragging {
+  cursor: grabbing;
+  transition: none;
+}
+
+.notification--leaving {
+  animation: notification-leave 220ms var(--motion-ease-standard) forwards;
+  pointer-events: none;
+}
+
+.notification--success {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #064e3b;
+}
+
+.notification--info {
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(59, 130, 246, 0.45);
+  color: #1e3a8a;
+}
+
+.notification--error {
+  background: rgba(239, 68, 68, 0.17);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #7f1d1d;
+}
+
+.dark-mode .notification--success {
+  background: rgba(16, 185, 129, 0.22);
+  color: #bbf7d0;
+}
+
+.dark-mode .notification--info {
+  background: rgba(59, 130, 246, 0.24);
+  color: #bfdbfe;
+}
+
+.dark-mode .notification--error {
+  background: rgba(239, 68, 68, 0.24);
+  color: #fecaca;
+}
+
+.notification__icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 900;
+  flex: 0 0 auto;
+  border: 1px solid currentColor;
+}
+
+.notification__message {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+@keyframes notification-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-28px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes notification-leave {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-24px) scale(0.97);
+  }
+}
