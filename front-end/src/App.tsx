@@ -1138,7 +1138,11 @@ export function App() {
         setPendingUser(null);
         setShowAIChat(true);
         setView('chatRoom');
-        setActiveAIChatId(aiRespondingChatId || null);
+        if (aiResponding && aiRespondingChatId) {
+            setActiveAIChatId(aiRespondingChatId);
+        } else {
+            setActiveAIChatId(null);
+        }
         navigate('/ai');
     };
 
@@ -1185,7 +1189,7 @@ export function App() {
     const handleSendAIMessage = useCallback(async (text: string, useReasoner = false) => {
         if (!currentUser) return;
 
-        if (aiRespondingChatId && activeAIChatId !== aiRespondingChatId) {
+        if (aiResponding && aiRespondingChatId && activeAIChatId !== aiRespondingChatId) {
             const respondingTitle = aiChats.find((c) => c.id === aiRespondingChatId)?.title || 'گفت‌وگوی در حال پاسخ';
             notify({ message: `گفت‌وگوی «${respondingTitle}» هنوز تکمیل نشده است.`, type: 'info' });
             return;
@@ -1247,7 +1251,7 @@ export function App() {
             setAIReasoningPending(false);
             setAIRespondingChatId(null);
         }
-    }, [currentUser, activeAIChatId, aiMessagesByChat, sendAIMessage, aiRespondingChatId, aiChats]);
+    }, [currentUser, activeAIChatId, aiMessagesByChat, sendAIMessage, aiResponding, aiRespondingChatId, aiChats]);
 
     const handleStopAIResponse = useCallback(() => {
         const success = stopAIGeneration();
