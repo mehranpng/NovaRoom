@@ -693,8 +693,17 @@ export function AIChatRoom({
             </AnimatePresence>
 
             {pendingDeleteChat && (
-                <div className="chat-room-modal-overlay" style={{ zIndex: 120 }}>
-                    <div className="chat-room-confirm-modal" role="dialog" aria-modal="true">
+                <div
+                    className="chat-room-modal-overlay"
+                    style={{ zIndex: 120 }}
+                    onClick={() => setPendingDeleteChat(null)}
+                >
+                    <div
+                        className="chat-room-confirm-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        onClick={(e) => e.stopPropagation()}
+                    >
                         <h3 className="chat-room-confirm-modal__title">حذف گفت‌وگو؟</h3>
                         <p className="chat-room-confirm-modal__text">
                             {`گفت‌وگوی «${pendingDeleteChat.title || 'گفت‌وگوی جدید'}» حذف شود؟`}

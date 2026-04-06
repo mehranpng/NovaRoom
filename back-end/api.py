@@ -2501,10 +2501,15 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 try:
                     ai_chat = await ensure_ai_chat(user_id, ai_chat_id)
                 except HTTPException:
-                    await websocket.send_json(
-                        {"type": "ai_error", "message": "گفت‌وگوی انتخاب‌شده معتبر نیست."}
-                    )
-                    continue
+                    # In rare race cases, chat can be created immediately before ws send.
+                    await asyncio.sleep(0.12)
+                    try:
+                        ai_chat = await ensure_ai_chat(user_id, ai_chat_id)
+                    except HTTPException:
+                        await websocket.send_json(
+                            {"type": "ai_error", "message": "گفت‌وگوی انتخاب‌شده معتبر نیست."}
+                        )
+                        continue
 
                 user_msg_count = await cl_ai_messages.count_documents(
                     {"userId": user_id, "aiChatId": ai_chat_id, "role": "user"}

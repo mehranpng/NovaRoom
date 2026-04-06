@@ -25,6 +25,7 @@ export function useAIWebSocket({
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<number | undefined>(undefined);
     const reconnectAttemptsRef = useRef(0);
+    const pendingMessagesRef = useRef<Array<{ text: string; aiChatId: string; clientId?: string; useReasoner: boolean }>>([]);
     const MAX_RECONNECT_ATTEMPTS = 5;
     const RECONNECT_DELAY = 2000;
 
@@ -37,6 +38,20 @@ export function useAIWebSocket({
         ws.onopen = () => {
             console.log('AI WebSocket connected');
             reconnectAttemptsRef.current = 0;
+
+            if (pendingMessagesRef.current.length > 0) {
+                const queued = [...pendingMessagesRef.current];
+                pendingMessagesRef.current = [];
+                queued.forEach((payload) => {
+                    ws.send(JSON.stringify({
+                        type: 'ai_message',
+                        text: payload.text,
+                        aiChatId: payload.aiChatId,
+                        clientId: payload.clientId,
+                        useReasoner: payload.useReasoner,
+                    }));
+                });
+            }
 
             // Send ping every 30 seconds to keep connection alive
             const pingInterval = setInterval(() => {
@@ -115,8 +130,9 @@ export function useAIWebSocket({
         }
         if (!aiChatId) return false;
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-            console.warn('AI WebSocket not connected');
-            return false;
+            pendingMessagesRef.current.push({ text, aiChatId, clientId, useReasoner });
+            console.warn('AI WebSocket not connected yet; message queued');
+            return true;
         }
 
         wsRef.current.send(
