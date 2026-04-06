@@ -568,7 +568,7 @@
 
 .video-media-viewer__controls.is-visible {
     opacity: 1;
-    pointer-events: auto;
+    pointer-events: none;
 }
 
 .video-media-viewer__overlay {
@@ -584,14 +584,13 @@
     height: 70px;
     border-radius: 999px;
     border: 1px solid rgba(255, 255, 255, 0.35);
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: rgba(0, 0, 0, 0.55);
     color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    pointer-events: auto;
 }
 
 .video-media-viewer__seek {
@@ -619,6 +618,7 @@
     bottom: 0;
     padding: 10px 16px 16px;
     background: linear-gradient(to top, rgba(0, 0, 0, 0.58), transparent);
+    pointer-events: auto;
 }
 
 .video-media-viewer__timeline-time {

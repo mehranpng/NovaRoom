@@ -142,6 +142,15 @@ def validate_username(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9_]+", value))
 
 
+def should_delete_file_with_message(message_doc: Dict[str, Any]) -> bool:
+    file_data = message_doc.get("file") or {}
+    file_id = str(file_data.get("fileId") or "").strip()
+    if not file_id:
+        return False
+    # Forwarded messages share source fileId and must not remove file from server.
+    return not bool(message_doc.get("forwardedFrom"))
+
+
 async def jwt_encode_async(payload: dict) -> str:
     # Offload JWT crypto to a worker thread.
     return await asyncio.to_thread(jwt.encode, payload, SECRET_KEY, algorithm=ALGORITHM)
@@ -868,8 +877,8 @@ async def leave_group(chat_id: str, current_user: dict = Depends(get_current_use
     if not remaining:
         messages = await cl_messages.find({"chatId": chat_id}).to_list(None)
         for msg in messages:
-            file_data = msg.get("file")
-            if file_data and file_data.get("fileId"):
+            if should_delete_file_with_message(msg):
+                file_data = msg.get("file") or {}
                 await delete_file(file_data["fileId"])
 
         await cl_messages.delete_many({"chatId": chat_id})
@@ -1184,8 +1193,8 @@ async def delete_chat(chat_id: str, current_user: dict = Depends(get_current_use
     # Delete associated files
     messages = await cl_messages.find({"chatId": chat_id}).to_list(None)
     for msg in messages:
-        file_data = msg.get("file")
-        if file_data and file_data.get("fileId"):
+        if should_delete_file_with_message(msg):
+            file_data = msg.get("file") or {}
             await delete_file(file_data["fileId"])
 
     await cl_messages.delete_many({"chatId": chat_id})
@@ -2060,8 +2069,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         continue
 
                 # Delete associated file if present
-                file_data = msg.get("file")
-                if file_data and file_data.get("fileId"):
+                if should_delete_file_with_message(msg):
+                    file_data = msg.get("file") or {}
                     await delete_file(file_data["fileId"])
 
                 await cl_messages.delete_one({"_id": oid})

@@ -155,7 +155,7 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
                     />
                 </div>
 
-                <div className={`video-media-viewer__controls ${playbackControlsVisible ? 'is-visible' : ''}`} onClick={(e) => e.stopPropagation()}>
+                <div className={`video-media-viewer__controls ${playbackControlsVisible ? 'is-visible' : ''}`}>
                     <div className="video-media-viewer__overlay">
                         <button type="button" className="video-media-viewer__play-btn" onClick={togglePlay} aria-label={isPlaying ? 'Pause' : 'Play'}>
                             {isPlaying ? <Pause size={28} /> : <Play size={28} />}
