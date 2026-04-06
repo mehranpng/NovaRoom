@@ -2344,6 +2344,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
             prompt_messages: List[Dict[str, str]],
             memory_summary: str,
             model_name: str,
+            reasoning_mode: bool,
         ):
             ai_message_doc = {
                 "userId": user_id,
@@ -2378,6 +2379,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     bio=user_bio,
                     conversation_summary=memory_summary,
                     model=model_name,
+                    reasoning_mode=reasoning_mode,
                 ):
                     full_ai_response += chunk
                     await websocket.send_json(
@@ -2498,7 +2500,12 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                         pass
 
                 current_stream_task = asyncio.create_task(
-                    stream_ai_reply(messages, refreshed_summary, model_name)
+                    stream_ai_reply(
+                        messages,
+                        refreshed_summary,
+                        model_name,
+                        use_reasoner,
+                    )
                 )
 
             elif data.get("type") == "ai_stop":

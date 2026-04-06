@@ -634,21 +634,25 @@ export function AIChatRoom({
                         aria-label="Reasoning mode"
                         title="حالت استدلال"
                         style={{
-                            width: 40,
                             height: 40,
+                            padding: '0 10px',
                             borderRadius: 12,
                             border: `1px solid ${reasoningEnabled ? 'rgba(47,128,237,0.45)' : 'var(--border-secondary)'}`,
                             background: reasoningEnabled ? 'rgba(47,128,237,0.16)' : 'var(--bg-secondary)',
                             color: reasoningEnabled ? '#2F80ED' : 'var(--text-secondary)',
                             display: 'inline-flex',
                             alignItems: 'center',
+                            gap: 6,
                             justifyContent: 'center',
                             flexShrink: 0,
                             cursor: 'pointer',
                             transition: 'all 0.2s ease',
+                            fontSize: 12,
+                            fontWeight: 600,
                         }}
                     >
-                        <Brain size={18} />
+                        <Brain size={15} />
+                        <span>استدلال</span>
                     </button>
                     <textarea
                         ref={textareaRef}
