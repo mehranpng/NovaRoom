@@ -539,7 +539,7 @@
 .video-media-viewer__stage {
     position: relative;
     width: 100%;
-    height: calc(100% - 72px);
+    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -552,20 +552,25 @@
     background: #000;
 }
 
+.video-media-viewer__controls {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+.video-media-viewer__controls.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
 .video-media-viewer__overlay {
     position: absolute;
     inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-    pointer-events: none;
-}
-
-.video-media-viewer__overlay.is-visible {
-    opacity: 1;
-    pointer-events: auto;
 }
 
 .video-media-viewer__play-btn {
@@ -606,12 +611,6 @@
     bottom: 0;
     padding: 10px 16px 16px;
     background: linear-gradient(to top, rgba(0, 0, 0, 0.58), transparent);
-    opacity: 0;
-    transition: opacity 0.2s ease;
-}
-
-.video-media-viewer__timeline-wrap.is-visible {
-    opacity: 1;
 }
 
 .video-media-viewer__timeline-time {

@@ -22,19 +22,18 @@ function formatDuration(seconds: number): string {
 
 export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }: VideoMediaViewerProps) {
     const videoRef = useRef<HTMLVideoElement | null>(null);
-    const hideControlsTimerRef = useRef<number | null>(null);
+    const controlsTimerRef = useRef<number | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
-    const [showControls, setShowControls] = useState(true);
+    const [controlsVisible, setControlsVisible] = useState(true);
 
-    const resetHideTimer = () => {
-        if (hideControlsTimerRef.current) window.clearTimeout(hideControlsTimerRef.current);
-        if (isPlaying) {
-            hideControlsTimerRef.current = window.setTimeout(() => {
-                setShowControls(false);
-            }, 1600);
-        }
+    const showControlsTemporarily = () => {
+        setControlsVisible(true);
+        if (controlsTimerRef.current) window.clearTimeout(controlsTimerRef.current);
+        controlsTimerRef.current = window.setTimeout(() => {
+            setControlsVisible(false);
+        }, 2000);
     };
 
     useEffect(() => {
@@ -46,6 +45,7 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
                 if (!video) return;
                 if (video.paused) void video.play();
                 else video.pause();
+                showControlsTemporarily();
             }
         };
         window.addEventListener('keydown', onKeyDown);
@@ -53,12 +53,16 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
     }, [onClose]);
 
     useEffect(() => {
-        resetHideTimer();
+        const video = videoRef.current;
+        if (!video) return;
+        void video.play().catch(() => {
+            setControlsVisible(true);
+        });
+        showControlsTemporarily();
         return () => {
-            if (hideControlsTimerRef.current) window.clearTimeout(hideControlsTimerRef.current);
+            if (controlsTimerRef.current) window.clearTimeout(controlsTimerRef.current);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isPlaying]);
+    }, []);
 
     const seekBy = (delta: number) => {
         const video = videoRef.current;
@@ -66,8 +70,7 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
         const next = Math.min(Math.max(0, video.currentTime + delta), video.duration || 0);
         video.currentTime = next;
         setCurrentTime(next);
-        setShowControls(true);
-        resetHideTimer();
+        showControlsTemporarily();
     };
 
     const togglePlay = async () => {
@@ -78,8 +81,7 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
         } else {
             video.pause();
         }
-        setShowControls(true);
-        resetHideTimer();
+        showControlsTemporarily();
     };
 
     const handleDownload = async () => {
@@ -111,20 +113,7 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
             className="video-media-viewer"
             role="dialog"
             aria-modal="true"
-            onMouseMove={() => {
-                setShowControls(true);
-                resetHideTimer();
-            }}
         >
-            <div className="video-media-viewer__header">
-                <button type="button" className="image-media-viewer__btn" onClick={handleDownload} aria-label="Download video">
-                    <Download size={18} />
-                </button>
-                <button type="button" className="image-media-viewer__btn image-media-viewer__btn--close" onClick={onClose} aria-label="Close">
-                    <X size={18} />
-                </button>
-            </div>
-
             <div className="video-media-viewer__stage">
                 <video
                     ref={videoRef}
@@ -132,57 +121,72 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
                     className="video-media-viewer__video"
                     playsInline
                     onClick={() => {
-                        if (!isPlaying) return;
-                        videoRef.current?.pause();
-                        setShowControls(true);
+                        setControlsVisible((prev) => {
+                            if (!prev) {
+                                showControlsTemporarily();
+                                return true;
+                            }
+                            if (controlsTimerRef.current) window.clearTimeout(controlsTimerRef.current);
+                            return false;
+                        });
                     }}
                     onPlay={() => {
                         setIsPlaying(true);
-                        resetHideTimer();
+                        showControlsTemporarily();
                     }}
                     onPause={() => {
                         setIsPlaying(false);
-                        setShowControls(true);
+                        setControlsVisible(true);
                     }}
                     onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                     onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
                     onEnded={() => {
                         setIsPlaying(false);
-                        setShowControls(true);
+                        setControlsVisible(true);
                     }}
                 />
 
                 <button type="button" className="video-media-viewer__seek video-media-viewer__seek--left" onDoubleClick={() => seekBy(-5)} aria-label="Seek backward 5 seconds" />
                 <button type="button" className="video-media-viewer__seek video-media-viewer__seek--right" onDoubleClick={() => seekBy(5)} aria-label="Seek forward 5 seconds" />
 
-                <div className={`video-media-viewer__overlay ${showControls ? 'is-visible' : ''}`}>
-                    <button type="button" className="video-media-viewer__play-btn" onClick={togglePlay} aria-label={isPlaying ? 'Pause' : 'Play'}>
-                        {isPlaying ? <Pause size={28} /> : <Play size={28} />}
-                    </button>
-                </div>
-            </div>
+                <div className={`video-media-viewer__controls ${controlsVisible ? 'is-visible' : ''}`}>
+                    <div className="video-media-viewer__header">
+                        <button type="button" className="image-media-viewer__btn" onClick={handleDownload} aria-label="Download video">
+                            <Download size={18} />
+                        </button>
+                        <button type="button" className="image-media-viewer__btn image-media-viewer__btn--close" onClick={onClose} aria-label="Close">
+                            <X size={18} />
+                        </button>
+                    </div>
 
-            <div className={`video-media-viewer__timeline-wrap ${showControls ? 'is-visible' : ''}`}>
-                <div className="video-media-viewer__timeline-time">
-                    <span>{formatDuration(currentTime)}</span>
-                    <span>{formatDuration(duration)}</span>
+                    <div className="video-media-viewer__overlay">
+                        <button type="button" className="video-media-viewer__play-btn" onClick={togglePlay} aria-label={isPlaying ? 'Pause' : 'Play'}>
+                            {isPlaying ? <Pause size={28} /> : <Play size={28} />}
+                        </button>
+                    </div>
+
+                    <div className="video-media-viewer__timeline-wrap">
+                        <div className="video-media-viewer__timeline-time">
+                            <span>{formatDuration(currentTime)}</span>
+                            <span>{formatDuration(duration)}</span>
+                        </div>
+                        <input
+                            type="range"
+                            min={0}
+                            max={duration || 0}
+                            value={Math.min(currentTime, duration || 0)}
+                            step={0.1}
+                            className="video-media-viewer__timeline"
+                            onChange={(e) => {
+                                const next = Number(e.target.value);
+                                if (!Number.isFinite(next)) return;
+                                if (videoRef.current) videoRef.current.currentTime = next;
+                                setCurrentTime(next);
+                                showControlsTemporarily();
+                            }}
+                        />
+                    </div>
                 </div>
-                <input
-                    type="range"
-                    min={0}
-                    max={duration || 0}
-                    value={Math.min(currentTime, duration || 0)}
-                    step={0.1}
-                    className="video-media-viewer__timeline"
-                    onChange={(e) => {
-                        const next = Number(e.target.value);
-                        if (!Number.isFinite(next)) return;
-                        if (videoRef.current) videoRef.current.currentTime = next;
-                        setCurrentTime(next);
-                        setShowControls(true);
-                        resetHideTimer();
-                    }}
-                />
             </div>
         </div>
     );

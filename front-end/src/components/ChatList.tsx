@@ -207,6 +207,25 @@ function formatTime(timestamp: any): string {
     return tehranMonthDayFmt.format(d);
 }
 
+function getFilePreviewLabel(file: any): string {
+    const mimeType = String(file?.mimeType || '').toLowerCase();
+    if (mimeType.startsWith('image/')) return '🖼️ تصویر';
+    if (mimeType.startsWith('video/')) return '🎥 ویدیو';
+    if (mimeType.startsWith('audio/')) return '🎵 صوت';
+    return '📎 فایل';
+}
+
+function getLastMessagePreview(lastMessage: any, fallback: string): string {
+    if (!lastMessage) return fallback;
+    const text = String(lastMessage?.text || '').trim();
+    const file = (lastMessage as any)?.file;
+    if (file) {
+        const prefix = getFilePreviewLabel(file);
+        return text ? `${prefix} • ${text}` : prefix;
+    }
+    return text || fallback;
+}
+
 function useIsMobile(breakpointPx = 768) {
     const [isMobile, setIsMobile] = useState(false);
 
@@ -874,7 +893,7 @@ export function ChatList({
                                         </div>
                                         <div className="chat-list__item-preview">
                                             <p className="chat-list__item-text">
-                                                {chat.lastMessage?.text || 'پیام‌های ذخیره شده شما'}
+                                                {getLastMessagePreview(chat.lastMessage, 'پیام‌های ذخیره شده شما')}
                                             </p>
                                             {chat.unreadCount > 0 && (
                                                 <span className="chat-list__unread-badge">{chat.unreadCount}</span>
@@ -960,7 +979,7 @@ export function ChatList({
                                     <div className="chat-list__item-preview">
                                         <p className="chat-list__item-text">
                                             {isMine && <span className="chat-list__item-text-prefix">شما: </span>}
-                                            {chat.lastMessage?.text || 'هنوز پیامی ارسال نشده'}
+                                            {getLastMessagePreview(chat.lastMessage, 'هنوز پیامی ارسال نشده')}
                                         </p>
                                         {unreadCount > 0 && (
                                             <span className="chat-list__unread-badge">{unreadCount}</span>
