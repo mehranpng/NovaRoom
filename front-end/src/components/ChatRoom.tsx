@@ -1623,7 +1623,11 @@ export function ChatRoom({
                     onClick={() => {
                         if (isSavedMessages) return;
                         maybeSaveScroll(chatId);
-                        if (onOpenContactInfo) {
+                        // For unsent direct chats opened from NewChatModal we use a temporary
+                        // chatId = "pending". Navigating to /chat/pending breaks the pending
+                        // chat context and results in an empty/blank screen.
+                        // So in this case we only open ContactInfo locally.
+                        if (onOpenContactInfo && chatId !== 'pending') {
                             onOpenContactInfo(chatId);
                         }
                         restoringFromInfoRef.current = true;
