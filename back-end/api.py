@@ -2395,29 +2395,6 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     {"$set": {"content": full_ai_response}},
                 )
 
-                conversation_for_summary = [
-                    *prompt_messages,
-                    {"role": "assistant", "content": full_ai_response},
-                ]
-                next_summary = await generate_conversation_summary(
-                    conversation_for_summary,
-                    previous_summary=memory_summary,
-                    user_name=user_name,
-                    username=username,
-                    chat_id=user_id,
-                    bio=user_bio,
-                )
-                await cl_ai_state.update_one(
-                    {"userId": user_id},
-                    {
-                        "$set": {
-                            "summary": next_summary,
-                            "updatedAt": utc_now(),
-                        }
-                    },
-                    upsert=True,
-                )
-
                 await websocket.send_json(
                     {
                         "type": "ai_response_done",
@@ -2487,6 +2464,26 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     for doc in history_docs
                 ]
 
+                # Update memory summary BEFORE generating the assistant response.
+                refreshed_summary = await generate_conversation_summary(
+                    messages,
+                    previous_summary=memory_summary,
+                    user_name=user_name,
+                    username=username,
+                    chat_id=user_id,
+                    bio=user_bio,
+                )
+                await cl_ai_state.update_one(
+                    {"userId": user_id},
+                    {
+                        "$set": {
+                            "summary": refreshed_summary,
+                            "updatedAt": utc_now(),
+                        }
+                    },
+                    upsert=True,
+                )
+
                 if current_stream_task and not current_stream_task.done():
                     current_stream_task.cancel()
                     try:
@@ -2495,7 +2492,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                         pass
 
                 current_stream_task = asyncio.create_task(
-                    stream_ai_reply(messages, memory_summary)
+                    stream_ai_reply(messages, refreshed_summary)
                 )
 
             elif data.get("type") == "ai_stop":

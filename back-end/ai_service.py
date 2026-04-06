@@ -138,7 +138,10 @@ async def generate_conversation_summary(
                 "content": (
                     "You are a summarizer. Return valid json only. "
                     'Output format: {"summary":"..."} . '
-                    "The summary must be Persian, max 500 characters."
+                    "The summary must be Persian, max 300 characters. "
+                    "Keep only critical long-term memory (preferences, constraints, goals, decisions, unresolved tasks). "
+                    "Do not include trivial details, greetings, or user's name because it is always available. "
+                    "If nothing important was added, keep summary unchanged."
                 ),
             },
             {
@@ -155,14 +158,14 @@ async def generate_conversation_summary(
             model="deepseek-chat",
             messages=summary_messages,
             response_format={"type": "json_object"},
-            max_tokens=400,
+            max_tokens=250,
         )
         raw = response.choices[0].message.content or ""
         data = json.loads(raw)
         summary = str(data.get("summary") or "").strip()
         if not summary:
-            return (previous_summary or "")[:500]
-        return summary[:500]
+            return (previous_summary or "")[:300]
+        return summary[:300]
     except Exception as e:
         print(f"Summary generation error: {e}")
-        return (previous_summary or "")[:500]
+        return (previous_summary or "")[:300]
