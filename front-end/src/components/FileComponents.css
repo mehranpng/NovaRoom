@@ -5,6 +5,7 @@
 .file-upload-container {
     display: flex;
     align-items: center;
+    position: relative;
 }
 
 .file-upload-button {
@@ -33,6 +34,39 @@
 .file-upload-button:disabled {
     opacity: 0.55;
     cursor: default;
+}
+
+.file-upload-picker-menu {
+    position: absolute;
+    inset-inline-start: 0;
+    bottom: calc(100% + 8px);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 120px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-primary);
+    border-radius: 12px;
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.16);
+    padding: 6px;
+    z-index: 12;
+}
+
+.file-upload-picker-item {
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: 'Vazir', sans-serif;
+    text-align: right;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+
+.file-upload-picker-item:hover {
+    background: var(--hover-bg);
 }
 
 .chat-room__input-wrapper {

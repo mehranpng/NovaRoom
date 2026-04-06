@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Eye, MoreVertical, Pencil, Reply, SendHorizontal, Smile, Trash2, X, Forward, Users, Search, LogOut, Check } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, Copy, Eye, MoreVertical, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check } from 'lucide-react';
 import { motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1991,8 +1991,8 @@ export function ChatRoom({
                         <button className="popover__item" onClick={() => { const el = messageElsRef.current.get(activeMsg.id); if (el) openReactionMenu(activeMsg.id, el, { top: msgMenu.top, left: msgMenu.left }); }} type="button">
                             <Smile size={16} />واکنش
                         </button>
-                        <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><Reply size={16} />پاسخ</button>
-                        <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><Forward size={16} />فوروارد</button>
+                        <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><ArrowRight size={16} />پاسخ</button>
+                        <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><ArrowLeft size={16} />فوروارد</button>
                         {activeMsg.senderId === currentUserId && !activeMsg.forwardedFrom && (
                             <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
                         )}
@@ -2128,7 +2128,7 @@ export function ChatRoom({
             {(newMsgCount > 0 || showScrollBtn) && (
                 <button type="button" aria-label="Jump to latest messages"
                     onClick={() => { scrollToBottom(true); setNewMsgCount(0); setShowScrollBtn(false); }}
-                    style={{ position: 'absolute', right: 16, bottom: 118, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px' }}>
+                    style={{ position: 'absolute', right: 16, bottom: 126, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px' }}>
                     <ArrowDown size={16} color="currentColor" />
                     {newMsgCount > 0 && (
                         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -2142,7 +2142,7 @@ export function ChatRoom({
             <div className="chat-room__input-area">
                 {(replyTo || editingId) && (
                     <div className="chat-room__reply-edit-box">
-                        <div style={{ minWidth: 0 }}>
+                        <div style={{ minWidth: 0, flex: 1, textAlign: 'right' }}>
                             <div className="chat-room__reply-edit-box__title">{editingId ? 'در حال ویرایش' : 'در حال پاسخ'}</div>
                             {!editingId && replyTo && <div className="chat-room__reply-edit-box__text">{getReplyPreviewText(replyTo)}</div>}
                         </div>
@@ -2153,7 +2153,7 @@ export function ChatRoom({
                 )}
                 {uploadedFile && (
                     <div className="chat-room__reply-edit-box">
-                        <div style={{ minWidth: 0 }}>
+                        <div style={{ minWidth: 0, flex: 1, textAlign: 'right' }}>
                             <div className="chat-room__reply-edit-box__title">فایل آپلود شده</div>
                             <div className="chat-room__reply-edit-box__text">{uploadedFile.fileName}</div>
                         </div>
@@ -2165,7 +2165,7 @@ export function ChatRoom({
                 )}
                 {pendingForwardDraft && (
                     <div className="chat-room__reply-edit-box">
-                        <div style={{ minWidth: 0 }}>
+                        <div style={{ minWidth: 0, flex: 1, textAlign: 'right' }}>
                             <div className="chat-room__reply-edit-box__title">در حال فوروارد پیام</div>
                             <div className="chat-room__reply-edit-box__text">{getForwardPreviewText(pendingForwardDraft)}</div>
                         </div>

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Paperclip } from 'lucide-react';
 import type { FileMetadata } from '../types';
 import { API_BASE_URL } from '../config/api';
@@ -13,7 +13,11 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
+    const [pickerMenuOpen, setPickerMenuOpen] = useState(false);
+    const imageInputRef = useRef<HTMLInputElement>(null);
+    const videoInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -26,9 +30,32 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
             return;
         }
 
+        setPickerMenuOpen(false);
         setSelectedFile(file);
         uploadFile(file);
     };
+
+    useEffect(() => {
+        if (!pickerMenuOpen) return;
+
+        const closeMenu = (e: MouseEvent) => {
+            if (!menuRef.current?.contains(e.target as Node)) {
+                setPickerMenuOpen(false);
+            }
+        };
+
+        const onEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setPickerMenuOpen(false);
+        };
+
+        document.addEventListener('mousedown', closeMenu);
+        document.addEventListener('keydown', onEscape);
+
+        return () => {
+            document.removeEventListener('mousedown', closeMenu);
+            document.removeEventListener('keydown', onEscape);
+        };
+    }, [pickerMenuOpen]);
 
     const uploadFile = async (file: File) => {
         setUploading(true);
@@ -105,20 +132,48 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
+        if (imageInputRef.current) {
+            imageInputRef.current.value = '';
+        }
+        if (videoInputRef.current) {
+            videoInputRef.current.value = '';
+        }
     };
 
     return (
         <div className="file-upload-container">
             <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileSelect}
+                style={{ display: 'none' }}
+                disabled={uploading}
+            />
+
+            <input
+                ref={videoInputRef}
+                type="file"
+                accept="video/*"
+                onChange={handleFileSelect}
+                style={{ display: 'none' }}
+                disabled={uploading}
+            />
+
+            <input
                 ref={fileInputRef}
                 type="file"
+                accept="*/*"
                 onChange={handleFileSelect}
                 style={{ display: 'none' }}
                 disabled={uploading}
             />
 
             <button
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => {
+                    if (uploading) return;
+                    setPickerMenuOpen((v) => !v);
+                }}
                 className="file-upload-button"
                 title={uploading ? 'در حال آپلود...' : 'ارسال فایل'}
                 disabled={uploading}
@@ -126,6 +181,20 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
             >
                 <Paperclip size={20} />
             </button>
+
+            {pickerMenuOpen && !uploading && (
+                <div className="file-upload-picker-menu" ref={menuRef}>
+                    <button type="button" className="file-upload-picker-item" onClick={() => imageInputRef.current?.click()}>
+                        تصویر
+                    </button>
+                    <button type="button" className="file-upload-picker-item" onClick={() => videoInputRef.current?.click()}>
+                        ویدیو
+                    </button>
+                    <button type="button" className="file-upload-picker-item" onClick={() => fileInputRef.current?.click()}>
+                        فایل
+                    </button>
+                </div>
+            )}
 
             {uploading && selectedFile && (
                 <div
