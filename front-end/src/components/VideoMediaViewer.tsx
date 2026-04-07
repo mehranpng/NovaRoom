@@ -182,7 +182,7 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
                             className={`video-media-viewer__seek-feedback video-media-viewer__seek-feedback--${seekFeedback.side}`}
                             onAnimationEnd={() => setSeekFeedback(null)}
                         >
-                            {seekFeedback.delta > 0 ? <ChevronsRight size={28} /> : <ChevronsLeft size={28} />}
+                            {seekFeedback.delta > 0 ? <ChevronsRight size={34} /> : <ChevronsLeft size={34} />}
                             <span>{seekFeedback.delta > 0 ? '+5' : '-5'}</span>
                         </div>
                     )}

@@ -232,7 +232,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
                             />
                             <span className="file-video-duration">{formatDuration(videoDuration)}</span>
                             <span className="file-video-play-badge" aria-hidden="true">
-                                <Play size={20} />
+                                <Play size={20} fill="currentColor" />
                             </span>
                         </button>
                     )}

@@ -617,21 +617,38 @@
     transform: translateY(-50%);
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 4px;
+    white-space: nowrap;
     color: #fff;
-    font-size: 24px;
+    font-size: 20px;
+    line-height: 1;
     font-weight: 700;
     pointer-events: none;
     text-shadow: 0 2px 14px rgba(0, 0, 0, 0.9);
-    animation: video-media-viewer-feedback 700ms ease forwards;
+    opacity: 0;
+    animation: video-media-viewer-feedback 820ms ease-in-out forwards;
+}
+
+.video-media-viewer__seek-feedback svg,
+.video-media-viewer__seek-feedback span {
+    display: block;
+}
+
+.video-media-viewer__seek-feedback svg {
+    flex-shrink: 0;
+}
+
+.video-media-viewer__seek-feedback span {
+    line-height: 1;
 }
 
 .video-media-viewer__seek-feedback--left {
-    left: 16%;
+    left: 11%;
 }
 
 .video-media-viewer__seek-feedback--right {
-    right: 16%;
+    right: 11%;
 }
 
 @keyframes video-media-viewer-feedback {
