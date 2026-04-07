@@ -322,7 +322,6 @@ export function ChatRoom({
     const messagesContainerRef = useRef<HTMLDivElement | null>(null);
     const roomRef = useRef<HTMLDivElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-    const inputAreaRef = useRef<HTMLDivElement | null>(null);
 
     const messageElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
     const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -339,7 +338,6 @@ export function ChatRoom({
     const [newMsgCount, setNewMsgCount] = useState(0);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     const [hideScrollBtnUntilBottom, setHideScrollBtnUntilBottom] = useState(false);
-    const [inputAreaHeight, setInputAreaHeight] = useState(112);
     const [chatStats, setChatStats] = useState<{ totalMembers: number; onlineMembers: number } | null>(null);
     const [groupMembers, setGroupMembers] = useState<Record<string, GroupMember>>({});
     const [membersLoading, setMembersLoading] = useState(false);
@@ -1236,16 +1234,6 @@ export function ChatRoom({
         const dayBreak = !prev || !sameDay(prev.timestamp, m.timestamp);
         return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender) };
     }), [messages, currentUserId]);
-
-    useEffect(() => {
-        const el = inputAreaRef.current;
-        if (!el) return;
-        const update = () => setInputAreaHeight(el.offsetHeight || 112);
-        update();
-        const ro = new ResizeObserver(update);
-        ro.observe(el);
-        return () => ro.disconnect();
-    }, [replyTo, editingId, uploadedFile, pendingForwardDraft, text]);
 
     const submit = () => {
         const t = text.trim();
@@ -2180,7 +2168,7 @@ export function ChatRoom({
                     initial={{ opacity: 0 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.14, ease: 'easeOut' }}
-                    style={{ position: 'absolute', right: 16, bottom: Math.max(76, inputAreaHeight + 10), display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px', zIndex: 12 }}>
+                    style={{ position: 'absolute', right: 16, bottom: 96, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px', zIndex: 12 }}>
                     <ArrowDown size={16} color="currentColor" />
                     {newMsgCount > 0 && (
                         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -2192,7 +2180,7 @@ export function ChatRoom({
                 )}
             </AnimatePresence>
 
-            <div className="chat-room__input-area" ref={inputAreaRef}>
+            <div className="chat-room__input-area">
                 {(replyTo || editingId) && (
                     <div className="chat-room__reply-edit-box">
                         <div style={{ minWidth: 0, flex: 1, textAlign: 'right' }}>

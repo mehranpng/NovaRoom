@@ -60,10 +60,10 @@ const NotificationCard = ({
       style={{ zIndex: 1000 - stackIndex }}
       drag="y"
       dragDirectionLock
-      dragElastic={0.18}
-      dragConstraints={{ top: -120, bottom: 0 }}
+      dragElastic={0.3}
+      dragMomentum={false}
       onDragEnd={(_, info) => {
-        if (info.offset.y < -36 || info.velocity.y < -480) {
+        if (info.offset.y < -22 || info.velocity.y < -280) {
           onDismiss(item.id);
         }
       }}

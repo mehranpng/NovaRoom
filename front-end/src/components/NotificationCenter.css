@@ -25,7 +25,7 @@
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
   padding: 12px 14px;
   pointer-events: auto;
-  touch-action: auto;
+  touch-action: none;
   cursor: default;
   user-select: none;
 }
