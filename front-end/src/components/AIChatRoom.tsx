@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Forward, Check, SendHorizontal, Brain, PanelRight, PencilLine, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Forward, Check, SendHorizontal, Brain, PanelRight, PencilLine, Trash2, History } from 'lucide-react';
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import type { Components } from 'react-markdown';
 import type { Message, Chat, FileMetadata, AIChatSummary } from '../types';
-import { VerifiedBadge } from './VerifiedBadge';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
 import { ForwardModal } from './ForwardModal';
 
@@ -164,6 +164,7 @@ export function AIChatRoom({
     const [forwardModalOpen, setForwardModalOpen] = useState(false);
     const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
     const [reasoningEnabled, setReasoningEnabled] = useState(false);
+    const prevActiveAIChatIdRef = useRef<string | null>(activeAIChatId);
     const [aiChatsDrawerOpen, setAIChatsDrawerOpen] = useState(false);
     const [pendingDeleteChat, setPendingDeleteChat] = useState<AIChatSummary | null>(null);
 
@@ -204,10 +205,10 @@ export function AIChatRoom({
         }
 
         if (isResponding && isReasoningPending) {
-            navigator.vibrate([26, 120, 26]);
+            navigator.vibrate([10, 180, 16]);
             responseVibrationIntervalRef.current = window.setInterval(() => {
-                navigator.vibrate([26, 120, 26]);
-            }, 1200);
+                navigator.vibrate([10, 180, 16]);
+            }, 1800);
         } else {
             if (responseVibrationIntervalRef.current) {
                 clearInterval(responseVibrationIntervalRef.current);
@@ -228,8 +229,26 @@ export function AIChatRoom({
     }, []);
 
     useEffect(() => {
-        setReasoningEnabled(false);
-    }, [activeAIChatId]);
+        const prevId = prevActiveAIChatIdRef.current;
+        const nextId = activeAIChatId;
+        const changed = prevId !== nextId;
+        const isAutoCreateTransition = prevId === null && nextId !== null && messages.length > 0;
+
+        if (changed && !isAutoCreateTransition && reasoningEnabled) {
+            setReasoningEnabled(false);
+            if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                navigator.vibrate([9, 32, 14]);
+            }
+        }
+
+        prevActiveAIChatIdRef.current = nextId;
+    }, [activeAIChatId, messages.length, reasoningEnabled]);
+
+    useEffect(() => () => {
+        if (!reasoningEnabled) return;
+        if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return;
+        navigator.vibrate([9, 32, 14]);
+    }, [reasoningEnabled]);
 
     useEffect(() => {
         prevLenRef.current = messages.length;
@@ -410,7 +429,7 @@ export function AIChatRoom({
         setReasoningEnabled((prev) => {
             const next = !prev;
             if (next && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-                navigator.vibrate([12, 20, 12]);
+                navigator.vibrate([8, 24, 14]);
             }
             return next;
         });
@@ -496,7 +515,7 @@ export function AIChatRoom({
 
     return (
         <motion.div
-            className="chat-room" style={{ position: 'relative' }} ref={roomRef}
+            className="chat-room ai-chat-room" style={{ position: 'relative' }} ref={roomRef}
             variants={toastVariants}
             initial="hidden"
             animate="visible"
@@ -513,30 +532,11 @@ export function AIChatRoom({
                     <ArrowLeft size={20} />
                 </button>
 
-                <div className="chat-room__header-clickable chat-room__header-clickable--full">
-                    <img
-                        src="/avatars/ai.png"
-                        alt="NovaRoom AI"
-                        style={{
-                            width: '40px',
-                            height: '40px',
-                            borderRadius: '50%',
-                            objectFit: 'cover',
-                            flexShrink: 0,
-                        }}
-                    />
-                    <div className="chat-room__header-info">
-                        <div
-                            className="chat-room__contact-name"
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                        >
-                            NovaRoom AI
-                            <VerifiedBadge size={14} />
-                        </div>
-                        <div className="chat-room__contact-status">
-                            {activeAIChatTitle || 'گفت‌وگوی جدید'}
-                        </div>
+                <div className="chat-room__header-clickable chat-room__header-clickable--full ai-chat-room__header-main">
+                    <div className="ai-chat-room__header-title">
+                        {activeAIChatTitle || 'گفت‌وگوی جدید'}
                     </div>
+                    <div className="ai-chat-room__header-brand">NovaRoom AI</div>
                 </div>
                 <button
                     type="button"
@@ -592,7 +592,7 @@ export function AIChatRoom({
                                         ) : (
                                             <div className="message-text message-text--markdown">
                                                 <ReactMarkdown
-                                                    remarkPlugins={[remarkGfm]}
+                                                    remarkPlugins={[remarkGfm, remarkBreaks]}
                                                     components={markdownComponents}
                                                 >
                                                     {message.text ?? ''}
@@ -663,15 +663,17 @@ export function AIChatRoom({
                                 className="ai-chat-drawer__new-chat"
                                 onClick={() => {
                                     onCreateAIChat();
-                                    setAIChatsDrawerOpen(false);
                                 }}
                             >
                                 <span>گفت‌وگوی جدید</span>
                                 <PencilLine size={16} />
                             </button>
 
-                            <div className="ai-chat-drawer__list">
+                            <div className="ai-chat-drawer__section-header">
                                 <div className="ai-chat-drawer__section-title">تاریخچه</div>
+                                <History size={15} />
+                            </div>
+                            <div className="ai-chat-drawer__list">
                                 {aiChats.map((chat) => (
                                     <div key={chat.id} className="ai-chat-drawer__item">
                                         <button
@@ -890,6 +892,31 @@ export function AIChatRoom({
             </div>
 
             <style>{`
+                .ai-chat-room .chat-room__header {
+                    padding: 7px 12px;
+                }
+                .ai-chat-room__header-main {
+                    justify-content: space-between;
+                    gap: 10px;
+                }
+                .ai-chat-room__header-title {
+                    min-width: 0;
+                    flex: 1;
+                    text-align: right;
+                    font-size: 15px;
+                    font-weight: 700;
+                    color: var(--text-primary);
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+                .ai-chat-room__header-brand {
+                    flex-shrink: 0;
+                    font-size: 18px;
+                    font-weight: 800;
+                    color: var(--text-primary);
+                    text-align: left;
+                }
                 .typing-indicator {
                     display: flex;
                     align-items: center;
@@ -901,7 +928,7 @@ export function AIChatRoom({
                     height: 8px;
                     border-radius: 50%;
                     background: #9ca3af;
-                    animation: typing-bounce 1.3s infinite ease-in-out;
+                    animation: typing-bounce 1.9s infinite ease-in-out;
                 }
                 .typing-indicator span:nth-child(1) { animation-delay: -0.28s; }
                 .typing-indicator span:nth-child(2) { animation-delay: -0.14s; }
@@ -923,7 +950,7 @@ export function AIChatRoom({
                     -webkit-background-clip: text;
                     background-clip: text;
                     color: transparent;
-                    animation: thinking-shimmer 1.2s linear infinite;
+                    animation: thinking-shimmer 2.2s linear infinite;
                 }
                 @keyframes thinking-shimmer {
                     0% { background-position: 220% 0; }

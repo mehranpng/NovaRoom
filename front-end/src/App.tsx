@@ -519,6 +519,7 @@ export function App() {
             aiStreamStartedRef.current[messageId] = true;
             setAITyping(false);
             setAIReasoningPending(false);
+            vibrate([8, 40, 8, 55, 10]);
         }
         setAIMessagesByChat(prev => {
             const aiChatId = aiPendingStreamMetaRef.current[messageId]?.chatId || activeAIChatId || '';
@@ -540,9 +541,10 @@ export function App() {
             next[idx] = { ...next[idx], text, seen: true };
             return { ...prev, [aiChatId]: next };
         });
-    }, [activeAIChatId]);
+    }, [activeAIChatId, vibrate]);
 
-    const handleAIStreamDone = useCallback((message: any) => {
+    const handleAIStreamDone = useCallback((payload: any) => {
+        const message = payload?.message || payload;
         const aiChatId = String(message.aiChatId || activeAIChatId || '');
         if (!aiChatId) return;
         const messageWithChatId: Message = {
@@ -564,10 +566,16 @@ export function App() {
         setAIRespondingChatId(null);
         delete aiStreamStartedRef.current[messageWithChatId.id];
         delete aiPendingStreamMetaRef.current[messageWithChatId.id];
-        vibrate(120);
+        const nextTitle = typeof payload?.title === 'string' ? payload.title.trim() : '';
+        if (nextTitle) {
+            setAIChats((prev) => prev.map((chat) => (
+                chat.id === aiChatId ? { ...chat, title: nextTitle } : chat
+            )));
+        }
+        vibrate([18]);
     }, [vibrate, activeAIChatId]);
 
-    const handleAIUserMessageSaved = useCallback((message: any, clientId?: string, title?: string) => {
+    const handleAIUserMessageSaved = useCallback((message: any, clientId?: string) => {
         const aiChatId = String(message.aiChatId || activeAIChatId || '');
         if (!aiChatId) return;
         const messageWithChatId: Message = {
@@ -585,7 +593,7 @@ export function App() {
         });
         setAIChats(prev => prev.map((c) => (
             c.id === aiChatId
-                ? { ...c, title: title?.trim() ? title : c.title, updatedAt: Date.now() }
+                ? { ...c, updatedAt: Date.now() }
                 : c
         )));
     }, [activeAIChatId]);
@@ -1164,19 +1172,12 @@ export function App() {
                 delete next[chatId];
                 return next;
             });
-            setActiveAIChatId((prev) => {
-                if (prev !== chatId) return prev;
-                const remaining = aiChats.filter((c) => c.id !== chatId);
-                return remaining[0]?.id || null;
-            });
-            if (aiChats.length === 1) {
-                setActiveAIChatId(null);
-            }
+            setActiveAIChatId((prev) => (prev === chatId ? null : prev));
         } catch (error) {
             console.error('Failed to delete AI chat', error);
             alert('حذف گفت‌وگو با خطا مواجه شد');
         }
-    }, [aiChats, handleCreateAIChat]);
+    }, []);
 
     const handleOpenSavedMessages = useCallback(() => {
         if (!currentUser) return;

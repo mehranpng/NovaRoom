@@ -9,7 +9,7 @@ interface UseAIWebSocketProps {
     onUserMessageSaved?: (message: Message, clientId?: string, title?: string) => void;
     onAIStreamStart?: (message: Message) => void;
     onAIStreamChunk?: (messageId: string, text: string) => void;
-    onAIStreamDone?: (message: Message) => void;
+    onAIStreamDone?: (payload: any) => void;
 }
 
 export function useAIWebSocket({
@@ -89,7 +89,7 @@ export function useAIWebSocket({
                 } else if (data.type === 'ai_response_chunk') {
                     onAIStreamChunkRef.current?.(data.messageId, data.text ?? '');
                 } else if (data.type === 'ai_response_done') {
-                    onAIStreamDoneRef.current?.(data.message);
+                    onAIStreamDoneRef.current?.(data);
                 } else if (data.type === 'ai_user_message_saved') {
                     onUserMessageSavedRef.current?.(data.message, data.clientId, data.title);
                 } else if (data.type === 'ai_error') {

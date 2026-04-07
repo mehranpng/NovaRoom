@@ -152,11 +152,12 @@ async def generate_conversation_summary(
                 "content": (
                     "You are a summarizer. Return valid json only. "
                     'Output format: {"summary":"..."} . '
-                    "The summary must be Persian, max 300 characters. "
+                    "The summary must be Persian, very short (1 to 80 characters when possible). "
+                    "It can be a single word if enough. "
                     "Keep only critical long-term memory (preferences, constraints, goals, decisions, unresolved tasks). "
-                    "Do not include trivial details, greetings, or user's name because it is always available. "
-                    "Do not include static system-prompt facts (assistant identity, creators, fixed product description, default language rules). "
-                    "If nothing important was added, keep summary unchanged."
+                    "Do not include trivial details, greetings, small talk, or user's name because it is always available. "
+                    "If the new message is only greeting/chitchat and no lasting info, return previous summary unchanged (can be empty). "
+                    "Do not include static system-prompt facts (assistant identity, creators, fixed product description, default language rules)."
                 ),
             },
             {
@@ -189,13 +190,13 @@ async def generate_conversation_summary(
         ]
         normalized_summary = summary.lower()
         if any(marker in normalized_summary for marker in banned_markers):
-            return (previous_summary or "")[:300]
+            return (previous_summary or "")[:120]
         if not summary:
-            return (previous_summary or "")[:300]
-        return summary[:300]
+            return (previous_summary or "")[:120]
+        return summary[:120]
     except Exception as e:
         print(f"Summary generation error: {e}")
-        return (previous_summary or "")[:300]
+        return (previous_summary or "")[:120]
 
 
 async def generate_chat_title(first_user_message: str) -> str:
@@ -233,9 +234,8 @@ async def generate_chat_title(first_user_message: str) -> str:
         parsed = json.loads(payload)
         title = str(parsed.get("title") or "").strip()
         if not title:
-            return (raw_message[:56]).strip() or "گفت‌وگوی جدید"
+            return "گفت‌وگوی جدید"
         return title[:56]
     except Exception as e:
         print(f"Title generation error: {e}")
-        fallback = (first_user_message or "").strip()
-        return (fallback[:56]).strip() or "گفت‌وگوی جدید"
+        return "گفت‌وگوی جدید"

@@ -2405,6 +2405,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
             memory_summary: str,
             model_name: str,
             reasoning_mode: bool,
+            should_generate_title: bool = False,
+            first_user_message: str = "",
         ):
             ai_message_doc = {
                 "userId": user_id,
@@ -2461,15 +2463,23 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     {"_id": result.inserted_id},
                     {"$set": {"content": full_ai_response}},
                 )
+                generated_title = ""
+                chat_update: Dict[str, Any] = {"updatedAt": utc_now()}
+                if should_generate_title and not stopped:
+                    candidate_title = await generate_chat_title(first_user_message)
+                    if isinstance(candidate_title, str) and candidate_title.strip() and candidate_title.strip() != "گفت‌وگوی جدید":
+                        generated_title = candidate_title.strip()[:56]
+                        chat_update["title"] = generated_title
                 await cl_ai_chats.update_one(
                     {"_id": await try_object_id(ai_chat_id), "userId": user_id},
-                    {"$set": {"updatedAt": utc_now()}},
+                    {"$set": chat_update},
                 )
 
                 await websocket.send_json(
                     {
                         "type": "ai_response_done",
                         "stopped": stopped,
+                        "title": generated_title,
                         "message": {
                             "id": ai_msg_id,
                             "aiChatId": ai_chat_id,
@@ -2533,29 +2543,10 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 }
                 user_insert = await cl_ai_messages.insert_one(user_message_doc)
 
-                generated_title = ""
-                if user_msg_count == 0:
-                    try:
-                        generated_title = await asyncio.wait_for(
-                            generate_chat_title(text),
-                            timeout=2.2,
-                        )
-                    except Exception:
-                        generated_title = (text or "").strip()[:56] or "گفت‌وگوی جدید"
-                    await cl_ai_chats.update_one(
-                        {"_id": ai_chat["_id"], "userId": user_id},
-                        {
-                            "$set": {
-                                "title": generated_title,
-                                "updatedAt": utc_now(),
-                            }
-                        },
-                    )
-
                 await websocket.send_json(
                     {
                         "type": "ai_user_message_saved",
-                        "title": generated_title,
+                        "title": "",
                         "clientId": client_id if isinstance(client_id, str) else None,
                         "message": {
                             "id": str(user_insert.inserted_id),
@@ -2613,6 +2604,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                         refreshed_summary,
                         model_name,
                         use_reasoner,
+                        should_generate_title=(user_msg_count == 0),
+                        first_user_message=text,
                     )
                 )
 
