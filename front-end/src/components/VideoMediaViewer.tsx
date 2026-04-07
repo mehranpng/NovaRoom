@@ -23,7 +23,7 @@ function formatDuration(seconds: number): string {
 export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }: VideoMediaViewerProps) {
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
-    const ignoreSurfaceClickUntilRef = useRef(0);
+    const clickTimeoutRef = useRef<number | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
@@ -63,13 +63,31 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
         return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
     }, []);
 
+    useEffect(() => {
+        return () => {
+            if (clickTimeoutRef.current !== null) {
+                window.clearTimeout(clickTimeoutRef.current);
+                clickTimeoutRef.current = null;
+            }
+        };
+    }, []);
+
     const seekBy = (delta: number) => {
         const video = videoRef.current;
-        if (!video) return;
-        const next = Math.min(Math.max(0, video.currentTime + delta), video.duration || 0);
+        if (!video) return false;
+        const durationSafe = Number.isFinite(video.duration) ? video.duration : 0;
+        if (durationSafe <= 0) return false;
+        const current = video.currentTime;
+        const atStart = current <= 0.05;
+        const atEnd = durationSafe - current <= 0.05;
+        if ((delta < 0 && atStart) || (delta > 0 && atEnd)) return false;
+
+        const next = Math.min(Math.max(0, current + delta), durationSafe);
+        if (Math.abs(next - current) < 0.001) return false;
         video.currentTime = next;
         setCurrentTime(next);
         setSeekFeedback({ delta: delta > 0 ? 5 : -5, side: delta > 0 ? 'right' : 'left', id: Date.now() });
+        return true;
     };
 
     const toggleFullscreen = async () => {
@@ -90,6 +108,20 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
         } else {
             video.pause();
         }
+    };
+
+    const handleSurfaceClick = () => {
+        if (clickTimeoutRef.current !== null) window.clearTimeout(clickTimeoutRef.current);
+        clickTimeoutRef.current = window.setTimeout(async () => {
+            const video = videoRef.current;
+            if (!video) return;
+            if (video.paused) {
+                await video.play();
+            } else {
+                video.pause();
+            }
+            clickTimeoutRef.current = null;
+        }, 220);
     };
 
     const handleDownload = async () => {
@@ -133,16 +165,7 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
             <div className="video-media-viewer__stage" ref={containerRef}>
                 <div
                     className="video-media-viewer__surface"
-                    onClick={async () => {
-                        if (Date.now() < ignoreSurfaceClickUntilRef.current) return;
-                        const video = videoRef.current;
-                        if (!video) return;
-                        if (video.paused) {
-                            await video.play();
-                        } else {
-                            video.pause();
-                        }
-                    }}
+                    onClick={handleSurfaceClick}
                 >
                     <video
                         ref={videoRef}
@@ -160,8 +183,12 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
                         type="button"
                         className="video-media-viewer__seek video-media-viewer__seek--left"
                         onDoubleClick={(e) => {
+                            e.preventDefault();
                             e.stopPropagation();
-                            ignoreSurfaceClickUntilRef.current = Date.now() + 260;
+                            if (clickTimeoutRef.current !== null) {
+                                window.clearTimeout(clickTimeoutRef.current);
+                                clickTimeoutRef.current = null;
+                            }
                             seekBy(-5);
                         }}
                         aria-label="Seek backward 5 seconds"
@@ -170,8 +197,12 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
                         type="button"
                         className="video-media-viewer__seek video-media-viewer__seek--right"
                         onDoubleClick={(e) => {
+                            e.preventDefault();
                             e.stopPropagation();
-                            ignoreSurfaceClickUntilRef.current = Date.now() + 260;
+                            if (clickTimeoutRef.current !== null) {
+                                window.clearTimeout(clickTimeoutRef.current);
+                                clickTimeoutRef.current = null;
+                            }
                             seekBy(5);
                         }}
                         aria-label="Seek forward 5 seconds"

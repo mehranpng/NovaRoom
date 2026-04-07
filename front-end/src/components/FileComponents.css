@@ -621,7 +621,7 @@
     gap: 4px;
     white-space: nowrap;
     color: #fff;
-    font-size: 20px;
+    font-size: 18px;
     line-height: 1;
     font-weight: 700;
     pointer-events: none;
@@ -637,6 +637,8 @@
 
 .video-media-viewer__seek-feedback svg {
     flex-shrink: 0;
+    width: 52px;
+    height: 52px;
 }
 
 .video-media-viewer__seek-feedback span {
