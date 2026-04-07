@@ -135,6 +135,21 @@ const markdownComponents: Components = {
     ),
 };
 
+const AI_EMPTY_STATE_PROMPTS = [
+    'درمورد چه چیزی سوال دارید؟',
+    'هر چیزی می‌خواهید بپرسید.',
+    'به چه چیزی فکر می‌کنید؟',
+    'چه ایده‌ای در سر دارید؟',
+    'دوست دارید از کجا شروع کنیم؟',
+    'الان دنبال چه پاسخی هستید؟',
+    'می‌خواهید روی چه موضوعی کار کنیم؟',
+    'چه چیزی امروز ذهنتان را مشغول کرده؟',
+];
+
+function pickRandomEmptyPrompt(): string {
+    return AI_EMPTY_STATE_PROMPTS[Math.floor(Math.random() * AI_EMPTY_STATE_PROMPTS.length)];
+}
+
 export function AIChatRoom({
     messages,
     currentUserId,
@@ -168,6 +183,7 @@ export function AIChatRoom({
     const prevActiveAIChatIdRef = useRef<string | null>(activeAIChatId);
     const [aiChatsDrawerOpen, setAIChatsDrawerOpen] = useState(false);
     const [pendingDeleteChat, setPendingDeleteChat] = useState<AIChatSummary | null>(null);
+    const [emptyStatePrompt, setEmptyStatePrompt] = useState<string>(() => pickRandomEmptyPrompt());
 
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -244,6 +260,10 @@ export function AIChatRoom({
 
         prevActiveAIChatIdRef.current = nextId;
     }, [activeAIChatId, messages.length, reasoningEnabled]);
+
+    useEffect(() => {
+        setEmptyStatePrompt(pickRandomEmptyPrompt());
+    }, [activeAIChatId]);
 
     useEffect(() => () => {
         if (!reasoningEnabled) return;
@@ -580,7 +600,7 @@ export function AIChatRoom({
                         <ChatMessagesSkeleton />
                     ) : messages.length === 0 && !isResponding && !isTyping ? (
                         <div className="ai-chat-empty-state">
-                            درمورد چه چیزی سوال دارید؟
+                            {emptyStatePrompt}
                         </div>
                     ) : (
                         messages.map((message) => {

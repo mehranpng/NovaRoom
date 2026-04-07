@@ -651,6 +651,17 @@
 
 .video-media-viewer__seek-feedback--right {
     right: 11%;
+    direction: ltr;
+    unicode-bidi: isolate;
+    flex-direction: row;
+}
+
+.video-media-viewer__seek-feedback--right svg {
+    order: 1;
+}
+
+.video-media-viewer__seek-feedback--right span {
+    order: 2;
 }
 
 @keyframes video-media-viewer-feedback {
