@@ -53,6 +53,7 @@ const NotificationCard = ({
   onDismiss: (id: string) => void;
 }) => {
   const typeClass = useMemo(() => getTypeClassName(item.type), [item.type]);
+  const touchStartYRef = useRef<number | null>(null);
 
   return (
     <motion.div
@@ -64,6 +65,18 @@ const NotificationCard = ({
       dragMomentum={false}
       onDragEnd={(_, info) => {
         if (info.offset.y < -22 || info.velocity.y < -280) {
+          onDismiss(item.id);
+        }
+      }}
+      onTouchStart={(e) => {
+        touchStartYRef.current = e.touches[0]?.clientY ?? null;
+      }}
+      onTouchEnd={(e) => {
+        const startY = touchStartYRef.current;
+        const endY = e.changedTouches[0]?.clientY ?? null;
+        touchStartYRef.current = null;
+        if (startY === null || endY === null) return;
+        if (startY - endY > 24) {
           onDismiss(item.id);
         }
       }}

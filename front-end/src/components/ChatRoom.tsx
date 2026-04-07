@@ -1235,6 +1235,11 @@ export function ChatRoom({
         return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender) };
     }), [messages, currentUserId]);
 
+    const activeInputStackCount = (replyTo || editingId ? 1 : 0)
+        + (uploadedFile ? 1 : 0)
+        + (pendingForwardDraft ? 1 : 0);
+    const scrollButtonBottom = 96 + (activeInputStackCount * 56);
+
     const submit = () => {
         const t = text.trim();
         if (t.length > MAX_CHAT_MESSAGE_LENGTH) {
@@ -2168,7 +2173,7 @@ export function ChatRoom({
                     initial={{ opacity: 0 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.14, ease: 'easeOut' }}
-                    style={{ position: 'absolute', right: 16, bottom: 96, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px', zIndex: 12 }}>
+                    style={{ position: 'absolute', right: 16, bottom: scrollButtonBottom, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px', zIndex: 12 }}>
                     <ArrowDown size={16} color="currentColor" />
                     {newMsgCount > 0 && (
                         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
