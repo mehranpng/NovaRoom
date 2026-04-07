@@ -894,7 +894,7 @@ export function AIChatRoom({
 
             <style>{`
                 .ai-chat-room .chat-room__header {
-                    padding: 7px 12px;
+                    padding: 9px 12px;
                 }
                 .ai-chat-room .chat-room__back-btn {
                     display: inline-flex;
@@ -916,7 +916,7 @@ export function AIChatRoom({
                     flex: 1;
                     text-align: right;
                     font-size: 13px;
-                    font-weight: 500;
+                    font-weight: 600;
                     color: var(--text-primary);
                     overflow: hidden;
                     text-overflow: ellipsis;
@@ -925,7 +925,7 @@ export function AIChatRoom({
                 }
                 .ai-chat-room__header-brand {
                     flex-shrink: 0;
-                    font-size: 17px;
+                    font-size: 19px;
                     font-weight: 780;
                     color: var(--text-primary);
                     text-align: left;

@@ -854,6 +854,7 @@ body,
     cursor: pointer;
     transition: color 0.2s ease;
     padding: 0 2px;
+    align-self: flex-start;
 }
 
 .ai-chat-drawer__icon-btn:hover {
