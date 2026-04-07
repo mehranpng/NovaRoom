@@ -1093,7 +1093,7 @@ body,
 
 .message-row {
     display: flex;
-    margin-top: 6px;
+    margin-top: 4px;
     touch-action: pan-y;
     position: relative;
 }
@@ -1113,12 +1113,12 @@ body,
 }
 
 .message-row--first {
-    margin-top: 8px;
+    margin-top: 6px;
 }
 
 .message-bubble {
-    max-width: 85%;
-    padding: 7px 10px 6px;
+    max-width: 90%;
+    padding: 6px 10px 5px;
     border-radius: 18px;
     margin-bottom: 2px;
     transition: transform var(--motion-fast) var(--motion-ease-standard), box-shadow var(--motion-base) var(--motion-ease-standard);
@@ -1126,7 +1126,7 @@ body,
 
 @media (min-width: 640px) {
     .message-bubble {
-        max-width: 70%;
+        max-width: 76%;
     }
 }
 
