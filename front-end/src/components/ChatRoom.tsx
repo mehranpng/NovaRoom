@@ -2181,7 +2181,7 @@ export function ChatRoom({
                     animate={{ opacity: 1 }}
                     initial={{ opacity: 0 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: 0.25, ease: 'easeOut' }}
+                    transition={{ duration: 0.14, ease: 'easeOut' }}
                     style={{ position: 'absolute', right: 16, bottom: Math.max(76, inputAreaHeight + 10), display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px', zIndex: 12 }}>
                     <ArrowDown size={16} color="currentColor" />
                     {newMsgCount > 0 && (

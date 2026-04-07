@@ -734,7 +734,7 @@ export function AIChatRoom({
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        transition={{ duration: 0.2, ease: 'easeOut' }}
+                        transition={{ duration: 0.14, ease: 'easeOut' }}
                     >
                         <motion.div
                             className="chat-room-confirm-modal"
@@ -815,7 +815,7 @@ export function AIChatRoom({
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        transition={{ duration: 0.2, ease: 'easeOut' }}
+                        transition={{ duration: 0.14, ease: 'easeOut' }}
                         style={{
                             position: 'absolute',
                             right: 16,
@@ -948,12 +948,13 @@ export function AIChatRoom({
                 .ai-chat-room__header-main {
                     justify-content: space-between;
                     gap: 6px;
-                    direction: rtl;
+                    direction: ltr;
                     align-items: center;
                 }
                 .ai-chat-room__header-title {
                     min-width: 0;
                     flex: 1;
+                    direction: rtl;
                     text-align: right;
                     font-size: 13px;
                     font-weight: 600;
@@ -970,6 +971,7 @@ export function AIChatRoom({
                     font-weight: 700;
                     color: var(--text-primary);
                     text-align: left;
+                    margin-right: 8px;
                     line-height: 1.2;
                 }
                 .typing-indicator {
