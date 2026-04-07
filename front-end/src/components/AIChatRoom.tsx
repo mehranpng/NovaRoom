@@ -894,16 +894,18 @@ export function AIChatRoom({
 
             <style>{`
                 .ai-chat-room .chat-room__header {
-                    padding: 9px 12px;
+                    padding: 10px 10px;
+                    padding-top: 12px;
                 }
                 .ai-chat-room .chat-room__back-btn {
                     display: inline-flex;
                     align-items: center;
                     justify-content: center;
                     line-height: 0;
+                    margin-bottom: 4px;
                 }
                 .ai-chat-room .chat-room__header-clickable--full {
-                    padding: 6px 4px;
+                    padding: 2px 5px;
                 }
                 .ai-chat-room__header-main {
                     justify-content: space-between;
@@ -922,11 +924,12 @@ export function AIChatRoom({
                     text-overflow: ellipsis;
                     white-space: nowrap;
                     line-height: 1.2;
+                    margin-bottom: 1px;
                 }
                 .ai-chat-room__header-brand {
                     flex-shrink: 0;
-                    font-size: 19px;
-                    font-weight: 780;
+                    font-size: 18px;
+                    font-weight: 700;
                     color: var(--text-primary);
                     text-align: left;
                     line-height: 1.2;

@@ -764,7 +764,7 @@ body,
     position: relative;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 2px;
     border-bottom: 1px solid var(--border-primary);
     background: var(--bg-primary);
     padding: 10px 12px;
@@ -802,14 +802,8 @@ body,
 .chat-room__header-clickable--full {
     align-self: stretch;
     padding: 8px 10px;
-    border-radius: 14px;
-    transition: background 0.15s, opacity 0.15s;
 }
 
-.chat-room__header-clickable--full:hover {
-    background: var(--hover-bg);
-    opacity: 1;
-}
 
 .chat-room__header-clickable--full:focus-visible {
     outline: 2px solid rgba(59, 130, 246, 0.35);
