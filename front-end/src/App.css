@@ -767,7 +767,7 @@ body,
     gap: 2px;
     border-bottom: 1px solid var(--border-primary);
     background: var(--bg-primary);
-    padding: 10px 12px;
+    padding: 7px 12px;
     box-shadow: var(--shadow-sm);
 }
 
@@ -801,7 +801,7 @@ body,
 
 .chat-room__header-clickable--full {
     align-self: stretch;
-    padding: 8px 10px;
+    padding: 5px 8px;
 }
 
 

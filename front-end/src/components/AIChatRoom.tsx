@@ -636,10 +636,10 @@ export function AIChatRoom({
                         className="ai-chat-drawer__overlay"
                         onClick={() => setAIChatsDrawerOpen(false)}
                         role="presentation"
-                        initial={{ opacity: 1 }}
+                        initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        exit={{ opacity: 1 }}
-                        transition={{ duration: 0 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.22, ease: 'easeOut' }}
                     >
                         <motion.aside
                             className="ai-chat-drawer"
@@ -704,44 +704,54 @@ export function AIChatRoom({
                 )}
             </AnimatePresence>
 
-            {pendingDeleteChat && (
-                <div
-                    className="chat-room-modal-overlay"
-                    style={{ zIndex: 120 }}
-                    onClick={() => setPendingDeleteChat(null)}
-                >
-                    <div
-                        className="chat-room-confirm-modal"
-                        role="dialog"
-                        aria-modal="true"
-                        onClick={(e) => e.stopPropagation()}
+            <AnimatePresence>
+                {pendingDeleteChat && (
+                    <motion.div
+                        className="chat-room-modal-overlay"
+                        style={{ zIndex: 120 }}
+                        onClick={() => setPendingDeleteChat(null)}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2, ease: 'easeOut' }}
                     >
-                        <h3 className="chat-room-confirm-modal__title">حذف گفت‌وگو؟</h3>
-                        <p className="chat-room-confirm-modal__text">
-                            {`گفت‌وگوی «${pendingDeleteChat.title || 'گفت‌وگوی جدید'}» حذف شود؟`}
-                        </p>
-                        <div className="chat-room-confirm-modal__actions">
-                            <button
-                                className="chat-room-confirm-modal__btn"
-                                type="button"
-                                onClick={() => setPendingDeleteChat(null)}
-                            >
-                                انصراف
-                            </button>
-                            <button
-                                className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger"
-                                type="button"
-                                onClick={() => {
-                                    onDeleteAIChat(pendingDeleteChat.id);
-                                    setPendingDeleteChat(null);
-                                }}
-                            >
-                                حذف
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+                        <motion.div
+                            className="chat-room-confirm-modal"
+                            role="dialog"
+                            aria-modal="true"
+                            onClick={(e) => e.stopPropagation()}
+                            initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                        >
+                            <h3 className="chat-room-confirm-modal__title">حذف گفت‌وگو؟</h3>
+                            <p className="chat-room-confirm-modal__text">
+                                {`گفت‌وگوی «${pendingDeleteChat.title || 'گفت‌وگوی جدید'}» حذف شود؟`}
+                            </p>
+                            <div className="chat-room-confirm-modal__actions">
+                                <button
+                                    className="chat-room-confirm-modal__btn"
+                                    type="button"
+                                    onClick={() => setPendingDeleteChat(null)}
+                                >
+                                    انصراف
+                                </button>
+                                <button
+                                    className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger"
+                                    type="button"
+                                    onClick={() => {
+                                        onDeleteAIChat(pendingDeleteChat.id);
+                                        setPendingDeleteChat(null);
+                                    }}
+                                >
+                                    حذف
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {msgMenu && activeMsg && (
                 <div
@@ -856,7 +866,7 @@ export function AIChatRoom({
                             }, 80);
                         }}
                         onKeyDown={(e) => {
-                            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                            if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault();
                                 submit();
                             }

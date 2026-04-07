@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, Copy, Eye, MoreVertical, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight } from 'lucide-react';
-import { motion, type Variants } from "framer-motion";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import type { Components } from 'react-markdown';
 import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata } from '../types';
 import { Avatar } from './Avatar';
@@ -321,6 +322,7 @@ export function ChatRoom({
     const messagesContainerRef = useRef<HTMLDivElement | null>(null);
     const roomRef = useRef<HTMLDivElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const inputAreaRef = useRef<HTMLDivElement | null>(null);
 
     const messageElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
     const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -336,6 +338,8 @@ export function ChatRoom({
 
     const [newMsgCount, setNewMsgCount] = useState(0);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
+    const [hideScrollBtnUntilBottom, setHideScrollBtnUntilBottom] = useState(false);
+    const [inputAreaHeight, setInputAreaHeight] = useState(112);
     const [chatStats, setChatStats] = useState<{ totalMembers: number; onlineMembers: number } | null>(null);
     const [groupMembers, setGroupMembers] = useState<Record<string, GroupMember>>({});
     const [membersLoading, setMembersLoading] = useState(false);
@@ -1017,6 +1021,7 @@ export function ChatRoom({
         initialScrollDoneRef.current = false;
         prevLenRef.current = messages.length;
         setNewMsgCount(0); setShowScrollBtn(false);
+        setHideScrollBtnUntilBottom(false);
         isAtBottomRef.current = true;
         setShowContactInfo(false);
         setShowMembersList(false);
@@ -1202,10 +1207,15 @@ export function ChatRoom({
         const nearBottom = computeNearBottom();
         isAtBottomRef.current = nearBottom;
         if (nearBottom) {
-            setNewMsgCount(0); setShowScrollBtn(false);
+            setNewMsgCount(0);
+            setShowScrollBtn(false);
+            setHideScrollBtnUntilBottom(false);
             consumeUnreadForOpenSession();
+        } else if (hideScrollBtnUntilBottom) {
+            setShowScrollBtn(false);
+        } else {
+            setShowScrollBtn(container.scrollHeight - container.scrollTop - container.clientHeight > 180);
         }
-        else setShowScrollBtn(container.scrollHeight - container.scrollTop - container.clientHeight > 180);
 
         userHasScrolledRef.current = true;
 
@@ -1226,6 +1236,16 @@ export function ChatRoom({
         const dayBreak = !prev || !sameDay(prev.timestamp, m.timestamp);
         return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender) };
     }), [messages, currentUserId]);
+
+    useEffect(() => {
+        const el = inputAreaRef.current;
+        if (!el) return;
+        const update = () => setInputAreaHeight(el.offsetHeight || 112);
+        update();
+        const ro = new ResizeObserver(update);
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [replyTo, editingId, uploadedFile, pendingForwardDraft, text]);
 
     const submit = () => {
         const t = text.trim();
@@ -1921,7 +1941,7 @@ export function ChatRoom({
                                             {m.text && (
                                                 <div className="message-text message-text--markdown">
                                                     <ReactMarkdown
-                                                        remarkPlugins={[remarkGfm]}
+                                                        remarkPlugins={[remarkGfm, remarkBreaks]}
                                                         components={markdownComponents}
                                                     >
                                                         {m.text}
@@ -2140,10 +2160,22 @@ export function ChatRoom({
                 );
             })()}
 
-            {(newMsgCount > 0 || showScrollBtn) && (
-                <button type="button" aria-label="Jump to latest messages"
-                    onClick={() => { scrollToBottom(true); setNewMsgCount(0); setShowScrollBtn(false); }}
-                    style={{ position: 'absolute', right: 16, bottom: 126, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px' }}>
+            <AnimatePresence>
+                {!hideScrollBtnUntilBottom && (newMsgCount > 0 || showScrollBtn) && (
+                    <motion.button
+                    type="button"
+                    aria-label="Jump to latest messages"
+                    onClick={() => {
+                        setHideScrollBtnUntilBottom(true);
+                        scrollToBottom(true);
+                        setNewMsgCount(0);
+                        setShowScrollBtn(false);
+                    }}
+                    animate={{ bottom: Math.max(76, inputAreaHeight + 10), opacity: 1, y: 0 }}
+                    initial={{ opacity: 0, y: 10 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    transition={{ duration: 0.25, ease: 'easeOut' }}
+                    style={{ position: 'absolute', right: 16, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px', zIndex: 12 }}>
                     <ArrowDown size={16} color="currentColor" />
                     {newMsgCount > 0 && (
                         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -2151,10 +2183,11 @@ export function ChatRoom({
                             <span style={{ width: 6, height: 6, borderRadius: 999, background: '#2F80ED', marginTop: 4 }} />
                         </span>
                     )}
-                </button>
-            )}
+                    </motion.button>
+                )}
+            </AnimatePresence>
 
-            <div className="chat-room__input-area">
+            <div className="chat-room__input-area" ref={inputAreaRef}>
                 {(replyTo || editingId) && (
                     <div className="chat-room__reply-edit-box">
                         <div style={{ minWidth: 0, flex: 1, textAlign: 'right' }}>
@@ -2200,7 +2233,7 @@ export function ChatRoom({
                         value={text} onChange={(e) => setText(e.target.value)}
                         onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
                         onKeyDown={(e) => {
-                            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                            if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault();
                                 submit();
                             }
@@ -2218,9 +2251,10 @@ export function ChatRoom({
             <ForwardModal isOpen={forwardModalOpen} chats={chats} currentUserId={currentUserId}
                 onClose={() => setForwardModalOpen(false)} onSelectTargetChat={handleForwardFromModal} onSelectChat={onSelectChat} />
 
-            {confirmDeleteChat && (
-                <div className="chat-room-modal-overlay" ref={confirmDeleteChatRef}>
-                    <div className="chat-room-confirm-modal">
+            <AnimatePresence>
+                {confirmDeleteChat && (
+                    <motion.div className="chat-room-modal-overlay" ref={confirmDeleteChatRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
+                        <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
                         <h3 className="chat-room-confirm-modal__title">{isGroupChat ? 'گروه حذف شود؟' : 'گفتگو حذف شود؟'}</h3>
                         <p className="chat-room-confirm-modal__text">
                             {isGroupChat ? 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.' : 'این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'}
@@ -2229,35 +2263,40 @@ export function ChatRoom({
                             <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteChat(false)} type="button">لغو</button>
                             <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doDeleteChat} type="button">حذف</button>
                         </div>
-                    </div>
-                </div>
-            )}
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
-            {confirmLeaveGroup && (
-                <div className="chat-room-modal-overlay" ref={confirmLeaveGroupRef}>
-                    <div className="chat-room-confirm-modal">
+            <AnimatePresence>
+                {confirmLeaveGroup && (
+                    <motion.div className="chat-room-modal-overlay" ref={confirmLeaveGroupRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
+                        <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
                         <h3 className="chat-room-confirm-modal__title">خروج از گروه؟</h3>
                         <p className="chat-room-confirm-modal__text">آیا می‌خواهید از گروه خارج شوید؟ گروه برای شما حذف خواهد شد.</p>
                         <div className="chat-room-confirm-modal__actions">
                             <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmLeaveGroup(false)} type="button">لغو</button>
                             <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doLeaveGroup} type="button">خروج</button>
                         </div>
-                    </div>
-                </div>
-            )}
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
-            {confirmDeleteMsg && (
-                <div className="chat-room-modal-overlay" ref={confirmDeleteMsgRef}>
-                    <div className="chat-room-confirm-modal">
+            <AnimatePresence>
+                {confirmDeleteMsg && (
+                    <motion.div className="chat-room-modal-overlay" ref={confirmDeleteMsgRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
+                        <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
                         <h3 className="chat-room-confirm-modal__title">این پیام حذف شود؟</h3>
                         <p className="chat-room-confirm-modal__text">این عمل پیام را کامل حذف میکند.</p>
                         <div className="chat-room-confirm-modal__actions">
                             <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteMsg(null)} type="button">لغو</button>
                             <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={confirmDeleteMessage} type="button">حذف</button>
                         </div>
-                    </div>
-                </div>
-            )}
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </motion.div>
     );
 }

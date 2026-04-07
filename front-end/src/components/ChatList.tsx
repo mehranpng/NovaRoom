@@ -1081,35 +1081,49 @@ export function ChatList({
             )}
 
             {/* Custom confirm modal (same classes as ChatRoom) */}
-            {confirmAction && confirmMeta && (
-                <div className="chat-room-modal-overlay" ref={confirmOverlayRef} style={{ zIndex: 120 }}>
-                    <div
-                        className="chat-room-confirm-modal"
-                        onMouseDown={(e) => e.stopPropagation()}
+            <AnimatePresence>
+                {confirmAction && confirmMeta && (
+                    <motion.div
+                        className="chat-room-modal-overlay"
+                        ref={confirmOverlayRef}
+                        style={{ zIndex: 120 }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2, ease: 'easeOut' }}
                     >
-                        <h3 className="chat-room-confirm-modal__title">{confirmMeta.title}</h3>
-                        <p className="chat-room-confirm-modal__text">{confirmMeta.text}</p>
-                        <div className="chat-room-confirm-modal__actions">
-                            <button
-                                className="chat-room-confirm-modal__btn"
-                                onClick={() => setConfirmAction(null)}
-                                disabled={confirmBusy}
-                                type="button"
-                            >
-                                لغو
-                            </button>
-                            <button
-                                className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger"
-                                onClick={runConfirmAction}
-                                disabled={confirmBusy}
-                                type="button"
-                            >
-                                {confirmMeta.confirmLabel}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+                        <motion.div
+                            className="chat-room-confirm-modal"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                        >
+                            <h3 className="chat-room-confirm-modal__title">{confirmMeta.title}</h3>
+                            <p className="chat-room-confirm-modal__text">{confirmMeta.text}</p>
+                            <div className="chat-room-confirm-modal__actions">
+                                <button
+                                    className="chat-room-confirm-modal__btn"
+                                    onClick={() => setConfirmAction(null)}
+                                    disabled={confirmBusy}
+                                    type="button"
+                                >
+                                    لغو
+                                </button>
+                                <button
+                                    className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger"
+                                    onClick={runConfirmAction}
+                                    disabled={confirmBusy}
+                                    type="button"
+                                >
+                                    {confirmMeta.confirmLabel}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
