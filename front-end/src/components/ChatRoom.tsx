@@ -1265,6 +1265,13 @@ export function ChatRoom({
         requestAnimationFrame(() => scrollToBottom(true));
     };
 
+    const isMobileKeyboardInput = () => {
+        if (typeof window === 'undefined') return false;
+        const coarse = window.matchMedia?.('(pointer: coarse)').matches;
+        const ua = navigator.userAgent || '';
+        return Boolean(coarse || /Android|iPhone|iPad|iPod|Mobile/i.test(ua));
+    };
+
     const doDeleteChat = async () => {
         try {
             await apiFetch(`/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
@@ -2171,11 +2178,11 @@ export function ChatRoom({
                         setNewMsgCount(0);
                         setShowScrollBtn(false);
                     }}
-                    animate={{ bottom: Math.max(76, inputAreaHeight + 10), opacity: 1, y: 0 }}
-                    initial={{ opacity: 0, y: 10 }}
-                    exit={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1 }}
+                    initial={{ opacity: 0 }}
+                    exit={{ opacity: 0 }}
                     transition={{ duration: 0.25, ease: 'easeOut' }}
-                    style={{ position: 'absolute', right: 16, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px', zIndex: 12 }}>
+                    style={{ position: 'absolute', right: 16, bottom: Math.max(76, inputAreaHeight + 10), display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px', zIndex: 12 }}>
                     <ArrowDown size={16} color="currentColor" />
                     {newMsgCount > 0 && (
                         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -2233,7 +2240,7 @@ export function ChatRoom({
                         value={text} onChange={(e) => setText(e.target.value)}
                         onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
                         onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
+                            if (e.key === 'Enter' && !e.shiftKey && !isMobileKeyboardInput()) {
                                 e.preventDefault();
                                 submit();
                             }

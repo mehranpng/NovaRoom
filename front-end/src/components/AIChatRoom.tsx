@@ -161,6 +161,7 @@ export function AIChatRoom({
     const [msgMenu, setMsgMenu] = useState<{ id: string; top: number; left: number } | null>(null);
     const [newMsgCount, setNewMsgCount] = useState(0);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
+    const [hideScrollBtnUntilBottom, setHideScrollBtnUntilBottom] = useState(false);
     const [forwardModalOpen, setForwardModalOpen] = useState(false);
     const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
     const [reasoningEnabled, setReasoningEnabled] = useState(false);
@@ -256,6 +257,7 @@ export function AIChatRoom({
         initialScrollDoneRef.current = false;
         setNewMsgCount(0);
         setShowScrollBtn(false);
+        setHideScrollBtnUntilBottom(false);
         requestAnimationFrame(() => scrollToBottom(false));
     }, [activeAIChatId]);
 
@@ -394,6 +396,12 @@ export function AIChatRoom({
         }
     }, [isTyping]);
 
+    useEffect(() => {
+        if (isResponding || isTyping) {
+            setMsgMenu(null);
+        }
+    }, [isResponding, isTyping]);
+
     const onMessagesScroll = () => {
         const container = messagesContainerRef.current;
         if (!container) return;
@@ -404,10 +412,22 @@ export function AIChatRoom({
         if (nearBottom) {
             setNewMsgCount(0);
             setShowScrollBtn(false);
+            setHideScrollBtnUntilBottom(false);
         } else {
             const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-            setShowScrollBtn(distanceFromBottom > 300);
+            if (hideScrollBtnUntilBottom) {
+                setShowScrollBtn(false);
+            } else {
+                setShowScrollBtn(distanceFromBottom > 300);
+            }
         }
+    };
+
+    const isMobileKeyboardInput = () => {
+        if (typeof window === 'undefined') return false;
+        const coarse = window.matchMedia?.('(pointer: coarse)').matches;
+        const ua = navigator.userAgent || '';
+        return Boolean(coarse || /Android|iPhone|iPad|iPod|Mobile/i.test(ua));
     };
 
     const submit = async () => {
@@ -436,6 +456,7 @@ export function AIChatRoom({
     };
 
     const openMessageMenu = (messageId: string, targetEl: HTMLElement, clientX?: number, clientY?: number) => {
+        if (isResponding || isTyping) return;
         const room = roomRef.current;
         if (!room) return;
         if (msgMenu?.id === messageId) {
@@ -585,7 +606,7 @@ export function AIChatRoom({
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter') openMessageMenu(message.id, e.currentTarget as HTMLElement);
                                         }}
-                                        style={{ cursor: 'pointer' }}
+                                        style={{ cursor: isResponding || isTyping ? 'default' : 'pointer' }}
                                     >
                                         {isMine ? (
                                             <div className="message-text">{message.text}</div>
@@ -780,50 +801,57 @@ export function AIChatRoom({
                 onSelectChat={onSelectChat}
             />
 
-            {(newMsgCount > 0 || showScrollBtn) && (
-                <button
-                    type="button"
-                    aria-label="Jump to latest messages"
-                    onClick={() => {
-                        scrollToBottom(true);
-                        setNewMsgCount(0);
-                        setShowScrollBtn(false);
-                    }}
-                    style={{
-                        position: 'absolute',
-                        right: 16,
-                        bottom: 96,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        padding: newMsgCount > 0 ? '8px 10px' : '10px',
-                        borderRadius: 999,
-                        border: '1px solid var(--border-secondary)',
-                        background: 'var(--bg-secondary)',
-                        color: 'var(--text-primary)',
-                        boxShadow: 'var(--shadow-md)',
-                        cursor: 'pointer',
-                        fontSize: 12,
-                        lineHeight: '12px',
-                    }}
-                >
-                    <ArrowDown size={16} />
-                    {newMsgCount > 0 && (
-                        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{newMsgCount}</span>
-                            <span
-                                style={{
-                                    width: 6,
-                                    height: 6,
-                                    borderRadius: 999,
-                                    background: '#2F80ED',
-                                    marginTop: 4,
-                                }}
-                            />
-                        </span>
-                    )}
-                </button>
-            )}
+            <AnimatePresence>
+                {!hideScrollBtnUntilBottom && (newMsgCount > 0 || showScrollBtn) && (
+                    <motion.button
+                        type="button"
+                        aria-label="Jump to latest messages"
+                        onClick={() => {
+                            setHideScrollBtnUntilBottom(true);
+                            scrollToBottom(true);
+                            setNewMsgCount(0);
+                            setShowScrollBtn(false);
+                        }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2, ease: 'easeOut' }}
+                        style={{
+                            position: 'absolute',
+                            right: 16,
+                            bottom: 96,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            padding: newMsgCount > 0 ? '8px 10px' : '10px',
+                            borderRadius: 999,
+                            border: '1px solid var(--border-secondary)',
+                            background: 'var(--bg-secondary)',
+                            color: 'var(--text-primary)',
+                            boxShadow: 'var(--shadow-md)',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            lineHeight: '12px',
+                        }}
+                    >
+                        <ArrowDown size={16} />
+                        {newMsgCount > 0 && (
+                            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{newMsgCount}</span>
+                                <span
+                                    style={{
+                                        width: 6,
+                                        height: 6,
+                                        borderRadius: 999,
+                                        background: '#2F80ED',
+                                        marginTop: 4,
+                                    }}
+                                />
+                            </span>
+                        )}
+                    </motion.button>
+                )}
+            </AnimatePresence>
 
             <div className="chat-room__input-area">
                 <div className="chat-room__input-wrapper">
@@ -866,7 +894,7 @@ export function AIChatRoom({
                             }, 80);
                         }}
                         onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
+                            if (e.key === 'Enter' && !e.shiftKey && !isMobileKeyboardInput()) {
                                 e.preventDefault();
                                 submit();
                             }
@@ -920,7 +948,7 @@ export function AIChatRoom({
                 .ai-chat-room__header-main {
                     justify-content: space-between;
                     gap: 6px;
-                    direction: ltr;
+                    direction: rtl;
                     align-items: center;
                 }
                 .ai-chat-room__header-title {
@@ -929,7 +957,7 @@ export function AIChatRoom({
                     text-align: right;
                     font-size: 13px;
                     font-weight: 600;
-                    color: var(--text-primary);
+                    color: var(--text-secondary);
                     overflow: hidden;
                     text-overflow: ellipsis;
                     white-space: nowrap;
