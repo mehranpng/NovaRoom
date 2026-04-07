@@ -2200,12 +2200,10 @@ export function ChatRoom({
                         value={text} onChange={(e) => setText(e.target.value)}
                         onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
                         onKeyDown={(e) => {
-                            if (e.key !== 'Enter') return;
-                            const isDesktop = typeof window !== 'undefined' && window.matchMedia('(pointer:fine)').matches;
-                            if (!isDesktop) return;
-                            if (e.shiftKey || e.ctrlKey || e.metaKey) return;
-                            e.preventDefault();
-                            submit();
+                            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                e.preventDefault();
+                                submit();
+                            }
                         }}
                         rows={1}
                     />

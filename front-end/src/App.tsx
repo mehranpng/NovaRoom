@@ -586,9 +586,13 @@ export function App() {
         setAIMessagesByChat(prev => {
             const current = prev[aiChatId] || [];
             const idx = clientId ? current.findIndex((m) => m.id === clientId) : -1;
-            if (idx === -1) return { ...prev, [aiChatId]: [...current, messageWithChatId] };
+            const existingByServerId = current.findIndex((m) => m.id === messageWithChatId.id);
+            if (idx === -1 && existingByServerId === -1) {
+                return { ...prev, [aiChatId]: [...current, messageWithChatId] };
+            }
             const next = [...current];
-            next[idx] = messageWithChatId;
+            const targetIndex = idx !== -1 ? idx : existingByServerId;
+            next[targetIndex] = { ...next[targetIndex], ...messageWithChatId };
             return { ...prev, [aiChatId]: next };
         });
         setAIChats(prev => prev.map((c) => (

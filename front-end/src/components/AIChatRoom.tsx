@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Forward, Check, SendHorizontal, Brain, PanelRight, PencilLine, Trash2, History } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Check, SendHorizontal, Brain, PanelRight, PencilLine, Trash2, History, CornerUpLeft } from 'lucide-react';
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -663,7 +663,7 @@ export function AIChatRoom({
                                 className="ai-chat-drawer__new-chat"
                                 onClick={() => {
                                     onCreateAIChat();
-                                setAIChatsDrawerOpen(false);
+                                    setAIChatsDrawerOpen(false);
                                 }}
                             >
                                 <span>گفت‌وگوی جدید</span>
@@ -755,7 +755,7 @@ export function AIChatRoom({
                         کپی
                     </button>
                     <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button">
-                        <Forward size={16} />
+                        <CornerUpLeft size={16} />
                         فوروارد
                     </button>
                 </div>
@@ -896,28 +896,40 @@ export function AIChatRoom({
                 .ai-chat-room .chat-room__header {
                     padding: 7px 12px;
                 }
+                .ai-chat-room .chat-room__back-btn {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    line-height: 0;
+                }
+                .ai-chat-room .chat-room__header-clickable--full {
+                    padding: 6px 4px;
+                }
                 .ai-chat-room__header-main {
                     justify-content: space-between;
-                    gap: 10px;
+                    gap: 6px;
                     direction: ltr;
+                    align-items: center;
                 }
                 .ai-chat-room__header-title {
                     min-width: 0;
                     flex: 1;
                     text-align: right;
-                    font-size: 15px;
-                    font-weight: 700;
+                    font-size: 13px;
+                    font-weight: 500;
                     color: var(--text-primary);
                     overflow: hidden;
                     text-overflow: ellipsis;
                     white-space: nowrap;
+                    line-height: 1.2;
                 }
                 .ai-chat-room__header-brand {
                     flex-shrink: 0;
-                    font-size: 18px;
-                    font-weight: 800;
+                    font-size: 17px;
+                    font-weight: 780;
                     color: var(--text-primary);
                     text-align: left;
+                    line-height: 1.2;
                 }
                 .typing-indicator {
                     display: flex;
