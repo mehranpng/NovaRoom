@@ -996,6 +996,7 @@ body,
     font-weight: 700;
     color: var(--text-secondary);
     padding: 20px;
+    direction: rtl;
 }
 
 .chat-room__back-btn {
