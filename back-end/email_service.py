@@ -8,10 +8,10 @@ import asyncio
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 
-SMTP_SERVER = "mc.mailfa.com"
-SMTP_PORT = 587
-EMAIL_SENDER = "novaroom@mailfa.com"
-APP_PASSWORD = "AyHQyuWKiX5zZsji"
+SMTP_SERVER = "smtp-ir-01.runflare.com"
+SMTP_PORT = 465
+EMAIL_SENDER = "auth@novaroom.org"
+APP_PASSWORD = "NO5L%@Q#4yAEj9B"
 
 verification_codes = {}
 password_reset_codes = {}
