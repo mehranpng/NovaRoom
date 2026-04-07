@@ -657,11 +657,12 @@
 }
 
 .video-media-viewer__seek-feedback--right svg {
-    order: 1;
+    order: 2;
 }
 
 .video-media-viewer__seek-feedback--right span {
-    order: 2;
+    order: 1;
+    margin-right: -4px;
 }
 
 @keyframes video-media-viewer-feedback {

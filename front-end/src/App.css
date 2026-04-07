@@ -987,12 +987,12 @@ body,
 }
 
 .ai-chat-empty-state {
-    min-height: calc(100dvh - 220px);
+    min-height: calc(100dvh - 180px);
     display: flex;
     align-items: center;
     justify-content: center;
     text-align: center;
-    font-size: 30px;
+    font-size: 24px;
     font-weight: 700;
     color: var(--text-secondary);
     padding: 20px;
