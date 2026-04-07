@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, Maximize, Minimize, Pause, Play, RotateCcw, RotateCw, X } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, Download, Maximize, Minimize, Pause, Play, X } from 'lucide-react';
 import { API_BASE_URL } from '../config/api';
 import type { FileMetadata } from '../types';
 
@@ -28,7 +28,7 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [isFullscreen, setIsFullscreen] = useState(false);
-    const [seekFeedback, setSeekFeedback] = useState<null | { delta: 5 | -5; id: number }>(null);
+    const [seekFeedback, setSeekFeedback] = useState<null | { delta: 5 | -5; side: 'left' | 'right'; id: number }>(null);
     const playbackControlsVisible = !isPlaying;
 
     useEffect(() => {
@@ -69,7 +69,7 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
         const next = Math.min(Math.max(0, video.currentTime + delta), video.duration || 0);
         video.currentTime = next;
         setCurrentTime(next);
-        setSeekFeedback({ delta: delta > 0 ? 5 : -5, id: Date.now() });
+        setSeekFeedback({ delta: delta > 0 ? 5 : -5, side: delta > 0 ? 'right' : 'left', id: Date.now() });
     };
 
     const toggleFullscreen = async () => {
@@ -177,8 +177,12 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
                         aria-label="Seek forward 5 seconds"
                     />
                     {seekFeedback && (
-                        <div key={seekFeedback.id} className="video-media-viewer__seek-feedback" onAnimationEnd={() => setSeekFeedback(null)}>
-                            {seekFeedback.delta > 0 ? <RotateCw size={20} /> : <RotateCcw size={20} />}
+                        <div
+                            key={seekFeedback.id}
+                            className={`video-media-viewer__seek-feedback video-media-viewer__seek-feedback--${seekFeedback.side}`}
+                            onAnimationEnd={() => setSeekFeedback(null)}
+                        >
+                            {seekFeedback.delta > 0 ? <ChevronsRight size={28} /> : <ChevronsLeft size={28} />}
                             <span>{seekFeedback.delta > 0 ? '+5' : '-5'}</span>
                         </div>
                     )}
