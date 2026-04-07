@@ -1093,7 +1093,7 @@ body,
 
 .message-row {
     display: flex;
-    margin-top: 8px;
+    margin-top: 6px;
     touch-action: pan-y;
     position: relative;
 }
@@ -1113,12 +1113,12 @@ body,
 }
 
 .message-row--first {
-    margin-top: 10px;
+    margin-top: 8px;
 }
 
 .message-bubble {
     max-width: 85%;
-    padding: 8px 12px 7px;
+    padding: 7px 10px 6px;
     border-radius: 18px;
     margin-bottom: 2px;
     transition: transform var(--motion-fast) var(--motion-ease-standard), box-shadow var(--motion-base) var(--motion-ease-standard);

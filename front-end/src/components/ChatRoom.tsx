@@ -1288,6 +1288,16 @@ export function ChatRoom({
         } catch { alert('خروج از گروه با خطا مواجه شد'); }
     };
 
+    const openDeleteChatConfirm = () => {
+        setChatMenuOpen(false);
+        window.setTimeout(() => setConfirmDeleteChat(true), 40);
+    };
+
+    const openLeaveGroupConfirm = () => {
+        setChatMenuOpen(false);
+        window.setTimeout(() => setConfirmLeaveGroup(true), 40);
+    };
+
     const openMessageMenu = (messageId: string, targetEl: HTMLElement, clientX?: number, clientY?: number) => {
         const room = roomRef.current;
         if (!room) return;
@@ -1707,11 +1717,7 @@ export function ChatRoom({
                                         {/* خروج از گروه — همه کاربران */}
                                         <button
                                             className="popover__item popover__item--danger"
-                                            onClick={() => {
-                                                // FIX: defer closing menu so onDocClick doesn't cancel the modal
-                                                setConfirmLeaveGroup(true);
-                                                setTimeout(() => setChatMenuOpen(false), 0);
-                                            }}
+                                            onClick={openLeaveGroupConfirm}
                                             type="button"
                                         >
                                             <LogOut size={16} />
@@ -1721,11 +1727,7 @@ export function ChatRoom({
                                         {isVerifiedUser && (
                                             <button
                                                 className="popover__item popover__item--danger"
-                                                onClick={() => {
-                                                    // FIX: defer closing menu so onDocClick doesn't cancel the modal
-                                                    setConfirmDeleteChat(true);
-                                                    setTimeout(() => setChatMenuOpen(false), 0);
-                                                }}
+                                                onClick={openDeleteChatConfirm}
                                                 type="button"
                                             >
                                                 <Trash2 size={16} />
@@ -1736,11 +1738,7 @@ export function ChatRoom({
                                 ) : (
                                     <button
                                         className="popover__item popover__item--danger"
-                                        onClick={() => {
-                                            // FIX: defer closing menu so onDocClick doesn't cancel the modal
-                                            setConfirmDeleteChat(true);
-                                            setTimeout(() => setChatMenuOpen(false), 0);
-                                        }}
+                                        onClick={openDeleteChatConfirm}
                                         type="button"
                                     >
                                         <Trash2 size={16} />
