@@ -894,7 +894,7 @@ body,
     justify-content: flex-end;
     gap: 6px;
     color: var(--text-secondary);
-    padding: 2px 6px 0;
+    padding: 10px 6px 0;
     position: sticky;
     top: 0;
     z-index: 1;
@@ -908,7 +908,7 @@ body,
     min-height: 0;
     overflow-y: auto;
     padding-right: 10px;
-    margin-top: 2px;
+    margin-top: 12px;
     scrollbar-gutter: stable;
 }
 
@@ -1099,7 +1099,7 @@ body,
 
 .message-row {
     display: flex;
-    margin-top: 2px;
+    margin-top: 12px;
     touch-action: pan-y;
     position: relative;
 }
@@ -1571,7 +1571,7 @@ body,
     align-items: center;
     justify-content: flex-end;
     gap: 4px;
-    margin-top: 2px;
+    margin-top: 12px;
     user-select: none;
 }
 
@@ -2735,7 +2735,7 @@ body,
 .success-message svg {
     flex-shrink: 0;
     color: #10b981;
-    margin-top: 2px;
+    margin-top: 12px;
 }
 
 .dark-mode .success-message svg {
@@ -2767,7 +2767,7 @@ body,
 
 .info-message svg {
     flex-shrink: 0;
-    margin-top: 2px;
+    margin-top: 12px;
     color: #f59e0b;
 }
 

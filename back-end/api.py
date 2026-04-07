@@ -81,6 +81,8 @@ cl_ai_chats = db["ai_chats"]
 
 # Store active connections (multiple tabs/devices per user)
 active_connections: Dict[str, List[WebSocket]] = {}
+active_ai_connections: Dict[str, List[WebSocket]] = {}
+active_ai_stream_tasks: Dict[str, asyncio.Task] = {}
 
 security = HTTPBearer()
 
@@ -1779,6 +1781,29 @@ async def broadcast(user_ids: Iterable[str], payload: dict):
     )
 
 
+async def safe_send_ai(user_id: str, message: dict):
+    conns = list(active_ai_connections.get(user_id, []))
+    if not conns:
+        return
+
+    results = await asyncio.gather(
+        *(ws.send_json(message) for ws in conns), return_exceptions=True
+    )
+
+    dead_connections: List[WebSocket] = []
+    for ws, r in zip(conns, results):
+        if isinstance(r, Exception):
+            dead_connections.append(ws)
+
+    if dead_connections:
+        for dead_ws in dead_connections:
+            if dead_ws in active_ai_connections.get(user_id, []):
+                active_ai_connections[user_id].remove(dead_ws)
+
+        if not active_ai_connections.get(user_id):
+            active_ai_connections.pop(user_id, None)
+
+
 async def try_object_id(value: Any) -> Optional[ObjectId]:
     try:
         if not value or not isinstance(value, str):
@@ -2375,7 +2400,6 @@ async def delete_ai_chat(ai_chat_id: str, current_user: dict = Depends(get_curre
 async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
     await websocket.accept()
     user_id: Optional[str] = None
-    current_stream_task: Optional[asyncio.Task] = None
 
     try:
         try:
@@ -2393,6 +2417,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
         if not user:
             await websocket.close(code=1008)
             return
+
+        active_ai_connections.setdefault(user_id, []).append(websocket)
 
         profile = user.get("profile", {}) if isinstance(user.get("profile"), dict) else {}
         user_name = profile.get("name", "")
@@ -2419,7 +2445,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
             ai_msg_id = str(result.inserted_id)
             message_ts_ms = dt_to_epoch_ms(ai_message_doc["timestamp"])
 
-            await websocket.send_json(
+            await safe_send_ai(
+                user_id,
                 {
                     "type": "ai_response_start",
                     "message": {
@@ -2429,7 +2456,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                         "text": "",
                         "timestamp": message_ts_ms,
                     },
-                }
+                },
             )
 
             stopped = False
@@ -2446,14 +2473,15 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     reasoning_mode=reasoning_mode,
                 ):
                     full_ai_response += chunk
-                    await websocket.send_json(
+                    await safe_send_ai(
+                        user_id,
                         {
                             "type": "ai_response_chunk",
                             "aiChatId": ai_chat_id,
                             "messageId": ai_msg_id,
                             "chunk": chunk,
                             "text": full_ai_response,
-                        }
+                        },
                     )
             except asyncio.CancelledError:
                 stopped = True
@@ -2475,7 +2503,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     {"$set": chat_update},
                 )
 
-                await websocket.send_json(
+                await safe_send_ai(
+                    user_id,
                     {
                         "type": "ai_response_done",
                         "stopped": stopped,
@@ -2487,7 +2516,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "text": full_ai_response,
                             "timestamp": message_ts_ms,
                         },
-                    }
+                    },
                 )
 
         while True:
@@ -2516,7 +2545,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     try:
                         ai_chat = await ensure_ai_chat(user_id, ai_chat_id)
                     except HTTPException:
-                        await websocket.send_json(
+                        await safe_send_ai(
+                            user_id,
                             {"type": "ai_error", "message": "گفت‌وگوی انتخاب‌شده معتبر نیست."}
                         )
                         continue
@@ -2525,7 +2555,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     {"userId": user_id, "aiChatId": ai_chat_id, "role": "user"}
                 )
                 if user_msg_count >= MAX_AI_MESSAGES_PER_CHAT:
-                    await websocket.send_json(
+                    await safe_send_ai(
+                        user_id,
                         {
                             "type": "ai_error",
                             "message": "حداکثر 30 پیام در هر گفتگو مجاز است. لطفاً گفت‌وگوی جدید باز کنید.",
@@ -2543,7 +2574,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 }
                 user_insert = await cl_ai_messages.insert_one(user_message_doc)
 
-                await websocket.send_json(
+                await safe_send_ai(
+                    user_id,
                     {
                         "type": "ai_user_message_saved",
                         "title": "",
@@ -2555,7 +2587,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "text": text,
                             "timestamp": dt_to_epoch_ms(user_message_doc["timestamp"]),
                         },
-                    }
+                    },
                 )
 
                 memory_summary = ""
@@ -2590,6 +2622,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     },
                 )
 
+                current_stream_task = active_ai_stream_tasks.get(user_id)
                 if current_stream_task and not current_stream_task.done():
                     current_stream_task.cancel()
                     try:
@@ -2597,7 +2630,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     except asyncio.CancelledError:
                         pass
 
-                current_stream_task = asyncio.create_task(
+                new_stream_task = asyncio.create_task(
                     stream_ai_reply(
                         ai_chat_id,
                         messages,
@@ -2608,14 +2641,17 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                         first_user_message=text,
                     )
                 )
+                active_ai_stream_tasks[user_id] = new_stream_task
 
             elif data.get("type") == "ai_stop":
+                current_stream_task = active_ai_stream_tasks.get(user_id)
                 if current_stream_task and not current_stream_task.done():
                     current_stream_task.cancel()
                     try:
                         await current_stream_task
                     except asyncio.CancelledError:
                         pass
+                active_ai_stream_tasks.pop(user_id, None)
 
             elif data.get("type") == "ping":
                 await websocket.send_json({"type": "pong"})
@@ -2625,8 +2661,10 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
     except Exception:
         print(f"AI WebSocket Error for {user_id}: {traceback.format_exc()}")
     finally:
-        if current_stream_task and not current_stream_task.done():
-            current_stream_task.cancel()
+        if user_id and user_id in active_ai_connections and websocket in active_ai_connections[user_id]:
+            active_ai_connections[user_id].remove(websocket)
+            if not active_ai_connections[user_id]:
+                del active_ai_connections[user_id]
 
 
 @app.get("/ai/messages")

@@ -533,10 +533,10 @@ export function AIChatRoom({
                 </button>
 
                 <div className="chat-room__header-clickable chat-room__header-clickable--full ai-chat-room__header-main">
+                    <div className="ai-chat-room__header-brand">NovaRoom AI</div>
                     <div className="ai-chat-room__header-title">
                         {activeAIChatTitle || 'گفت‌وگوی جدید'}
                     </div>
-                    <div className="ai-chat-room__header-brand">NovaRoom AI</div>
                 </div>
                 <button
                     type="button"
@@ -613,7 +613,7 @@ export function AIChatRoom({
                             <div className="message-bubble message-bubble--theirs msg-shape--single">
                                 {isReasoningPending ? (
                                     <div className="thinking-indicator">
-                                        <span className="thinking-indicator__text">در حال فکر</span>
+                                        <span className="thinking-indicator__text">در حال استدلال</span>
                                     </div>
                                 ) : (
                                     <div className="typing-indicator">
@@ -636,17 +636,17 @@ export function AIChatRoom({
                         className="ai-chat-drawer__overlay"
                         onClick={() => setAIChatsDrawerOpen(false)}
                         role="presentation"
-                        initial={{ opacity: 0 }}
+                        initial={{ opacity: 1 }}
                         animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.2 }}
+                        exit={{ opacity: 1 }}
+                        transition={{ duration: 0 }}
                     >
                         <motion.aside
                             className="ai-chat-drawer"
                             onClick={(e) => e.stopPropagation()}
-                            initial={{ x: 280, opacity: 0.95 }}
-                            animate={{ x: 0, opacity: 1 }}
-                            exit={{ x: 280, opacity: 0.9 }}
+                            initial={{ x: 280 }}
+                            animate={{ x: 0 }}
+                            exit={{ x: 280 }}
                             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
                         >
                             <button
@@ -663,6 +663,7 @@ export function AIChatRoom({
                                 className="ai-chat-drawer__new-chat"
                                 onClick={() => {
                                     onCreateAIChat();
+                                setAIChatsDrawerOpen(false);
                                 }}
                             >
                                 <span>گفت‌وگوی جدید</span>
@@ -898,6 +899,7 @@ export function AIChatRoom({
                 .ai-chat-room__header-main {
                     justify-content: space-between;
                     gap: 10px;
+                    direction: ltr;
                 }
                 .ai-chat-room__header-title {
                     min-width: 0;
@@ -950,7 +952,7 @@ export function AIChatRoom({
                     -webkit-background-clip: text;
                     background-clip: text;
                     color: transparent;
-                    animation: thinking-shimmer 2.2s linear infinite;
+                    animation: thinking-shimmer 1.8s linear infinite;
                 }
                 @keyframes thinking-shimmer {
                     0% { background-position: 220% 0; }
