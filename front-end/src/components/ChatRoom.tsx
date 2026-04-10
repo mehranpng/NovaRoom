@@ -417,7 +417,7 @@ export function ChatRoom({
                         return;
                     }
                 }
-                scrollToBottom(false);
+                scrollToBottom(true);
             });
         }
     };
@@ -445,7 +445,7 @@ export function ChatRoom({
     const computeNearBottom = () => {
         const container = messagesContainerRef.current;
         if (!container) return true;
-        return container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+        return container.scrollHeight - container.scrollTop - container.clientHeight < 56;
     };
 
     const saveScroll = (id: string) => {
@@ -1934,6 +1934,15 @@ export function ChatRoom({
                                                 </div>
                                             )}
 
+                                            {m.file && (
+                                                <FileMessage
+                                                    file={m.file}
+                                                    token={token}
+                                                    onMediaLoad={() => handleInitialMediaReady(m.id)}
+                                                    onImageClick={(imageUrl, file) => setOpenedImage({ url: imageUrl, file })}
+                                                    onVideoClick={(videoUrl, file) => setOpenedVideo({ url: videoUrl, file })}
+                                                />
+                                            )}
                                             {m.text && (
                                                 <div className="message-text message-text--markdown">
                                                     <ReactMarkdown
@@ -1943,15 +1952,6 @@ export function ChatRoom({
                                                         {m.text}
                                                     </ReactMarkdown>
                                                 </div>
-                                            )}
-                                            {m.file && (
-                                                <FileMessage
-                                                    file={m.file}
-                                                    token={token}
-                                                    onMediaLoad={() => handleInitialMediaReady(m.id)}
-                                                    onImageClick={(imageUrl, file) => setOpenedImage({ url: imageUrl, file })}
-                                                    onVideoClick={(videoUrl, file) => setOpenedVideo({ url: videoUrl, file })}
-                                                />
                                             )}
 
                                             {effectiveReactions && effectiveReactions.length > 0 && (

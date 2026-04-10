@@ -85,16 +85,26 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
 
             // Handle completion
             xhr.addEventListener('load', () => {
-                if (xhr.status === 200) {
+                if (xhr.status !== 200) {
+                    console.error(`Upload failed: ${xhr.status}`);
+                    alert('خطا در آپلود فایل');
+                    resetUpload();
+                    return;
+                }
+                try {
                     const response = JSON.parse(xhr.responseText);
                     if (response.success && response.file) {
                         onFileUploaded(response.file);
                         resetUpload();
-                    } else {
-                        throw new Error('Invalid response');
+                        return;
                     }
-                } else {
-                    throw new Error(`Upload failed: ${xhr.status}`);
+                    console.error('Invalid upload response payload');
+                    alert('خطا در آپلود فایل');
+                    resetUpload();
+                } catch (error) {
+                    console.error('Failed to parse upload response', error);
+                    alert('خطا در آپلود فایل');
+                    resetUpload();
                 }
             });
 

@@ -649,9 +649,9 @@ export function AIChatRoom({
                         })
                     )}
 
-                    {isTyping && (
+                    {(isTyping || isResponding) && (
                         <div className="message-row message-row--theirs">
-                            <div className="message-bubble message-bubble--theirs msg-shape--single">
+                            <div className="message-bubble message-bubble--theirs msg-shape--single ai-chat-room__loader-bubble">
                                 {isReasoningPending ? (
                                     <div className="thinking-indicator">
                                         <span className="thinking-indicator__text">در حال تفکر</span>
@@ -677,9 +677,9 @@ export function AIChatRoom({
                         className="ai-chat-drawer__overlay"
                         onClick={() => setAIChatsDrawerOpen(false)}
                         role="presentation"
-                        initial={{ opacity: 1 }}
+                        initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        exit={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
                         transition={{ duration: 0.22, ease: 'easeOut' }}
                     >
                         <motion.aside
@@ -751,9 +751,9 @@ export function AIChatRoom({
                         className="chat-room-modal-overlay"
                         style={{ zIndex: 120 }}
                         onClick={() => setPendingDeleteChat(null)}
-                        initial={{ opacity: 1 }}
+                        initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        exit={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
                         transition={{ duration: 0.14, ease: 'easeOut' }}
                     >
                         <motion.div
@@ -832,9 +832,9 @@ export function AIChatRoom({
                             setNewMsgCount(0);
                             setShowScrollBtn(false);
                         }}
-                        initial={{ opacity: 1 }}
+                        initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        exit={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
                         transition={{ duration: 0.14, ease: 'easeOut' }}
                         style={{
                             position: 'absolute',
@@ -1009,6 +1009,10 @@ export function AIChatRoom({
                 }
                 .typing-indicator span:nth-child(1) { animation-delay: -0.28s; }
                 .typing-indicator span:nth-child(2) { animation-delay: -0.14s; }
+                 .ai-chat-room__loader-bubble {
+                    min-width: 52px;
+                    width: fit-content;
+                }
                 .thinking-indicator {
                     display: inline-flex;
                     align-items: center;

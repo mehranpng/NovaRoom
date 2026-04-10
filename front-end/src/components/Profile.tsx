@@ -6,6 +6,7 @@ import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { cx } from '../utils/cx';
 import { API_BASE_URL, apiFetch } from '../config/api';
+import { ImageMediaViewer } from './ImageMediaViewer';
 
 interface ProfileProps {
     user: User;
@@ -30,6 +31,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
     const [copiedField, setCopiedField] = useState<string | null>(null);
     const [updatingAvatar, setUpdatingAvatar] = useState(false);
     const [ownedGroups, setOwnedGroups] = useState<OwnedGroup[]>([]);
+    const [openedProfileImage, setOpenedProfileImage] = useState<string | null>(null);
 
     const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
     const [usernameHint, setUsernameHint] = useState<string>('');
@@ -229,7 +231,9 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
             <div className="profile__content">
                 {/* Avatar & Name Section */}
                 <div className="profile__avatar-section">
-                    <Avatar name={user.name} size="xl" src={user.avatar ? `${API_BASE_URL}/files/${user.avatar}` : ''} />
+                    <button type="button" onClick={() => user.avatar && setOpenedProfileImage(`${API_BASE_URL}/files/${user.avatar}`)} style={{ border: 'none', background: 'transparent', padding: 0, cursor: user.avatar ? 'zoom-in' : 'default' }}>
+                        <Avatar name={user.name} size="xl" src={user.avatar ? `${API_BASE_URL}/files/${user.avatar}` : ''} />
+                    </button>
                     <div className="profile__avatar-actions">
                         <label className="profile__avatar-btn" aria-disabled={updatingAvatar}>
                             <Upload size={14} />
@@ -439,6 +443,9 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                     </div>
                 </div>
             </div>
+            {openedProfileImage && (
+                <ImageMediaViewer imageUrl={openedProfileImage} onClose={() => setOpenedProfileImage(null)} />
+            )}
         </motion.div >
     );
 }

@@ -131,9 +131,10 @@ function formatTime(timestamp: any): string {
 
 function getFilePreviewLabel(file: any): string {
     const mimeType = String(file?.mimeType || '').toLowerCase();
-    if (mimeType.startsWith('image/')) return '🖼️ تصویر';
-    if (mimeType.startsWith('video/')) return '🎥 ویدیو';
-    if (mimeType.startsWith('audio/')) return '🎵 صوت';
+    const fileName = String(file?.fileName || '').toLowerCase();
+    if (mimeType.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|heic)$/i.test(fileName)) return '🖼️ تصویر';
+    if (mimeType.startsWith('video/') || /\.(mp4|mkv|mov|avi|webm|m4v)$/i.test(fileName)) return '🎥 ویدیو';
+    if (mimeType.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(fileName)) return '🎵 صوت';
     return '📎 فایل';
 }
 
@@ -868,12 +869,7 @@ export function ChatList({
                                             {contact.name}
                                             {contact.verified ? <VerifiedBadge size={14} /> : null}
                                             {pinned ? (
-                                                <PinFilledSharpIcon
-                                                    size={14}
-                                                    className="chat-list__pin-icon"
-                                                    title="سنجاق شده"
-                                                    style={{ opacity: 0.95 }}
-                                                />
+                                                <Pin size={14} className="chat-list__pin-icon" title="سنجاق شده" style={{ opacity: 0.95 }} strokeWidth={2.2} />
                                             ) : null}
                                         </span>
 

@@ -1135,12 +1135,16 @@ body,
 }
 
 .message-bubble--mine {
+    padding-right: 11px;
+    padding-left: 14px;
     background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
     color: #ffffff;
     box-shadow: 0 8px 18px rgba(37, 99, 235, 0.24);
 }
 
 .message-bubble--theirs {
+    padding-left: 11px;
+    padding-right: 14px;
     background: var(--message-theirs-bg);
     color: var(--message-theirs-text);
     box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
@@ -1261,7 +1265,9 @@ body,
     font-size: 15px;
     line-height: 1.625;
     white-space: pre-wrap;
-    word-break: break-word;
+    word-break: normal;
+    overflow-wrap: break-word;
+    hyphens: none;
     direction: rtl;
     text-align: right;
 }
@@ -1271,6 +1277,8 @@ body,
    ======================================== */
 .message-text--markdown {
     white-space: normal;
+    word-break: normal;
+    overflow-wrap: break-word;
     line-height: 1.6;
     direction: rtl;
     text-align: right;
