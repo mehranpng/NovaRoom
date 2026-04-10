@@ -1,4 +1,4 @@
-import { useRef, type PointerEvent } from 'react';
+import { useRef, type PointerEvent, type WheelEvent } from 'react';
 
 interface ReactionPickerProps {
     messageId: string;
@@ -45,6 +45,15 @@ export function ReactionPicker({ messageId, currentReaction, onReact, onDeleteRe
         container.scrollLeft = startScrollLeftRef.current - (dx * dragFactorRef.current);
     };
 
+
+    const onWheel = (e: WheelEvent<HTMLDivElement>) => {
+        const container = emojisRef.current;
+        if (!container) return;
+        if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
+        e.preventDefault();
+        container.scrollLeft += e.deltaY;
+    };
+
     const stopDragging = (e: PointerEvent<HTMLDivElement>) => {
         const container = emojisRef.current;
         isPointerDownRef.current = false;
@@ -62,6 +71,7 @@ export function ReactionPicker({ messageId, currentReaction, onReact, onDeleteRe
                 onPointerMove={onPointerMove}
                 onPointerUp={stopDragging}
                 onPointerCancel={stopDragging}
+                onWheel={onWheel}
             >
                 {EMOJIS.map((emoji) => (
                     <button

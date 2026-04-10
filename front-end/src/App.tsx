@@ -67,6 +67,7 @@ export function App() {
     const [aiResponding, setAIResponding] = useState(false);
     const [aiReasoningPending, setAIReasoningPending] = useState(false);
     const [aiRespondingChatId, setAIRespondingChatId] = useState<string | null>(null);
+    const AI_PENDING_STATE_KEY = 'ai:pending_response';
 
     // Track if this is the initial load (show skeleton only once)
     const [isInitialChatsLoad, setIsInitialChatsLoad] = useState(true);
@@ -238,6 +239,24 @@ export function App() {
         loadAIMessages();
     }, [isAuthenticated, activeAIChatId, aiMessagesByChat]);
 
+
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        try {
+            const raw = sessionStorage.getItem(AI_PENDING_STATE_KEY);
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            const pendingChatId = String(parsed?.chatId || '');
+            if (!pendingChatId) return;
+            setAIResponding(true);
+            setAITyping(true);
+            setAIReasoningPending(Boolean(parsed?.reasoning));
+            setAIRespondingChatId(pendingChatId);
+            setActiveAIChatId((prev) => prev || pendingChatId);
+        } catch {
+            // ignore
+        }
+    }, [isAuthenticated]);
     const loadChats = useCallback(async (showLoading = true) => {
         if (!isAuthenticated) return;
 
@@ -491,6 +510,8 @@ export function App() {
         setAITyping(false);
         setAIResponding(false);
         setAIReasoningPending(false);
+        setAIRespondingChatId(null);
+        sessionStorage.removeItem(AI_PENDING_STATE_KEY);
     }, [activeAIChatId, appendAIMessage]);
 
     const vibrate = useCallback((pattern: number | number[]) => {
@@ -513,8 +534,15 @@ export function App() {
         setAIRespondingChatId(aiChatId);
     }, [activeAIChatId, appendAIMessage]);
 
-    const handleAIStreamChunk = useCallback((messageId: string, text: string) => {
+    const handleAIStreamChunk = useCallback((payload: { messageId: string; text: string; aiChatId?: string }) => {
+        const messageId = payload?.messageId;
+        const text = payload?.text ?? '';
         if (!messageId) return;
+        const chunkChatId = String(payload?.aiChatId || aiPendingStreamMetaRef.current[messageId]?.chatId || activeAIChatId || '');
+        if (chunkChatId) {
+            setAIRespondingChatId(chunkChatId);
+            setAIResponding(true);
+        }
         if (!aiStreamStartedRef.current[messageId]) {
             aiStreamStartedRef.current[messageId] = true;
             setAITyping(false);
@@ -522,7 +550,7 @@ export function App() {
             vibrate([8, 40, 8, 55, 10]);
         }
         setAIMessagesByChat(prev => {
-            const aiChatId = aiPendingStreamMetaRef.current[messageId]?.chatId || activeAIChatId || '';
+            const aiChatId = chunkChatId || aiPendingStreamMetaRef.current[messageId]?.chatId || activeAIChatId || '';
             if (!aiChatId) return prev;
             const current = prev[aiChatId] || [];
             const idx = current.findIndex((m) => m.id === messageId);
@@ -564,6 +592,7 @@ export function App() {
         setAIResponding(false);
         setAIReasoningPending(false);
         setAIRespondingChatId(null);
+        sessionStorage.removeItem(AI_PENDING_STATE_KEY);
         delete aiStreamStartedRef.current[messageWithChatId.id];
         delete aiPendingStreamMetaRef.current[messageWithChatId.id];
         const nextTitle = typeof payload?.title === 'string' ? payload.title.trim() : '';
@@ -608,6 +637,7 @@ export function App() {
         setAIResponding(false);
         setAIReasoningPending(false);
         setAIRespondingChatId(null);
+        sessionStorage.removeItem(AI_PENDING_STATE_KEY);
     }, []);
 
     // WebSocket initialization
@@ -1246,6 +1276,7 @@ export function App() {
             [finalChatId]: [...(prev[finalChatId] || []), userMessage],
         }));
         setAIRespondingChatId(finalChatId);
+        sessionStorage.setItem(AI_PENDING_STATE_KEY, JSON.stringify({ chatId: finalChatId, reasoning: Boolean(useReasoner), startedAt: Date.now() }));
 
         const success = sendAIMessage(text, finalChatId, clientId, useReasoner);
         if (!success) {
@@ -1258,6 +1289,7 @@ export function App() {
             setAIResponding(false);
             setAIReasoningPending(false);
             setAIRespondingChatId(null);
+            sessionStorage.removeItem(AI_PENDING_STATE_KEY);
             notify({ message: 'ارتباط با سرویس هوش مصنوعی برقرار نیست. لطفاً دوباره تلاش کنید.', type: 'error' });
             return false;
         }
@@ -1271,6 +1303,7 @@ export function App() {
         setAIResponding(false);
         setAIReasoningPending(false);
         setAIRespondingChatId(null);
+        sessionStorage.removeItem(AI_PENDING_STATE_KEY);
     }, [stopAIGeneration]);
 
     const getActiveContact = (): User => {

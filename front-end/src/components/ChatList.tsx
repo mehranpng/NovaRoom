@@ -1,4 +1,4 @@
-import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, Laptop, ChevronDown, MoreVertical, Trash2, RefreshCw } from 'lucide-react';
+import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, Laptop, ChevronDown, MoreVertical, Trash2, RefreshCw, Pin, PinOff } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Chat, User } from '../types';
@@ -32,84 +32,6 @@ type IconProps = {
     style?: CSSProperties;
     title?: string;
 };
-
-const PIN_ROTATE_DEG = 45;
-
-const STREAMLINE_SHARP_PIN_D = 'm23 9 -8 -8 -3 5 -9.00005 4 4.7929 4.7929 -6.5 6.5 1.41421 1.4142 6.5 -6.5L14 21l4 -9 5 -3Z';
-
-function PinFilledSharpIcon({ size = 16, className, style, title }: IconProps) {
-    return (
-        <svg
-            width={size}
-            height={size}
-            viewBox="0 0 24 24"
-            className={className}
-            style={{ transform: `rotate(${PIN_ROTATE_DEG}deg)`, ...style }}
-            aria-hidden={title ? undefined : true}
-            role={title ? 'img' : 'presentation'}
-        >
-            {title ? <title>{title}</title> : null}
-            <path
-                d={STREAMLINE_SHARP_PIN_D}
-                fill="currentColor"
-                fillRule="evenodd"
-                clipRule="evenodd"
-            />
-        </svg>
-    );
-}
-
-function PinOutlineSharpIcon({ size = 16, className, style, title }: IconProps) {
-    return (
-        <svg
-            width={size}
-            height={size}
-            viewBox="0 0 24 24"
-            className={className}
-            style={{ transform: `rotate(${PIN_ROTATE_DEG}deg)`, ...style }}
-            aria-hidden={title ? undefined : true}
-            role={title ? 'img' : 'presentation'}
-        >
-            {title ? <title>{title}</title> : null}
-            <path
-                d={STREAMLINE_SHARP_PIN_D}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinejoin="miter"
-                strokeLinecap="square"
-            />
-        </svg>
-    );
-}
-
-function UnpinFilledSharpIcon({ size = 16, className, style, title }: IconProps) {
-    return (
-        <svg
-            width={size}
-            height={size}
-            viewBox="0 0 24 24"
-            className={className}
-            style={{ transform: `rotate(${PIN_ROTATE_DEG}deg)`, ...style }}
-            aria-hidden={title ? undefined : true}
-            role={title ? 'img' : 'presentation'}
-        >
-            {title ? <title>{title}</title> : null}
-            <path
-                d={STREAMLINE_SHARP_PIN_D}
-                fill="currentColor"
-                fillRule="evenodd"
-                clipRule="evenodd"
-            />
-            <path
-                d="M5 19 19 5"
-                stroke="currentColor"
-                strokeWidth="2.6"
-                strokeLinecap="round"
-            />
-        </svg>
-    );
-}
 
 function FilledGroupIcon({ size = 16, className, style, title }: IconProps) {
     return (
@@ -1020,7 +942,7 @@ export function ChatList({
                         disabled={Boolean(pinBusy[actionMenuChat.id])}
                         style={pinBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
                     >
-                        {actionMenuPinned ? <UnpinFilledSharpIcon size={16} /> : <PinOutlineSharpIcon size={16} />}
+                        {actionMenuPinned ? <PinOff size={16} strokeWidth={2.2} /> : <Pin size={16} strokeWidth={2.2} />}
                         {actionMenuPinned ? 'برداشتن سنجاق' : 'سنجاق'}
                     </button>
 

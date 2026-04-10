@@ -55,13 +55,14 @@ export const MiniMusicPlayer: React.FC = () => {
         {/* Music icon */}
         <div style={{
           width: 36, height: 36,
-          borderRadius: '50%',
+          borderRadius: 10,
           background: 'linear-gradient(135deg, #2F80ED, #56CCF2)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexShrink: 0,
           fontSize: 16,
+          overflow: 'hidden'
         }}>
-          🎵
+          {track.coverUrl ? <img src={track.coverUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '🎵'}
         </div>
 
         {/* Track name */}
@@ -74,9 +75,12 @@ export const MiniMusicPlayer: React.FC = () => {
             whiteSpace: 'nowrap',
             color: 'var(--text-primary, #111)',
           }}>
-            {track.fileName}
+            {track.title || track.fileName}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary, #888)' }}>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary, #888)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {track.artist || 'Unknown'}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--text-secondary, #888)' }}>
             {formatTime(currentTime)} / {formatTime(duration)}
           </div>
         </div>

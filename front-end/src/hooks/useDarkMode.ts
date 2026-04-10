@@ -49,8 +49,12 @@ export function useDarkMode() {
     document.documentElement.classList.toggle('dark-mode', isDarkMode);
     localStorage.setItem(STORAGE_KEY, themeMode);
 
-    // Keep mobile browser chrome color in sync with app theme.
-    const themeColor = isDarkMode ? '#111827' : '#ffffff';
+    // Keep mobile browser chrome color in sync with app header/background.
+    const computed = getComputedStyle(document.documentElement);
+    const headerBg = computed.getPropertyValue('--bg-secondary').trim();
+    const pageBg = computed.getPropertyValue('--bg-primary').trim();
+    const fallback = isDarkMode ? '#111827' : '#ffffff';
+    const themeColor = headerBg || pageBg || fallback;
     const ensureMeta = (name: string) => {
       let m = document.querySelector(`meta[name=\"${name}\"]`) as HTMLMetaElement | null;
       if (!m) {

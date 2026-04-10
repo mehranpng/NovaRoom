@@ -417,7 +417,7 @@ export function ChatRoom({
                         return;
                     }
                 }
-                scrollToBottom(true);
+                scrollToBottom(false);
             });
         }
     };
@@ -425,9 +425,9 @@ export function ChatRoom({
     const consumeUnreadForOpenSession = () => {
         if (unreadConsumedInSessionRef.current) return;
         if (displayUnreadCount <= 0) return;
+        // Keep separator visible during current open session; only consume
+        // unread marker after leaving and reopening the chat.
         unreadConsumedInSessionRef.current = true;
-        setDisplayUnreadCount(0);
-        setUnreadAnchorId(null);
         window.setTimeout(() => onConsumeInitialUnread?.(chatId), 0);
     };
 
@@ -530,8 +530,6 @@ export function ChatRoom({
 
                 if (!consumedInitialUnreadRef.current) {
                     consumedInitialUnreadRef.current = true;
-                    // Consume in App so next time you open this chat, it doesn't auto-jump again.
-                    window.setTimeout(() => onConsumeInitialUnread?.(chatId), 0);
                 }
 
                 return;
@@ -2041,7 +2039,7 @@ export function ChatRoom({
                         <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)' }}>
                             دیده شده توسط ({rows.length})
                         </div>
-                        <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                        <div style={{ maxHeight: 260, overflowY: 'auto' }} onWheel={(e) => { e.stopPropagation(); }}>
                             {rows.length === 0 ? (
                                 <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>
                                     هنوز کسی این پیام را ندیده است
@@ -2127,7 +2125,7 @@ export function ChatRoom({
                                     واکنش‌ها
                                     ({reactionUsersList.length})
                                 </div>
-                                <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                                <div style={{ maxHeight: 260, overflowY: 'auto' }} onWheel={(e) => { e.stopPropagation(); }}>
                                     {reactionUsersList.map((ru, i) => (
                                         <div key={i}
                                             onClick={(e) => {
@@ -2252,7 +2250,7 @@ export function ChatRoom({
             <AnimatePresence>
                 {confirmDeleteChat && (
                     <motion.div className="chat-room-modal-overlay" ref={confirmDeleteChatRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
-                        <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+                        <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }} transition={{ duration: 0.14, ease: [0.2, 0.8, 0.2, 1] }}>
                         <h3 className="chat-room-confirm-modal__title">{isGroupChat ? 'گروه حذف شود؟' : 'گفتگو حذف شود؟'}</h3>
                         <p className="chat-room-confirm-modal__text">
                             {isGroupChat ? 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.' : 'این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'}
@@ -2269,7 +2267,7 @@ export function ChatRoom({
             <AnimatePresence>
                 {confirmLeaveGroup && (
                     <motion.div className="chat-room-modal-overlay" ref={confirmLeaveGroupRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
-                        <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+                        <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }} transition={{ duration: 0.14, ease: [0.2, 0.8, 0.2, 1] }}>
                         <h3 className="chat-room-confirm-modal__title">خروج از گروه؟</h3>
                         <p className="chat-room-confirm-modal__text">آیا می‌خواهید از گروه خارج شوید؟ گروه برای شما حذف خواهد شد.</p>
                         <div className="chat-room-confirm-modal__actions">
@@ -2284,7 +2282,7 @@ export function ChatRoom({
             <AnimatePresence>
                 {confirmDeleteMsg && (
                     <motion.div className="chat-room-modal-overlay" ref={confirmDeleteMsgRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
-                        <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+                        <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }} transition={{ duration: 0.14, ease: [0.2, 0.8, 0.2, 1] }}>
                         <h3 className="chat-room-confirm-modal__title">این پیام حذف شود؟</h3>
                         <p className="chat-room-confirm-modal__text">این عمل پیام را کامل حذف میکند.</p>
                         <div className="chat-room-confirm-modal__actions">

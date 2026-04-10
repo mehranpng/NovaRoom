@@ -654,7 +654,7 @@ export function AIChatRoom({
                             <div className="message-bubble message-bubble--theirs msg-shape--single">
                                 {isReasoningPending ? (
                                     <div className="thinking-indicator">
-                                        <span className="thinking-indicator__text">در حال استدلال</span>
+                                        <span className="thinking-indicator__text">در حال تفکر</span>
                                     </div>
                                 ) : (
                                     <div className="typing-indicator">
@@ -677,18 +677,18 @@ export function AIChatRoom({
                         className="ai-chat-drawer__overlay"
                         onClick={() => setAIChatsDrawerOpen(false)}
                         role="presentation"
-                        initial={{ opacity: 0 }}
+                        initial={{ opacity: 1 }}
                         animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
+                        exit={{ opacity: 1 }}
                         transition={{ duration: 0.22, ease: 'easeOut' }}
                     >
                         <motion.aside
                             className="ai-chat-drawer"
                             onClick={(e) => e.stopPropagation()}
-                            initial={{ x: 280 }}
-                            animate={{ x: 0 }}
-                            exit={{ x: 280 }}
-                            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                            initial={{ x: 280, scale: 0.99 }}
+                            animate={{ x: 0, scale: 1 }}
+                            exit={{ x: 280, scale: 0.995 }}
+                            transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.6 }}
                         >
                             <button
                                 type="button"
@@ -751,9 +751,9 @@ export function AIChatRoom({
                         className="chat-room-modal-overlay"
                         style={{ zIndex: 120 }}
                         onClick={() => setPendingDeleteChat(null)}
-                        initial={{ opacity: 0 }}
+                        initial={{ opacity: 1 }}
                         animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
+                        exit={{ opacity: 1 }}
                         transition={{ duration: 0.14, ease: 'easeOut' }}
                     >
                         <motion.div
@@ -832,9 +832,9 @@ export function AIChatRoom({
                             setNewMsgCount(0);
                             setShowScrollBtn(false);
                         }}
-                        initial={{ opacity: 0 }}
+                        initial={{ opacity: 1 }}
                         animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
+                        exit={{ opacity: 1 }}
                         transition={{ duration: 0.14, ease: 'easeOut' }}
                         style={{
                             position: 'absolute',
@@ -879,7 +879,7 @@ export function AIChatRoom({
                         type="button"
                         onClick={toggleReasoning}
                         aria-label="Reasoning mode"
-                        title="حالت استدلال"
+                        title="حالت فکر"
                         style={{
                             height: 44,
                             padding: '0 10px',
@@ -900,7 +900,7 @@ export function AIChatRoom({
                         }}
                     >
                         <Brain size={15} />
-                        <span>استدلال</span>
+                        <span>فکر</span>
                     </button>
                     <textarea
                         ref={textareaRef}

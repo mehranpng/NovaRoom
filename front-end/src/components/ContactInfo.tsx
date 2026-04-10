@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
-import { apiFetch } from '../config/api';
+import { API_BASE_URL, apiFetch } from '../config/api';
+import { ImageMediaViewer } from './ImageMediaViewer';
 
 interface ContactInfoProps {
     user: User;
@@ -40,6 +41,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
     const [resolvedRegistrationDate, setResolvedRegistrationDate] = useState<string>(String(user.registrationDate ?? '').trim());
     const [registrationLoading, setRegistrationLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const [profilePreviewUrl, setProfilePreviewUrl] = useState<string | null>(null);
 
     useEffect(() => {
         setCopied(false);
@@ -60,7 +62,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
 
     useEffect(() => {
         // Reset group edit state when user changes
-        setEditingGroup(isGroup ? startInEditMode : false);
+        setEditingGroup(false);
         setSaving(false);
         setError(null);
         setGroupName(String(user.name ?? ''));
@@ -221,7 +223,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
 
             // Ask App to refresh /chats so sidebar + header get updated.
             window.dispatchEvent(new Event('novaroom:refresh_chats'));
-            setEditingGroup(isGroup ? startInEditMode : false);
+            setEditingGroup(false);
         } catch (e) {
             console.error(e);
             setError('ویرایش گروه با خطا مواجه شد');
@@ -236,6 +238,26 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
 
     const canRemoveAvatar = Boolean(previewAvatar);
     const isAvatarRemoved = avatarTouched && !groupAvatar && Boolean(originalAvatar);
+
+
+    const openProfileImage = async () => {
+        const src = String(user.avatar || '').trim();
+        if (!src) return;
+        if (src.startsWith('blob:') || src.startsWith('data:') || src.startsWith('http://') || src.startsWith('https://')) {
+            setProfilePreviewUrl(src);
+            return;
+        }
+        const token = localStorage.getItem('token') || '';
+        if (!token) return;
+        try {
+            const res = await fetch(`${API_BASE_URL}/files/${src}`, { headers: { Authorization: `Bearer ${token}` } });
+            if (!res.ok) return;
+            const blob = await res.blob();
+            setProfilePreviewUrl(URL.createObjectURL(blob));
+        } catch {
+            // ignore
+        }
+    };
 
     const toastVariants: Variants = {
         hidden: { scale: 0.9, opacity: 0, },
@@ -272,7 +294,9 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
 
             <div className="contact-info__content">
                 <div className="contact-info__avatar">
-                    <Avatar name={user.name} size="xl" online={user.online} src={user.avatar} />
+                    <button type="button" onClick={openProfileImage} style={{ border: 'none', background: 'transparent', padding: 0, cursor: user.avatar ? 'zoom-in' : 'default' }}>
+                        <Avatar name={user.name} size="xl" online={user.online} src={user.avatar} />
+                    </button>
                     <div
                         className="contact-info__name"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
@@ -399,8 +423,6 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
                                                 type="button"
                                                 onClick={() => {
                                                     if (!canRemoveAvatar) return;
-                                                    const ok = window.confirm('عکس گروه حذف شود؟ (بعد از زدن «ذخیره» اعمال می‌شود)');
-                                                    if (!ok) return;
                                                     setError(null);
                                                     setGroupAvatar('');
                                                     setAvatarTouched(true);
@@ -485,7 +507,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
                                         setGroupName(String(user.name ?? ''));
                                         setGroupAvatar(String(user.avatar ?? ''));
                                         setAvatarTouched(false);
-                                        setEditingGroup(isGroup ? startInEditMode : false);
+                                        setEditingGroup(false);
                                     }}
                                     disabled={saving}
                                     style={{
@@ -598,6 +620,12 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
                     </div>
                 )}
             </div>
+            {profilePreviewUrl && (
+                <ImageMediaViewer
+                    imageUrl={profilePreviewUrl}
+                    onClose={() => setProfilePreviewUrl(null)}
+                />
+            )}
         </motion.div>
     );
 }

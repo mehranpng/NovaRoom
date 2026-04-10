@@ -172,9 +172,9 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
 
 
     const toastVariants: Variants = {
-        hidden: { opacity: 0, scale: 0.9 },
-        visible: { opacity: 1, scale: 1, transition: { duration: 0.2 } },
-        exit: { opacity: 0, scale: 0.6, transition: { duration: 0.2 } },
+        hidden: { opacity: 0, y: 12 },
+        visible: { opacity: 1, y: 0, transition: { duration: 0.16 } },
+        exit: { opacity: 0, y: 8, transition: { duration: 0.14 } },
     };
 
     return (

@@ -45,6 +45,21 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
     const isCurrentTrack = musicPlayer.track?.fileId === file.fileId;
     const isThisPlaying = isCurrentTrack && musicPlayer.isPlaying;
 
+    const resolveAudioMeta = () => {
+        const meta = file as any;
+        const rawName = String(file.fileName || '').trim();
+        const nameWithoutExt = rawName.replace(/\.[^/.]+$/, '').trim();
+        const maybeTitle = String(meta?.title || meta?.trackTitle || '').trim();
+        const maybeArtist = String(meta?.artist || meta?.performer || '').trim();
+        const split = maybeTitle ? [] : nameWithoutExt.split(/\s[-–—]\s/);
+        const title = maybeTitle || (split.length > 1 ? split.slice(1).join(' - ').trim() : nameWithoutExt) || rawName;
+        const artist = maybeArtist || (split.length > 1 ? split[0].trim() : '') || 'Unknown';
+        const coverUrl = String(meta?.coverUrl || meta?.artworkUrl || '').trim() || null;
+        return { title, artist, coverUrl };
+    };
+
+    const audioMeta = resolveAudioMeta();
+
     useEffect(() => {
         if (!isImage) return;
         let objectUrl: string | null = null;
@@ -238,12 +253,19 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
                     )}
                 </div>
             ) : isAudio ? (
-                <div className="file-audio-card" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', minWidth: 200 }}>
+                <div className="file-audio-card file-audio-card--compact" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', minWidth: 220 }}>
+                    <div className="file-audio-cover" aria-hidden="true">
+                        {audioMeta.coverUrl ? (
+                            <img src={audioMeta.coverUrl} alt="" />
+                        ) : (
+                            <span>🎵</span>
+                        )}
+                    </div>
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
                             if (audioUrl) {
-                                musicPlayer.playTrack({ fileId: file.fileId, fileName: file.fileName, audioUrl, mimeType: file.mimeType });
+                                musicPlayer.playTrack({ fileId: file.fileId, fileName: file.fileName, audioUrl, mimeType: file.mimeType, title: audioMeta.title, artist: audioMeta.artist, coverUrl: audioMeta.coverUrl });
                             }
                         }}
                         disabled={audioLoading || audioError || !audioUrl}
@@ -265,7 +287,8 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
                         ) : isThisPlaying ? <Pause size={18} /> : <Play size={18} />}
                     </button>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🎵 {file.fileName}</div>
+                        <div className="file-audio-title" title={audioMeta.title}>{audioMeta.title || file.fileName}</div>
+                        <div className="file-audio-artist">{audioMeta.artist || 'Unknown'}</div>
                         {audioError && <div style={{ fontSize: 11, color: '#e55' }}>پخش ممکن نشد</div>}
                         {isCurrentTrack && musicPlayer.duration > 0 && (
                             <div style={{ fontSize: 11, color: '#888' }}>
