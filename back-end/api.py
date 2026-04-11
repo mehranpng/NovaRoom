@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 from typing import List, Dict, Optional, Any, Iterable
 import traceback
 import asyncio
+import time
 import hashlib
 from bson import ObjectId
 import re
@@ -2469,6 +2470,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
             stopped = False
             full_ai_response = ""
             full_reasoning_content = ""
+            stream_started_at = time.time()
             try:
                 async for chunk in generate_ai_response_stream(
                     prompt_messages,
@@ -2527,6 +2529,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "content": full_ai_response,
                             "reasoningContent": full_reasoning_content,
                             "streamCompleted": True,
+                            "reasoningDurationSec": int(max(0, round(time.time() - stream_started_at))),
                         }
                     },
                 )
@@ -2557,6 +2560,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "reasoningEnabled": bool(reasoning_mode),
                             "isStreaming": False,
                             "streamCompleted": True,
+                            "reasoningDurationSec": int(max(0, round(time.time() - stream_started_at))),
                             "timestamp": message_ts_ms,
                         },
                     },
@@ -2737,6 +2741,7 @@ async def get_ai_messages(
             "reasoningEnabled": bool(m.get("reasoningEnabled", False)),
             "isStreaming": bool(m["role"] == "assistant" and not bool(m.get("streamCompleted", True))),
             "streamCompleted": bool(m.get("streamCompleted", True)),
+            "reasoningDurationSec": int(m.get("reasoningDurationSec", 0) or 0),
             "timestamp": dt_to_epoch_ms(m.get("timestamp")),
         }
         for m in msgs

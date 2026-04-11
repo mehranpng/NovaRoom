@@ -55,6 +55,7 @@ export interface Message {
     reasoningEnabled?: boolean;
     isStreaming?: boolean;
     streamCompleted?: boolean;
+    reasoningDurationSec?: number;
 }
 
 export interface ChatLastMessage {
