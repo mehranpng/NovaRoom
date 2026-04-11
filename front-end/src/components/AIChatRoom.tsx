@@ -60,6 +60,24 @@ function toPersianDigits(value: string | number): string {
     return String(value).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)] ?? d);
 }
 
+function setCookie(name: string, value: string, maxAgeSec = 60 * 60 * 4) {
+    if (typeof document === 'undefined') return;
+    document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSec}; samesite=lax`;
+}
+
+function getCookie(name: string): string | null {
+    if (typeof document === 'undefined') return null;
+    const key = `${encodeURIComponent(name)}=`;
+    const row = document.cookie.split('; ').find((item) => item.startsWith(key));
+    if (!row) return null;
+    return decodeURIComponent(row.slice(key.length));
+}
+
+function deleteCookie(name: string) {
+    if (typeof document === 'undefined') return;
+    document.cookie = `${encodeURIComponent(name)}=; path=/; max-age=0; samesite=lax`;
+}
+
 // ─── CodeBlock with copy button ───────────────────────────────────────────────
 function CodeBlock({ className, children }: { className?: string; children?: React.ReactNode }) {
     const [copied, setCopied] = useState(false);
@@ -428,13 +446,16 @@ export function AIChatRoom({
     useEffect(() => {
         const streamMessageId = streamingReasoningMessage?.id;
         if (!streamMessageId) return;
+        const timerCookieKey = `ai_reasoning_start_${streamMessageId}`;
 
         if (reasoningPanelByMessage[streamMessageId] === undefined) {
             setReasoningPanelByMessage((prev) => ({ ...prev, [streamMessageId]: true }));
         }
 
         if (!reasoningStartAtRef.current[streamMessageId]) {
-            reasoningStartAtRef.current[streamMessageId] = Date.now();
+            const saved = Number(getCookie(timerCookieKey) || 0);
+            reasoningStartAtRef.current[streamMessageId] = saved > 0 ? saved : Number(streamingReasoningMessage?.timestamp || Date.now());
+            setCookie(timerCookieKey, String(reasoningStartAtRef.current[streamMessageId]));
         }
 
         const hasMainResponseStarted = Boolean((streamingReasoningMessage.text || '').trim());
@@ -449,6 +470,9 @@ export function AIChatRoom({
             const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
             setReasoningElapsedByMessage((prev) => ({ ...prev, [streamMessageId]: elapsed }));
         }, 1000);
+        if (!streamingReasoningMessage?.isStreaming) {
+            deleteCookie(timerCookieKey);
+        }
         return () => clearInterval(interval);
     }, [streamingReasoningMessage?.id, streamingReasoningMessage?.text, reasoningPanelByMessage]);
 
@@ -714,9 +738,11 @@ export function AIChatRoom({
                                                     )}
                                                 </AnimatePresence>
                                                 <div className="ai-reasoning-answer">
-                                                    <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
-                                                        {message.text ?? ''}
-                                                    </ReactMarkdown>
+                                                    <div className="message-text message-text--markdown">
+                                                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
+                                                            {message.text ?? ''}
+                                                        </ReactMarkdown>
+                                                    </div>
                                                 </div>
                                             </div>
                                             <div className="message-meta message-meta--theirs">
@@ -1144,14 +1170,20 @@ export function AIChatRoom({
                     text-align: right;
                     width: 100%;
                     display: flex;
-                    flex-direction: row-reverse;
-                    justify-content: flex-start;
+                    align-items: center;
+                    justify-content: flex-end;
+                }
+                .ai-chat-drawer__item {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
                 }
                 .ai-reasoning-wrap {
                     width: min(100%, 560px);
                     display: flex;
                     flex-direction: column;
                     gap: 8px;
+                    overflow: hidden;
                 }
                 .ai-reasoning-message-stack {
                     width: min(100%, 560px);
@@ -1204,15 +1236,20 @@ export function AIChatRoom({
                     margin-top: 6px;
                     border-top: 1px solid var(--border-secondary);
                     padding-top: 8px;
+                    direction: rtl;
+                    text-align: right;
                 }
                 .ai-chat-room .message-text--markdown {
                     max-width: 100%;
                     overflow-x: hidden;
+                    word-break: break-word;
+                    overflow-wrap: anywhere;
                 }
                 .ai-chat-room .message-text--markdown pre,
                 .ai-chat-room .message-text--markdown .md-code-block-wrapper,
                 .ai-chat-room .message-text--markdown .md-code-block {
                     max-width: 100%;
+                    overflow-x: auto;
                 }
                 .ai-chat-room .message-text--markdown pre,
                 .ai-chat-room .message-text--markdown code {
