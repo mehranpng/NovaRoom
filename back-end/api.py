@@ -2439,6 +2439,9 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 "aiChatId": ai_chat_id,
                 "role": "assistant",
                 "content": "",
+                "reasoningContent": "",
+                "reasoningEnabled": bool(reasoning_mode),
+                "streamCompleted": False,
                 "timestamp": utc_now(),
             }
             result = await cl_ai_messages.insert_one(ai_message_doc)
@@ -2454,6 +2457,10 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                         "aiChatId": ai_chat_id,
                         "senderId": "ai",
                         "text": "",
+                        "reasoningContent": "",
+                        "reasoningEnabled": bool(reasoning_mode),
+                        "isStreaming": True,
+                        "streamCompleted": False,
                         "timestamp": message_ts_ms,
                     },
                 },
@@ -2461,6 +2468,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
 
             stopped = False
             full_ai_response = ""
+            full_reasoning_content = ""
             try:
                 async for chunk in generate_ai_response_stream(
                     prompt_messages,
@@ -2472,15 +2480,40 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     model=model_name,
                     reasoning_mode=reasoning_mode,
                 ):
-                    full_ai_response += chunk
+                    text_chunk = ""
+                    reasoning_chunk = ""
+                    if isinstance(chunk, dict):
+                        text_chunk = str(chunk.get("content") or "")
+                        reasoning_chunk = str(chunk.get("reasoning_content") or "")
+                    elif isinstance(chunk, str):
+                        text_chunk = chunk
+
+                    if text_chunk:
+                        full_ai_response += text_chunk
+                    if reasoning_chunk:
+                        full_reasoning_content += reasoning_chunk
+
+                    await cl_ai_messages.update_one(
+                        {"_id": result.inserted_id},
+                        {
+                            "$set": {
+                                "content": full_ai_response,
+                                "reasoningContent": full_reasoning_content,
+                                "streamCompleted": False,
+                            }
+                        },
+                    )
                     await safe_send_ai(
                         user_id,
                         {
                             "type": "ai_response_chunk",
                             "aiChatId": ai_chat_id,
                             "messageId": ai_msg_id,
-                            "chunk": chunk,
+                            "chunk": text_chunk,
+                            "reasoningChunk": reasoning_chunk,
                             "text": full_ai_response,
+                            "reasoningContent": full_reasoning_content,
+                            "hasMainContent": bool(full_ai_response),
                         },
                     )
             except asyncio.CancelledError:
@@ -2489,7 +2522,13 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
             finally:
                 await cl_ai_messages.update_one(
                     {"_id": result.inserted_id},
-                    {"$set": {"content": full_ai_response}},
+                    {
+                        "$set": {
+                            "content": full_ai_response,
+                            "reasoningContent": full_reasoning_content,
+                            "streamCompleted": True,
+                        }
+                    },
                 )
                 generated_title = ""
                 chat_update: Dict[str, Any] = {"updatedAt": utc_now()}
@@ -2514,6 +2553,10 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "aiChatId": ai_chat_id,
                             "senderId": "ai",
                             "text": full_ai_response,
+                            "reasoningContent": full_reasoning_content,
+                            "reasoningEnabled": bool(reasoning_mode),
+                            "isStreaming": False,
+                            "streamCompleted": True,
                             "timestamp": message_ts_ms,
                         },
                     },
@@ -2690,6 +2733,10 @@ async def get_ai_messages(
             "aiChatId": chatId,
             "senderId": "ai" if m["role"] == "assistant" else user_id,
             "text": m.get("content", ""),
+            "reasoningContent": m.get("reasoningContent", ""),
+            "reasoningEnabled": bool(m.get("reasoningEnabled", False)),
+            "isStreaming": bool(m["role"] == "assistant" and not bool(m.get("streamCompleted", True))),
+            "streamCompleted": bool(m.get("streamCompleted", True)),
             "timestamp": dt_to_epoch_ms(m.get("timestamp")),
         }
         for m in msgs

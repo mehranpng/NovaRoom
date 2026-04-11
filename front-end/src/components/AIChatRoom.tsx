@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Check, SendHorizontal, Brain, PanelRight, PencilLine, Trash2, History, CornerUpLeft } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Check, SendHorizontal, Brain, PanelRight, PencilLine, Trash2, History, CornerUpLeft, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -184,6 +184,9 @@ export function AIChatRoom({
     const [aiChatsDrawerOpen, setAIChatsDrawerOpen] = useState(false);
     const [pendingDeleteChat, setPendingDeleteChat] = useState<AIChatSummary | null>(null);
     const [emptyStatePrompt, setEmptyStatePrompt] = useState<string>(() => pickRandomEmptyPrompt());
+    const [reasoningPanelByMessage, setReasoningPanelByMessage] = useState<Record<string, boolean>>({});
+    const [reasoningElapsedSec, setReasoningElapsedSec] = useState(0);
+    const reasoningStartAtRef = useRef<number | null>(null);
 
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -197,6 +200,7 @@ export function AIChatRoom({
     const initialScrollDoneRef = useRef(false);
     const prevLastMessageRef = useRef<Message | null>(null);
     const responseVibrationIntervalRef = useRef<number | null>(null);
+    const streamingAssistantMessage = [...messages].reverse().find((m) => m.senderId !== currentUserId && m.isStreaming);
 
     const resizeTextarea = () => {
         const textarea = textareaRef.current;
@@ -417,6 +421,31 @@ export function AIChatRoom({
     }, [isTyping]);
 
     useEffect(() => {
+        const streamMessageId = streamingAssistantMessage?.id;
+        if (!streamMessageId) {
+            reasoningStartAtRef.current = null;
+            setReasoningElapsedSec(0);
+            return;
+        }
+        if (reasoningPanelByMessage[streamMessageId] === undefined) {
+            setReasoningPanelByMessage((prev) => ({ ...prev, [streamMessageId]: true }));
+        }
+        const hasMainResponseStarted = Boolean((streamingAssistantMessage.text || '').trim());
+        if (hasMainResponseStarted) {
+            setReasoningPanelByMessage((prev) => ({ ...prev, [streamMessageId]: false }));
+            return;
+        }
+        if (!hasMainResponseStarted && reasoningStartAtRef.current == null) {
+            reasoningStartAtRef.current = Date.now();
+        }
+        const interval = window.setInterval(() => {
+            if (reasoningStartAtRef.current == null) return;
+            setReasoningElapsedSec(Math.max(0, Math.floor((Date.now() - reasoningStartAtRef.current) / 1000)));
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [streamingAssistantMessage?.id, streamingAssistantMessage?.text, reasoningPanelByMessage]);
+
+    useEffect(() => {
         if (isResponding || isTyping) {
             setMsgMenu(null);
         }
@@ -604,6 +633,7 @@ export function AIChatRoom({
                         </div>
                     ) : (
                         messages.map((message) => {
+                            if (message.isStreaming) return null;
                             const isMine = message.senderId === currentUserId;
 
                             return (
@@ -649,18 +679,54 @@ export function AIChatRoom({
                         })
                     )}
 
-                    {isTyping && (
+                    {isTyping && !streamingAssistantMessage && (
                         <div className="message-row message-row--theirs">
                             <div className="message-bubble message-bubble--theirs msg-shape--single">
-                                {isReasoningPending ? (
-                                    <div className="thinking-indicator">
-                                        <span className="thinking-indicator__text">در حال استدلال</span>
-                                    </div>
-                                ) : (
+                                {isReasoningPending ? (<div className="thinking-indicator"><span className="thinking-indicator__text">در حال استدلال</span></div>) : (
                                     <div className="typing-indicator">
                                         <span></span>
                                         <span></span>
                                         <span></span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                    {streamingAssistantMessage && (
+                        <div className="message-row message-row--theirs">
+                            <div className="message-bubble message-bubble--theirs msg-shape--single ai-reasoning-wrap">
+                                <button
+                                    type="button"
+                                    className="ai-reasoning-header"
+                                    onClick={() => {
+                                        const isOpen = reasoningPanelByMessage[streamingAssistantMessage.id] ?? true;
+                                        setReasoningPanelByMessage((prev) => ({ ...prev, [streamingAssistantMessage.id]: !isOpen }));
+                                    }}
+                                >
+                                    <span className="thinking-indicator__text">{(streamingAssistantMessage.text || '').trim() ? 'روند استدلال' : 'در حال استدلال'}</span>
+                                    {!(streamingAssistantMessage.text || '').trim() && <span className="ai-reasoning-timer">{`${Math.floor(reasoningElapsedSec / 60)}:${String(reasoningElapsedSec % 60).padStart(2, '0')}`}</span>}
+                                    <ChevronDown size={15} className={reasoningPanelByMessage[streamingAssistantMessage.id] ?? true ? 'ai-reasoning-chevron ai-reasoning-chevron--open' : 'ai-reasoning-chevron'} />
+                                </button>
+                                <AnimatePresence initial={false}>
+                                    {(reasoningPanelByMessage[streamingAssistantMessage.id] ?? true) && (
+                                        <motion.div
+                                            className="ai-reasoning-body"
+                                            initial={{ height: 0, opacity: 0 }}
+                                            animate={{ height: 'auto', opacity: 1 }}
+                                            exit={{ height: 0, opacity: 0 }}
+                                            transition={{ duration: 0.2, ease: 'easeOut' }}
+                                        >
+                                            <div className="ai-reasoning-content">
+                                                {streamingAssistantMessage.reasoningContent || '...'}
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                                {Boolean((streamingAssistantMessage.text || '').trim()) && (
+                                    <div className="ai-reasoning-answer">
+                                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
+                                            {streamingAssistantMessage.text ?? ''}
+                                        </ReactMarkdown>
                                     </div>
                                 )}
                             </div>
@@ -688,7 +754,7 @@ export function AIChatRoom({
                             initial={{ x: 280 }}
                             animate={{ x: 0 }}
                             exit={{ x: 280 }}
-                            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                            transition={{ type: 'spring', stiffness: 440, damping: 36, mass: 0.8 }}
                         >
                             <button
                                 type="button"
@@ -1028,6 +1094,52 @@ export function AIChatRoom({
                     background-clip: text;
                     color: transparent;
                     animation: thinking-shimmer 1.8s linear infinite;
+                }
+                .ai-chat-drawer__item-title {
+                    direction: rtl;
+                    text-align: right;
+                }
+                .ai-reasoning-wrap {
+                    width: min(100%, 560px);
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                }
+                .ai-reasoning-header {
+                    all: unset;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    color: var(--text-secondary);
+                }
+                .ai-reasoning-timer {
+                    font-variant-numeric: tabular-nums;
+                    font-size: 12px;
+                    opacity: 0.8;
+                }
+                .ai-reasoning-chevron {
+                    margin-inline-start: auto;
+                    transition: transform 0.2s ease;
+                }
+                .ai-reasoning-chevron--open {
+                    transform: rotate(180deg);
+                }
+                .ai-reasoning-body {
+                    overflow: hidden;
+                }
+                .ai-reasoning-content {
+                    font-size: 13px;
+                    line-height: 1.7;
+                    color: var(--text-secondary);
+                    white-space: pre-wrap;
+                    border-inline-start: 2px solid var(--border-secondary);
+                    padding-inline-start: 10px;
+                }
+                .ai-reasoning-answer {
+                    margin-top: 6px;
+                    border-top: 1px solid var(--border-secondary);
+                    padding-top: 8px;
                 }
                 @keyframes thinking-shimmer {
                     0% { background-position: 220% 0; }

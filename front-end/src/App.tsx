@@ -229,6 +229,15 @@ export function App() {
                     seen: true,
                 }));
                 setAIMessagesByChat((prev) => ({ ...prev, [activeAIChatId]: messagesWithChatId }));
+                const pending = [...messagesWithChatId].reverse().find((m) => m.senderId === 'ai' && m.isStreaming);
+                if (pending) {
+                    setAITyping(true);
+                    setAIResponding(true);
+                    setAIRespondingChatId(activeAIChatId);
+                    setAIReasoningPending(Boolean(pending.reasoningEnabled && !pending.text));
+                    aiPendingStreamMetaRef.current[pending.id] = pending;
+                    aiStreamStartedRef.current[pending.id] = Boolean(pending.text);
+                }
             } catch (error) {
                 console.error('Failed to load AI messages:', error);
             } finally {
@@ -505,17 +514,24 @@ export function App() {
             ...message,
             chatId: aiChatId,
             seen: true,
+            isStreaming: true,
+            streamCompleted: false,
+            reasoningContent: String(message?.reasoningContent || ''),
+            reasoningEnabled: Boolean(message?.reasoningEnabled),
         };
         aiStreamStartedRef.current[messageWithChatId.id] = false;
         aiPendingStreamMetaRef.current[messageWithChatId.id] = messageWithChatId;
+        appendAIMessage(aiChatId, messageWithChatId);
         setAITyping(true);
         setAIResponding(true);
         setAIRespondingChatId(aiChatId);
+        setAIReasoningPending(Boolean(message?.reasoningEnabled));
     }, [activeAIChatId, appendAIMessage]);
 
-    const handleAIStreamChunk = useCallback((messageId: string, text: string) => {
+    const handleAIStreamChunk = useCallback((payload: { messageId: string; text: string; reasoningContent?: string; hasMainContent?: boolean }) => {
+        const { messageId, text, reasoningContent = '', hasMainContent = false } = payload;
         if (!messageId) return;
-        if (!aiStreamStartedRef.current[messageId]) {
+        if (!aiStreamStartedRef.current[messageId] && hasMainContent) {
             aiStreamStartedRef.current[messageId] = true;
             setAITyping(false);
             setAIReasoningPending(false);
@@ -534,11 +550,30 @@ export function App() {
                     text: '',
                     timestamp: Date.now(),
                     seen: true,
+                    isStreaming: true,
+                    streamCompleted: false,
                 };
-                return { ...prev, [aiChatId]: [...current, { ...fallback, text, seen: true }] };
+                return {
+                    ...prev,
+                    [aiChatId]: [...current, {
+                        ...fallback,
+                        text,
+                        reasoningContent,
+                        seen: true,
+                        isStreaming: true,
+                        streamCompleted: false,
+                    }],
+                };
             }
             const next = [...current];
-            next[idx] = { ...next[idx], text, seen: true };
+            next[idx] = {
+                ...next[idx],
+                text,
+                reasoningContent,
+                seen: true,
+                isStreaming: true,
+                streamCompleted: false,
+            };
             return { ...prev, [aiChatId]: next };
         });
     }, [activeAIChatId, vibrate]);
@@ -551,6 +586,9 @@ export function App() {
             ...message,
             chatId: aiChatId,
             seen: true,
+            isStreaming: false,
+            streamCompleted: true,
+            reasoningContent: String(message?.reasoningContent || ''),
         };
         setAIMessagesByChat(prev => {
             const current = prev[aiChatId] || [];

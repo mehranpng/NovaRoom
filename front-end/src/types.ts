@@ -51,6 +51,10 @@ export interface Message {
     reactions?: MessageReaction[];
     forwardedFrom?: ForwardedFrom;
     file?: FileMetadata;
+    reasoningContent?: string;
+    reasoningEnabled?: boolean;
+    isStreaming?: boolean;
+    streamCompleted?: boolean;
 }
 
 export interface ChatLastMessage {

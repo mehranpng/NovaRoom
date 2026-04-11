@@ -1,7 +1,7 @@
 import os
 import json
 from openai import AsyncOpenAI
-from typing import List, Dict, AsyncIterator
+from typing import List, Dict, AsyncIterator, Any
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -74,7 +74,7 @@ async def generate_ai_response_stream(
     conversation_summary: str = "",
     model: str = "deepseek-chat",
     reasoning_mode: bool = False,
-) -> AsyncIterator[str]:
+) -> AsyncIterator[Dict[str, Any]]:
     try:
         summary_context = (
             conversation_summary.strip()
@@ -116,21 +116,32 @@ async def generate_ai_response_stream(
         )
 
         has_content = False
+        has_reasoning = False
         async for chunk in stream:
-            delta = ""
+            content_delta = ""
+            reasoning_delta = ""
             if chunk.choices and chunk.choices[0].delta:
-                delta = chunk.choices[0].delta.content or ""
+                delta = chunk.choices[0].delta
+                content_delta = getattr(delta, "content", "") or ""
+                reasoning_delta = getattr(delta, "reasoning_content", "") or ""
 
-            if delta:
+            if content_delta:
                 has_content = True
-                yield delta
+            if reasoning_delta:
+                has_reasoning = True
 
-        if not has_content:
-            yield "متأسفم، نتوانستم پاسخی تولید کنم."
+            if content_delta or reasoning_delta:
+                yield {
+                    "content": content_delta,
+                    "reasoning_content": reasoning_delta,
+                }
+
+        if not has_content and not has_reasoning:
+            yield {"content": "متأسفم، نتوانستم پاسخی تولید کنم.", "reasoning_content": ""}
 
     except Exception as e:
         print(f"AI generation error: {e}")
-        yield "متأسفم، خطایی رخ داده است. لطفاً دوباره تلاش کنید."
+        yield {"content": "متأسفم، خطایی رخ داده است. لطفاً دوباره تلاش کنید.", "reasoning_content": ""}
 
 
 async def generate_conversation_summary(
