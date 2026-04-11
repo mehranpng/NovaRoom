@@ -31,15 +31,28 @@ export function FileUpload({ token, chatId, onFileUploaded }: FileUploadProps) {
     const audioInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
+    const pickerSessionRef = useRef(false);
+    const pickerCloseTimerRef = useRef<number | null>(null);
+
+    const clearPickerCloseTimer = () => {
+        if (pickerCloseTimerRef.current != null) {
+            window.clearTimeout(pickerCloseTimerRef.current);
+            pickerCloseTimerRef.current = null;
+        }
+    };
+
+    const setPickerSession = (active: boolean) => {
+        pickerSessionRef.current = active;
+        if (!active) clearPickerCloseTimer();
+    };
 
     const openPicker = (inputRef: React.RefObject<HTMLInputElement | null>) => (e: React.MouseEvent<HTMLButtonElement>) => {
         e.preventDefault();
         e.stopPropagation();
         if (uploading) return;
         setPickerMenuOpen(false);
-        window.setTimeout(() => {
-            inputRef.current?.click();
-        }, 0);
+        setPickerSession(true);
+        inputRef.current?.click();
     };
 
     const pushTaskUpdate = (task: UploadTask) => {
@@ -74,6 +87,7 @@ export function FileUpload({ token, chatId, onFileUploaded }: FileUploadProps) {
     }, [chatId, onFileUploaded]);
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setPickerSession(false);
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -111,6 +125,38 @@ export function FileUpload({ token, chatId, onFileUploaded }: FileUploadProps) {
             document.removeEventListener('keydown', onEscape);
         };
     }, [pickerMenuOpen]);
+
+    useEffect(() => {
+        const onFocus = () => {
+            if (!pickerSessionRef.current) return;
+            clearPickerCloseTimer();
+            pickerCloseTimerRef.current = window.setTimeout(() => {
+                const hasPickedFile = Boolean(
+                    imageInputRef.current?.files?.length
+                    || videoInputRef.current?.files?.length
+                    || audioInputRef.current?.files?.length
+                    || fileInputRef.current?.files?.length
+                );
+                if (!hasPickedFile) {
+                    setPickerSession(false);
+                }
+            }, 220);
+        };
+
+        const onBeforeUnload = (event: BeforeUnloadEvent) => {
+            if (!pickerSessionRef.current) return;
+            event.preventDefault();
+            event.returnValue = '';
+        };
+
+        window.addEventListener('focus', onFocus);
+        window.addEventListener('beforeunload', onBeforeUnload);
+        return () => {
+            clearPickerCloseTimer();
+            window.removeEventListener('focus', onFocus);
+            window.removeEventListener('beforeunload', onBeforeUnload);
+        };
+    }, []);
 
     const uploadFile = async (file: File) => {
         setUploading(true);
