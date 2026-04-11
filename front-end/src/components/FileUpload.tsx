@@ -32,6 +32,16 @@ export function FileUpload({ token, chatId, onFileUploaded }: FileUploadProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
 
+    const openPicker = (inputRef: React.RefObject<HTMLInputElement | null>) => (e: React.MouseEvent<HTMLButtonElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (uploading) return;
+        setPickerMenuOpen(false);
+        window.setTimeout(() => {
+            inputRef.current?.click();
+        }, 0);
+    };
+
     const pushTaskUpdate = (task: UploadTask) => {
         task.listeners.forEach((listener) => listener(task));
     };
@@ -257,19 +267,19 @@ export function FileUpload({ token, chatId, onFileUploaded }: FileUploadProps) {
                         exit={{ opacity: 0, y: 8, scale: 0.97 }}
                         transition={{ duration: 0.18, ease: 'easeOut' }}
                     >
-                        <motion.button type="button" className="file-upload-picker-item" onClick={() => imageInputRef.current?.click()}
+                        <motion.button type="button" className="file-upload-picker-item" onClick={openPicker(imageInputRef)}
                             whileHover={{ x: -2 }} whileTap={{ scale: 0.98 }}>
                             <span className="file-upload-picker-item__label"><Image size={16} />تصویر</span>
                         </motion.button>
-                        <motion.button type="button" className="file-upload-picker-item" onClick={() => videoInputRef.current?.click()}
+                        <motion.button type="button" className="file-upload-picker-item" onClick={openPicker(videoInputRef)}
                             whileHover={{ x: -2 }} whileTap={{ scale: 0.98 }}>
                             <span className="file-upload-picker-item__label"><Video size={16} />ویدیو</span>
                         </motion.button>
-                        <motion.button type="button" className="file-upload-picker-item" onClick={() => audioInputRef.current?.click()}
+                        <motion.button type="button" className="file-upload-picker-item" onClick={openPicker(audioInputRef)}
                             whileHover={{ x: -2 }} whileTap={{ scale: 0.98 }}>
                             <span className="file-upload-picker-item__label"><Music2 size={16} />آهنگ</span>
                         </motion.button>
-                        <motion.button type="button" className="file-upload-picker-item" onClick={() => fileInputRef.current?.click()}
+                        <motion.button type="button" className="file-upload-picker-item" onClick={openPicker(fileInputRef)}
                             whileHover={{ x: -2 }} whileTap={{ scale: 0.98 }}>
                             <span className="file-upload-picker-item__label"><File size={16} />فایل</span>
                         </motion.button>
