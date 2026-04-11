@@ -722,7 +722,6 @@ export function ChatList({
                                 className="chat-list__reconnect-btn"
                                 onClick={() => {
                                     onReconnectNow();
-                                    window.location.reload();
                                 }}
                             >
                                 <RefreshCw size={16} />

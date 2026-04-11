@@ -79,7 +79,7 @@ export function FileUpload({ token, chatId, onFileUploaded }: FileUploadProps) {
 
         // Validate file size
         if (!validateFileSize(file.size)) {
-            alert('حجم فایل نباید بیشتر از ۱۰ مگابایت باشد');
+            alert('حجم فایل نباید بیشتر از ۲۰ مگابایت باشد');
             e.currentTarget.value = '';
             setSelectedFileName(null);
             return;

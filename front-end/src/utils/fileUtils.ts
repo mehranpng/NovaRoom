@@ -36,6 +36,6 @@ export function isImageFile(mimeType: string): boolean {
 }
 
 export function validateFileSize(size: number): boolean {
-  const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+  const MAX_SIZE = 20 * 1024 * 1024; // 20MB
   return size <= MAX_SIZE;
 }

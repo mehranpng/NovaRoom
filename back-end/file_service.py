@@ -10,8 +10,8 @@ import mimetypes
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-# Maximum file size 10MB
-MAX_FILE_SIZE = 10 * 1024 * 1024
+# Maximum file size 20MB
+MAX_FILE_SIZE = 20 * 1024 * 1024
 
 # Allowed MIME types (blacklist dangerous executables)
 DANGEROUS_EXTENSIONS = {
