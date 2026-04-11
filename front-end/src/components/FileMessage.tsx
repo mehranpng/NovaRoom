@@ -36,6 +36,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
     const [videoLoading, setVideoLoading] = useState(false);
     const [videoError, setVideoError] = useState(false);
     const [videoDuration, setVideoDuration] = useState(0);
+    const [coverUrl, setCoverUrl] = useState<string | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
 
     const musicPlayer = useMusicPlayer();
@@ -44,6 +45,12 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
     const isVideo = (file.mimeType || '').startsWith('video/');
     const isCurrentTrack = musicPlayer.track?.fileId === file.fileId;
     const isThisPlaying = isCurrentTrack && musicPlayer.isPlaying;
+    const audioTitle = (file.title || '').trim();
+    const audioArtist = (file.artist || '').trim() || 'unknown';
+    const displayAudioTitle = audioTitle || file.fileName;
+    const audioSubtitle = audioTitle ? audioArtist : ((file.artist || '').trim() || 'unknown');
+    const rawCoverFileId = (file as any).coverArtFileId || (file as any)?.meta?.coverArtFileId || (file as any)?.metadata?.coverArtFileId;
+    const rawCoverUrl = (file.coverArtUrl || (file as any).coverUrl || (file as any)?.meta?.coverArtUrl || (file as any)?.metadata?.coverArtUrl || '').trim();
 
     useEffect(() => {
         if (!isImage) return;
@@ -109,6 +116,40 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
             if (objectUrl) window.URL.revokeObjectURL(objectUrl);
         };
     }, [file.fileId, isAudio, token]);
+
+    useEffect(() => {
+        if (!isAudio) return;
+        if (rawCoverUrl) {
+            setCoverUrl(rawCoverUrl);
+            return;
+        }
+        if (!rawCoverFileId) {
+            setCoverUrl(null);
+            return;
+        }
+        let objectUrl: string | null = null;
+        let cancelled = false;
+        const loadCover = async () => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/files/${rawCoverFileId}`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!response.ok) throw new Error('Failed to load cover');
+                const blob = await response.blob();
+                if (!cancelled) {
+                    objectUrl = window.URL.createObjectURL(blob);
+                    setCoverUrl(objectUrl);
+                }
+            } catch {
+                if (!cancelled) setCoverUrl(null);
+            }
+        };
+        loadCover();
+        return () => {
+            cancelled = true;
+            if (objectUrl) window.URL.revokeObjectURL(objectUrl);
+        };
+    }, [isAudio, rawCoverFileId, rawCoverUrl, token]);
 
     // Load video with auth header
     useEffect(() => {
@@ -238,12 +279,20 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
                     )}
                 </div>
             ) : isAudio ? (
-                <div className="file-audio-card" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', minWidth: 200 }}>
+                <div className="file-audio-card">
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
                             if (audioUrl) {
-                                musicPlayer.playTrack({ fileId: file.fileId, fileName: file.fileName, audioUrl, mimeType: file.mimeType });
+                                musicPlayer.playTrack({
+                                    fileId: file.fileId,
+                                    fileName: file.fileName,
+                                    audioUrl,
+                                    mimeType: file.mimeType,
+                                    title: audioTitle || undefined,
+                                    artist: audioArtist || undefined,
+                                    coverArtUrl: coverUrl || undefined,
+                                });
                             }
                         }}
                         disabled={audioLoading || audioError || !audioUrl}
@@ -264,8 +313,12 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
                             <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #2F80ED', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
                         ) : isThisPlaying ? <Pause size={18} /> : <Play size={18} />}
                     </button>
+                    <div className="file-audio-cover" aria-hidden="true">
+                        {coverUrl ? <img src={coverUrl} alt={displayAudioTitle} /> : <span>🎵</span>}
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🎵 {file.fileName}</div>
+                        <div className="file-audio-title">{displayAudioTitle}</div>
+                        <div className="file-audio-artist">{audioSubtitle}</div>
                         {audioError && <div style={{ fontSize: 11, color: '#e55' }}>پخش ممکن نشد</div>}
                         {isCurrentTrack && musicPlayer.duration > 0 && (
                             <div style={{ fontSize: 11, color: '#888' }}>

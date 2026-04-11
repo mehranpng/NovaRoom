@@ -33,6 +33,10 @@ export interface FileMetadata {
     fileSize: number;
     mimeType: string;
     uploadedAt: string;
+    title?: string;
+    artist?: string;
+    coverArtUrl?: string;
+    coverArtFileId?: string;
 }
 
 export interface Message {

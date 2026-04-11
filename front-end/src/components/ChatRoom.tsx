@@ -426,8 +426,6 @@ export function ChatRoom({
         if (unreadConsumedInSessionRef.current) return;
         if (displayUnreadCount <= 0) return;
         unreadConsumedInSessionRef.current = true;
-        setDisplayUnreadCount(0);
-        setUnreadAnchorId(null);
         window.setTimeout(() => onConsumeInitialUnread?.(chatId), 0);
     };
 
@@ -1015,6 +1013,7 @@ export function ChatRoom({
 
     useEffect(() => {
         if (lastChatIdRef.current === chatId) return;
+        const mem = scrollMemoryRef.current[chatId];
         lastChatIdRef.current = chatId;
         initialScrollDoneRef.current = false;
         prevLenRef.current = messages.length;
@@ -1042,10 +1041,16 @@ export function ChatRoom({
         unreadConsumedInSessionRef.current = false;
         restoringFromInfoRef.current = false;
         restoreTopAfterInfoRef.current = null;
-        initialMediaFollowupDoneRef.current = false;
-        initialMediaPendingIdsRef.current = collectInitialMediaPendingIds();
-        if (initialMediaPendingIdsRef.current.size === 0) {
+        const hasSavedPosition = Boolean(mem);
+        if (hasSavedPosition) {
             initialMediaFollowupDoneRef.current = true;
+            initialMediaPendingIdsRef.current = new Set();
+        } else {
+            initialMediaFollowupDoneRef.current = false;
+            initialMediaPendingIdsRef.current = collectInitialMediaPendingIds();
+            if (initialMediaPendingIdsRef.current.size === 0) {
+                initialMediaFollowupDoneRef.current = true;
+            }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
@@ -1170,21 +1175,6 @@ export function ChatRoom({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [messages, messages.length, chatId, loading, displayUnreadCount, unreadAnchorId, currentUserId]);
 
-    useEffect(() => {
-        if (displayUnreadCount <= 0) return;
-        if (loading) return;
-        if (!messages.length) return;
-        // Do not auto-consume immediately on open/reflow; this can make the
-        // unread separator flash and disappear (seen mostly on desktop Chrome).
-        // We only consume after real user scroll interaction.
-        if (!userHasScrolledRef.current) return;
-        const raf = requestAnimationFrame(() => {
-            if (computeNearBottom()) consumeUnreadForOpenSession();
-        });
-        return () => cancelAnimationFrame(raf);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [chatId, displayUnreadCount, loading, messages.length]);
-
     const onMessagesScroll = () => {
         const container = messagesContainerRef.current;
         if (!container) return;
@@ -1208,7 +1198,6 @@ export function ChatRoom({
             setNewMsgCount(0);
             setShowScrollBtn(false);
             setHideScrollBtnUntilBottom(false);
-            consumeUnreadForOpenSession();
         } else if (hideScrollBtnUntilBottom) {
             setShowScrollBtn(false);
         } else {
@@ -1233,7 +1222,7 @@ export function ChatRoom({
         const nextSameSender = next ? next.senderId === m.senderId : false;
         const dayBreak = !prev || !sameDay(prev.timestamp, m.timestamp);
         return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender) };
-    }), [messages, currentUserId]);
+    }), [messages, messages.length, currentUserId]);
 
     const activeInputStackCount = (replyTo || editingId ? 1 : 0)
         + (uploadedFile ? 1 : 0)
@@ -1936,6 +1925,15 @@ export function ChatRoom({
                                                 </div>
                                             )}
 
+                                            {m.file && (
+                                                <FileMessage
+                                                    file={m.file}
+                                                    token={token}
+                                                    onMediaLoad={() => handleInitialMediaReady(m.id)}
+                                                    onImageClick={(imageUrl, file) => setOpenedImage({ url: imageUrl, file })}
+                                                    onVideoClick={(videoUrl, file) => setOpenedVideo({ url: videoUrl, file })}
+                                                />
+                                            )}
                                             {m.text && (
                                                 <div className="message-text message-text--markdown">
                                                     <ReactMarkdown
@@ -1945,15 +1943,6 @@ export function ChatRoom({
                                                         {m.text}
                                                     </ReactMarkdown>
                                                 </div>
-                                            )}
-                                            {m.file && (
-                                                <FileMessage
-                                                    file={m.file}
-                                                    token={token}
-                                                    onMediaLoad={() => handleInitialMediaReady(m.id)}
-                                                    onImageClick={(imageUrl, file) => setOpenedImage({ url: imageUrl, file })}
-                                                    onVideoClick={(videoUrl, file) => setOpenedVideo({ url: videoUrl, file })}
-                                                />
                                             )}
 
                                             {effectiveReactions && effectiveReactions.length > 0 && (
@@ -1965,6 +1954,11 @@ export function ChatRoom({
                                                             <button key={idx}
                                                                 className={isMyReaction ? 'message-reaction message-reaction--active' : 'message-reaction'}
                                                                 onClick={(e) => { e.stopPropagation(); if (isMyReaction) handleDeleteReaction(m.id); else handleReact(m.id, reaction.emoji); }}
+                                                                onMouseEnter={(e) => {
+                                                                    if (!window.matchMedia?.('(pointer:fine)').matches) return;
+                                                                    e.stopPropagation();
+                                                                    openReactionMenu(m.id, e.currentTarget);
+                                                                }}
                                                                 type="button"
                                                             >
                                                                 <span className="message-reaction__emoji">{reaction.emoji}</span>

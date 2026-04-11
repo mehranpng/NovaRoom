@@ -24,6 +24,8 @@ export const MiniMusicPlayer: React.FC = () => {
   if (!track) return null;
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const title = track.title?.trim() || track.fileName;
+  const artist = track.title?.trim() ? (track.artist?.trim() || 'unknown') : (track.artist?.trim() || 'unknown');
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!progressRef.current || duration === 0) return;
@@ -54,14 +56,19 @@ export const MiniMusicPlayer: React.FC = () => {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {/* Music icon */}
         <div style={{
-          width: 36, height: 36,
-          borderRadius: '50%',
+          width: 40, height: 40,
+          borderRadius: 10,
           background: 'linear-gradient(135deg, #2F80ED, #56CCF2)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexShrink: 0,
           fontSize: 16,
+          overflow: 'hidden',
         }}>
-          🎵
+          {track.coverArtUrl ? (
+            <img src={track.coverArtUrl} alt={title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            <span>🎵</span>
+          )}
         </div>
 
         {/* Track name */}
@@ -74,10 +81,11 @@ export const MiniMusicPlayer: React.FC = () => {
             whiteSpace: 'nowrap',
             color: 'var(--text-primary, #111)',
           }}>
-            {track.fileName}
+            {title}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary, #888)' }}>
-            {formatTime(currentTime)} / {formatTime(duration)}
+          <div style={{ fontSize: 11, color: 'var(--text-secondary, #888)', display: 'flex', gap: 8 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 110 }}>{artist}</span>
+            <span style={{ direction: 'ltr' }}>{formatTime(currentTime)} / {formatTime(duration)}</span>
           </div>
         </div>
 

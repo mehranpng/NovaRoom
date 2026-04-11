@@ -5,6 +5,9 @@ export interface TrackInfo {
   fileName: string;
   audioUrl: string;
   mimeType: string;
+  title?: string;
+  artist?: string;
+  coverArtUrl?: string;
 }
 
 interface MusicPlayerState {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { File, Image, Paperclip, Video } from 'lucide-react';
+import { File, Image, Music2, Paperclip, Video } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { FileMetadata } from '../types';
 import { API_BASE_URL } from '../config/api';
@@ -17,6 +17,7 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
     const [pickerMenuOpen, setPickerMenuOpen] = useState(false);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
+    const audioInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
@@ -141,6 +142,9 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
         if (videoInputRef.current) {
             videoInputRef.current.value = '';
         }
+        if (audioInputRef.current) {
+            audioInputRef.current.value = '';
+        }
     };
 
     return (
@@ -158,6 +162,14 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
                 ref={videoInputRef}
                 type="file"
                 accept="video/*"
+                onChange={handleFileSelect}
+                style={{ display: 'none' }}
+                disabled={uploading}
+            />
+            <input
+                ref={audioInputRef}
+                type="file"
+                accept="audio/*"
                 onChange={handleFileSelect}
                 style={{ display: 'none' }}
                 disabled={uploading}
@@ -202,6 +214,10 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
                         <motion.button type="button" className="file-upload-picker-item" onClick={() => videoInputRef.current?.click()}
                             whileHover={{ x: -2 }} whileTap={{ scale: 0.98 }}>
                             <span className="file-upload-picker-item__label"><Video size={16} />ویدیو</span>
+                        </motion.button>
+                        <motion.button type="button" className="file-upload-picker-item" onClick={() => audioInputRef.current?.click()}
+                            whileHover={{ x: -2 }} whileTap={{ scale: 0.98 }}>
+                            <span className="file-upload-picker-item__label"><Music2 size={16} />آهنگ</span>
                         </motion.button>
                         <motion.button type="button" className="file-upload-picker-item" onClick={() => fileInputRef.current?.click()}
                             whileHover={{ x: -2 }} whileTap={{ scale: 0.98 }}>
