@@ -29,6 +29,25 @@ function resolveVerified(val: any): boolean {
     return true;
 }
 
+function resolveAvatarUrl(rawAvatar: string): string {
+    const avatar = String(rawAvatar || '').trim();
+    if (!avatar) return '';
+    if (avatar.startsWith('blob:') || avatar.startsWith('data:')) return avatar;
+    if (avatar.startsWith('http://') || avatar.startsWith('https://')) return avatar;
+    if (avatar.startsWith('/')) return `${API_BASE_URL}${avatar}`;
+    return `${API_BASE_URL}/files/${avatar}`;
+}
+
+function extractFileIdFromAvatar(rawAvatar: string): string {
+    const avatar = String(rawAvatar || '').trim();
+    if (!avatar) return '';
+    const withoutOrigin = avatar.startsWith(API_BASE_URL) ? avatar.slice(API_BASE_URL.length) : avatar;
+    const match = withoutOrigin.match(/\/(?:files|avatars)\/([^/?#]+)/);
+    if (match?.[1]) return decodeURIComponent(match[1]);
+    if (!avatar.startsWith('http://') && !avatar.startsWith('https://') && !avatar.startsWith('/')) return avatar;
+    return '';
+}
+
 export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenMembers = true, startInEditMode = false }: ContactInfoProps) {
     const [copied, setCopied] = useState(false);
     const [canEditGroup, setCanEditGroup] = useState(false);
@@ -210,15 +229,13 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
     const openAvatarViewer = async () => {
         const rawAvatar = String(user.avatar || '').trim();
         if (!rawAvatar) return;
-        const fileId = rawAvatar
-            .replace(`${API_BASE_URL}/files/`, '')
-            .replace(/^\/files\//, '')
-            .trim();
+        const fileId = extractFileIdFromAvatar(rawAvatar);
+        const avatarUrl = resolveAvatarUrl(rawAvatar);
         const token = localStorage.getItem('token') || '';
-        if (!fileId || !token) return;
+        if (!avatarUrl || !token) return;
 
         try {
-            const response = await fetch(`${API_BASE_URL}/files/${fileId}`, {
+            const response = await fetch(avatarUrl, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (!response.ok) throw new Error('Failed to load avatar');

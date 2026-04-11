@@ -131,9 +131,13 @@ function formatTime(timestamp: any): string {
 
 function getFilePreviewLabel(file: any): string {
     const mimeType = String(file?.mimeType || file?.type || '').toLowerCase();
-    if (mimeType.startsWith('image/')) return '🖼️ تصویر';
-    if (mimeType.startsWith('video/')) return '🎥 ویدیو';
-    if (mimeType.startsWith('audio/')) return '🎵 صوت';
+    const fileType = String(file?.fileType || file?.kind || file?.mediaType || file?.messageType || '').toLowerCase();
+    const fileName = String(file?.fileName || file?.name || '').toLowerCase();
+    const ext = fileName.includes('.') ? fileName.split('.').pop() || '' : '';
+
+    if (mimeType.startsWith('image/') || fileType.includes('image') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'heic'].includes(ext)) return '🖼️ تصویر';
+    if (mimeType.startsWith('video/') || fileType.includes('video') || ['mp4', 'mov', 'mkv', 'avi', 'webm', 'm4v'].includes(ext)) return '🎥 ویدیو';
+    if (mimeType.startsWith('audio/') || fileType.includes('audio') || fileType.includes('voice') || ['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac'].includes(ext)) return '🎵 صوت';
     return '📎 فایل';
 }
 
@@ -143,21 +147,44 @@ function extractLastMessageFile(lastMessage: any): any {
         lastMessage?.file ||
         lastMessage?.attachment ||
         lastMessage?.media ||
+        lastMessage?.document ||
         lastMessage?.message?.file ||
         lastMessage?.message?.attachment ||
+        lastMessage?.message?.media ||
         lastMessage?.payload?.file ||
+        lastMessage?.payload?.attachment ||
+        lastMessage?.payload?.media ||
         null
     );
 }
 
+function extractLastMessageText(lastMessage: any): string {
+    if (!lastMessage) return '';
+    return String(
+        lastMessage?.caption
+        || lastMessage?.text
+        || lastMessage?.message?.caption
+        || lastMessage?.message?.text
+        || lastMessage?.payload?.caption
+        || lastMessage?.payload?.text
+        || ''
+    ).trim();
+}
+
 function getLastMessagePreview(lastMessage: any, fallback: string): string {
     if (!lastMessage) return fallback;
-    const text = String(lastMessage?.text || lastMessage?.caption || lastMessage?.message?.text || '').trim();
+    const text = extractLastMessageText(lastMessage);
     const file = extractLastMessageFile(lastMessage);
     if (file) {
         const prefix = getFilePreviewLabel(file);
         return text ? `${prefix} • ${text}` : prefix;
     }
+    const messageType = String(lastMessage?.messageType || lastMessage?.type || lastMessage?.payload?.type || '').toLowerCase();
+    if (messageType.includes('image')) return text ? `🖼️ تصویر • ${text}` : '🖼️ تصویر';
+    if (messageType.includes('video')) return text ? `🎥 ویدیو • ${text}` : '🎥 ویدیو';
+    if (messageType.includes('audio') || messageType.includes('voice')) return text ? `🎵 صوت • ${text}` : '🎵 صوت';
+    if (messageType.includes('file') || messageType.includes('document') || messageType.includes('attachment')) return text ? `📎 فایل • ${text}` : '📎 فایل';
+
     const normalizedText = text.toLowerCase();
     if (['[file]', 'file', 'attachment'].includes(normalizedText)) return '📎 فایل';
     if (['[image]', 'image', 'photo'].includes(normalizedText)) return '🖼️ تصویر';

@@ -192,9 +192,12 @@ export function FileUpload({ token, chatId, onFileUploaded }: FileUploadProps) {
                     if (response.success && response.file) {
                         task.status = 'done';
                         task.progress = 100;
+                        setUploadProgress(100);
                         task.result = response.file;
                         pushTaskUpdate(task);
-                        resetUpload();
+                        window.setTimeout(() => {
+                            resetUpload();
+                        }, 260);
                     } else {
                         throw new Error('Invalid response');
                     }
@@ -254,7 +257,23 @@ export function FileUpload({ token, chatId, onFileUploaded }: FileUploadProps) {
     };
 
     return (
-        <div className="file-upload-container">
+        <>
+            {uploading && selectedFileName && (
+                <div
+                    className="file-upload-progress-inline"
+                    role="progressbar"
+                    aria-label={`Uploading ${uploadProgress}%`}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={uploadProgress}
+                >
+                    <div
+                        className="file-upload-progress-inline__fill"
+                        style={{ width: `${uploadProgress}%` }}
+                    />
+                </div>
+            )}
+            <div className="file-upload-container">
             <input
                 ref={imageInputRef}
                 type="file"
@@ -332,22 +351,7 @@ export function FileUpload({ token, chatId, onFileUploaded }: FileUploadProps) {
                     </motion.div>
                 )}
             </AnimatePresence>
-
-            {uploading && selectedFileName && (
-                <div
-                    className="file-upload-progress-inline"
-                    role="progressbar"
-                    aria-label={`Uploading ${uploadProgress}%`}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={uploadProgress}
-                >
-                    <div
-                        className="file-upload-progress-inline__fill"
-                        style={{ width: `${uploadProgress}%` }}
-                    />
-                </div>
-            )}
-        </div>
+            </div>
+        </>
     );
 }
