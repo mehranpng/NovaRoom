@@ -6,6 +6,7 @@ import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { cx } from '../utils/cx';
 import { API_BASE_URL, apiFetch } from '../config/api';
+import { ImageMediaViewer } from './ImageMediaViewer';
 
 interface ProfileProps {
     user: User;
@@ -30,6 +31,8 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
     const [copiedField, setCopiedField] = useState<string | null>(null);
     const [updatingAvatar, setUpdatingAvatar] = useState(false);
     const [ownedGroups, setOwnedGroups] = useState<OwnedGroup[]>([]);
+    const [openedProfileImage, setOpenedProfileImage] = useState<{ url: string; fileId: string } | null>(null);
+    const openedImageObjectUrlRef = useRef<string | null>(null);
 
     const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
     const [usernameHint, setUsernameHint] = useState<string>('');
@@ -140,6 +143,15 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
         loadOwnedGroups();
     }, []);
 
+    useEffect(() => {
+        return () => {
+            if (openedImageObjectUrlRef.current) {
+                URL.revokeObjectURL(openedImageObjectUrlRef.current);
+                openedImageObjectUrlRef.current = null;
+            }
+        };
+    }, []);
+
     const updateAvatar = async (avatarValue: string) => {
         try {
             setUpdatingAvatar(true);
@@ -173,6 +185,27 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
 
     const handleAvatarRemove = async () => {
         await updateAvatar('');
+    };
+
+    const openAvatarViewer = async () => {
+        const fileId = String(user.avatar || '').trim();
+        if (!fileId) return;
+        const token = localStorage.getItem('token') || '';
+        if (!token) return;
+        try {
+            const response = await fetch(`${API_BASE_URL}/files/${fileId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) throw new Error('Failed to load avatar');
+            const blob = await response.blob();
+            if (openedImageObjectUrlRef.current) URL.revokeObjectURL(openedImageObjectUrlRef.current);
+            const objectUrl = URL.createObjectURL(blob);
+            openedImageObjectUrlRef.current = objectUrl;
+            setOpenedProfileImage({ url: objectUrl, fileId });
+        } catch (error) {
+            console.error(error);
+            alert('نمایش تصویر پروفایل ممکن نبود');
+        }
     };
 
     const handleCancel = () => {
@@ -229,7 +262,9 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
             <div className="profile__content">
                 {/* Avatar & Name Section */}
                 <div className="profile__avatar-section">
-                    <Avatar name={user.name} size="xl" src={user.avatar ? `${API_BASE_URL}/files/${user.avatar}` : ''} />
+                    <button type="button" onClick={openAvatarViewer} style={{ background: 'none', border: 'none', padding: 0, cursor: user.avatar ? 'zoom-in' : 'default' }}>
+                        <Avatar name={user.name} size="xl" src={user.avatar ? `${API_BASE_URL}/files/${user.avatar}` : ''} />
+                    </button>
                     <div className="profile__avatar-actions">
                         <label className="profile__avatar-btn" aria-disabled={updatingAvatar}>
                             <Upload size={14} />
@@ -439,6 +474,20 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                     </div>
                 </div>
             </div>
+            {openedProfileImage && (
+                <ImageMediaViewer
+                    imageUrl={openedProfileImage.url}
+                    token={localStorage.getItem('token') || ''}
+                    downloadFile={{ fileId: openedProfileImage.fileId, fileName: `${user.name || 'profile'}.jpg` }}
+                    onClose={() => {
+                        setOpenedProfileImage(null);
+                        if (openedImageObjectUrlRef.current) {
+                            URL.revokeObjectURL(openedImageObjectUrlRef.current);
+                            openedImageObjectUrlRef.current = null;
+                        }
+                    }}
+                />
+            )}
         </motion.div >
     );
 }

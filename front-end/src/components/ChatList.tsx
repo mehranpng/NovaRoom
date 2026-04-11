@@ -1,4 +1,4 @@
-import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, Laptop, ChevronDown, MoreVertical, Trash2, RefreshCw } from 'lucide-react';
+import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, Laptop, ChevronDown, MoreVertical, Trash2, RefreshCw, Pin, PinOff } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Chat, User } from '../types';
@@ -32,84 +32,6 @@ type IconProps = {
     style?: CSSProperties;
     title?: string;
 };
-
-const PIN_ROTATE_DEG = 45;
-
-const STREAMLINE_SHARP_PIN_D = 'm23 9 -8 -8 -3 5 -9.00005 4 4.7929 4.7929 -6.5 6.5 1.41421 1.4142 6.5 -6.5L14 21l4 -9 5 -3Z';
-
-function PinFilledSharpIcon({ size = 16, className, style, title }: IconProps) {
-    return (
-        <svg
-            width={size}
-            height={size}
-            viewBox="0 0 24 24"
-            className={className}
-            style={{ transform: `rotate(${PIN_ROTATE_DEG}deg)`, ...style }}
-            aria-hidden={title ? undefined : true}
-            role={title ? 'img' : 'presentation'}
-        >
-            {title ? <title>{title}</title> : null}
-            <path
-                d={STREAMLINE_SHARP_PIN_D}
-                fill="currentColor"
-                fillRule="evenodd"
-                clipRule="evenodd"
-            />
-        </svg>
-    );
-}
-
-function PinOutlineSharpIcon({ size = 16, className, style, title }: IconProps) {
-    return (
-        <svg
-            width={size}
-            height={size}
-            viewBox="0 0 24 24"
-            className={className}
-            style={{ transform: `rotate(${PIN_ROTATE_DEG}deg)`, ...style }}
-            aria-hidden={title ? undefined : true}
-            role={title ? 'img' : 'presentation'}
-        >
-            {title ? <title>{title}</title> : null}
-            <path
-                d={STREAMLINE_SHARP_PIN_D}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinejoin="miter"
-                strokeLinecap="square"
-            />
-        </svg>
-    );
-}
-
-function UnpinFilledSharpIcon({ size = 16, className, style, title }: IconProps) {
-    return (
-        <svg
-            width={size}
-            height={size}
-            viewBox="0 0 24 24"
-            className={className}
-            style={{ transform: `rotate(${PIN_ROTATE_DEG}deg)`, ...style }}
-            aria-hidden={title ? undefined : true}
-            role={title ? 'img' : 'presentation'}
-        >
-            {title ? <title>{title}</title> : null}
-            <path
-                d={STREAMLINE_SHARP_PIN_D}
-                fill="currentColor"
-                fillRule="evenodd"
-                clipRule="evenodd"
-            />
-            <path
-                d="M5 19 19 5"
-                stroke="currentColor"
-                strokeWidth="2.6"
-                strokeLinecap="round"
-            />
-        </svg>
-    );
-}
 
 function FilledGroupIcon({ size = 16, className, style, title }: IconProps) {
     return (
@@ -208,17 +130,30 @@ function formatTime(timestamp: any): string {
 }
 
 function getFilePreviewLabel(file: any): string {
-    const mimeType = String(file?.mimeType || '').toLowerCase();
+    const mimeType = String(file?.mimeType || file?.type || '').toLowerCase();
     if (mimeType.startsWith('image/')) return '🖼️ تصویر';
     if (mimeType.startsWith('video/')) return '🎥 ویدیو';
     if (mimeType.startsWith('audio/')) return '🎵 صوت';
     return '📎 فایل';
 }
 
+function extractLastMessageFile(lastMessage: any): any {
+    if (!lastMessage) return null;
+    return (
+        lastMessage?.file ||
+        lastMessage?.attachment ||
+        lastMessage?.media ||
+        lastMessage?.message?.file ||
+        lastMessage?.message?.attachment ||
+        lastMessage?.payload?.file ||
+        null
+    );
+}
+
 function getLastMessagePreview(lastMessage: any, fallback: string): string {
     if (!lastMessage) return fallback;
-    const text = String(lastMessage?.text || '').trim();
-    const file = (lastMessage as any)?.file;
+    const text = String(lastMessage?.text || lastMessage?.caption || lastMessage?.message?.text || '').trim();
+    const file = extractLastMessageFile(lastMessage);
     if (file) {
         const prefix = getFilePreviewLabel(file);
         return text ? `${prefix} • ${text}` : prefix;
@@ -459,6 +394,23 @@ export function ChatList({
         }
         return () => document.removeEventListener('mousedown', onDocClick);
     }, [chatActionMenu]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const style = getComputedStyle(document.documentElement);
+        const themeColor = (style.getPropertyValue('--bg-primary') || '').trim() || (style.getPropertyValue('--bg-secondary') || '').trim() || '#ffffff';
+        const ensureMeta = (name: string) => {
+            let m = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
+            if (!m) {
+                m = document.createElement('meta');
+                m.name = name;
+                document.head.appendChild(m);
+            }
+            m.setAttribute('content', themeColor);
+        };
+        ensureMeta('theme-color');
+        ensureMeta('msapplication-navbutton-color');
+    }, [themeMode]);
 
     useEffect(() => {
         if (!confirmAction) return;
@@ -945,11 +897,11 @@ export function ChatList({
                                             {contact.name}
                                             {contact.verified ? <VerifiedBadge size={14} /> : null}
                                             {pinned ? (
-                                                <PinFilledSharpIcon
+                                                <Pin
                                                     size={14}
                                                     className="chat-list__pin-icon"
                                                     title="سنجاق شده"
-                                                    style={{ opacity: 0.95 }}
+                                                    style={{ opacity: 0.95, fill: 'currentColor' }}
                                                 />
                                             ) : null}
                                         </span>
@@ -1019,7 +971,7 @@ export function ChatList({
                         disabled={Boolean(pinBusy[actionMenuChat.id])}
                         style={pinBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
                     >
-                        {actionMenuPinned ? <UnpinFilledSharpIcon size={16} /> : <PinOutlineSharpIcon size={16} />}
+                        {actionMenuPinned ? <PinOff size={16} /> : <Pin size={16} />}
                         {actionMenuPinned ? 'برداشتن سنجاق' : 'سنجاق'}
                     </button>
 

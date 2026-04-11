@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
-import { apiFetch } from '../config/api';
+import { API_BASE_URL, apiFetch } from '../config/api';
+import { ImageMediaViewer } from './ImageMediaViewer';
 
 interface ContactInfoProps {
     user: User;
@@ -39,7 +40,9 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
     const [error, setError] = useState<string | null>(null);
     const [resolvedRegistrationDate, setResolvedRegistrationDate] = useState<string>(String(user.registrationDate ?? '').trim());
     const [registrationLoading, setRegistrationLoading] = useState(false);
+    const [openedProfileImage, setOpenedProfileImage] = useState<{ url: string; fileId: string } | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const openedImageObjectUrlRef = useRef<string | null>(null);
 
     useEffect(() => {
         setCopied(false);
@@ -204,6 +207,43 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
         }
     };
 
+    const openAvatarViewer = async () => {
+        const rawAvatar = String(user.avatar || '').trim();
+        if (!rawAvatar) return;
+        const fileId = rawAvatar
+            .replace(`${API_BASE_URL}/files/`, '')
+            .replace(/^\/files\//, '')
+            .trim();
+        const token = localStorage.getItem('token') || '';
+        if (!fileId || !token) return;
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/files/${fileId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) throw new Error('Failed to load avatar');
+            const blob = await response.blob();
+            if (openedImageObjectUrlRef.current) {
+                URL.revokeObjectURL(openedImageObjectUrlRef.current);
+            }
+            const objectUrl = URL.createObjectURL(blob);
+            openedImageObjectUrlRef.current = objectUrl;
+            setOpenedProfileImage({ url: objectUrl, fileId });
+        } catch (e) {
+            console.error(e);
+            alert('نمایش تصویر پروفایل ممکن نبود');
+        }
+    };
+
+    useEffect(() => {
+        return () => {
+            if (openedImageObjectUrlRef.current) {
+                URL.revokeObjectURL(openedImageObjectUrlRef.current);
+                openedImageObjectUrlRef.current = null;
+            }
+        };
+    }, []);
+
     const saveGroup = async () => {
         if (!user.chatId) return;
 
@@ -221,7 +261,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
 
             // Ask App to refresh /chats so sidebar + header get updated.
             window.dispatchEvent(new Event('novaroom:refresh_chats'));
-            setEditingGroup(isGroup ? startInEditMode : false);
+            setEditingGroup(false);
         } catch (e) {
             console.error(e);
             setError('ویرایش گروه با خطا مواجه شد');
@@ -272,7 +312,9 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
 
             <div className="contact-info__content">
                 <div className="contact-info__avatar">
-                    <Avatar name={user.name} size="xl" online={user.online} src={user.avatar} />
+                    <button type="button" onClick={openAvatarViewer} style={{ background: 'none', border: 'none', padding: 0, cursor: user.avatar ? 'zoom-in' : 'default' }}>
+                        <Avatar name={user.name} size="xl" online={user.online} src={user.avatar} />
+                    </button>
                     <div
                         className="contact-info__name"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
@@ -288,7 +330,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
                 </div>
 
                 {isGroup && canEditGroup && editingGroup && (
-                    <div className="contact-info__card">
+                    <div className="contact-info__card" style={{ borderRadius: 16, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', border: '1px solid var(--border-primary)' }}>
                         <div className="contact-info__label">ویرایش گروه</div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -324,7 +366,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
                                         padding: 10,
                                         borderRadius: 12,
                                         border: '1px solid var(--border-primary)',
-                                        background: 'var(--bg-secondary)',
+                                        background: 'linear-gradient(180deg, var(--bg-secondary), color-mix(in srgb, var(--bg-secondary) 78%, transparent))',
                                     }}
                                 >
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
@@ -399,8 +441,6 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
                                                 type="button"
                                                 onClick={() => {
                                                     if (!canRemoveAvatar) return;
-                                                    const ok = window.confirm('عکس گروه حذف شود؟ (بعد از زدن «ذخیره» اعمال می‌شود)');
-                                                    if (!ok) return;
                                                     setError(null);
                                                     setGroupAvatar('');
                                                     setAvatarTouched(true);
@@ -485,7 +525,7 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
                                         setGroupName(String(user.name ?? ''));
                                         setGroupAvatar(String(user.avatar ?? ''));
                                         setAvatarTouched(false);
-                                        setEditingGroup(isGroup ? startInEditMode : false);
+                                        setEditingGroup(false);
                                     }}
                                     disabled={saving}
                                     style={{
@@ -598,6 +638,20 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
                     </div>
                 )}
             </div>
+            {openedProfileImage && (
+                <ImageMediaViewer
+                    imageUrl={openedProfileImage.url}
+                    token={localStorage.getItem('token') || ''}
+                    downloadFile={{ fileId: openedProfileImage.fileId, fileName: `${user.name || 'profile'}.jpg` }}
+                    onClose={() => {
+                        setOpenedProfileImage(null);
+                        if (openedImageObjectUrlRef.current) {
+                            URL.revokeObjectURL(openedImageObjectUrlRef.current);
+                            openedImageObjectUrlRef.current = null;
+                        }
+                    }}
+                />
+            )}
         </motion.div>
     );
 }
