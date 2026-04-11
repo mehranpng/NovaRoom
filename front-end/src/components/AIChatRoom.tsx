@@ -653,9 +653,8 @@ export function AIChatRoom({
                         </div>
                     ) : (
                         messages.map((message) => {
-                            if (message.isStreaming && message.reasoningEnabled) return null;
                             const isMine = message.senderId === currentUserId;
-                            const isReasoningMessage = !isMine && Boolean(message.reasoningEnabled && message.reasoningContent);
+                            const isReasoningMessage = !isMine && Boolean(message.reasoningEnabled);
                             const elapsed = reasoningElapsedByMessage[message.id] ?? Number(message.reasoningDurationSec || 0);
                             const elapsedLabel = `${toPersianDigits(Math.floor(elapsed / 60))}:${toPersianDigits(String(elapsed % 60).padStart(2, '0'))}`;
 
@@ -665,21 +664,37 @@ export function AIChatRoom({
                                     className={isMine ? 'message-row message-row--mine' : 'message-row message-row--theirs'}
                                 >
                                     {isReasoningMessage ? (
-                                        <div className="ai-reasoning-message-stack">
-                                            <div className="message-bubble message-bubble--theirs msg-shape--single ai-reasoning-wrap">
+                                        <div
+                                            className="message-bubble message-bubble--theirs msg-shape--single ai-reasoning-wrap"
+                                            onClick={(e) => {
+                                                const ne = e.nativeEvent as MouseEvent;
+                                                openMessageMenu(message.id, e.currentTarget, ne.clientX, ne.clientY);
+                                            }}
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') openMessageMenu(message.id, e.currentTarget as HTMLElement);
+                                            }}
+                                            style={{ cursor: isResponding || isTyping ? 'default' : 'pointer' }}
+                                        >
+                                            <div className="ai-reasoning-message-stack">
                                                 <button
                                                     type="button"
                                                     className="ai-reasoning-header"
-                                                    onClick={() => {
-                                                        const isOpen = reasoningPanelByMessage[message.id] ?? false;
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        e.preventDefault();
+                                                        const isOpen = reasoningPanelByMessage[message.id] ?? (message.isStreaming ? true : false);
                                                         setReasoningPanelByMessage((prev) => ({ ...prev, [message.id]: !isOpen }));
                                                     }}
                                                 >
-                                                    <span className={message.isStreaming && !(message.text || '').trim() ? 'thinking-indicator__text' : 'ai-reasoning-static-title'}>
-                                                        {(message.isStreaming && !(message.text || '').trim()) ? 'در حال استدلال' : 'روند استدلال'}
-                                                    </span>
-                                                    <span className={message.isStreaming && !(message.text || '').trim() ? 'thinking-indicator__text ai-reasoning-timer' : 'ai-reasoning-timer'}>
-                                                        {elapsedLabel}
+                                                    <span className="ai-reasoning-header-main">
+                                                        <span className={message.isStreaming && !(message.text || '').trim() ? 'thinking-indicator__text' : 'ai-reasoning-static-title'}>
+                                                            {(message.isStreaming && !(message.text || '').trim()) ? 'در حال استدلال' : 'روند استدلال'}
+                                                        </span>
+                                                        <span className='ai-reasoning-timer'>
+                                                            {elapsedLabel}
+                                                        </span>
                                                     </span>
                                                     <ChevronDown size={15} className={reasoningPanelByMessage[message.id] ? 'ai-reasoning-chevron ai-reasoning-chevron--open' : 'ai-reasoning-chevron'} />
                                                 </button>
@@ -693,33 +708,19 @@ export function AIChatRoom({
                                                             transition={{ duration: 0.2, ease: 'easeOut' }}
                                                         >
                                                             <div className="ai-reasoning-content">
-                                                                {message.reasoningContent}
+                                                                {message.reasoningContent || '...'}
                                                             </div>
                                                         </motion.div>
                                                     )}
                                                 </AnimatePresence>
-                                            </div>
-                                            <div
-                                                className="message-bubble message-bubble--theirs msg-shape--single"
-                                                onClick={(e) => {
-                                                    const ne = e.nativeEvent as MouseEvent;
-                                                    openMessageMenu(message.id, e.currentTarget, ne.clientX, ne.clientY);
-                                                }}
-                                                role="button"
-                                                tabIndex={0}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') openMessageMenu(message.id, e.currentTarget as HTMLElement);
-                                                }}
-                                                style={{ cursor: isResponding || isTyping ? 'default' : 'pointer' }}
-                                            >
-                                                <div className="message-text message-text--markdown">
+                                                <div className="ai-reasoning-answer">
                                                     <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
                                                         {message.text ?? ''}
                                                     </ReactMarkdown>
                                                 </div>
-                                                <div className="message-meta message-meta--theirs">
-                                                    <span className="message-time">{formatMessageTime(message.timestamp)}</span>
-                                                </div>
+                                            </div>
+                                            <div className="message-meta message-meta--theirs">
+                                                <span className="message-time">{formatMessageTime(message.timestamp)}</span>
                                             </div>
                                         </div>
                                     ) : (
@@ -762,7 +763,7 @@ export function AIChatRoom({
                         })
                     )}
 
-                    {isTyping && !streamingReasoningMessage && (
+                    {isTyping && !messages.some((m) => m.senderId !== currentUserId && m.isStreaming) && (
                         <div className="message-row message-row--theirs">
                             <div className="message-bubble message-bubble--theirs msg-shape--single">
                                 {isReasoningPending ? (<div className="thinking-indicator"><span className="thinking-indicator__text">در حال استدلال</span></div>) : (
@@ -770,50 +771,6 @@ export function AIChatRoom({
                                         <span></span>
                                         <span></span>
                                         <span></span>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                    {streamingReasoningMessage && (
-                        <div className="message-row message-row--theirs">
-                            <div className="message-bubble message-bubble--theirs msg-shape--single ai-reasoning-wrap">
-                                <button
-                                    type="button"
-                                    className="ai-reasoning-header"
-                                    onClick={() => {
-                                        const isOpen = reasoningPanelByMessage[streamingReasoningMessage.id] ?? true;
-                                        setReasoningPanelByMessage((prev) => ({ ...prev, [streamingReasoningMessage.id]: !isOpen }));
-                                    }}
-                                >
-                                    <span className={(streamingReasoningMessage.text || '').trim() ? 'ai-reasoning-static-title' : 'thinking-indicator__text'}>
-                                        {(streamingReasoningMessage.text || '').trim() ? 'روند استدلال' : 'در حال استدلال'}
-                                    </span>
-                                    <span className={!(streamingReasoningMessage.text || '').trim() ? 'thinking-indicator__text ai-reasoning-timer' : 'ai-reasoning-timer'}>
-                                        {`${toPersianDigits(Math.floor((reasoningElapsedByMessage[streamingReasoningMessage.id] || 0) / 60))}:${toPersianDigits(String((reasoningElapsedByMessage[streamingReasoningMessage.id] || 0) % 60).padStart(2, '0'))}`}
-                                    </span>
-                                    <ChevronDown size={15} className={reasoningPanelByMessage[streamingReasoningMessage.id] ?? true ? 'ai-reasoning-chevron ai-reasoning-chevron--open' : 'ai-reasoning-chevron'} />
-                                </button>
-                                <AnimatePresence initial={false}>
-                                    {(reasoningPanelByMessage[streamingReasoningMessage.id] ?? true) && (
-                                        <motion.div
-                                            className="ai-reasoning-body"
-                                            initial={{ height: 0, opacity: 0 }}
-                                            animate={{ height: 'auto', opacity: 1 }}
-                                            exit={{ height: 0, opacity: 0 }}
-                                            transition={{ duration: 0.2, ease: 'easeOut' }}
-                                        >
-                                            <div className="ai-reasoning-content">
-                                                {streamingReasoningMessage.reasoningContent || '...'}
-                                            </div>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                                {Boolean((streamingReasoningMessage.text || '').trim()) && (
-                                    <div className="ai-reasoning-answer">
-                                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
-                                            {streamingReasoningMessage.text ?? ''}
-                                        </ReactMarkdown>
                                     </div>
                                 )}
                             </div>
@@ -1185,7 +1142,10 @@ export function AIChatRoom({
                 .ai-chat-drawer__item-title {
                     direction: rtl;
                     text-align: right;
-                    justify-content: flex-end;
+                    width: 100%;
+                    display: flex;
+                    flex-direction: row-reverse;
+                    justify-content: flex-start;
                 }
                 .ai-reasoning-wrap {
                     width: min(100%, 560px);
@@ -1208,11 +1168,15 @@ export function AIChatRoom({
                     direction: rtl;
                     color: var(--text-secondary);
                 }
+                .ai-reasoning-header-main {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 8px;
+                }
                 .ai-reasoning-timer {
                     font-variant-numeric: tabular-nums;
                     font-size: 12px;
                     opacity: 0.8;
-                    margin-inline-start: 8px;
                 }
                 .ai-reasoning-chevron {
                     transition: transform 0.2s ease;
@@ -1240,6 +1204,21 @@ export function AIChatRoom({
                     margin-top: 6px;
                     border-top: 1px solid var(--border-secondary);
                     padding-top: 8px;
+                }
+                .ai-chat-room .message-text--markdown {
+                    max-width: 100%;
+                    overflow-x: hidden;
+                }
+                .ai-chat-room .message-text--markdown pre,
+                .ai-chat-room .message-text--markdown .md-code-block-wrapper,
+                .ai-chat-room .message-text--markdown .md-code-block {
+                    max-width: 100%;
+                }
+                .ai-chat-room .message-text--markdown pre,
+                .ai-chat-room .message-text--markdown code {
+                    overflow-x: auto;
+                    word-break: break-word;
+                    overflow-wrap: anywhere;
                 }
                 @keyframes thinking-shimmer {
                     0% { background-position: 220% 0; }
