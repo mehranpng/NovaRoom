@@ -9,6 +9,7 @@ interface FileUploadProps {
     token: string;
     chatId: string;
     onFileUploaded: (file: FileMetadata) => void;
+    fileAttached?: boolean;
 }
 
 type UploadTask = {
@@ -16,12 +17,13 @@ type UploadTask = {
     fileName: string;
     progress: number;
     result?: FileMetadata;
+    delivered?: boolean;
     listeners: Set<(task: UploadTask) => void>;
 };
 
 const uploadTasksByChat = new Map<string, UploadTask>();
 
-export function FileUpload({ token, chatId, onFileUploaded }: FileUploadProps) {
+export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false }: FileUploadProps) {
     const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
@@ -69,12 +71,17 @@ export function FileUpload({ token, chatId, onFileUploaded }: FileUploadProps) {
         }
 
         const handleTask = (task: UploadTask) => {
-            setUploading(task.status === 'uploading');
-            setUploadProgress(task.progress || 0);
+            const waitingForFileBox = task.status === 'done' && !fileAttached;
+            setUploading(task.status === 'uploading' || waitingForFileBox);
+            setUploadProgress(task.status === 'done' ? 100 : (task.progress || 0));
             setSelectedFileName(task.fileName);
-            if (task.status === 'done' && task.result) {
+            if (task.status === 'done' && task.result && !task.delivered) {
+                task.delivered = true;
                 onFileUploaded(task.result);
+            }
+            if (task.status === 'done' && fileAttached) {
                 uploadTasksByChat.delete(chatId);
+                resetUpload();
             }
         };
 
@@ -84,7 +91,7 @@ export function FileUpload({ token, chatId, onFileUploaded }: FileUploadProps) {
         return () => {
             existingTask.listeners.delete(handleTask);
         };
-    }, [chatId, onFileUploaded]);
+    }, [chatId, onFileUploaded, fileAttached]);
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         setPickerSession(false);
@@ -195,9 +202,6 @@ export function FileUpload({ token, chatId, onFileUploaded }: FileUploadProps) {
                         setUploadProgress(100);
                         task.result = response.file;
                         pushTaskUpdate(task);
-                        window.setTimeout(() => {
-                            resetUpload();
-                        }, 260);
                     } else {
                         throw new Error('Invalid response');
                     }

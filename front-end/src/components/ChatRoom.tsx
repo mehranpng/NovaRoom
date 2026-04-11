@@ -8,7 +8,7 @@ import type { Components } from 'react-markdown';
 import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
-import { apiFetch, getMessageSeenBy } from '../config/api';
+import { API_BASE_URL, apiFetch, getMessageSeenBy } from '../config/api';
 import { ContactInfo } from './ContactInfo';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
 import { ReactionPicker } from './ReactionPicker';
@@ -115,6 +115,25 @@ function resolveVerified(val: any): boolean {
     if (val === null || val === undefined) return false;
     if (val === false || val === 0 || val === 'false' || val === '0') return false;
     return true;
+}
+
+function resolveAvatarUrl(rawAvatar: string): string {
+    const avatar = String(rawAvatar || '').trim();
+    if (!avatar) return '';
+    if (avatar.startsWith('blob:') || avatar.startsWith('data:')) return avatar;
+    if (avatar.startsWith('http://') || avatar.startsWith('https://')) return avatar;
+    if (avatar.startsWith('/')) return `${API_BASE_URL}${avatar}`;
+    return `${API_BASE_URL}/files/${avatar}`;
+}
+
+function extractFileIdFromAvatar(rawAvatar: string): string {
+    const avatar = String(rawAvatar || '').trim();
+    if (!avatar) return '';
+    const withoutOrigin = avatar.startsWith(API_BASE_URL) ? avatar.slice(API_BASE_URL.length) : avatar;
+    const match = withoutOrigin.match(/\/(?:files|avatars)\/([^/?#]+)/);
+    if (match?.[1]) return decodeURIComponent(match[1]);
+    if (!avatar.startsWith('http://') && !avatar.startsWith('https://') && !avatar.startsWith('/')) return avatar;
+    return '';
 }
 
 type GroupMember = {
@@ -378,6 +397,8 @@ export function ChatRoom({
     const [displayUnreadCount, setDisplayUnreadCount] = useState<number>(initialUnreadCount);
     const [openedImage, setOpenedImage] = useState<{ url: string; file: FileMetadata | null } | null>(null);
     const [openedVideo, setOpenedVideo] = useState<{ url: string; file: FileMetadata | null } | null>(null);
+    const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId: string; fileName: string } | null>(null);
+    const openedGroupAvatarObjectUrlRef = useRef<string | null>(null);
 
     // Auto-jump bookkeeping to avoid saving an automatic scroll position as user's scroll memory.
     const autoJumpedToUnreadRef = useRef(false);
@@ -429,6 +450,44 @@ export function ChatRoom({
         if (displayUnreadCount <= 0) return;
         unreadConsumedInSessionRef.current = true;
         window.setTimeout(() => onConsumeInitialUnread?.(chatId), 0);
+    };
+
+    useEffect(() => {
+        return () => {
+            if (openedGroupAvatarObjectUrlRef.current) {
+                URL.revokeObjectURL(openedGroupAvatarObjectUrlRef.current);
+                openedGroupAvatarObjectUrlRef.current = null;
+            }
+        };
+    }, []);
+
+    const openGroupAvatarViewer = async () => {
+        const rawAvatar = String(contact.avatar || '').trim();
+        if (!rawAvatar) return;
+        const avatarUrl = resolveAvatarUrl(rawAvatar);
+        const token = localStorage.getItem('token') || '';
+        if (!avatarUrl || !token) return;
+
+        try {
+            const response = await fetch(avatarUrl, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) throw new Error('Failed to load group avatar');
+            const blob = await response.blob();
+            if (openedGroupAvatarObjectUrlRef.current) {
+                URL.revokeObjectURL(openedGroupAvatarObjectUrlRef.current);
+            }
+            const objectUrl = URL.createObjectURL(blob);
+            openedGroupAvatarObjectUrlRef.current = objectUrl;
+            setOpenedGroupAvatar({
+                url: objectUrl,
+                fileId: extractFileIdFromAvatar(rawAvatar),
+                fileName: `${contact.name || 'group'}.jpg`,
+            });
+        } catch (error) {
+            console.error(error);
+            alert('نمایش تصویر گروه ممکن نبود');
+        }
     };
 
     const scrollToBottom = (smooth = false) => {
@@ -1503,6 +1562,7 @@ export function ChatRoom({
         const inviteLink = contact.username && isInviteLink(contact.username) ? contact.username : null;
 
         return (
+            <>
             <div className="contact-info">
                 <div className="contact-info__header">
                     <button className="contact-info__back" onClick={() => {
@@ -1533,7 +1593,14 @@ export function ChatRoom({
 
                 <div className="contact-info__content">
                     <div className="contact-info__avatar">
-                        <Avatar name={contact.name} size="xl" src={contact.avatar} />
+                        <button
+                            type="button"
+                            onClick={openGroupAvatarViewer}
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: contact.avatar ? 'zoom-in' : 'default' }}
+                            aria-label="Open group avatar"
+                        >
+                            <Avatar name={contact.name} size="xl" src={contact.avatar} />
+                        </button>
                         <div className="contact-info__name" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{contact.name}</div>
                         <div className="contact-info__status chat-room__contact-status--online" style={{ color: '#22c55e' }}>
                             {membersList.length} عضو • {onlineCount} آنلاین
@@ -1614,6 +1681,21 @@ export function ChatRoom({
                     </div>
                 </div>
             </div>
+            {openedGroupAvatar && (
+                <ImageMediaViewer
+                    imageUrl={openedGroupAvatar.url}
+                    token={token}
+                    downloadFile={{ fileId: openedGroupAvatar.fileId, fileName: openedGroupAvatar.fileName }}
+                    onClose={() => {
+                        setOpenedGroupAvatar(null);
+                        if (openedGroupAvatarObjectUrlRef.current) {
+                            URL.revokeObjectURL(openedGroupAvatarObjectUrlRef.current);
+                            openedGroupAvatarObjectUrlRef.current = null;
+                        }
+                    }}
+                />
+            )}
+            </>
         );
     }
 
@@ -2218,7 +2300,7 @@ export function ChatRoom({
                     </div>
                 )}
                 <div className="chat-room__input-wrapper">
-                    <FileUpload token={token} chatId={chatId} onFileUploaded={handleFileUploaded} />
+                    <FileUpload token={token} chatId={chatId} onFileUploaded={handleFileUploaded} fileAttached={Boolean(uploadedFile)} />
                     <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
                         value={text} onChange={(e) => setText(e.target.value)}
                         onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
@@ -2287,6 +2369,7 @@ export function ChatRoom({
                     </motion.div>
                 )}
             </AnimatePresence>
+
         </motion.div>
     );
 }

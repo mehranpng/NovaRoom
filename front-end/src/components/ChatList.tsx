@@ -143,7 +143,7 @@ function getFilePreviewLabel(file: any): string {
 
 function extractLastMessageFile(lastMessage: any): any {
     if (!lastMessage) return null;
-    return (
+    const detectedFile = (
         lastMessage?.file ||
         lastMessage?.attachment ||
         lastMessage?.media ||
@@ -156,6 +156,29 @@ function extractLastMessageFile(lastMessage: any): any {
         lastMessage?.payload?.media ||
         null
     );
+    if (detectedFile) return detectedFile;
+
+    const rootFileId = String(
+        lastMessage?.fileId
+        || lastMessage?.file_id
+        || lastMessage?.mediaId
+        || lastMessage?.media_id
+        || lastMessage?.attachmentId
+        || ''
+    ).trim();
+    const rootMime = String(lastMessage?.mimeType || lastMessage?.mime_type || '').trim();
+    const rootFileName = String(lastMessage?.fileName || lastMessage?.file_name || lastMessage?.name || '').trim();
+    const rootType = String(lastMessage?.messageType || lastMessage?.message_type || lastMessage?.fileType || lastMessage?.file_type || lastMessage?.mediaType || '').trim();
+    if (rootFileId || rootMime || rootFileName || rootType) {
+        return {
+            fileId: rootFileId,
+            mimeType: rootMime,
+            fileName: rootFileName,
+            fileType: rootType,
+            messageType: rootType,
+        };
+    }
+    return null;
 }
 
 function extractLastMessageText(lastMessage: any): string {
@@ -167,6 +190,9 @@ function extractLastMessageText(lastMessage: any): string {
         || lastMessage?.message?.text
         || lastMessage?.payload?.caption
         || lastMessage?.payload?.text
+        || lastMessage?.message_caption
+        || lastMessage?.fileCaption
+        || lastMessage?.file_caption
         || ''
     ).trim();
 }
@@ -179,7 +205,14 @@ function getLastMessagePreview(lastMessage: any, fallback: string): string {
         const prefix = getFilePreviewLabel(file);
         return text ? `${prefix} • ${text}` : prefix;
     }
-    const messageType = String(lastMessage?.messageType || lastMessage?.type || lastMessage?.payload?.type || '').toLowerCase();
+    const messageType = String(
+        lastMessage?.messageType
+        || lastMessage?.message_type
+        || lastMessage?.type
+        || lastMessage?.payload?.type
+        || lastMessage?.payload?.messageType
+        || ''
+    ).toLowerCase();
     if (messageType.includes('image')) return text ? `🖼️ تصویر • ${text}` : '🖼️ تصویر';
     if (messageType.includes('video')) return text ? `🎥 ویدیو • ${text}` : '🎥 ویدیو';
     if (messageType.includes('audio') || messageType.includes('voice')) return text ? `🎵 صوت • ${text}` : '🎵 صوت';
