@@ -19,6 +19,8 @@ import { ImageMediaViewer } from './ImageMediaViewer';
 import { VideoMediaViewer } from './VideoMediaViewer';
 import './FileComponents.css';
 
+const pendingUploadedFileByChat: Record<string, FileMetadata | null> = {};
+
 interface ChatRoomProps {
     chatId: string;
     contact: User;
@@ -948,7 +950,10 @@ export function ChatRoom({
         }
     };
 
-    const handleFileUploaded = (file: FileMetadata) => setUploadedFile(file);
+    const handleFileUploaded = (file: FileMetadata) => {
+        pendingUploadedFileByChat[chatId] = file;
+        setUploadedFile(file);
+    };
 
     const cleanupUploadedFile = async (file: FileMetadata | null) => {
         if (!file?.fileId) return;
@@ -994,15 +999,6 @@ export function ChatRoom({
         };
     }, []);
 
-    useEffect(() => {
-        return () => {
-            if (uploadedFile) {
-                void cleanupUploadedFile(uploadedFile);
-            }
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [uploadedFile?.fileId]);
-
     // Save scroll when leaving current chatId (unmount or switching to another chat).
     useEffect(() => {
         return () => {
@@ -1026,8 +1022,8 @@ export function ChatRoom({
         setForwardSourceUser(null);
         setReplyTo(null); setEditingId(null);
         setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
-        if (uploadedFile) void cleanupUploadedFile(uploadedFile);
-        setText(''); setUploadedFile(null);
+        setText('');
+        setUploadedFile(pendingUploadedFileByChat[chatId] || null);
         setUnreadAnchorId(null);
         setOptimisticReactions({});
         setSeenByLoadingMessageId(null);
@@ -1243,6 +1239,7 @@ export function ChatRoom({
         if (pendingForwardDraft && !editingId) {
             void handleForwardMessage(pendingForwardDraft.sourceChatId, pendingForwardDraft.messageId, chatId);
         }
+        pendingUploadedFileByChat[chatId] = null;
         setText(''); setUploadedFile(null); setReplyTo(null); setEditingId(null);
         requestAnimationFrame(() => scrollToBottom(true));
     };
@@ -2199,6 +2196,7 @@ export function ChatRoom({
                         </div>
                         <button type="button" className="icon-btn" aria-label="Remove file" onClick={() => {
                             if (uploadedFile) void cleanupUploadedFile(uploadedFile);
+                            pendingUploadedFileByChat[chatId] = null;
                             setUploadedFile(null);
                         }}><X size={18} /></button>
                     </div>
@@ -2220,7 +2218,7 @@ export function ChatRoom({
                     </div>
                 )}
                 <div className="chat-room__input-wrapper">
-                    <FileUpload token={token} onFileUploaded={handleFileUploaded} />
+                    <FileUpload token={token} chatId={chatId} onFileUploaded={handleFileUploaded} />
                     <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
                         value={text} onChange={(e) => setText(e.target.value)}
                         onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
@@ -2245,8 +2243,8 @@ export function ChatRoom({
 
             <AnimatePresence>
                 {confirmDeleteChat && (
-                    <motion.div className="chat-room-modal-overlay" ref={confirmDeleteChatRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
-                        <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+                    <motion.div className="chat-room-modal-overlay" ref={confirmDeleteChatRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16, ease: 'easeOut' }}>
+                        <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 12, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.985 }} transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}>
                         <h3 className="chat-room-confirm-modal__title">{isGroupChat ? 'گروه حذف شود؟' : 'گفتگو حذف شود؟'}</h3>
                         <p className="chat-room-confirm-modal__text">
                             {isGroupChat ? 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.' : 'این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'}
@@ -2262,8 +2260,8 @@ export function ChatRoom({
 
             <AnimatePresence>
                 {confirmLeaveGroup && (
-                    <motion.div className="chat-room-modal-overlay" ref={confirmLeaveGroupRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
-                        <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+                    <motion.div className="chat-room-modal-overlay" ref={confirmLeaveGroupRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16, ease: 'easeOut' }}>
+                        <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 12, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.985 }} transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}>
                         <h3 className="chat-room-confirm-modal__title">خروج از گروه؟</h3>
                         <p className="chat-room-confirm-modal__text">آیا می‌خواهید از گروه خارج شوید؟ گروه برای شما حذف خواهد شد.</p>
                         <div className="chat-room-confirm-modal__actions">
@@ -2277,8 +2275,8 @@ export function ChatRoom({
 
             <AnimatePresence>
                 {confirmDeleteMsg && (
-                    <motion.div className="chat-room-modal-overlay" ref={confirmDeleteMsgRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
-                        <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
+                    <motion.div className="chat-room-modal-overlay" ref={confirmDeleteMsgRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16, ease: 'easeOut' }}>
+                        <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 12, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.985 }} transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}>
                         <h3 className="chat-room-confirm-modal__title">این پیام حذف شود؟</h3>
                         <p className="chat-room-confirm-modal__text">این عمل پیام را کامل حذف میکند.</p>
                         <div className="chat-room-confirm-modal__actions">

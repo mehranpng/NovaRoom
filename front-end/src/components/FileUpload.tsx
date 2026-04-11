@@ -7,11 +7,22 @@ import { validateFileSize } from '../utils/fileUtils';
 
 interface FileUploadProps {
     token: string;
+    chatId: string;
     onFileUploaded: (file: FileMetadata) => void;
 }
 
-export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+type UploadTask = {
+    status: 'uploading' | 'done' | 'error';
+    fileName: string;
+    progress: number;
+    result?: FileMetadata;
+    listeners: Set<(task: UploadTask) => void>;
+};
+
+const uploadTasksByChat = new Map<string, UploadTask>();
+
+export function FileUpload({ token, chatId, onFileUploaded }: FileUploadProps) {
+    const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [pickerMenuOpen, setPickerMenuOpen] = useState(false);
@@ -20,7 +31,37 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
     const audioInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
-    const abortControllerRef = useRef<AbortController | null>(null);
+
+    const pushTaskUpdate = (task: UploadTask) => {
+        task.listeners.forEach((listener) => listener(task));
+    };
+
+    useEffect(() => {
+        const existingTask = uploadTasksByChat.get(chatId);
+        if (!existingTask) {
+            setUploading(false);
+            setUploadProgress(0);
+            setSelectedFileName(null);
+            return;
+        }
+
+        const handleTask = (task: UploadTask) => {
+            setUploading(task.status === 'uploading');
+            setUploadProgress(task.progress || 0);
+            setSelectedFileName(task.fileName);
+            if (task.status === 'done' && task.result) {
+                onFileUploaded(task.result);
+                uploadTasksByChat.delete(chatId);
+            }
+        };
+
+        existingTask.listeners.add(handleTask);
+        handleTask(existingTask);
+
+        return () => {
+            existingTask.listeners.delete(handleTask);
+        };
+    }, [chatId, onFileUploaded]);
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -30,12 +71,12 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
         if (!validateFileSize(file.size)) {
             alert('حجم فایل نباید بیشتر از ۱۰ مگابایت باشد');
             e.currentTarget.value = '';
-            setSelectedFile(null);
+            setSelectedFileName(null);
             return;
         }
 
         setPickerMenuOpen(false);
-        setSelectedFile(file);
+        setSelectedFileName(file.name);
         uploadFile(file);
     };
 
@@ -67,10 +108,13 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
 
         const formData = new FormData();
         formData.append('file', file);
-
-        // Create AbortController for cancellation
-        const abortController = new AbortController();
-        abortControllerRef.current = abortController;
+        const task: UploadTask = {
+            status: 'uploading',
+            fileName: file.name,
+            progress: 0,
+            listeners: new Set(),
+        };
+        uploadTasksByChat.set(chatId, task);
 
         try {
             const xhr = new XMLHttpRequest();
@@ -80,6 +124,8 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
                 if (e.lengthComputable) {
                     const progress = Math.round((e.loaded / e.total) * 100);
                     setUploadProgress(progress);
+                    task.progress = progress;
+                    pushTaskUpdate(task);
                 }
             });
 
@@ -88,7 +134,10 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
                 if (xhr.status === 200) {
                     const response = JSON.parse(xhr.responseText);
                     if (response.success && response.file) {
-                        onFileUploaded(response.file);
+                        task.status = 'done';
+                        task.progress = 100;
+                        task.result = response.file;
+                        pushTaskUpdate(task);
                         resetUpload();
                     } else {
                         throw new Error('Invalid response');
@@ -102,18 +151,19 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
             xhr.addEventListener('error', () => {
                 console.error('Upload error');
                 alert('خطا در آپلود فایل');
+                task.status = 'error';
+                pushTaskUpdate(task);
+                uploadTasksByChat.delete(chatId);
                 resetUpload();
             });
 
             // Handle abort
             xhr.addEventListener('abort', () => {
                 console.log('Upload cancelled');
+                task.status = 'error';
+                pushTaskUpdate(task);
+                uploadTasksByChat.delete(chatId);
                 resetUpload();
-            });
-
-            // Setup abort signal
-            abortController.signal.addEventListener('abort', () => {
-                xhr.abort();
             });
 
             // Start upload
@@ -124,15 +174,15 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
         } catch (error) {
             console.error('Upload error:', error);
             alert('خطا در آپلود فایل');
+            uploadTasksByChat.delete(chatId);
             resetUpload();
         }
     };
 
     const resetUpload = () => {
-        setSelectedFile(null);
+        setSelectedFileName(null);
         setUploading(false);
         setUploadProgress(0);
-        abortControllerRef.current = null;
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
@@ -227,7 +277,7 @@ export function FileUpload({ token, onFileUploaded }: FileUploadProps) {
                 )}
             </AnimatePresence>
 
-            {uploading && selectedFile && (
+            {uploading && selectedFileName && (
                 <div
                     className="file-upload-progress-inline"
                     role="progressbar"
