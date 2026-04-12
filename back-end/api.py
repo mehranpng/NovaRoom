@@ -355,6 +355,31 @@ async def _is_direct_blocked_between(user_a: str, user_b: str) -> bool:
     return user_b in a_blocked or user_a in b_blocked
 
 
+async def _filter_recipients_by_block_status(
+    actor_id: str, candidate_ids: Iterable[str]
+) -> List[str]:
+    unique_candidates = [str(cid or "").strip() for cid in candidate_ids]
+    unique_candidates = [cid for cid in unique_candidates if cid and cid != actor_id]
+    if not unique_candidates:
+        return []
+
+    rows = await cl_users.find(
+        {"chatId": {"$in": [actor_id, *unique_candidates]}},
+        {"chatId": 1, "settings.blockedChatIds": 1},
+    ).to_list(len(unique_candidates) + 1)
+
+    by_id = {str(r.get("chatId")): r for r in rows}
+    actor_blocked = set(_get_blocked_from_user_doc(by_id.get(actor_id) or {}))
+
+    allowed: List[str] = []
+    for cid in unique_candidates:
+        cand_blocked = set(_get_blocked_from_user_doc(by_id.get(cid) or {}))
+        if cid in actor_blocked or actor_id in cand_blocked:
+            continue
+        allowed.append(cid)
+    return allowed
+
+
 def _user_can_pin_chat(user_id: str, chat_id: str) -> bool:
     # Allow pin for saved messages.
     if chat_id == get_saved_messages_id(user_id):
@@ -482,6 +507,10 @@ async def block_user(
             }
         },
     )
+    await broadcast(
+        [my_id, target_id],
+        {"type": "block_status_changed", "userId": my_id, "targetUserId": target_id},
+    )
     user = await cl_users.find_one({"chatId": my_id}, {"settings": 1})
     return {"blockedChatIds": _get_blocked_from_user_doc(user or {})}
 
@@ -508,6 +537,10 @@ async def unblock_user(
                 "settings.blockedUpdatedAt": utc_now(),
             }
         },
+    )
+    await broadcast(
+        [my_id, target_id],
+        {"type": "block_status_changed", "userId": my_id, "targetUserId": target_id},
     )
     user = await cl_users.find_one({"chatId": my_id}, {"settings": 1})
     return {"blockedChatIds": _get_blocked_from_user_doc(user or {})}
@@ -1101,6 +1134,14 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
             (pid for pid in chat.get("participants", []) if pid != my_id), None
         )
         other_user = user_by_id.get(other_id) if (other_id and not is_group) else None
+        blocked_by_me = bool(other_id and other_id in my_blocked_ids)
+        other_blocked_ids = (
+            set(_get_blocked_from_user_doc(other_user))
+            if (other_user and not is_group)
+            else set()
+        )
+        blocked_by_other = bool(not is_group and my_id in other_blocked_ids)
+        blocked_relation = blocked_by_me or blocked_by_other
 
         last_msg = chat.get("lastMessage")
         if isinstance(last_msg, dict) and last_msg.get("timestamp") is not None:
@@ -1152,15 +1193,13 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                         False
                         if is_group
                         else (
-                            False
-                            if (other_id in my_blocked_ids)
-                            else (
-                                other_user.get("online", False)
-                                if other_user
-                                else False
+                            False if blocked_relation else (
+                                other_user.get("online", False) if other_user else False
                             )
                         )
                     ),
+                    "blockedByMe": blocked_by_me if not is_group else False,
+                    "blockedByOther": blocked_by_other if not is_group else False,
                     "verified": (
                         False
                         if is_group
@@ -2005,8 +2044,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     if p != chat_id:
                         contacts_to_notify.add(p)
 
+            allowed_contacts = await _filter_recipients_by_block_status(
+                chat_id, contacts_to_notify
+            )
             await broadcast(
-                contacts_to_notify,
+                allowed_contacts,
                 {"type": "user_status", "userId": chat_id, "online": True},
             )
 
@@ -2523,8 +2565,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         if p != chat_id:
                             contacts_to_notify.add(p)
 
+                allowed_contacts = await _filter_recipients_by_block_status(
+                    chat_id, contacts_to_notify
+                )
                 await broadcast(
-                    contacts_to_notify,
+                    allowed_contacts,
                     {"type": "user_status", "userId": chat_id, "online": False},
                 )
 

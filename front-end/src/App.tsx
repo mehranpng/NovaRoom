@@ -338,6 +338,11 @@ export function App() {
         }
     }, [isAuthenticated, isInitialChatsLoad]);
 
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        void loadChats(false);
+    }, [blockedChatIds, isAuthenticated, loadChats]);
+
     const handleLogout = useCallback(() => {
         localStorage.removeItem('token');
         setIsAuthenticated(false);
@@ -526,6 +531,11 @@ export function App() {
     const handleUserStatusChange = useCallback((userId: string, online: boolean) => {
         setChats(prev => prev.map(chat => {
             if (chat.otherUser && (chat.otherUser.username === userId || chat.participantIds.includes(userId))) {
+                const blockedByMe = Boolean((chat.otherUser as any)?.blockedByMe);
+                const blockedByOther = Boolean((chat.otherUser as any)?.blockedByOther);
+                if (blockedByMe || blockedByOther) {
+                    return { ...chat, otherUser: { ...chat.otherUser, online: false } };
+                }
                 return { ...chat, otherUser: { ...chat.otherUser, online } };
             }
             return chat;
@@ -839,7 +849,11 @@ export function App() {
             loadChats(false);
         };
         window.addEventListener('novaroom:refresh_chats', handler as any);
-        return () => window.removeEventListener('novaroom:refresh_chats', handler as any);
+        window.addEventListener('novaroom:block_status_changed', handler as any);
+        return () => {
+            window.removeEventListener('novaroom:refresh_chats', handler as any);
+            window.removeEventListener('novaroom:block_status_changed', handler as any);
+        };
     }, [isAuthenticated, loadChats]);
 
     const handleSelectChat = useCallback(async (chatId: string, options?: { navigateToRoute?: boolean }) => {
@@ -1511,6 +1525,8 @@ export function App() {
                 online: Boolean(chat.otherUser.online),
                 verified: Boolean((chat.otherUser as any)?.verified),
                 registrationDate: (chat.otherUser as any)?.registrationDate,
+                ...(typeof (chat.otherUser as any)?.blockedByMe !== 'undefined' ? { blockedByMe: Boolean((chat.otherUser as any)?.blockedByMe) } : {}),
+                ...(typeof (chat.otherUser as any)?.blockedByOther !== 'undefined' ? { blockedByOther: Boolean((chat.otherUser as any)?.blockedByOther) } : {}),
             };
         }
 

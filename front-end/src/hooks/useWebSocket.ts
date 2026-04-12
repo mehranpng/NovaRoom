@@ -152,6 +152,8 @@ export function useWebSocket({
                     onReactionUpdated?.(data.chatId, data.messageId, data.reactions);
                 } else if (data.type === 'typing') {
                     onTypingStatus?.(data.chatId, data.userId, Boolean(data.isTyping));
+                } else if (data.type === 'block_status_changed') {
+                    window.dispatchEvent(new Event('novaroom:block_status_changed'));
                 } else if (data.type === 'pong') {
                     lastPongAtRef.current = Date.now();
                 } else if (data.type === 'error' && data.requestId) {

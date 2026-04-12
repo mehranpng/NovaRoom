@@ -922,6 +922,7 @@ export function ChatList({
 
                         const isMine = chat.lastMessage?.senderId === currentUser.chatId;
                         const contact = getContact(chat);
+                        const blockedRelation = Boolean((chat.otherUser as any)?.blockedByMe || (chat.otherUser as any)?.blockedByOther);
                         const unreadCount = typeof chat.unreadCount === 'number' && chat.unreadCount > 0 ? chat.unreadCount : 0;
 
                         return (
@@ -937,7 +938,7 @@ export function ChatList({
                                 <Avatar
                                     name={contact.name}
                                     size="md"
-                                    online={group ? undefined : contact.online}
+                                    online={group || blockedRelation ? undefined : contact.online}
                                     src={contact.avatar}
                                 />
 

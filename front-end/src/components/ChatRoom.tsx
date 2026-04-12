@@ -318,7 +318,8 @@ export function ChatRoom({
     const isGroupChat = currentChat?.chatType === 'group';
     const isDirectChat = !isGroupChat;
     const isVerifiedUser = resolveVerified(currentUser?.verified);
-    const isContactBlocked = isDirectChat && !chatId.startsWith('saved_messages_') && Boolean(isUserBlocked?.(contact));
+    const blockedByOther = Boolean((contact as any)?.blockedByOther);
+    const isContactBlocked = isDirectChat && !chatId.startsWith('saved_messages_') && (blockedByOther || Boolean(isUserBlocked?.(contact)));
 
     const [text, setText] = useState('');
     const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
@@ -1564,6 +1565,7 @@ export function ChatRoom({
             <ContactInfo
                 user={infoUser}
                 isBlocked={!isGroupChat && Boolean(isUserBlocked?.(infoUser))}
+                hideOnlineStatus={!isGroupChat && (Boolean((infoUser as any)?.blockedByOther) || Boolean(isUserBlocked?.(infoUser)))}
                 onToggleBlock={!isGroupChat ? onToggleBlockUser : undefined}
                 onBack={() => {
                     setShowContactInfo(false);
@@ -1602,6 +1604,7 @@ export function ChatRoom({
             <ContactInfo
                 user={forwardSourceUser}
                 isBlocked={Boolean(isUserBlocked?.(forwardSourceUser))}
+                hideOnlineStatus={Boolean((forwardSourceUser as any)?.blockedByOther) || Boolean(isUserBlocked?.(forwardSourceUser))}
                 onToggleBlock={onToggleBlockUser}
                 onBack={() => setForwardSourceUser(null)}
                 onOpenChat={(u) => {
@@ -1626,6 +1629,7 @@ export function ChatRoom({
             <ContactInfo
                 user={memberUser}
                 isBlocked={Boolean(isUserBlocked?.(memberUser))}
+                hideOnlineStatus={Boolean((memberUser as any)?.blockedByOther) || Boolean(isUserBlocked?.(memberUser))}
                 onToggleBlock={onToggleBlockUser}
                 onBack={() => setViewingMemberId(null)}
                 onOpenChat={(u) => {

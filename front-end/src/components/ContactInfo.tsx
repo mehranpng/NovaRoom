@@ -12,6 +12,7 @@ interface ContactInfoProps {
     onBack: () => void;
     onOpenChat?: (user: User) => void;
     isBlocked?: boolean;
+    hideOnlineStatus?: boolean;
     onToggleBlock?: (user: User) => void | Promise<void>;
     onOpenMembers?: () => void;
     autoOpenMembers?: boolean;
@@ -55,6 +56,7 @@ export function ContactInfo({
     onBack,
     onOpenChat,
     isBlocked = false,
+    hideOnlineStatus = false,
     onToggleBlock,
     onOpenMembers,
     autoOpenMembers = true,
@@ -341,7 +343,7 @@ export function ContactInfo({
             <div className="contact-info__content">
                 <div className="contact-info__avatar">
                     <button type="button" onClick={openAvatarViewer} style={{ background: 'none', border: 'none', padding: 0, cursor: user.avatar ? 'zoom-in' : 'default' }}>
-                        <Avatar name={user.name} size="xl" online={user.online} src={user.avatar} />
+                        <Avatar name={user.name} size="xl" online={(isBlocked || hideOnlineStatus) ? undefined : user.online} src={user.avatar} />
                     </button>
                     <div
                         className="contact-info__name"
@@ -351,8 +353,8 @@ export function ContactInfo({
                         {!isGroup && user.verified ? <VerifiedBadge size={16} /> : null}
                     </div>
                     {!isGroup && (
-                        <div className={!isBlocked && user.online ? 'contact-info__status contact-info__status--online' : 'contact-info__status'}>
-                            {isBlocked ? 'آخرین بازدید مدت‌ها پیش' : user.online ? 'آنلاین' : 'آفلاین'}
+                        <div className={!(isBlocked || hideOnlineStatus) && user.online ? 'contact-info__status contact-info__status--online' : 'contact-info__status'}>
+                            {(isBlocked || hideOnlineStatus) ? 'آخرین بازدید مدت‌ها پیش' : user.online ? 'آنلاین' : 'آفلاین'}
                         </div>
                     )}
                 </div>
