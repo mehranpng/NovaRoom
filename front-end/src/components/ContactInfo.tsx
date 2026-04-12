@@ -12,7 +12,7 @@ interface ContactInfoProps {
     onBack: () => void;
     onOpenChat?: (user: User) => void;
     isBlocked?: boolean;
-    onToggleBlock?: (user: User) => void;
+    onToggleBlock?: (user: User) => void | Promise<void>;
     onOpenMembers?: () => void;
     autoOpenMembers?: boolean;
     startInEditMode?: boolean;

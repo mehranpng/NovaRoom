@@ -52,7 +52,7 @@ interface ChatRoomProps {
     typingUserIds?: string[];
     onTypingChange?: (chatId: string, isTyping: boolean) => void;
     isUserBlocked?: (user: User) => boolean;
-    onToggleBlockUser?: (user: User) => void;
+    onToggleBlockUser?: (user: User) => void | Promise<void>;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000;

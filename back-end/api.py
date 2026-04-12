@@ -324,6 +324,37 @@ def _get_pinned_from_user_doc(user: dict) -> List[str]:
     return out
 
 
+def _get_blocked_from_user_doc(user: dict) -> List[str]:
+    ids = ((user or {}).get("settings") or {}).get("blockedChatIds") or []
+    if not isinstance(ids, list):
+        return []
+
+    out: List[str] = []
+    seen = set()
+    for x in ids:
+        if not isinstance(x, str):
+            continue
+        cid = x.strip()
+        if not cid or cid in seen:
+            continue
+        seen.add(cid)
+        out.append(cid)
+    return out
+
+
+async def _is_direct_blocked_between(user_a: str, user_b: str) -> bool:
+    rows = await cl_users.find(
+        {"chatId": {"$in": [user_a, user_b]}},
+        {"chatId": 1, "settings.blockedChatIds": 1},
+    ).to_list(2)
+    by_id = {str(r.get("chatId")): r for r in rows}
+    a_doc = by_id.get(user_a) or {}
+    b_doc = by_id.get(user_b) or {}
+    a_blocked = set(_get_blocked_from_user_doc(a_doc))
+    b_blocked = set(_get_blocked_from_user_doc(b_doc))
+    return user_b in a_blocked or user_a in b_blocked
+
+
 def _user_can_pin_chat(user_id: str, chat_id: str) -> bool:
     # Allow pin for saved messages.
     if chat_id == get_saved_messages_id(user_id):
@@ -415,6 +446,71 @@ async def unpin_chat(chat_id: str, current_user: dict = Depends(get_current_user
 
     user = await cl_users.find_one({"chatId": user_id}, {"settings": 1})
     return {"pinnedChatIds": _get_pinned_from_user_doc(user or {})}
+
+
+@app.get("/profile/me/blocks")
+async def get_my_blocks(current_user: dict = Depends(get_current_user)):
+    return {"blockedChatIds": _get_blocked_from_user_doc(current_user)}
+
+
+@app.post("/profile/me/blocks/{target_chat_id}")
+async def block_user(
+    target_chat_id: str, current_user: dict = Depends(get_current_user)
+):
+    my_id = str(current_user["chatId"])
+    target_id = str(target_chat_id or "").strip()
+    if not target_id:
+        raise HTTPException(status_code=400, detail="Invalid target chatId")
+    if target_id == my_id:
+        raise HTTPException(status_code=400, detail="Cannot block yourself")
+
+    target_user = await cl_users.find_one({"chatId": target_id}, {"chatId": 1})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Target user not found")
+
+    blocked = _get_blocked_from_user_doc(current_user)
+    if target_id in blocked:
+        return {"blockedChatIds": blocked}
+
+    blocked.append(target_id)
+    await cl_users.update_one(
+        {"chatId": my_id},
+        {
+            "$set": {
+                "settings.blockedChatIds": blocked,
+                "settings.blockedUpdatedAt": utc_now(),
+            }
+        },
+    )
+    user = await cl_users.find_one({"chatId": my_id}, {"settings": 1})
+    return {"blockedChatIds": _get_blocked_from_user_doc(user or {})}
+
+
+@app.delete("/profile/me/blocks/{target_chat_id}")
+async def unblock_user(
+    target_chat_id: str, current_user: dict = Depends(get_current_user)
+):
+    my_id = str(current_user["chatId"])
+    target_id = str(target_chat_id or "").strip()
+    if not target_id:
+        raise HTTPException(status_code=400, detail="Invalid target chatId")
+
+    blocked = _get_blocked_from_user_doc(current_user)
+    if target_id not in blocked:
+        return {"blockedChatIds": blocked}
+
+    blocked = [x for x in blocked if x != target_id]
+    await cl_users.update_one(
+        {"chatId": my_id},
+        {
+            "$set": {
+                "settings.blockedChatIds": blocked,
+                "settings.blockedUpdatedAt": utc_now(),
+            }
+        },
+    )
+    user = await cl_users.find_one({"chatId": my_id}, {"settings": 1})
+    return {"blockedChatIds": _get_blocked_from_user_doc(user or {})}
 
 
 @app.post("/auth/register/email")
@@ -951,6 +1047,7 @@ async def update_group(
 @app.get("/chats")
 async def get_chat_list(current_user: dict = Depends(get_current_user)):
     my_id = current_user["chatId"]
+    my_blocked_ids = set(_get_blocked_from_user_doc(current_user))
     chats = (
         await cl_chats.find({"participants": my_id}).sort("updatedAt", -1).to_list(50)
     )
@@ -1054,7 +1151,15 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                     "online": (
                         False
                         if is_group
-                        else (other_user.get("online", False) if other_user else False)
+                        else (
+                            False
+                            if (other_id in my_blocked_ids)
+                            else (
+                                other_user.get("online", False)
+                                if other_user
+                                else False
+                            )
+                        )
                     ),
                     "verified": (
                         False
@@ -1622,6 +1727,12 @@ async def forward_message(
             raise HTTPException(
                 status_code=403, detail="Not authorized to send to this chat"
             )
+        if target_chat.get("chatType") != "group":
+            other_id = next((p for p in target_participants if p != user_id), "")
+            if other_id and await _is_direct_blocked_between(user_id, other_id):
+                raise HTTPException(
+                    status_code=403, detail="Direct chat is blocked between users"
+                )
 
     # Get original sender info and file data
     file_data = None
@@ -1933,11 +2044,21 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 if not is_saved:
                     chat_doc = await cl_chats.find_one(
-                        {"_id": chat_id_target}, {"participants": 1}
+                        {"_id": chat_id_target}, {"participants": 1, "chatType": 1}
                     )
                     participants = chat_doc.get("participants", []) if chat_doc else []
                     if chat_id not in participants:
                         continue
+                    if chat_doc and chat_doc.get("chatType") != "group":
+                        other_id = next((p for p in participants if p != chat_id), "")
+                        if other_id and await _is_direct_blocked_between(chat_id, other_id):
+                            await websocket.send_json(
+                                {
+                                    "type": "error",
+                                    "error": "Direct chat is blocked between users",
+                                }
+                            )
+                            continue
 
                 reply_to = None
                 if reply_to_id:
@@ -2212,11 +2333,15 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     continue
 
                 chat_doc = await cl_chats.find_one(
-                    {"_id": chat_id_target}, {"participants": 1}
+                    {"_id": chat_id_target}, {"participants": 1, "chatType": 1}
                 )
                 participants = chat_doc.get("participants", []) if chat_doc else []
                 if chat_id not in participants:
                     continue
+                if chat_doc and chat_doc.get("chatType") != "group":
+                    other_id = next((p for p in participants if p != chat_id), "")
+                    if other_id and await _is_direct_blocked_between(chat_id, other_id):
+                        continue
 
                 await broadcast(
                     [p for p in participants if p != chat_id],
