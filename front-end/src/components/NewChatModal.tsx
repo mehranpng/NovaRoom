@@ -195,7 +195,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
                 animate={isClosing ? 'exit' : 'visible'}
             >
                 <div className="modal-header">
-                    <h2>گفتگوی جدید</h2>
+                    <h2>گفتوگوی جدید</h2>
                     <button onClick={onClose} className="icon-btn" aria-label="Close">
                         <X size={20} />
                     </button>

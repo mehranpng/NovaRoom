@@ -85,7 +85,7 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward,
                     <Search size={18} />
                     <input
                         type="text"
-                        placeholder="جستجو در گفتگو‌ها..."
+                        placeholder="جستجو در گفتوگو‌ها..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -111,7 +111,7 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward,
 
                     {filteredChats.length === 0 && !showSavedMessages ? (
                         <div className="no-results">
-                            {searchQuery ? 'گفتگویی یافت نشد' : 'گفتگوی فعالی وجود ندارد'}
+                            {searchQuery ? 'گفتوگویی یافت نشد' : 'گفتوگوی فعالی وجود ندارد'}
                         </div>
                     ) : (
                         filteredChats.map((chat) => {

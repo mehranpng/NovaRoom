@@ -395,8 +395,8 @@ export function ChatList({
             };
         }
         return {
-            title: 'گفتگو حذف شود؟',
-            text: 'این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.',
+            title: 'گفتوگو حذف شود؟',
+            text: 'این عمل گفتوگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.',
             confirmLabel: 'حذف',
         };
     }, [confirmAction]);
@@ -548,7 +548,7 @@ export function ChatList({
         const currentlyPinned = prev.includes(chatId);
 
         if (!currentlyPinned && prev.length >= 20) {
-            alert('حداکثر ۲۰ گفتگو را می‌توانید سنجاق کنید');
+            alert('حداکثر ۲۰ گفتوگو را می‌توانید سنجاق کنید');
             return;
         }
 
@@ -618,7 +618,7 @@ export function ChatList({
             if (kind === 'leave_group') alert('خروج از گروه با خطا مواجه شد');
             else if (kind === 'delete_group') alert('حذف گروه با خطا مواجه شد');
             else if (kind === 'logout') alert('خروج از حساب با خطا مواجه شد');
-            else alert('حذف گفتگو با خطا مواجه شد');
+            else alert('حذف گفتوگو با خطا مواجه شد');
         } finally {
             setActionBusy((m) => ({ ...m, [chatId]: false }));
         }
@@ -825,7 +825,7 @@ export function ChatList({
                     </span>
                     <input
                         type="text"
-                        placeholder="جستجوی گفتگو..."
+                        placeholder="جستجوی گفتوگو..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="chat-list__search-input"
@@ -879,7 +879,7 @@ export function ChatList({
                 ) : filteredChats.length === 0 ? (
                     <div className="chat-list__empty">
                         <MessageSquarePlus size={48} strokeWidth={1} />
-                        <p>گفتگویی یافت نشد</p>
+                        <p>گفتوگویی یافت نشد</p>
                     </div>
                 ) : (
                     filteredChats.map((chat) => {
@@ -1085,7 +1085,7 @@ export function ChatList({
                             style={actionBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
                         >
                             <Trash2 size={16} />
-                            حذف گفتگو
+                            حذف گفتوگو
                         </button>
                     )}
                 </div>

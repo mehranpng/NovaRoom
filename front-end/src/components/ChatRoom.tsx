@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Eye, MoreVertical, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Eye, MoreVertical, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown } from 'lucide-react';
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -86,6 +86,9 @@ function iranDayNumber(ts: any): number {
 function formatMessageTime(ts: any) {
     const d = iranShiftedDate(ts);
     return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
+}
+function toPersianDigits(value: string | number): string {
+    return String(value).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)] ?? d);
 }
 
 function sameDay(a: any, b: any) {
@@ -327,6 +330,7 @@ export function ChatRoom({
     const [seenByMenu, setSeenByMenu] = useState<null | { id: string; top: number; left: number }>(null);
     const [seenByUsersByMessage, setSeenByUsersByMessage] = useState<Record<string, SeenByUser[]>>({});
     const [seenByLoadingMessageId, setSeenByLoadingMessageId] = useState<string | null>(null);
+    const [reasoningPanelByMessage, setReasoningPanelByMessage] = useState<Record<string, boolean>>({});
 
     // Optimistic reactions: messageId -> overridden reactions array
     const [optimisticReactions, setOptimisticReactions] = useState<Record<string, ReactionEntry[]>>({});
@@ -1078,6 +1082,7 @@ export function ChatRoom({
         setUploadedFile(pendingUploadedFileByChat[chatId] || null);
         setUnreadAnchorId(null);
         setOptimisticReactions({});
+        setReasoningPanelByMessage({});
         setSeenByLoadingMessageId(null);
 
         setDisplayUnreadCount(initialUnreadCount);
@@ -1308,7 +1313,7 @@ export function ChatRoom({
             await apiFetch(`/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
             setConfirmDeleteChat(false); setChatMenuOpen(false);
             if (onChatDeleted) onChatDeleted(chatId); else onBack();
-        } catch { alert('حذف گفتگو با خطا مواجه شد'); }
+        } catch { alert('حذف گفتوگو با خطا مواجه شد'); }
     };
 
     const doLeaveGroup = async () => {
@@ -1796,7 +1801,7 @@ export function ChatRoom({
                                         type="button"
                                     >
                                         <Trash2 size={16} />
-                                        حذف گفتگو
+                                        حذف گفتوگو
                                     </button>
                                 )}
                             </div>
@@ -2005,6 +2010,29 @@ export function ChatRoom({
                                                     onImageClick={(imageUrl, file) => setOpenedImage({ url: imageUrl, file })}
                                                     onVideoClick={(videoUrl, file) => setOpenedVideo({ url: videoUrl, file })}
                                                 />
+                                            )}
+                                            {Boolean(m.reasoningEnabled && m.reasoningContent) && (
+                                                <div style={{ marginBottom: 8, border: '1px solid var(--border-primary)', borderRadius: 10, padding: '8px 10px' }}>
+                                                    <button
+                                                        type="button"
+                                                        className="ai-reasoning-header"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setReasoningPanelByMessage((prev) => ({ ...prev, [m.id]: !Boolean(prev[m.id]) }));
+                                                        }}
+                                                    >
+                                                        <span className="ai-reasoning-header-main">
+                                                            <span className="ai-reasoning-static-title">روند استدلال</span>
+                                                            <span className='ai-reasoning-timer'>
+                                                                {`${toPersianDigits(Math.floor(Number(m.reasoningDurationSec || 0) / 60))}:${toPersianDigits(String(Number(m.reasoningDurationSec || 0) % 60).padStart(2, '0'))}`}
+                                                            </span>
+                                                        </span>
+                                                        <ChevronDown size={15} style={{ transform: reasoningPanelByMessage[m.id] ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }} />
+                                                    </button>
+                                                    {Boolean(reasoningPanelByMessage[m.id]) && (
+                                                        <div className="ai-reasoning-content" style={{ marginTop: 8 }}>{m.reasoningContent}</div>
+                                                    )}
+                                                </div>
                                             )}
                                             {m.text && (
                                                 <div className="message-text message-text--markdown">
@@ -2320,9 +2348,9 @@ export function ChatRoom({
                 {confirmDeleteChat && (
                     <motion.div className="chat-room-modal-overlay" ref={confirmDeleteChatRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16, ease: 'easeOut' }}>
                         <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 12, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.985 }} transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}>
-                            <h3 className="chat-room-confirm-modal__title">{isGroupChat ? 'گروه حذف شود؟' : 'گفتگو حذف شود؟'}</h3>
+                            <h3 className="chat-room-confirm-modal__title">{isGroupChat ? 'گروه حذف شود؟' : 'گفتوگو حذف شود؟'}</h3>
                             <p className="chat-room-confirm-modal__text">
-                                {isGroupChat ? 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.' : 'این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'}
+                                {isGroupChat ? 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.' : 'این عمل گفتوگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'}
                             </p>
                             <div className="chat-room-confirm-modal__actions">
                                 <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteChat(false)} type="button">لغو</button>

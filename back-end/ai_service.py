@@ -205,7 +205,7 @@ async def generate_chat_title(first_user_message: str) -> str:
     try:
         raw_message = (first_user_message or "").strip()
         if not raw_message:
-            return "گفت‌وگوی جدید"
+            return "گفتوگوی جدید"
 
         title_messages = [
             {
@@ -236,8 +236,8 @@ async def generate_chat_title(first_user_message: str) -> str:
         parsed = json.loads(payload)
         title = str(parsed.get("title") or "").strip()
         if not title:
-            return "گفت‌وگوی جدید"
+            return "گفتوگوی جدید"
         return title[:56]
     except Exception as e:
         print(f"Title generation error: {e}")
-        return "گفت‌وگوی جدید"
+        return "گفتوگوی جدید"

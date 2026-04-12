@@ -102,7 +102,7 @@ VALID_REACTIONS = [
     "❌️",
     "💩",
     "😡",
-    "🖕",
+    "😰",
 ]
 
 # Pin settings
@@ -1245,6 +1245,9 @@ async def get_messages(
                 "reactions": aggregate_reactions(m.get("reactions", [])),
                 "forwardedFrom": m.get("forwardedFrom"),
                 "file": m.get("file"),
+                "reasoningContent": m.get("reasoningContent", ""),
+                "reasoningEnabled": bool(m.get("reasoningEnabled", False)),
+                "reasoningDurationSec": int(m.get("reasoningDurationSec", 0) or 0),
             }
             for m in msgs
         ]
@@ -1298,6 +1301,9 @@ async def get_messages(
             "reactions": aggregate_reactions(m.get("reactions", [])),
             "forwardedFrom": m.get("forwardedFrom"),
             "file": m.get("file"),
+            "reasoningContent": m.get("reasoningContent", ""),
+            "reasoningEnabled": bool(m.get("reasoningEnabled", False)),
+            "reasoningDurationSec": int(m.get("reasoningDurationSec", 0) or 0),
         }
         for m in msgs
     ]
@@ -1637,6 +1643,9 @@ async def forward_message(
                 "username": profile.get("username", ""),
             }
         message_text = original_msg.get("content", "")
+        reasoning_content = str(original_msg.get("reasoningContent") or "")
+        reasoning_enabled = bool(original_msg.get("reasoningEnabled", False))
+        reasoning_duration_sec = int(original_msg.get("reasoningDurationSec", 0) or 0)
     else:
         existing_forwarded_from = (
             original_msg.get("forwardedFrom")
@@ -1688,6 +1697,9 @@ async def forward_message(
             }
         message_text = original_msg.get("text", "")
         file_data = original_msg.get("file")
+        reasoning_content = str(original_msg.get("reasoningContent") or "")
+        reasoning_enabled = bool(original_msg.get("reasoningEnabled", False))
+        reasoning_duration_sec = int(original_msg.get("reasoningDurationSec", 0) or 0)
 
     # Create forwarded message
     forwarded_msg = {
@@ -1699,6 +1711,9 @@ async def forward_message(
         "replyTo": None,  # Forwarded messages don't preserve replies
         "reactions": [],
         "forwardedFrom": forwarded_from_info,
+        "reasoningContent": reasoning_content,
+        "reasoningEnabled": reasoning_enabled,
+        "reasoningDurationSec": reasoning_duration_sec,
     }
 
     # Add file data if present
@@ -1748,6 +1763,9 @@ async def forward_message(
                 "reactions": [],
                 "forwardedFrom": forwarded_from_info,
                 "file": file_data,
+                "reasoningContent": reasoning_content,
+                "reasoningEnabled": reasoning_enabled,
+                "reasoningDurationSec": reasoning_duration_sec,
             },
         }
         await broadcast(participants_to_notify, msg_payload)
@@ -2377,7 +2395,7 @@ async def get_ai_chats(current_user: dict = Depends(get_current_user)):
     return [
         {
             "id": str(row["_id"]),
-            "title": row.get("title") or "گفت‌وگوی جدید",
+            "title": row.get("title") or "گفتوگوی جدید",
             "summary": row.get("summary") or "",
             "updatedAt": dt_to_epoch_ms(row.get("updatedAt")),
         }
@@ -2391,7 +2409,7 @@ async def create_ai_chat(current_user: dict = Depends(get_current_user)):
     now = utc_now()
     chat_doc = {
         "userId": user_id,
-        "title": "گفت‌وگوی جدید",
+        "title": "گفتوگوی جدید",
         "summary": "",
         "createdAt": now,
         "updatedAt": now,
@@ -2421,16 +2439,15 @@ async def rename_ai_chat(
     if not next_title:
         raise HTTPException(status_code=400, detail="Title is required")
 
-    now = utc_now()
     await cl_ai_chats.update_one(
         {"_id": chat["_id"]},
-        {"$set": {"title": next_title, "updatedAt": now}},
+        {"$set": {"title": next_title}},
     )
     return {
         "id": ai_chat_id,
         "title": next_title,
         "summary": chat.get("summary") or "",
-        "updatedAt": dt_to_epoch_ms(now),
+        "updatedAt": dt_to_epoch_ms(chat.get("updatedAt")),
     }
 
 
@@ -2521,6 +2538,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
             full_ai_response = ""
             full_reasoning_content = ""
             stream_started_at = time.time()
+            first_main_content_at: Optional[float] = None
             try:
                 async for chunk in generate_ai_response_stream(
                     prompt_messages,
@@ -2542,6 +2560,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                     if text_chunk:
                         full_ai_response += text_chunk
+                        if first_main_content_at is None:
+                            first_main_content_at = time.time()
                     if reasoning_chunk:
                         full_reasoning_content += reasoning_chunk
 
@@ -2572,6 +2592,15 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 stopped = True
                 raise
             finally:
+                reasoning_duration_sec = int(
+                    max(
+                        0,
+                        round(
+                            (first_main_content_at or time.time())
+                            - stream_started_at
+                        ),
+                    )
+                )
                 await cl_ai_messages.update_one(
                     {"_id": result.inserted_id},
                     {
@@ -2579,9 +2608,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "content": full_ai_response,
                             "reasoningContent": full_reasoning_content,
                             "streamCompleted": True,
-                            "reasoningDurationSec": int(
-                                max(0, round(time.time() - stream_started_at))
-                            ),
+                            "reasoningDurationSec": reasoning_duration_sec,
                         }
                     },
                 )
@@ -2592,7 +2619,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     if (
                         isinstance(candidate_title, str)
                         and candidate_title.strip()
-                        and candidate_title.strip() != "گفت‌وگوی جدید"
+                        and candidate_title.strip() != "گفتوگوی جدید"
                     ):
                         generated_title = candidate_title.strip()[:56]
                         chat_update["title"] = generated_title
@@ -2616,9 +2643,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "reasoningEnabled": bool(reasoning_mode),
                             "isStreaming": False,
                             "streamCompleted": True,
-                            "reasoningDurationSec": int(
-                                max(0, round(time.time() - stream_started_at))
-                            ),
+                            "reasoningDurationSec": reasoning_duration_sec,
                             "timestamp": message_ts_ms,
                         },
                     },
@@ -2654,7 +2679,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                             user_id,
                             {
                                 "type": "ai_error",
-                                "message": "گفت‌وگوی انتخاب‌شده معتبر نیست.",
+                                "message": "گفتوگوی انتخاب‌شده معتبر نیست.",
                             },
                         )
                         continue
@@ -2667,7 +2692,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                         user_id,
                         {
                             "type": "ai_error",
-                            "message": "حداکثر 30 پیام در هر گفتگو مجاز است. لطفاً گفت‌وگوی جدید باز کنید.",
+                            "message": "حداکثر 30 پیام در هر گفتوگو مجاز است. لطفاً گفتوگوی جدید باز کنید.",
                         },
                     )
                     continue

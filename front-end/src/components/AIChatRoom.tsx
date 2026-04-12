@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Check, SendHorizontal, Brain, PanelRight, PencilLine, Trash2, History, CornerUpLeft, ChevronDown, Menu, Pin, PinOff } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Check, SendHorizontal, Brain, PanelRight, PencilLine, Trash2, History, CornerUpLeft, ChevronDown, Menu, Pin, PinOff, MessageSquareDashed } from 'lucide-react';
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -28,10 +28,12 @@ interface AIChatRoomProps {
     activeAIChatId: string | null;
     activeAIChatTitle?: string;
     onCreateAIChat: () => void;
+    onCreateTemporaryAIChat?: () => void;
     onSelectAIChat: (chatId: string) => void;
     onDeleteAIChat: (chatId: string) => void;
     onRenameAIChat: (chatId: string, nextTitle: string) => Promise<boolean>;
     respondingAIChatId?: string | null;
+    temporaryMode?: boolean;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000; // +03:30
@@ -191,10 +193,12 @@ export function AIChatRoom({
     activeAIChatId,
     activeAIChatTitle,
     onCreateAIChat,
+    onCreateTemporaryAIChat,
     onSelectAIChat,
     onDeleteAIChat,
     onRenameAIChat,
     respondingAIChatId = null,
+    temporaryMode = false,
 }: AIChatRoomProps) {
     const MAX_AI_MESSAGE_LENGTH = 3000;
     const [text, setText] = useState('');
@@ -491,7 +495,7 @@ export function AIChatRoom({
             autoClosedReasoningRef.current[streamMessageId] = true;
             setReasoningPanelByMessage((prev) => ({ ...prev, [streamMessageId]: false }));
         }
-        if (hasMainResponseStarted && !reasoningStopAtRef.current[streamMessageId]) {
+        if ((hasMainResponseStarted || !streamingReasoningMessage?.isStreaming) && !reasoningStopAtRef.current[streamMessageId]) {
             reasoningStopAtRef.current[streamMessageId] = Date.now();
         }
 
@@ -544,7 +548,7 @@ export function AIChatRoom({
     const togglePinAIChat = (chatId: string) => {
         const pinned = pinnedAIChatIds.includes(chatId);
         if (!pinned && pinnedAIChatIds.length >= 10) {
-            notify({ message: 'حداکثر ۱۰ گفت‌وگوی AI را می‌توانید سنجاق کنید.', type: 'info' });
+            notify({ message: 'حداکثر ۱۰ گفتوگوی AI را می‌توانید سنجاق کنید.', type: 'info' });
             return;
         }
         const next = pinned
@@ -739,7 +743,7 @@ export function AIChatRoom({
                 <div className="chat-room__header-clickable chat-room__header-clickable--full ai-chat-room__header-main">
                     <div className="ai-chat-room__header-brand">NovaRoom AI</div>
                     <div className="ai-chat-room__header-title">
-                        {activeAIChatTitle || 'گفت‌وگوی جدید'}
+                        {activeAIChatTitle || 'گفتوگوی جدید'}
                     </div>
                 </div>
                 <button
@@ -763,7 +767,13 @@ export function AIChatRoom({
                         <ChatMessagesSkeleton />
                     ) : messages.length === 0 && !isResponding && !isTyping ? (
                         <div className="ai-chat-empty-state">
-                            {emptyStatePrompt}
+                            {temporaryMode ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                                    <MessageSquareDashed size={34} />
+                                    <div style={{ fontSize: 24, fontWeight: 800 }}>گفتوگو موقت</div>
+                                    <div style={{ fontSize: 13, fontWeight: 500, opacity: 0.85 }}>پیام‌های گفتوگو موقت ذخیره نمی‌شوند و با خروج از این صفحه حذف می‌شوند.</div>
+                                </div>
+                            ) : emptyStatePrompt}
                         </div>
                     ) : (
                         messages.map((message) => {
@@ -920,7 +930,7 @@ export function AIChatRoom({
                                 type="button"
                                 className="ai-chat-drawer__icon-btn"
                                 onClick={() => setAIChatsDrawerOpen(false)}
-                                aria-label="بستن منوی گفت‌وگوها"
+                                aria-label="بستن منوی گفتوگوها"
                             >
                                 <PanelRight size={18} />
                             </button>
@@ -934,8 +944,20 @@ export function AIChatRoom({
                                     setAIChatsDrawerOpen(false);
                                 }}
                             >
-                                <span>گفت‌وگوی جدید</span>
+                                <span>گفتوگوی جدید</span>
                                 <PencilLine size={16} />
+                            </button>
+                            <button
+                                type="button"
+                                className="ai-chat-drawer__new-chat ai-chat-drawer__new-chat--temporary"
+                                onClick={() => {
+                                    onCreateTemporaryAIChat?.();
+                                    setAIChatActionMenu(null);
+                                    setAIChatsDrawerOpen(false);
+                                }}
+                            >
+                                <span>گفتوگو موقت</span>
+                                <MessageSquareDashed size={16} />
                             </button>
 
                             <div className="ai-chat-drawer__section-header">
@@ -958,8 +980,8 @@ export function AIChatRoom({
                                             }}
                                         >
                                             {respondingAIChatId === chat.id && <span className="ai-chat-drawer__loader" />}
-                                            {pinnedAIChatIds.includes(chat.id) && <Pin size={13} className="ai-chat-drawer__pin" />}
-                                            {chat.title || 'گفت‌وگوی جدید'}
+                                            {pinnedAIChatIds.includes(chat.id) && <Pin size={13} className="ai-chat-drawer__pin" style={{ fill: 'currentColor' }} />}
+                                            {chat.title || 'گفتوگوی جدید'}
                                         </button>
                                         <button
                                             type="button"
@@ -968,7 +990,7 @@ export function AIChatRoom({
                                                 aiChatActionBtnRef.current = e.currentTarget;
                                                 openAIChatActionMenu(chat.id, e.currentTarget);
                                             }}
-                                            aria-label="گزینه‌های گفت‌وگو"
+                                            aria-label="گزینه‌های گفتوگو"
                                         >
                                             <Menu size={16} />
                                         </button>
@@ -1008,7 +1030,7 @@ export function AIChatRoom({
                         تغییر نام
                     </button>
                     <button
-                        className="popover__item"
+                        className="popover__item popover__item--danger"
                         type="button"
                         onClick={() => {
                             const target = aiChats.find((c) => c.id === aiChatActionMenu.chatId) || null;
@@ -1043,9 +1065,9 @@ export function AIChatRoom({
                             exit={{ opacity: 0, y: 10, scale: 0.98 }}
                             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                         >
-                            <h3 className="chat-room-confirm-modal__title">حذف گفت‌وگو؟</h3>
+                            <h3 className="chat-room-confirm-modal__title">حذف گفتوگو؟</h3>
                             <p className="chat-room-confirm-modal__text">
-                                {`گفت‌وگوی «${pendingDeleteChat.title || 'گفت‌وگوی جدید'}» حذف شود؟`}
+                                {`گفتوگوی «${pendingDeleteChat.title || 'گفتوگوی جدید'}» حذف شود؟`}
                             </p>
                             <div className="chat-room-confirm-modal__actions">
                                 <button
@@ -1091,7 +1113,7 @@ export function AIChatRoom({
                             exit={{ opacity: 0, y: 10, scale: 0.98 }}
                             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                         >
-                            <h3 className="chat-room-confirm-modal__title">تغییر نام گفت‌وگو</h3>
+                            <h3 className="chat-room-confirm-modal__title">تغییر نام گفتوگو</h3>
                             <input
                                 value={renameTitleInput}
                                 onChange={(e) => setRenameTitleInput(e.target.value)}
@@ -1469,6 +1491,10 @@ export function AIChatRoom({
                 .ai-chat-drawer__pin {
                     color: #2f80ed;
                     flex-shrink: 0;
+                }
+                .ai-chat-drawer__new-chat--temporary {
+                    border-style: dashed;
+                    opacity: 0.95;
                 }
                 .chat-room-confirm-modal__input {
                     width: 100%;

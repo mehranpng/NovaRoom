@@ -8,7 +8,7 @@ interface ReactionPickerProps {
     onClose: () => void;
 }
 
-const EMOJIS = ['👍', '👎', '🤣', '😢', '❤️', '💔', '😐', '😍', '🤔', '✅️', '❌️', '💩', '😡', '🖕'];
+const EMOJIS = ['👍', '👎', '🤣', '😢', '❤️', '💔', '😐', '😍', '🤔', '✅️', '❌️', '💩', '😡', '😰'];
 
 export function ReactionPicker({ messageId, currentReaction, onReact, onDeleteReaction }: ReactionPickerProps) {
     const emojisRef = useRef<HTMLDivElement | null>(null);
