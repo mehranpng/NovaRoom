@@ -20,6 +20,8 @@ import { NotificationCenter } from './components/NotificationCenter';
 import { notify } from './utils/notificationBus';
 import './App.css';
 
+const BLOCKED_USERS_STORAGE_KEY = 'novaroom_blocked_users_v1';
+
 const normalizeTimestamp = (ts: unknown): number => {
     if (typeof ts === 'number' && Number.isFinite(ts)) return ts;
     if (typeof ts === 'string') {
@@ -43,7 +45,58 @@ export function App() {
     const [wsConnected, setWsConnected] = useState(false);
     const [wsReconnectExhausted, setWsReconnectExhausted] = useState(false);
     const [typingUserIdsByChat, setTypingUserIdsByChat] = useState<Record<string, string[]>>({});
+    const [blockedUsers, setBlockedUsers] = useState<Record<string, { chatId: string; username: string; name: string }>>({});
     const typingTimeoutsRef = useRef<Record<string, number>>({});
+
+    const resolveBlockKey = useCallback((user: Partial<User> | null | undefined): string => {
+        if (!user) return '';
+        const chatId = String(user.chatId || '').trim();
+        if (chatId) return `id:${chatId}`;
+        const username = String(user.username || '').trim().toLowerCase();
+        if (username) return `un:${username}`;
+        return '';
+    }, []);
+
+    const isUserBlocked = useCallback((user: Partial<User> | null | undefined): boolean => {
+        if (!user) return false;
+        const chatId = String(user.chatId || '').trim();
+        const username = String(user.username || '').trim().toLowerCase();
+        const byId = chatId ? blockedUsers[`id:${chatId}`] : undefined;
+        const byUsername = username ? blockedUsers[`un:${username}`] : undefined;
+        return Boolean(byId || byUsername);
+    }, [blockedUsers]);
+
+    const toggleBlockUser = useCallback((user: User) => {
+        const key = resolveBlockKey(user);
+        if (!key) return;
+        setBlockedUsers((prev) => {
+            const next = { ...prev };
+            const chatId = String(user.chatId || '').trim();
+            const username = String(user.username || '').trim().toLowerCase();
+            const altKey = chatId && username
+                ? (key.startsWith('id:') ? `un:${username}` : `id:${chatId}`)
+                : '';
+            const currentlyBlocked = Boolean(next[key]) || (altKey ? Boolean(next[altKey]) : false);
+
+            if (currentlyBlocked) {
+                delete next[key];
+                if (altKey) delete next[altKey];
+                return next;
+            }
+
+            const entry = {
+                chatId,
+                username,
+                name: String(user.name || '').trim(),
+            };
+            next[key] = entry;
+            if (chatId && username) {
+                next[`id:${chatId}`] = entry;
+                next[`un:${username}`] = entry;
+            }
+            return next;
+        });
+    }, [resolveBlockKey]);
 
     // When opening a chat from the list, capture its unreadCount BEFORE clearing it,
     // so ChatRoom can scroll to the first unread message and render an unread separator.
@@ -114,6 +167,26 @@ export function App() {
             receiveSoundRef.current = null;
         };
     }, []);
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(BLOCKED_USERS_STORAGE_KEY);
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== 'object') return;
+            setBlockedUsers(parsed);
+        } catch {
+            // ignore malformed storage
+        }
+    }, []);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(BLOCKED_USERS_STORAGE_KEY, JSON.stringify(blockedUsers));
+        } catch {
+            // ignore storage errors
+        }
+    }, [blockedUsers]);
 
     useEffect(() => {
         let primed = false;
@@ -987,8 +1060,12 @@ export function App() {
             return;
         }
 
+        const isBlockedDirectTarget = (candidate: Partial<User> | null | undefined) =>
+            Boolean(candidate) && isUserBlocked(candidate);
+
         if (!activeChatId && pendingUser) {
             if (payload.editMessageId) return;
+            if (isBlockedDirectTarget(pendingUser)) return;
 
             try {
                 const res = await apiFetch('/chats', {
@@ -1029,10 +1106,13 @@ export function App() {
 
         if (!activeChatId) return;
 
+        const activeChat = chats.find((c) => c.id === activeChatId);
+        if (activeChat?.chatType !== 'group' && isBlockedDirectTarget(activeChat.otherUser)) return;
+
         const success = sendViaWS(activeChatId, text, payload.replyToId, payload.file);
         if (!success) console.warn('WebSocket not connected');
         if (success) playChatSound('send');
-    }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, playChatSound, navigate]);
+    }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, playChatSound, navigate, chats, isUserBlocked]);
 
     const handleDeleteMessage = useCallback((messageId: string) => {
         if (!activeChatId) return;
@@ -1632,6 +1712,8 @@ export function App() {
                                 onClearPendingForwardDraft={handleClearPendingForwardDraft}
                                 typingUserIds={typingUserIdsByChat[activeChatId || 'pending'] || []}
                                 onTypingChange={(targetChatId, isTyping) => sendTyping(targetChatId, isTyping)}
+                                isUserBlocked={isUserBlocked}
+                                onToggleBlockUser={toggleBlockUser}
                             />
                         ) : (
                             <EmptyState />

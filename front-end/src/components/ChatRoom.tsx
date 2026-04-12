@@ -51,6 +51,8 @@ interface ChatRoomProps {
     onClearPendingForwardDraft?: (targetChatId: string) => void;
     typingUserIds?: string[];
     onTypingChange?: (chatId: string, isTyping: boolean) => void;
+    isUserBlocked?: (user: User) => boolean;
+    onToggleBlockUser?: (user: User) => void;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000;
@@ -305,6 +307,8 @@ export function ChatRoom({
     onClearPendingForwardDraft,
     typingUserIds = [],
     onTypingChange,
+    isUserBlocked,
+    onToggleBlockUser,
 }: ChatRoomProps) {
     const MAX_CHAT_MESSAGE_LENGTH = 6000;
     const currentChat = useMemo(
@@ -312,7 +316,9 @@ export function ChatRoom({
         [chats, chatId]
     );
     const isGroupChat = currentChat?.chatType === 'group';
+    const isDirectChat = !isGroupChat;
     const isVerifiedUser = resolveVerified(currentUser?.verified);
+    const isContactBlocked = isDirectChat && !chatId.startsWith('saved_messages_') && Boolean(isUserBlocked?.(contact));
 
     const [text, setText] = useState('');
     const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
@@ -425,6 +431,7 @@ export function ChatRoom({
     };
 
     const emitTyping = (isTyping: boolean) => {
+        if (isContactBlocked && isTyping) return;
         if (!onTypingChange) return;
         onTypingChange(chatId, isTyping);
     };
@@ -453,6 +460,16 @@ export function ChatRoom({
             typingTimeoutRef.current = null;
         }, 1000);
     };
+
+    useEffect(() => {
+        if (!isContactBlocked) return;
+        stopTyping();
+        pendingUploadedFileByChat[chatId] = null;
+        setText('');
+        setUploadedFile(null);
+        setReplyTo(null);
+        setEditingId(null);
+    }, [isContactBlocked, chatId]);
 
     const markProgrammaticScroll = () => {
         programmaticScrollEventsRef.current += 2;
@@ -1338,6 +1355,7 @@ export function ChatRoom({
     );
 
     const typingStatusLabel = useMemo(() => {
+        if (isContactBlocked) return '';
         if (otherTypingUserIds.length === 0) return '';
         if (!isGroupChat) return 'درحال تایپ...';
         if (otherTypingUserIds.length === 1) {
@@ -1346,7 +1364,7 @@ export function ChatRoom({
             return `${name} درحال تایپ...`;
         }
         return `${toPersianDigits(otherTypingUserIds.length)} کاربر درحال تایپ هستند`;
-    }, [otherTypingUserIds, isGroupChat, groupMembers]);
+    }, [otherTypingUserIds, isGroupChat, groupMembers, isContactBlocked]);
 
     const activeInputStackCount = (replyTo || editingId ? 1 : 0)
         + (uploadedFile ? 1 : 0)
@@ -1354,6 +1372,7 @@ export function ChatRoom({
     const scrollButtonBottom = 96 + (activeInputStackCount * 56);
 
     const submit = () => {
+        if (isContactBlocked) return;
         const t = text.trim();
         if (t.length > MAX_CHAT_MESSAGE_LENGTH) {
             alert(`حداکثر طول پیام ${MAX_CHAT_MESSAGE_LENGTH} کاراکتر است`);
@@ -1544,6 +1563,8 @@ export function ChatRoom({
         return (
             <ContactInfo
                 user={infoUser}
+                isBlocked={!isGroupChat && Boolean(isUserBlocked?.(infoUser))}
+                onToggleBlock={!isGroupChat ? onToggleBlockUser : undefined}
                 onBack={() => {
                     setShowContactInfo(false);
                     if (onCloseForcedContactInfo) {
@@ -1580,6 +1601,8 @@ export function ChatRoom({
         return (
             <ContactInfo
                 user={forwardSourceUser}
+                isBlocked={Boolean(isUserBlocked?.(forwardSourceUser))}
+                onToggleBlock={onToggleBlockUser}
                 onBack={() => setForwardSourceUser(null)}
                 onOpenChat={(u) => {
                     if (u.chatId === currentUserId) {
@@ -1602,6 +1625,8 @@ export function ChatRoom({
         return (
             <ContactInfo
                 user={memberUser}
+                isBlocked={Boolean(isUserBlocked?.(memberUser))}
+                onToggleBlock={onToggleBlockUser}
                 onBack={() => setViewingMemberId(null)}
                 onOpenChat={(u) => {
                     if (u.chatId === currentUserId) {
@@ -1809,7 +1834,7 @@ export function ChatRoom({
                     <Avatar
                         name={contact.name}
                         size="sm"
-                        online={isGroupChat || isSavedMessages ? undefined : contact.online}
+                        online={isGroupChat || isSavedMessages || isContactBlocked ? undefined : contact.online}
                         savedMessages={isSavedMessages}
                         src={contact.avatar}
                     />
@@ -1819,10 +1844,10 @@ export function ChatRoom({
                             {!isSavedMessages && resolveVerified(contact.verified) ? <VerifiedBadge size={14} /> : null}
                         </div>
                         {!isSavedMessages && (
-                            <div className={isGroupChat || contact.online ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
+                            <div className={isGroupChat || (!isContactBlocked && contact.online) ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
                                 {typingStatusLabel || (isGroupChat
                                     ? `${chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0} عضو • ${chatStats?.onlineMembers ?? 0} آنلاین`
-                                    : contact.online ? 'آنلاین' : 'آفلاین')}
+                                    : isContactBlocked ? 'آخرین بازدید مدت‌ها پیش' : contact.online ? 'آنلاین' : 'آفلاین')}
                             </div>
                         )}
                     </div>
@@ -2415,28 +2440,34 @@ export function ChatRoom({
                     </div>
                 )}
                 <div className="chat-room__input-wrapper">
-                    <FileUpload token={token} chatId={chatId} onFileUploaded={handleFileUploaded} fileAttached={Boolean(uploadedFile)} />
-                    <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
-                        value={text}
-                        onChange={(e) => {
-                            const nextValue = e.target.value;
-                            setText(nextValue);
-                            refreshTyping(nextValue);
-                        }}
-                        onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey && !isMobileKeyboardInput()) {
-                                e.preventDefault();
-                                submit();
-                            }
-                        }}
-                        rows={1}
-                    />
-                    <button
-                        className={text.trim() || uploadedFile || (pendingForwardDraft && !editingId) ? 'chat-room__send-btn chat-room__send-btn--active' : 'chat-room__send-btn chat-room__send-btn--disabled'}
-                        onClick={submit} disabled={!text.trim() && !uploadedFile && (!pendingForwardDraft || Boolean(editingId))} aria-label="Send" type="button">
-                        <SendHorizontal size={18} />
-                    </button>
+                    {isContactBlocked ? (
+                        <div className="chat-room__blocked-box">این کاربر را بلاک کرده‌اید.</div>
+                    ) : (
+                        <>
+                            <FileUpload token={token} chatId={chatId} onFileUploaded={handleFileUploaded} fileAttached={Boolean(uploadedFile)} />
+                            <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
+                                value={text}
+                                onChange={(e) => {
+                                    const nextValue = e.target.value;
+                                    setText(nextValue);
+                                    refreshTyping(nextValue);
+                                }}
+                                onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey && !isMobileKeyboardInput()) {
+                                        e.preventDefault();
+                                        submit();
+                                    }
+                                }}
+                                rows={1}
+                            />
+                            <button
+                                className={text.trim() || uploadedFile || (pendingForwardDraft && !editingId) ? 'chat-room__send-btn chat-room__send-btn--active' : 'chat-room__send-btn chat-room__send-btn--disabled'}
+                                onClick={submit} disabled={!text.trim() && !uploadedFile && (!pendingForwardDraft || Boolean(editingId))} aria-label="Send" type="button">
+                                <SendHorizontal size={18} />
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 

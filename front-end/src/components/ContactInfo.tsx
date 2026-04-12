@@ -1,4 +1,4 @@
-import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Save, Image as ImageIcon, Trash2, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Save, Image as ImageIcon, Trash2, RotateCcw, Ban } from 'lucide-react';
 import { motion, type Variants } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '../types';
@@ -11,6 +11,8 @@ interface ContactInfoProps {
     user: User;
     onBack: () => void;
     onOpenChat?: (user: User) => void;
+    isBlocked?: boolean;
+    onToggleBlock?: (user: User) => void;
     onOpenMembers?: () => void;
     autoOpenMembers?: boolean;
     startInEditMode?: boolean;
@@ -48,7 +50,16 @@ function extractFileIdFromAvatar(rawAvatar: string): string {
     return '';
 }
 
-export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenMembers = true, startInEditMode = false }: ContactInfoProps) {
+export function ContactInfo({
+    user,
+    onBack,
+    onOpenChat,
+    isBlocked = false,
+    onToggleBlock,
+    onOpenMembers,
+    autoOpenMembers = true,
+    startInEditMode = false,
+}: ContactInfoProps) {
     const [copied, setCopied] = useState(false);
     const [canEditGroup, setCanEditGroup] = useState(false);
     const [editingGroup, setEditingGroup] = useState(false);
@@ -340,8 +351,8 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
                         {!isGroup && user.verified ? <VerifiedBadge size={16} /> : null}
                     </div>
                     {!isGroup && (
-                        <div className={user.online ? 'contact-info__status contact-info__status--online' : 'contact-info__status'}>
-                            {user.online ? 'آنلاین' : 'آفلاین'}
+                        <div className={!isBlocked && user.online ? 'contact-info__status contact-info__status--online' : 'contact-info__status'}>
+                            {isBlocked ? 'آخرین بازدید مدت‌ها پیش' : user.online ? 'آنلاین' : 'آفلاین'}
                         </div>
                     )}
                 </div>
@@ -572,30 +583,26 @@ export function ContactInfo({ user, onBack, onOpenChat, onOpenMembers, autoOpenM
 
                 {canOpenChat && (
                     <div className="contact-info__card" style={{ padding: 10 }}>
-                        <button
-                            type="button"
-                            onClick={() => onOpenChat?.(user)}
-                            style={{
-                                width: '100%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: 10,
-                                padding: '10px 12px',
-                                borderRadius: 12,
-                                border: '1px solid var(--border-primary)',
-                                background: 'var(--bg-secondary)',
-                                color: 'var(--text-primary, #fff)',
-                                cursor: 'pointer',
-                                fontSize: 14,
-                                fontWeight: 700,
-                                fontFamily: 'Vazir, sans-serif',
-                            }}
-                            aria-label="Open chat"
-                        >
-                            پیام
-                            <MessageCircle size={18} />
-                        </button>
+                        <div className="contact-info__actions-row">
+                            <button
+                                type="button"
+                                onClick={() => onOpenChat?.(user)}
+                                className="contact-info__action-btn"
+                                aria-label="Open chat"
+                            >
+                                پیام
+                                <MessageCircle size={18} />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onToggleBlock?.(user)}
+                                className={isBlocked ? 'contact-info__action-btn contact-info__action-btn--danger contact-info__action-btn--danger-soft' : 'contact-info__action-btn contact-info__action-btn--danger'}
+                                aria-label={isBlocked ? 'Unblock user' : 'Block user'}
+                            >
+                                {isBlocked ? 'آنبلاک' : 'بلاک'}
+                                <Ban size={16} />
+                            </button>
+                        </div>
                     </div>
                 )}
 
