@@ -7,8 +7,8 @@ interface UseAIWebSocketProps {
     onNewMessage: (message: Message) => void;
     onError?: (message: string) => void;
     onUserMessageSaved?: (message: Message, clientId?: string, title?: string) => void;
-    onAIStreamStart?: (message: Message) => void;
-    onAIStreamChunk?: (payload: { messageId: string; text: string; chunk?: string; reasoningContent?: string; reasoningChunk?: string; hasMainContent?: boolean }) => void;
+    onAIStreamStart?: (message: Message & { temporary?: boolean; temporarySessionId?: string }) => void;
+    onAIStreamChunk?: (payload: { messageId: string; text: string; chunk?: string; reasoningContent?: string; reasoningChunk?: string; hasMainContent?: boolean; temporary?: boolean; temporarySessionId?: string }) => void;
     onAIStreamDone?: (payload: any) => void;
 }
 
@@ -25,7 +25,7 @@ export function useAIWebSocket({
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<number | undefined>(undefined);
     const reconnectAttemptsRef = useRef(0);
-    const pendingMessagesRef = useRef<Array<{ text: string; aiChatId: string; clientId?: string; useReasoner: boolean }>>([]);
+    const pendingMessagesRef = useRef<Array<{ text: string; aiChatId: string; clientId?: string; useReasoner: boolean; temporary?: boolean; temporarySessionId?: string; temporaryHistory?: Array<{ role: 'user' | 'assistant'; content: string }> }>>([]);
     const onNewMessageRef = useRef(onNewMessage);
     const onErrorRef = useRef(onError);
     const onUserMessageSavedRef = useRef(onUserMessageSaved);
@@ -62,6 +62,9 @@ export function useAIWebSocket({
                         aiChatId: payload.aiChatId,
                         clientId: payload.clientId,
                         useReasoner: payload.useReasoner,
+                        temporary: Boolean(payload.temporary),
+                        temporarySessionId: payload.temporarySessionId,
+                        history: payload.temporaryHistory,
                     }));
                 });
             }
@@ -94,6 +97,8 @@ export function useAIWebSocket({
                         reasoningContent: data.reasoningContent ?? '',
                         reasoningChunk: data.reasoningChunk ?? '',
                         hasMainContent: Boolean(data.hasMainContent),
+                        temporary: Boolean(data.temporary),
+                        temporarySessionId: data.temporarySessionId ? String(data.temporarySessionId) : undefined,
                     });
                 } else if (data.type === 'ai_response_done') {
                     onAIStreamDoneRef.current?.(data);
@@ -144,13 +149,31 @@ export function useAIWebSocket({
         };
     }, [connect]);
 
-    const sendMessage = useCallback((text: string, aiChatId: string, clientId?: string, useReasoner = false) => {
+    const sendMessage = useCallback((
+        text: string,
+        aiChatId: string,
+        clientId?: string,
+        useReasoner = false,
+        options?: {
+            temporary?: boolean;
+            temporarySessionId?: string;
+            temporaryHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
+        }
+    ) => {
         if (typeof text !== 'string' || !text.trim() || text.length > MAX_AI_MESSAGE_LENGTH) {
             return false;
         }
         if (!aiChatId) return false;
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-            pendingMessagesRef.current.push({ text, aiChatId, clientId, useReasoner });
+            pendingMessagesRef.current.push({
+                text,
+                aiChatId,
+                clientId,
+                useReasoner,
+                temporary: Boolean(options?.temporary),
+                temporarySessionId: options?.temporarySessionId,
+                temporaryHistory: options?.temporaryHistory,
+            });
             console.warn('AI WebSocket not connected yet; message queued');
             return true;
         }
@@ -162,6 +185,9 @@ export function useAIWebSocket({
                 aiChatId,
                 clientId,
                 useReasoner,
+                temporary: Boolean(options?.temporary),
+                temporarySessionId: options?.temporarySessionId,
+                history: options?.temporaryHistory,
             })
         );
         return true;

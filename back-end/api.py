@@ -2360,7 +2360,7 @@ async def get_ai_chats(current_user: dict = Depends(get_current_user)):
     return [
         {
             "id": str(row["_id"]),
-            "title": row.get("title") or "گفت‌وگوی جدید",
+            "title": row.get("title") or "گفتگوی جدید",
             "summary": row.get("summary") or "",
             "updatedAt": dt_to_epoch_ms(row.get("updatedAt")),
         }
@@ -2374,7 +2374,7 @@ async def create_ai_chat(current_user: dict = Depends(get_current_user)):
     now = utc_now()
     chat_doc = {
         "userId": user_id,
-        "title": "گفت‌وگوی جدید",
+        "title": "گفتگوی جدید",
         "summary": "",
         "createdAt": now,
         "updatedAt": now,
@@ -2384,6 +2384,35 @@ async def create_ai_chat(current_user: dict = Depends(get_current_user)):
         "id": str(inserted.inserted_id),
         "title": chat_doc["title"],
         "summary": "",
+        "updatedAt": dt_to_epoch_ms(now),
+    }
+
+
+class AIChatRenameRequest(BaseModel):
+    title: str
+
+
+@app.patch("/ai/chats/{ai_chat_id}")
+async def rename_ai_chat(
+    ai_chat_id: str,
+    body: AIChatRenameRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = current_user["chatId"]
+    chat = await ensure_ai_chat(user_id, ai_chat_id)
+    next_title = str(body.title or "").strip()[:56]
+    if not next_title:
+        raise HTTPException(status_code=400, detail="Title is required")
+
+    now = utc_now()
+    await cl_ai_chats.update_one(
+        {"_id": chat["_id"]},
+        {"$set": {"title": next_title, "updatedAt": now}},
+    )
+    return {
+        "id": ai_chat_id,
+        "title": next_title,
+        "summary": chat.get("summary") or "",
         "updatedAt": dt_to_epoch_ms(now),
     }
 
@@ -2434,6 +2463,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
             reasoning_mode: bool,
             should_generate_title: bool = False,
             first_user_message: str = "",
+            temporary: bool = False,
+            temporary_session_id: str = "",
         ):
             ai_message_doc = {
                 "userId": user_id,
@@ -2445,8 +2476,12 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 "streamCompleted": False,
                 "timestamp": utc_now(),
             }
-            result = await cl_ai_messages.insert_one(ai_message_doc)
-            ai_msg_id = str(result.inserted_id)
+            result = None
+            if not temporary:
+                result = await cl_ai_messages.insert_one(ai_message_doc)
+                ai_msg_id = str(result.inserted_id)
+            else:
+                ai_msg_id = f"tmp_ai_{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}"
             message_ts_ms = dt_to_epoch_ms(ai_message_doc["timestamp"])
 
             await safe_send_ai(
@@ -2463,6 +2498,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                         "isStreaming": True,
                         "streamCompleted": False,
                         "timestamp": message_ts_ms,
+                        "temporary": temporary,
+                        "temporarySessionId": temporary_session_id if temporary else "",
                     },
                 },
             )
@@ -2495,16 +2532,17 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     if reasoning_chunk:
                         full_reasoning_content += reasoning_chunk
 
-                    await cl_ai_messages.update_one(
-                        {"_id": result.inserted_id},
-                        {
-                            "$set": {
-                                "content": full_ai_response,
-                                "reasoningContent": full_reasoning_content,
-                                "streamCompleted": False,
-                            }
-                        },
-                    )
+                    if result is not None:
+                        await cl_ai_messages.update_one(
+                            {"_id": result.inserted_id},
+                            {
+                                "$set": {
+                                    "content": full_ai_response,
+                                    "reasoningContent": full_reasoning_content,
+                                    "streamCompleted": False,
+                                }
+                            },
+                        )
                     await safe_send_ai(
                         user_id,
                         {
@@ -2516,34 +2554,38 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "text": full_ai_response,
                             "reasoningContent": full_reasoning_content,
                             "hasMainContent": bool(full_ai_response),
+                            "temporary": temporary,
+                            "temporarySessionId": temporary_session_id if temporary else "",
                         },
                     )
             except asyncio.CancelledError:
                 stopped = True
                 raise
             finally:
-                await cl_ai_messages.update_one(
-                    {"_id": result.inserted_id},
-                    {
-                        "$set": {
-                            "content": full_ai_response,
-                            "reasoningContent": full_reasoning_content,
-                            "streamCompleted": True,
-                            "reasoningDurationSec": int(max(0, round(time.time() - stream_started_at))),
-                        }
-                    },
-                )
+                if result is not None:
+                    await cl_ai_messages.update_one(
+                        {"_id": result.inserted_id},
+                        {
+                            "$set": {
+                                "content": full_ai_response,
+                                "reasoningContent": full_reasoning_content,
+                                "streamCompleted": True,
+                                "reasoningDurationSec": int(max(0, round(time.time() - stream_started_at))),
+                            }
+                        },
+                    )
                 generated_title = ""
-                chat_update: Dict[str, Any] = {"updatedAt": utc_now()}
-                if should_generate_title and not stopped:
-                    candidate_title = await generate_chat_title(first_user_message)
-                    if isinstance(candidate_title, str) and candidate_title.strip() and candidate_title.strip() != "گفت‌وگوی جدید":
-                        generated_title = candidate_title.strip()[:56]
-                        chat_update["title"] = generated_title
-                await cl_ai_chats.update_one(
-                    {"_id": await try_object_id(ai_chat_id), "userId": user_id},
-                    {"$set": chat_update},
-                )
+                if not temporary:
+                    chat_update: Dict[str, Any] = {"updatedAt": utc_now()}
+                    if should_generate_title and not stopped:
+                        candidate_title = await generate_chat_title(first_user_message)
+                        if isinstance(candidate_title, str) and candidate_title.strip() and candidate_title.strip() != "گفتگوی جدید":
+                            generated_title = candidate_title.strip()[:56]
+                            chat_update["title"] = generated_title
+                    await cl_ai_chats.update_one(
+                        {"_id": await try_object_id(ai_chat_id), "userId": user_id},
+                        {"$set": chat_update},
+                    )
 
                 await safe_send_ai(
                     user_id,
@@ -2562,7 +2604,11 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "streamCompleted": True,
                             "reasoningDurationSec": int(max(0, round(time.time() - stream_started_at))),
                             "timestamp": message_ts_ms,
+                            "temporary": temporary,
+                            "temporarySessionId": temporary_session_id if temporary else "",
                         },
+                        "temporary": temporary,
+                        "temporarySessionId": temporary_session_id if temporary else "",
                     },
                 )
 
@@ -2576,6 +2622,9 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 text = data.get("text")
                 client_id = data.get("clientId")
                 ai_chat_id = str(data.get("aiChatId") or "").strip()
+                is_temporary = bool(data.get("temporary"))
+                temporary_session_id = str(data.get("temporarySessionId") or "").strip()
+                history_payload = data.get("history")
                 use_reasoner = bool(data.get("useReasoner"))
                 model_name = "deepseek-reasoner" if use_reasoner else "deepseek-chat"
 
@@ -2584,90 +2633,107 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 if len(text) > MAX_AI_MESSAGE_LENGTH:
                     continue
 
-                try:
-                    ai_chat = await ensure_ai_chat(user_id, ai_chat_id)
-                except HTTPException:
-                    # In rare race cases, chat can be created immediately before ws send.
-                    await asyncio.sleep(0.12)
+                ai_chat = None
+                user_msg_count = 0
+                refreshed_summary = ""
+                messages: List[Dict[str, str]] = []
+
+                if is_temporary:
+                    ai_chat_id = "__temporary__"
+                    if isinstance(history_payload, list):
+                        for item in history_payload[-12:]:
+                            if not isinstance(item, dict):
+                                continue
+                            role = str(item.get("role") or "").strip()
+                            content = str(item.get("content") or "").strip()
+                            if role not in ("user", "assistant") or not content:
+                                continue
+                            messages.append({"role": role, "content": content})
+                    if not messages:
+                        messages = [{"role": "user", "content": text}]
+                else:
                     try:
                         ai_chat = await ensure_ai_chat(user_id, ai_chat_id)
                     except HTTPException:
+                        # In rare race cases, chat can be created immediately before ws send.
+                        await asyncio.sleep(0.12)
+                        try:
+                            ai_chat = await ensure_ai_chat(user_id, ai_chat_id)
+                        except HTTPException:
+                            await safe_send_ai(
+                                user_id,
+                                {"type": "ai_error", "message": "گفتگوی انتخاب‌شده معتبر نیست."}
+                            )
+                            continue
+
+                    user_msg_count = await cl_ai_messages.count_documents(
+                        {"userId": user_id, "aiChatId": ai_chat_id, "role": "user"}
+                    )
+                    if user_msg_count >= MAX_AI_MESSAGES_PER_CHAT:
                         await safe_send_ai(
                             user_id,
-                            {"type": "ai_error", "message": "گفت‌وگوی انتخاب‌شده معتبر نیست."}
+                            {
+                                "type": "ai_error",
+                                "message": "حداکثر 30 پیام در هر گفتگو مجاز است. لطفاً گفتگوی جدید باز کنید.",
+                            }
                         )
                         continue
 
-                user_msg_count = await cl_ai_messages.count_documents(
-                    {"userId": user_id, "aiChatId": ai_chat_id, "role": "user"}
-                )
-                if user_msg_count >= MAX_AI_MESSAGES_PER_CHAT:
+                    user_message_doc = {
+                        "userId": user_id,
+                        "aiChatId": ai_chat_id,
+                        "role": "user",
+                        "content": text,
+                        "timestamp": utc_now(),
+                    }
+                    user_insert = await cl_ai_messages.insert_one(user_message_doc)
+
                     await safe_send_ai(
                         user_id,
                         {
-                            "type": "ai_error",
-                            "message": "حداکثر 30 پیام در هر گفتگو مجاز است. لطفاً گفت‌وگوی جدید باز کنید.",
-                        }
-                    )
-                    continue
-
-                # Save user message
-                user_message_doc = {
-                    "userId": user_id,
-                    "aiChatId": ai_chat_id,
-                    "role": "user",
-                    "content": text,
-                    "timestamp": utc_now(),
-                }
-                user_insert = await cl_ai_messages.insert_one(user_message_doc)
-
-                await safe_send_ai(
-                    user_id,
-                    {
-                        "type": "ai_user_message_saved",
-                        "title": "",
-                        "clientId": client_id if isinstance(client_id, str) else None,
-                        "message": {
-                            "id": str(user_insert.inserted_id),
-                            "aiChatId": ai_chat_id,
-                            "senderId": user_id,
-                            "text": text,
-                            "timestamp": dt_to_epoch_ms(user_message_doc["timestamp"]),
+                            "type": "ai_user_message_saved",
+                            "title": "",
+                            "clientId": client_id if isinstance(client_id, str) else None,
+                            "message": {
+                                "id": str(user_insert.inserted_id),
+                                "aiChatId": ai_chat_id,
+                                "senderId": user_id,
+                                "text": text,
+                                "timestamp": dt_to_epoch_ms(user_message_doc["timestamp"]),
+                            },
                         },
-                    },
-                )
+                    )
 
-                memory_summary = ""
-                if isinstance(ai_chat.get("summary"), str):
-                    memory_summary = ai_chat.get("summary", "").strip()
+                    memory_summary = ""
+                    if isinstance(ai_chat.get("summary"), str):
+                        memory_summary = ai_chat.get("summary", "").strip()
 
-                history_docs = (
-                    await cl_ai_messages.find({"userId": user_id, "aiChatId": ai_chat_id})
-                    .sort("timestamp", -1)
-                    .limit(6)
-                    .to_list(6)
-                )
-                history_docs.reverse()
+                    history_docs = (
+                        await cl_ai_messages.find({"userId": user_id, "aiChatId": ai_chat_id})
+                        .sort("timestamp", -1)
+                        .limit(6)
+                        .to_list(6)
+                    )
+                    history_docs.reverse()
+                    messages = [{"role": doc["role"], "content": doc["content"]} for doc in history_docs]
 
-                messages = [{"role": doc["role"], "content": doc["content"]} for doc in history_docs]
-
-                refreshed_summary = await generate_conversation_summary(
-                    messages,
-                    previous_summary=memory_summary,
-                    user_name=user_name,
-                    username=username,
-                    chat_id=user_id,
-                    bio=user_bio,
-                )
-                await cl_ai_chats.update_one(
-                    {"_id": ai_chat["_id"], "userId": user_id},
-                    {
-                        "$set": {
-                            "summary": refreshed_summary,
-                            "updatedAt": utc_now(),
-                        }
-                    },
-                )
+                    refreshed_summary = await generate_conversation_summary(
+                        messages,
+                        previous_summary=memory_summary,
+                        user_name=user_name,
+                        username=username,
+                        chat_id=user_id,
+                        bio=user_bio,
+                    )
+                    await cl_ai_chats.update_one(
+                        {"_id": ai_chat["_id"], "userId": user_id},
+                        {
+                            "$set": {
+                                "summary": refreshed_summary,
+                                "updatedAt": utc_now(),
+                            }
+                        },
+                    )
 
                 current_stream_task = active_ai_stream_tasks.get(user_id)
                 if current_stream_task and not current_stream_task.done():
@@ -2684,8 +2750,10 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                         refreshed_summary,
                         model_name,
                         use_reasoner,
-                        should_generate_title=(user_msg_count == 0),
+                        should_generate_title=(not is_temporary and user_msg_count == 0),
                         first_user_message=text,
+                        temporary=is_temporary,
+                        temporary_session_id=temporary_session_id,
                     )
                 )
                 active_ai_stream_tasks[user_id] = new_stream_task
