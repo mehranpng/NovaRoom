@@ -1221,6 +1221,26 @@ export function App() {
         }
     }, []);
 
+    const handleRenameAIChat = useCallback(async (chatId: string, nextTitle: string): Promise<boolean> => {
+        const trimmed = nextTitle.trim();
+        if (!trimmed) {
+            notify({ message: 'عنوان گفت‌وگو نمی‌تواند خالی باشد.', type: 'info' });
+            return false;
+        }
+        try {
+            await apiFetch(`/ai/chats/${encodeURIComponent(chatId)}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ title: trimmed }),
+            });
+            setAIChats((prev) => prev.map((chat) => (chat.id === chatId ? { ...chat, title: trimmed } : chat)));
+            return true;
+        } catch (error) {
+            console.error('Failed to rename AI chat', error);
+            notify({ message: 'تغییر نام گفت‌وگو انجام نشد.', type: 'error' });
+            return false;
+        }
+    }, []);
+
     const handleOpenSavedMessages = useCallback(() => {
         if (!currentUser) return;
         const savedMessagesId = `saved_messages_${currentUser.chatId}`;
@@ -1467,6 +1487,7 @@ export function App() {
                                 onCreateAIChat={handleCreateAIChat}
                                 onSelectAIChat={handleSelectAIChat}
                                 onDeleteAIChat={handleDeleteAIChat}
+                                onRenameAIChat={handleRenameAIChat}
                                 respondingAIChatId={aiRespondingChatId}
                             />
                         ) : view === 'chatRoom' && (activeChat || pendingUser || isSavedMessagesActive) ? (

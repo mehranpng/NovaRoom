@@ -2405,6 +2405,35 @@ async def create_ai_chat(current_user: dict = Depends(get_current_user)):
     }
 
 
+class AIChatRenameRequest(BaseModel):
+    title: str
+
+
+@app.patch("/ai/chats/{ai_chat_id}")
+async def rename_ai_chat(
+    ai_chat_id: str,
+    body: AIChatRenameRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = current_user["chatId"]
+    chat = await ensure_ai_chat(user_id, ai_chat_id)
+    next_title = str(body.title or "").strip()[:56]
+    if not next_title:
+        raise HTTPException(status_code=400, detail="Title is required")
+
+    now = utc_now()
+    await cl_ai_chats.update_one(
+        {"_id": chat["_id"]},
+        {"$set": {"title": next_title, "updatedAt": now}},
+    )
+    return {
+        "id": ai_chat_id,
+        "title": next_title,
+        "summary": chat.get("summary") or "",
+        "updatedAt": dt_to_epoch_ms(now),
+    }
+
+
 @app.delete("/ai/chats/{ai_chat_id}")
 async def delete_ai_chat(
     ai_chat_id: str, current_user: dict = Depends(get_current_user)

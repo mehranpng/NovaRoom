@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Check, SendHorizontal, Brain, PanelRight, PencilLine, Trash2, History, CornerUpLeft, ChevronDown } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Check, SendHorizontal, Brain, PanelRight, PencilLine, Trash2, History, CornerUpLeft, ChevronDown, Menu, Pin, PinOff } from 'lucide-react';
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -8,6 +8,7 @@ import type { Components } from 'react-markdown';
 import type { Message, Chat, FileMetadata, AIChatSummary } from '../types';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
 import { ForwardModal } from './ForwardModal';
+import { notify } from '../utils/notificationBus';
 
 interface AIChatRoomProps {
     messages: Message[];
@@ -29,6 +30,7 @@ interface AIChatRoomProps {
     onCreateAIChat: () => void;
     onSelectAIChat: (chatId: string) => void;
     onDeleteAIChat: (chatId: string) => void;
+    onRenameAIChat: (chatId: string, nextTitle: string) => Promise<boolean>;
     respondingAIChatId?: string | null;
 }
 
@@ -191,6 +193,7 @@ export function AIChatRoom({
     onCreateAIChat,
     onSelectAIChat,
     onDeleteAIChat,
+    onRenameAIChat,
     respondingAIChatId = null,
 }: AIChatRoomProps) {
     const MAX_AI_MESSAGE_LENGTH = 3000;
@@ -209,11 +212,21 @@ export function AIChatRoom({
     const [reasoningPanelByMessage, setReasoningPanelByMessage] = useState<Record<string, boolean>>({});
     const [reasoningElapsedByMessage, setReasoningElapsedByMessage] = useState<Record<string, number>>({});
     const reasoningStartAtRef = useRef<Record<string, number>>({});
+    const reasoningStopAtRef = useRef<Record<string, number>>({});
     const autoClosedReasoningRef = useRef<Record<string, boolean>>({});
+    const [aiChatActionMenu, setAIChatActionMenu] = useState<null | { chatId: string; top: number; left: number }>(null);
+    const [pendingRenameChat, setPendingRenameChat] = useState<AIChatSummary | null>(null);
+    const [renameTitleInput, setRenameTitleInput] = useState('');
+    const [renameBusy, setRenameBusy] = useState(false);
+    const [pinnedAIChatIds, setPinnedAIChatIds] = useState<string[]>([]);
+    const [aiDrawerScrollTop, setAIDrawerScrollTop] = useState(0);
 
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
+    const aiChatActionMenuRef = useRef<HTMLDivElement | null>(null);
+    const aiChatActionBtnRef = useRef<HTMLElement | null>(null);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+    const aiDrawerListRef = useRef<HTMLDivElement | null>(null);
     const roomRef = useRef<HTMLDivElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const sendSoundRef = useRef<HTMLAudioElement | null>(null);
@@ -224,6 +237,7 @@ export function AIChatRoom({
     const prevLastMessageRef = useRef<Message | null>(null);
     const responseVibrationIntervalRef = useRef<number | null>(null);
     const streamingReasoningMessage = [...messages].reverse().find((m) => m.senderId !== currentUserId && m.isStreaming && m.reasoningEnabled);
+    const PINNED_AI_CHATS_STORAGE_KEY = `pinnedAIChats:${currentUserId}`;
 
     const resizeTextarea = () => {
         const textarea = textareaRef.current;
@@ -291,6 +305,20 @@ export function AIChatRoom({
     useEffect(() => {
         setEmptyStatePrompt(pickRandomEmptyPrompt());
     }, [activeAIChatId]);
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(PINNED_AI_CHATS_STORAGE_KEY);
+            const parsed = raw ? JSON.parse(raw) : null;
+            if (Array.isArray(parsed?.ids)) {
+                setPinnedAIChatIds(parsed.ids.slice(0, 10));
+            } else {
+                setPinnedAIChatIds([]);
+            }
+        } catch {
+            setPinnedAIChatIds([]);
+        }
+    }, [PINNED_AI_CHATS_STORAGE_KEY]);
 
     useEffect(() => () => {
         if (!reasoningEnabled) return;
@@ -463,11 +491,15 @@ export function AIChatRoom({
             autoClosedReasoningRef.current[streamMessageId] = true;
             setReasoningPanelByMessage((prev) => ({ ...prev, [streamMessageId]: false }));
         }
+        if (hasMainResponseStarted && !reasoningStopAtRef.current[streamMessageId]) {
+            reasoningStopAtRef.current[streamMessageId] = Date.now();
+        }
 
         const interval = window.setInterval(() => {
             const startedAt = reasoningStartAtRef.current[streamMessageId];
             if (!startedAt) return;
-            const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+            const stoppedAt = reasoningStopAtRef.current[streamMessageId] || Date.now();
+            const elapsed = Math.max(0, Math.floor((stoppedAt - startedAt) / 1000));
             setReasoningElapsedByMessage((prev) => ({ ...prev, [streamMessageId]: elapsed }));
         }, 1000);
         if (!streamingReasoningMessage?.isStreaming) {
@@ -481,6 +513,64 @@ export function AIChatRoom({
             setMsgMenu(null);
         }
     }, [isResponding, isTyping]);
+
+    useEffect(() => {
+        const onDocClick = (e: MouseEvent) => {
+            const target = e.target as Node;
+            if (aiChatActionMenuRef.current?.contains(target)) return;
+            if (aiChatActionBtnRef.current?.contains(target)) return;
+            setAIChatActionMenu(null);
+        };
+        if (aiChatActionMenu) {
+            document.addEventListener('mousedown', onDocClick);
+        }
+        return () => document.removeEventListener('mousedown', onDocClick);
+    }, [aiChatActionMenu]);
+
+    useEffect(() => {
+        if (!aiChatsDrawerOpen) return;
+        const raf = window.requestAnimationFrame(() => {
+            const list = aiDrawerListRef.current;
+            if (!list) return;
+            list.scrollTop = aiDrawerScrollTop;
+        });
+        return () => window.cancelAnimationFrame(raf);
+    }, [aiChatsDrawerOpen, aiDrawerScrollTop]);
+
+    const persistPinnedAIChats = (ids: string[]) => {
+        localStorage.setItem(PINNED_AI_CHATS_STORAGE_KEY, JSON.stringify({ ids }));
+    };
+
+    const togglePinAIChat = (chatId: string) => {
+        const pinned = pinnedAIChatIds.includes(chatId);
+        if (!pinned && pinnedAIChatIds.length >= 10) {
+            notify({ message: 'حداکثر ۱۰ گفت‌وگوی AI را می‌توانید سنجاق کنید.', type: 'info' });
+            return;
+        }
+        const next = pinned
+            ? pinnedAIChatIds.filter((id) => id !== chatId)
+            : [chatId, ...pinnedAIChatIds];
+        setPinnedAIChatIds(next);
+        persistPinnedAIChats(next);
+        setAIChatActionMenu(null);
+    };
+
+    const openAIChatActionMenu = (chatId: string, btnEl: HTMLElement) => {
+        const r = btnEl.getBoundingClientRect();
+        const menuWidth = 180;
+        const menuHeight = 140;
+        const padding = 8;
+        const top = Math.max(padding, Math.min(r.bottom + 6, window.innerHeight - menuHeight - padding));
+        const left = Math.max(padding, Math.min(r.right - menuWidth, window.innerWidth - menuWidth - padding));
+        setAIChatActionMenu((prev) => (prev?.chatId === chatId ? null : { chatId, top, left }));
+    };
+
+    const sortedAIChats = [...aiChats].sort((a, b) => {
+        const aPinned = pinnedAIChatIds.includes(a.id) ? 1 : 0;
+        const bPinned = pinnedAIChatIds.includes(b.id) ? 1 : 0;
+        if (aPinned !== bPinned) return bPinned - aPinned;
+        return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
+    });
 
     useEffect(() => {
         const nextElapsed: Record<string, number> = {};
@@ -840,6 +930,7 @@ export function AIChatRoom({
                                 className="ai-chat-drawer__new-chat"
                                 onClick={() => {
                                     onCreateAIChat();
+                                    setAIChatActionMenu(null);
                                     setAIChatsDrawerOpen(false);
                                 }}
                             >
@@ -851,8 +942,12 @@ export function AIChatRoom({
                                 <div className="ai-chat-drawer__section-title">تاریخچه</div>
                                 <History size={15} />
                             </div>
-                            <div className="ai-chat-drawer__list">
-                                {aiChats.map((chat) => (
+                            <div
+                                className="ai-chat-drawer__list"
+                                ref={aiDrawerListRef}
+                                onScroll={(e) => setAIDrawerScrollTop(e.currentTarget.scrollTop)}
+                            >
+                                {sortedAIChats.map((chat) => (
                                     <div key={chat.id} className="ai-chat-drawer__item">
                                         <button
                                             type="button"
@@ -863,15 +958,19 @@ export function AIChatRoom({
                                             }}
                                         >
                                             {respondingAIChatId === chat.id && <span className="ai-chat-drawer__loader" />}
+                                            {pinnedAIChatIds.includes(chat.id) && <Pin size={13} className="ai-chat-drawer__pin" />}
                                             {chat.title || 'گفت‌وگوی جدید'}
                                         </button>
                                         <button
                                             type="button"
                                             className="ai-chat-drawer__delete"
-                                            onClick={() => setPendingDeleteChat(chat)}
-                                            aria-label="حذف گفت‌وگو"
+                                            onClick={(e) => {
+                                                aiChatActionBtnRef.current = e.currentTarget;
+                                                openAIChatActionMenu(chat.id, e.currentTarget);
+                                            }}
+                                            aria-label="گزینه‌های گفت‌وگو"
                                         >
-                                            <Trash2 size={15} />
+                                            <Menu size={16} />
                                         </button>
                                     </div>
                                 ))}
@@ -880,6 +979,48 @@ export function AIChatRoom({
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {aiChatActionMenu && (
+                <div
+                    ref={aiChatActionMenuRef}
+                    className="popover popover--mini"
+                    style={{ top: aiChatActionMenu.top, left: aiChatActionMenu.left, right: 'auto', position: 'fixed', zIndex: 130 }}
+                >
+                    <button
+                        className="popover__item"
+                        type="button"
+                        onClick={() => togglePinAIChat(aiChatActionMenu.chatId)}
+                    >
+                        {pinnedAIChatIds.includes(aiChatActionMenu.chatId) ? <PinOff size={15} /> : <Pin size={15} />}
+                        {pinnedAIChatIds.includes(aiChatActionMenu.chatId) ? 'برداشتن سنجاق' : 'سنجاق'}
+                    </button>
+                    <button
+                        className="popover__item"
+                        type="button"
+                        onClick={() => {
+                            const target = aiChats.find((c) => c.id === aiChatActionMenu.chatId) || null;
+                            setPendingRenameChat(target);
+                            setRenameTitleInput(target?.title || '');
+                            setAIChatActionMenu(null);
+                        }}
+                    >
+                        <PencilLine size={15} />
+                        تغییر نام
+                    </button>
+                    <button
+                        className="popover__item"
+                        type="button"
+                        onClick={() => {
+                            const target = aiChats.find((c) => c.id === aiChatActionMenu.chatId) || null;
+                            setPendingDeleteChat(target);
+                            setAIChatActionMenu(null);
+                        }}
+                    >
+                        <Trash2 size={15} />
+                        حذف
+                    </button>
+                </div>
+            )}
 
             <AnimatePresence>
                 {pendingDeleteChat && (
@@ -923,6 +1064,64 @@ export function AIChatRoom({
                                     }}
                                 >
                                     حذف
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+            <AnimatePresence>
+                {pendingRenameChat && (
+                    <motion.div
+                        className="chat-room-modal-overlay"
+                        style={{ zIndex: 120 }}
+                        onClick={() => !renameBusy && setPendingRenameChat(null)}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.14, ease: 'easeOut' }}
+                    >
+                        <motion.div
+                            className="chat-room-confirm-modal"
+                            role="dialog"
+                            aria-modal="true"
+                            onClick={(e) => e.stopPropagation()}
+                            initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                        >
+                            <h3 className="chat-room-confirm-modal__title">تغییر نام گفت‌وگو</h3>
+                            <input
+                                value={renameTitleInput}
+                                onChange={(e) => setRenameTitleInput(e.target.value)}
+                                className="chat-room-confirm-modal__input"
+                                placeholder="عنوان جدید..."
+                                maxLength={56}
+                                disabled={renameBusy}
+                            />
+                            <div className="chat-room-confirm-modal__actions">
+                                <button
+                                    className="chat-room-confirm-modal__btn"
+                                    type="button"
+                                    onClick={() => setPendingRenameChat(null)}
+                                    disabled={renameBusy}
+                                >
+                                    انصراف
+                                </button>
+                                <button
+                                    className="chat-room-confirm-modal__btn"
+                                    type="button"
+                                    disabled={renameBusy || !renameTitleInput.trim()}
+                                    onClick={async () => {
+                                        if (!pendingRenameChat) return;
+                                        setRenameBusy(true);
+                                        const ok = await onRenameAIChat(pendingRenameChat.id, renameTitleInput.trim());
+                                        setRenameBusy(false);
+                                        if (ok) setPendingRenameChat(null);
+                                    }}
+                                >
+                                    ذخیره
                                 </button>
                             </div>
                         </motion.div>
@@ -1231,6 +1430,8 @@ export function AIChatRoom({
                     white-space: pre-wrap;
                     border-inline-start: 2px solid var(--border-secondary);
                     padding-inline-start: 10px;
+                    direction: rtl;
+                    text-align: right;
                 }
                 .ai-reasoning-answer {
                     margin-top: 6px;
@@ -1264,6 +1465,24 @@ export function AIChatRoom({
                 @keyframes typing-bounce {
                     0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
                     40% { transform: scale(1.2); opacity: 1; }
+                }
+                .ai-chat-drawer__pin {
+                    color: #2f80ed;
+                    flex-shrink: 0;
+                }
+                .chat-room-confirm-modal__input {
+                    width: 100%;
+                    margin-top: 6px;
+                    min-height: 42px;
+                    border-radius: 10px;
+                    border: 1px solid var(--border-secondary);
+                    background: var(--bg-secondary);
+                    color: var(--text-primary);
+                    font: inherit;
+                    padding: 0 10px;
+                    direction: rtl;
+                    text-align: right;
+                    outline: none;
                 }
             `}</style>
         </motion.div>
