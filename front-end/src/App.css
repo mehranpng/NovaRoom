@@ -1000,6 +1000,72 @@ body,
     direction: rtl;
 }
 
+.ai-reasoning-message-stack {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ai-reasoning-header {
+    all: unset;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    direction: rtl;
+    color: var(--text-secondary);
+}
+
+.ai-reasoning-header-main {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ai-reasoning-timer {
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+.ai-reasoning-chevron {
+    transition: transform 0.2s ease;
+}
+
+.ai-reasoning-chevron--open {
+    transform: rotate(180deg);
+}
+
+.ai-reasoning-static-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.ai-reasoning-body {
+    overflow: hidden;
+}
+
+.ai-reasoning-content {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    border-inline-start: 2px solid var(--border-secondary);
+    padding-inline-start: 10px;
+    direction: rtl;
+    text-align: right;
+}
+
+.ai-reasoning-answer {
+    margin-top: 6px;
+    border-top: 1px solid var(--border-secondary);
+    padding-top: 8px;
+    direction: rtl;
+    text-align: right;
+}
+
 .chat-room__back-btn {
     display: flex;
     align-items: center;

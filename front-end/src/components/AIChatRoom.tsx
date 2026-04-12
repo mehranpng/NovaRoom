@@ -570,6 +570,10 @@ export function AIChatRoom({
     };
 
     const sortedAIChats = [...aiChats].sort((a, b) => {
+        if (respondingAIChatId) {
+            if (a.id === respondingAIChatId && b.id !== respondingAIChatId) return -1;
+            if (b.id === respondingAIChatId && a.id !== respondingAIChatId) return 1;
+        }
         const aPinned = pinnedAIChatIds.includes(a.id) ? 1 : 0;
         const bPinned = pinnedAIChatIds.includes(b.id) ? 1 : 0;
         if (aPinned !== bPinned) return bPinned - aPinned;
@@ -743,7 +747,7 @@ export function AIChatRoom({
                 <div className="chat-room__header-clickable chat-room__header-clickable--full ai-chat-room__header-main">
                     <div className="ai-chat-room__header-brand">NovaRoom AI</div>
                     <div className="ai-chat-room__header-title">
-                        {activeAIChatTitle || 'گفتوگوی جدید'}
+                        {temporaryMode ? 'گفتوگوی موقت' : (activeAIChatTitle || 'گفتوگوی جدید')}
                     </div>
                 </div>
                 <button
@@ -770,8 +774,8 @@ export function AIChatRoom({
                             {temporaryMode ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
                                     <MessageSquareDashed size={34} />
-                                    <div style={{ fontSize: 24, fontWeight: 800 }}>گفتوگو موقت</div>
-                                    <div style={{ fontSize: 13, fontWeight: 500, opacity: 0.85 }}>پیام‌های گفتوگو موقت ذخیره نمی‌شوند و با خروج از این صفحه حذف می‌شوند.</div>
+                                    <div style={{ fontSize: 24, fontWeight: 800 }}>گفتوگوی موقت</div>
+                                    <div style={{ fontSize: 13, fontWeight: 500, opacity: 0.85 }}>پیام‌های گفتوگوی موقت ذخیره نمی‌شوند و با خروج از این صفحه حذف می‌شوند.</div>
                                 </div>
                             ) : emptyStatePrompt}
                         </div>
@@ -935,30 +939,32 @@ export function AIChatRoom({
                                 <PanelRight size={18} />
                             </button>
 
-                            <button
-                                type="button"
-                                className="ai-chat-drawer__new-chat"
-                                onClick={() => {
-                                    onCreateAIChat();
-                                    setAIChatActionMenu(null);
-                                    setAIChatsDrawerOpen(false);
-                                }}
-                            >
-                                <span>گفتوگوی جدید</span>
-                                <PencilLine size={16} />
-                            </button>
-                            <button
-                                type="button"
-                                className="ai-chat-drawer__new-chat ai-chat-drawer__new-chat--temporary"
-                                onClick={() => {
-                                    onCreateTemporaryAIChat?.();
-                                    setAIChatActionMenu(null);
-                                    setAIChatsDrawerOpen(false);
-                                }}
-                            >
-                                <span>گفتوگو موقت</span>
-                                <MessageSquareDashed size={16} />
-                            </button>
+                            <div className="ai-chat-drawer__new-chat-row">
+                                <button
+                                    type="button"
+                                    className="ai-chat-drawer__new-chat"
+                                    onClick={() => {
+                                        onCreateAIChat();
+                                        setAIChatActionMenu(null);
+                                        setAIChatsDrawerOpen(false);
+                                    }}
+                                >
+                                    <span>گفتوگوی جدید</span>
+                                    <PencilLine size={16} />
+                                </button>
+                                <button
+                                    type="button"
+                                    className="ai-chat-drawer__new-chat"
+                                    onClick={() => {
+                                        onCreateTemporaryAIChat?.();
+                                        setAIChatActionMenu(null);
+                                        setAIChatsDrawerOpen(false);
+                                    }}
+                                >
+                                    <span>گفتوگوی موقت</span>
+                                    <MessageSquareDashed size={16} />
+                                </button>
+                            </div>
 
                             <div className="ai-chat-drawer__section-header">
                                 <div className="ai-chat-drawer__section-title">تاریخچه</div>
@@ -1492,9 +1498,13 @@ export function AIChatRoom({
                     color: #2f80ed;
                     flex-shrink: 0;
                 }
-                .ai-chat-drawer__new-chat--temporary {
-                    border-style: dashed;
-                    opacity: 0.95;
+                .ai-chat-drawer__new-chat-row {
+                    display: flex;
+                    gap: 8px;
+                }
+                .ai-chat-drawer__new-chat-row .ai-chat-drawer__new-chat {
+                    flex: 1;
+                    font-size: 12px;
                 }
                 .chat-room-confirm-modal__input {
                     width: 100%;

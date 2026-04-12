@@ -2012,7 +2012,7 @@ export function ChatRoom({
                                                 />
                                             )}
                                             {Boolean(m.reasoningEnabled && m.reasoningContent) && (
-                                                <div style={{ marginBottom: 8, border: '1px solid var(--border-primary)', borderRadius: 10, padding: '8px 10px' }}>
+                                                <div className="ai-reasoning-message-stack" style={{ width: '100%' }}>
                                                     <button
                                                         type="button"
                                                         className="ai-reasoning-header"
@@ -2027,14 +2027,24 @@ export function ChatRoom({
                                                                 {`${toPersianDigits(Math.floor(Number(m.reasoningDurationSec || 0) / 60))}:${toPersianDigits(String(Number(m.reasoningDurationSec || 0) % 60).padStart(2, '0'))}`}
                                                             </span>
                                                         </span>
-                                                        <ChevronDown size={15} style={{ transform: reasoningPanelByMessage[m.id] ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }} />
+                                                        <ChevronDown size={15} className={reasoningPanelByMessage[m.id] ? 'ai-reasoning-chevron ai-reasoning-chevron--open' : 'ai-reasoning-chevron'} />
                                                     </button>
-                                                    {Boolean(reasoningPanelByMessage[m.id]) && (
-                                                        <div className="ai-reasoning-content" style={{ marginTop: 8 }}>{m.reasoningContent}</div>
-                                                    )}
+                                                    <AnimatePresence initial={false}>
+                                                        {Boolean(reasoningPanelByMessage[m.id]) && (
+                                                            <motion.div
+                                                                className="ai-reasoning-body"
+                                                                initial={{ height: 0, opacity: 0 }}
+                                                                animate={{ height: 'auto', opacity: 1 }}
+                                                                exit={{ height: 0, opacity: 0 }}
+                                                                transition={{ duration: 0.2, ease: 'easeOut' }}
+                                                            >
+                                                                <div className="ai-reasoning-content">{m.reasoningContent}</div>
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
                                                 </div>
                                             )}
-                                            {m.text && (
+                                            {m.text && !Boolean(m.reasoningEnabled && m.reasoningContent) && (
                                                 <div className="message-text message-text--markdown">
                                                     <ReactMarkdown
                                                         remarkPlugins={[remarkGfm, remarkBreaks]}
@@ -2042,6 +2052,18 @@ export function ChatRoom({
                                                     >
                                                         {m.text}
                                                     </ReactMarkdown>
+                                                </div>
+                                            )}
+                                            {m.text && Boolean(m.reasoningEnabled && m.reasoningContent) && (
+                                                <div className="ai-reasoning-answer" style={{ marginTop: 0 }}>
+                                                    <div className="message-text message-text--markdown">
+                                                        <ReactMarkdown
+                                                            remarkPlugins={[remarkGfm, remarkBreaks]}
+                                                            components={markdownComponents}
+                                                        >
+                                                            {m.text}
+                                                        </ReactMarkdown>
+                                                    </div>
                                                 </div>
                                             )}
 

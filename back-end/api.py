@@ -2390,7 +2390,9 @@ async def ensure_ai_chat(user_id: str, ai_chat_id: str) -> dict:
 async def get_ai_chats(current_user: dict = Depends(get_current_user)):
     user_id = current_user["chatId"]
     rows = (
-        await cl_ai_chats.find({"userId": user_id}).sort("updatedAt", -1).to_list(200)
+        await cl_ai_chats.find(
+            {"userId": user_id, "$or": [{"isTemporary": {"$exists": False}}, {"isTemporary": False}]}
+        ).sort("updatedAt", -1).to_list(200)
     )
     return [
         {
@@ -2403,16 +2405,25 @@ async def get_ai_chats(current_user: dict = Depends(get_current_user)):
     ]
 
 
+class AICreateChatRequest(BaseModel):
+    temporary: bool = False
+
+
 @app.post("/ai/chats")
-async def create_ai_chat(current_user: dict = Depends(get_current_user)):
+async def create_ai_chat(
+    body: Optional[AICreateChatRequest] = None,
+    current_user: dict = Depends(get_current_user),
+):
     user_id = current_user["chatId"]
+    is_temporary = bool(body.temporary) if body else False
     now = utc_now()
     chat_doc = {
         "userId": user_id,
-        "title": "گفتوگوی جدید",
+        "title": "گفتوگوی موقت" if is_temporary else "گفتوگوی جدید",
         "summary": "",
         "createdAt": now,
         "updatedAt": now,
+        "isTemporary": is_temporary,
     }
     inserted = await cl_ai_chats.insert_one(chat_doc)
     return {
@@ -2420,6 +2431,7 @@ async def create_ai_chat(current_user: dict = Depends(get_current_user)):
         "title": chat_doc["title"],
         "summary": "",
         "updatedAt": dt_to_epoch_ms(now),
+        "isTemporary": is_temporary,
     }
 
 
@@ -2501,6 +2513,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
             reasoning_mode: bool,
             should_generate_title: bool = False,
             first_user_message: str = "",
+            is_temporary_chat: bool = False,
         ):
             ai_message_doc = {
                 "userId": user_id,
@@ -2614,7 +2627,9 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 )
                 generated_title = ""
                 chat_update: Dict[str, Any] = {"updatedAt": utc_now()}
-                if should_generate_title and not stopped:
+                if is_temporary_chat:
+                    chat_update["title"] = "گفتوگوی موقت"
+                elif should_generate_title and not stopped:
                     candidate_title = await generate_chat_title(first_user_message)
                     if (
                         isinstance(candidate_title, str)
@@ -2777,6 +2792,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                         use_reasoner,
                         should_generate_title=(user_msg_count == 0),
                         first_user_message=text,
+                        is_temporary_chat=bool(ai_chat.get("isTemporary", False)),
                     )
                 )
                 active_ai_stream_tasks[user_id] = new_stream_task

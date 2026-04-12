@@ -1236,14 +1236,13 @@ export function App() {
 
     const handleCreateTemporaryAIChat = useCallback(async () => {
         try {
-            const created = await apiFetch('/ai/chats', { method: 'POST' });
-            setAIChats((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
+            const created = await apiFetch('/ai/chats', { method: 'POST', body: JSON.stringify({ temporary: true }) });
             setAIMessagesByChat((prev) => ({ ...prev, [created.id]: [] }));
             setActiveAIChatId(created.id);
             setTemporaryAIChat(true);
         } catch (error) {
             console.error('Failed to create temporary AI chat', error);
-            notify({ message: 'ساخت گفتوگو موقت انجام نشد.', type: 'error' });
+            notify({ message: 'ساخت گفتوگوی موقت انجام نشد.', type: 'error' });
         }
     }, []);
 
