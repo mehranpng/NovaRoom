@@ -944,18 +944,6 @@ export function AIChatRoom({
                                     type="button"
                                     className="ai-chat-drawer__new-chat"
                                     onClick={() => {
-                                        onCreateAIChat();
-                                        setAIChatActionMenu(null);
-                                        setAIChatsDrawerOpen(false);
-                                    }}
-                                >
-                                    <span>گفتوگوی جدید</span>
-                                    <PencilLine size={16} />
-                                </button>
-                                <button
-                                    type="button"
-                                    className="ai-chat-drawer__new-chat"
-                                    onClick={() => {
                                         onCreateTemporaryAIChat?.();
                                         setAIChatActionMenu(null);
                                         setAIChatsDrawerOpen(false);
@@ -963,6 +951,18 @@ export function AIChatRoom({
                                 >
                                     <span>گفتوگوی موقت</span>
                                     <MessageSquareDashed size={16} />
+                                </button>
+                                <button
+                                    type="button"
+                                    className="ai-chat-drawer__new-chat"
+                                    onClick={() => {
+                                        onCreateAIChat();
+                                        setAIChatActionMenu(null);
+                                        setAIChatsDrawerOpen(false);
+                                    }}
+                                >
+                                    <span>گفتوگوی جدید</span>
+                                    <PencilLine size={16} />
                                 </button>
                             </div>
 
