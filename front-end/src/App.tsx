@@ -42,6 +42,8 @@ export function App() {
     const [newChatModalOpen, setNewChatModalOpen] = useState(false);
     const [wsConnected, setWsConnected] = useState(false);
     const [wsReconnectExhausted, setWsReconnectExhausted] = useState(false);
+    const [typingUserIdsByChat, setTypingUserIdsByChat] = useState<Record<string, string[]>>({});
+    const typingTimeoutsRef = useRef<Record<string, number>>({});
 
     // When opening a chat from the list, capture its unreadCount BEFORE clearing it,
     // so ChatRoom can scroll to the first unread message and render an unread separator.
@@ -318,8 +320,55 @@ export function App() {
         setPendingForwardDrafts({});
         newGroupTimestamps.current = {};
         setOpenChatUnread(null);
+        Object.values(typingTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
+        typingTimeoutsRef.current = {};
+        setTypingUserIdsByChat({});
         navigate('/login', { replace: true });
     }, [navigate]);
+
+    const handleTypingStatus = useCallback((chatId: string, userId: string, isTyping: boolean) => {
+        if (!chatId || !userId) return;
+        if (currentUser?.chatId && userId === currentUser.chatId) return;
+
+        const key = `${chatId}:${userId}`;
+        const clearEntry = () => {
+            const timeoutId = typingTimeoutsRef.current[key];
+            if (timeoutId) {
+                window.clearTimeout(timeoutId);
+                delete typingTimeoutsRef.current[key];
+            }
+            setTypingUserIdsByChat((prev) => {
+                const chatUsers = prev[chatId] || [];
+                if (!chatUsers.includes(userId)) return prev;
+                const nextUsers = chatUsers.filter((id) => id !== userId);
+                if (nextUsers.length === chatUsers.length) return prev;
+                if (nextUsers.length === 0) {
+                    const next = { ...prev };
+                    delete next[chatId];
+                    return next;
+                }
+                return { ...prev, [chatId]: nextUsers };
+            });
+        };
+
+        if (!isTyping) {
+            clearEntry();
+            return;
+        }
+
+        setTypingUserIdsByChat((prev) => {
+            const chatUsers = prev[chatId] || [];
+            if (chatUsers.includes(userId)) return prev;
+            return { ...prev, [chatId]: [...chatUsers, userId] };
+        });
+
+        if (typingTimeoutsRef.current[key]) {
+            window.clearTimeout(typingTimeoutsRef.current[key]);
+        }
+        typingTimeoutsRef.current[key] = window.setTimeout(() => {
+            clearEntry();
+        }, 1000);
+    }, [currentUser?.chatId]);
 
     // WebSocket handlers wrapped in useCallback to prevent infinite reconnection loops
     const handleNewMessage = useCallback((chatId: string, newMsg: Message) => {
@@ -651,7 +700,7 @@ export function App() {
     }, []);
 
     // WebSocket initialization
-    const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen, reconnectExhausted, reconnectNow } = useWebSocket({
+    const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen, sendTyping, reconnectExhausted, reconnectNow } = useWebSocket({
         token: localStorage.getItem('token'),
         onNewMessage: handleNewMessage,
         onMessageEdited: handleMessageEdited,
@@ -659,6 +708,7 @@ export function App() {
         onUserStatusChange: handleUserStatusChange,
         onMessagesSeen: handleMessagesSeen,
         onReactionUpdated: handleReactionUpdated,
+        onTypingStatus: handleTypingStatus,
         onConnectionChange: setWsConnected,
         onReconnectExhausted: handleWsReconnectExhausted,
     });
@@ -1580,6 +1630,8 @@ export function App() {
                                 pendingForwardDraft={activeChatId ? (pendingForwardDrafts[activeChatId] || null) : null}
                                 onSetPendingForwardDraft={handleSetPendingForwardDraft}
                                 onClearPendingForwardDraft={handleClearPendingForwardDraft}
+                                typingUserIds={typingUserIdsByChat[activeChatId || 'pending'] || []}
+                                onTypingChange={(targetChatId, isTyping) => sendTyping(targetChatId, isTyping)}
                             />
                         ) : (
                             <EmptyState />

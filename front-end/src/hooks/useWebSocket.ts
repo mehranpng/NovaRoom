@@ -11,6 +11,7 @@ interface UseWebSocketProps {
     onUserStatusChange?: (userId: string, online: boolean) => void;
     onMessagesSeen?: (chatId: string) => void;
     onReactionUpdated?: (chatId: string, messageId: string, reactions: any[]) => void;
+    onTypingStatus?: (chatId: string, userId: string, isTyping: boolean) => void;
     onConnectionChange?: (isConnected: boolean) => void;
     onReconnectExhausted?: () => void;
 }
@@ -25,6 +26,7 @@ type OutgoingEvent =
     | { type: 'react_message'; requestId: string; chatId: string; messageId: string; emoji: string }
     | { type: 'unreact_message'; requestId: string; chatId: string; messageId: string }
     | { type: 'forward_message'; requestId: string; messageId: string; targetChatId: string }
+    | { type: 'typing'; chatId: string; isTyping: boolean }
     | { type: 'ping' };
 
 const WS_RECONNECT_DELAY_MS = 1500;
@@ -40,6 +42,7 @@ export function useWebSocket({
     onUserStatusChange,
     onMessagesSeen,
     onReactionUpdated,
+    onTypingStatus,
     onConnectionChange,
     onReconnectExhausted,
 }: UseWebSocketProps) {
@@ -147,6 +150,8 @@ export function useWebSocket({
                     onMessagesSeen?.(data.chatId);
                 } else if (data.type === 'reaction_updated') {
                     onReactionUpdated?.(data.chatId, data.messageId, data.reactions);
+                } else if (data.type === 'typing') {
+                    onTypingStatus?.(data.chatId, data.userId, Boolean(data.isTyping));
                 } else if (data.type === 'pong') {
                     lastPongAtRef.current = Date.now();
                 } else if (data.type === 'error' && data.requestId) {
@@ -187,7 +192,7 @@ export function useWebSocket({
         };
 
         socketRef.current = ws;
-    }, [token, onNewMessage, onMessageEdited, onMessageDeleted, onUserStatusChange, onMessagesSeen, onReactionUpdated, onConnectionChange, scheduleReconnect, rejectAllPendingRequests]);
+    }, [token, onNewMessage, onMessageEdited, onMessageDeleted, onUserStatusChange, onMessagesSeen, onReactionUpdated, onTypingStatus, onConnectionChange, scheduleReconnect, rejectAllPendingRequests]);
 
     const send = useCallback(
         (event: OutgoingEvent): boolean => {
@@ -246,6 +251,14 @@ export function useWebSocket({
         (chatId: string) => {
             if (!chatId) return;
             send({ type: 'seen', chatId });
+        },
+        [send]
+    );
+
+    const sendTyping = useCallback(
+        (chatId: string, isTyping: boolean) => {
+            if (!chatId) return;
+            send({ type: 'typing', chatId, isTyping: Boolean(isTyping) });
         },
         [send]
     );
@@ -365,6 +378,7 @@ export function useWebSocket({
         editMessage,
         deleteMessage,
         sendSeen,
+        sendTyping,
         fetchChats,
         fetchMessages,
         reactMessage,

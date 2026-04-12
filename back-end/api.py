@@ -2200,6 +2200,34 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             },
                         )
 
+            elif data.get("type") == "typing":
+                chat_id_target = data.get("chatId")
+                is_typing = bool(data.get("isTyping"))
+                if not chat_id_target:
+                    continue
+
+                # Ignore saved messages typing indicator.
+                saved_chat_id = get_saved_messages_id(chat_id)
+                if chat_id_target == saved_chat_id:
+                    continue
+
+                chat_doc = await cl_chats.find_one(
+                    {"_id": chat_id_target}, {"participants": 1}
+                )
+                participants = chat_doc.get("participants", []) if chat_doc else []
+                if chat_id not in participants:
+                    continue
+
+                await broadcast(
+                    [p for p in participants if p != chat_id],
+                    {
+                        "type": "typing",
+                        "chatId": chat_id_target,
+                        "userId": chat_id,
+                        "isTyping": is_typing,
+                    },
+                )
+
             elif data.get("type") == "get_chats":
                 request_id = data.get("requestId")
                 try:

@@ -49,6 +49,8 @@ interface ChatRoomProps {
     pendingForwardDraft?: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null } | null;
     onSetPendingForwardDraft?: (targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => void;
     onClearPendingForwardDraft?: (targetChatId: string) => void;
+    typingUserIds?: string[];
+    onTypingChange?: (chatId: string, isTyping: boolean) => void;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000;
@@ -301,6 +303,8 @@ export function ChatRoom({
     pendingForwardDraft = null,
     onSetPendingForwardDraft,
     onClearPendingForwardDraft,
+    typingUserIds = [],
+    onTypingChange,
 }: ChatRoomProps) {
     const MAX_CHAT_MESSAGE_LENGTH = 6000;
     const currentChat = useMemo(
@@ -373,6 +377,7 @@ export function ChatRoom({
     const isAtBottomRef = useRef(true);
 
     const prevLenRef = useRef(0);
+    const openedAtRef = useRef<number>(Date.now());
     const initialScrollDoneRef = useRef(false);
     const lastChatIdRef = useRef<string | null>(null);
     const initialMediaPendingIdsRef = useRef<Set<string>>(new Set());
@@ -409,6 +414,45 @@ export function ChatRoom({
     const userScrolledAfterAutoJumpRef = useRef(false);
     const programmaticScrollEventsRef = useRef(0);
     const consumedInitialUnreadRef = useRef(false);
+    const typingActiveRef = useRef(false);
+    const typingTimeoutRef = useRef<number | null>(null);
+
+    const clearTypingTimeout = () => {
+        if (typingTimeoutRef.current) {
+            window.clearTimeout(typingTimeoutRef.current);
+            typingTimeoutRef.current = null;
+        }
+    };
+
+    const emitTyping = (isTyping: boolean) => {
+        if (!onTypingChange) return;
+        onTypingChange(chatId, isTyping);
+    };
+
+    const stopTyping = () => {
+        clearTypingTimeout();
+        if (!typingActiveRef.current) return;
+        typingActiveRef.current = false;
+        emitTyping(false);
+    };
+
+    const refreshTyping = (nextValue: string) => {
+        if (!onTypingChange) return;
+        const hasAnyChar = nextValue.length > 0;
+        if (!hasAnyChar) {
+            stopTyping();
+            return;
+        }
+
+        typingActiveRef.current = true;
+        emitTyping(true);
+        clearTypingTimeout();
+        typingTimeoutRef.current = window.setTimeout(() => {
+            typingActiveRef.current = false;
+            emitTyping(false);
+            typingTimeoutRef.current = null;
+        }, 1000);
+    };
 
     const markProgrammaticScroll = () => {
         programmaticScrollEventsRef.current += 2;
@@ -1067,6 +1111,7 @@ export function ChatRoom({
         if (lastChatIdRef.current === chatId) return;
         const mem = scrollMemoryRef.current[chatId];
         lastChatIdRef.current = chatId;
+        openedAtRef.current = Date.now();
         initialScrollDoneRef.current = false;
         prevLenRef.current = messages.length;
         setNewMsgCount(0); setShowScrollBtn(false);
@@ -1079,6 +1124,7 @@ export function ChatRoom({
         setReplyTo(null); setEditingId(null);
         setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
         setText('');
+        stopTyping();
         setUploadedFile(pendingUploadedFileByChat[chatId] || null);
         setUnreadAnchorId(null);
         setOptimisticReactions({});
@@ -1105,6 +1151,13 @@ export function ChatRoom({
                 initialMediaFollowupDoneRef.current = true;
             }
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [chatId]);
+
+    useEffect(() => {
+        return () => {
+            stopTyping();
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
 
@@ -1214,7 +1267,9 @@ export function ChatRoom({
         const added = messages.length - prevLenRef.current;
         if (added > 0) {
             if (nearBottom) {
-                const raf = requestAnimationFrame(() => scrollToBottom(true));
+                const openedRecently = Date.now() - openedAtRef.current < 1600;
+                const shouldAnimate = !openedRecently && added <= 2;
+                const raf = requestAnimationFrame(() => scrollToBottom(shouldAnimate));
                 prevLenRef.current = messages.length;
                 return () => cancelAnimationFrame(raf);
             }
@@ -1277,6 +1332,22 @@ export function ChatRoom({
         return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender) };
     }), [messages, messages.length, currentUserId]);
 
+    const otherTypingUserIds = useMemo(
+        () => (typingUserIds || []).filter((uid) => uid && uid !== currentUserId),
+        [typingUserIds, currentUserId]
+    );
+
+    const typingStatusLabel = useMemo(() => {
+        if (otherTypingUserIds.length === 0) return '';
+        if (!isGroupChat) return 'درحال تایپ...';
+        if (otherTypingUserIds.length === 1) {
+            const uid = otherTypingUserIds[0];
+            const name = groupMembers[uid]?.name || 'یک کاربر';
+            return `${name} درحال تایپ...`;
+        }
+        return `${toPersianDigits(otherTypingUserIds.length)} کاربر درحال تایپ هستند`;
+    }, [otherTypingUserIds, isGroupChat, groupMembers]);
+
     const activeInputStackCount = (replyTo || editingId ? 1 : 0)
         + (uploadedFile ? 1 : 0)
         + (pendingForwardDraft ? 1 : 0);
@@ -1296,6 +1367,7 @@ export function ChatRoom({
         if (pendingForwardDraft && !editingId) {
             void handleForwardMessage(pendingForwardDraft.sourceChatId, pendingForwardDraft.messageId, chatId);
         }
+        stopTyping();
         pendingUploadedFileByChat[chatId] = null;
         setText(''); setUploadedFile(null); setReplyTo(null); setEditingId(null);
         requestAnimationFrame(() => scrollToBottom(true));
@@ -1748,9 +1820,9 @@ export function ChatRoom({
                         </div>
                         {!isSavedMessages && (
                             <div className={isGroupChat || contact.online ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
-                                {isGroupChat
+                                {typingStatusLabel || (isGroupChat
                                     ? `${chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0} عضو • ${chatStats?.onlineMembers ?? 0} آنلاین`
-                                    : contact.online ? 'آنلاین' : 'آفلاین'}
+                                    : contact.online ? 'آنلاین' : 'آفلاین')}
                             </div>
                         )}
                     </div>
@@ -2308,7 +2380,7 @@ export function ChatRoom({
                             <div className="chat-room__reply-edit-box__title">{editingId ? 'در حال ویرایش' : 'در حال پاسخ'}</div>
                             {!editingId && replyTo && <div className="chat-room__reply-edit-box__text">{getReplyPreviewText(replyTo)}</div>}
                         </div>
-                        <button type="button" className="icon-btn" aria-label="Cancel" onClick={() => { setReplyTo(null); setEditingId(null); setText(''); }}>
+                        <button type="button" className="icon-btn" aria-label="Cancel" onClick={() => { setReplyTo(null); setEditingId(null); setText(''); stopTyping(); }}>
                             <X size={18} />
                         </button>
                     </div>
@@ -2345,7 +2417,12 @@ export function ChatRoom({
                 <div className="chat-room__input-wrapper">
                     <FileUpload token={token} chatId={chatId} onFileUploaded={handleFileUploaded} fileAttached={Boolean(uploadedFile)} />
                     <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
-                        value={text} onChange={(e) => setText(e.target.value)}
+                        value={text}
+                        onChange={(e) => {
+                            const nextValue = e.target.value;
+                            setText(nextValue);
+                            refreshTyping(nextValue);
+                        }}
                         onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey && !isMobileKeyboardInput()) {
