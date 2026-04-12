@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Eye, MoreVertical, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Eye, AlignJustify, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown } from 'lucide-react';
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1867,7 +1867,7 @@ export function ChatRoom({
                             style={!canDeleteChat ? { opacity: 0.4, cursor: 'default' } : undefined}
                             type="button"
                         >
-                            <MoreVertical size={20} />
+                            <AlignJustify size={20} />
                         </button>
 
                         {chatMenuOpen && canDeleteChat && (

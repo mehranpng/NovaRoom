@@ -1240,6 +1240,7 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                 "text": doc.get("text", ""),
                 "senderId": doc.get("senderId"),
                 "timestamp": dt_to_epoch_ms(doc.get("timestamp")),
+                "file": doc.get("file"),
             }
 
         result.append(
@@ -1878,6 +1879,7 @@ async def forward_message(
         "text": forwarded_msg["text"],
         "senderId": user_id,
         "timestamp": forwarded_msg["timestamp"],
+        "file": file_data,
     }
 
     # Update chat document (only for non-saved chats)
@@ -2005,6 +2007,7 @@ async def build_last_message(chat_id: str) -> Optional[dict]:
         "text": doc.get("text", ""),
         "senderId": doc.get("senderId"),
         "timestamp": doc.get("timestamp"),
+        "file": doc.get("file"),
     }
 
 
@@ -2138,6 +2141,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     "text": text if text else "[File]",
                     "senderId": chat_id,
                     "timestamp": message_doc["timestamp"],
+                    "file": file_data,
                 }
 
                 # Only update chat document for normal chats (not saved messages)

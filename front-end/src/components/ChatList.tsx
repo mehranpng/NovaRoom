@@ -1,4 +1,4 @@
-import { Search, MessageSquarePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, Laptop, ChevronDown, MoreVertical, Trash2, RefreshCw, Pin, PinOff } from 'lucide-react';
+import { Search, MessageCirclePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, Laptop, ChevronDown, AlignJustify, Trash2, RefreshCw, Pin, PinOff } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Chat, User } from '../types';
@@ -743,7 +743,7 @@ export function ChatList({
                 </div>
                 <div className="chat-list__header-actions">
                     <button className="icon-btn" onClick={onNewChatClick}>
-                        <MessageSquarePlus size={20} />
+                        <MessageCirclePlus size={20} />
                     </button>
 
                     <div className="chat-list__menu" ref={menuRef}>
@@ -988,7 +988,7 @@ export function ChatList({
                                                     openActionMenu(chat.id, e.currentTarget, menuItemCount);
                                                 }}
                                             >
-                                                <MoreVertical size={16} />
+                                                <AlignJustify size={16} />
                                             </button>
                                         </div>
                                     </div>
