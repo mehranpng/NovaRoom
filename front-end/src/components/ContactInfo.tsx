@@ -245,7 +245,7 @@ export function ContactInfo({
         const fileId = extractFileIdFromAvatar(rawAvatar);
         const avatarUrl = resolveAvatarUrl(rawAvatar);
         const token = localStorage.getItem('token') || '';
-        if (!avatarUrl || !token) return;
+        if (!avatarUrl || !token || !fileId) return;
 
         try {
             const response = await fetch(avatarUrl, {
@@ -261,7 +261,7 @@ export function ContactInfo({
             setOpenedProfileImage({ url: objectUrl, fileId });
         } catch (e) {
             console.error(e);
-            alert('نمایش تصویر پروفایل ممکن نبود');
+            // اگر تصویر پروفایل معتبر نبود یا قابل دریافت نبود، سکوت کن.
         }
     };
 

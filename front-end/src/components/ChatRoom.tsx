@@ -2445,7 +2445,9 @@ export function ChatRoom({
                 )}
                 <div className="chat-room__input-wrapper">
                     {isContactBlocked ? (
-                        <div className="chat-room__blocked-box">این کاربر را بلاک کرده‌اید.</div>
+                        <div className="chat-room__blocked-box">
+                            {blockedByOther ? 'این کاربر شما را بلاک کرده است.' : 'شما این کاربر را بلاک کرده‌اید.'}
+                        </div>
                     ) : (
                         <>
                             <FileUpload token={token} chatId={chatId} onFileUploaded={handleFileUploaded} fileAttached={Boolean(uploadedFile)} />
