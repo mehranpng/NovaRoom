@@ -1,4 +1,4 @@
-import { Search, MessageCirclePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, Laptop, ChevronDown, AlignJustify, Trash2, RefreshCw, Pin, PinOff } from 'lucide-react';
+import { Search, MessageCirclePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, Laptop, ChevronDown, AlignJustify, Trash2, RefreshCw, Pin, PinOff, MessageSquarePlus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Chat, User } from '../types';
