@@ -860,8 +860,8 @@ body,
     border-radius: 10px;
     background: var(--bg-secondary);
     color: var(--text-primary);
-    height: 36px;
-    padding: 0 10px;
+    height: 42px;
+    padding: 0 14px;
     font: inherit;
     font-weight: 650;
     font-size: 16px;
@@ -955,7 +955,7 @@ body,
     border: none;
     border-radius: 10px;
     background: transparent;
-    color: #ef4444;
+    color: var(--text-secondary);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -964,7 +964,8 @@ body,
 }
 
 .ai-chat-drawer__delete:hover {
-    background: rgba(239, 68, 68, 0.12);
+    background: var(--hover-bg);
+    color: var(--text-primary);
 }
 
 .ai-chat-drawer__loader {
