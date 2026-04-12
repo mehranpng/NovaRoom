@@ -588,15 +588,6 @@ export function ContactInfo({
                         <div className="contact-info__actions-row">
                             <button
                                 type="button"
-                                onClick={() => onOpenChat?.(user)}
-                                className="contact-info__action-btn"
-                                aria-label="Open chat"
-                            >
-                                پیام
-                                <MessageCircle size={18} />
-                            </button>
-                            <button
-                                type="button"
                                 onClick={() => onToggleBlock?.(user)}
                                 className={isBlocked ? 'contact-info__action-btn contact-info__action-btn--danger contact-info__action-btn--danger-soft' : 'contact-info__action-btn contact-info__action-btn--danger'}
                                 aria-label={isBlocked ? 'Unblock user' : 'Block user'}
@@ -604,11 +595,19 @@ export function ContactInfo({
                                 {isBlocked ? 'آنبلاک' : 'بلاک'}
                                 <Ban size={16} />
                             </button>
+                            <button
+                                type="button"
+                                onClick={() => onOpenChat?.(user)}
+                                className="contact-info__action-btn"
+                                aria-label="Open chat"
+                            >
+                                پیام
+                                <MessageCircle size={18} />
+                            </button>
                         </div>
                     </div>
                 )}
 
-                {/* بیوگرافی — برای گروه نشون داده نمیشه اگه خالی باشه */}
                 {(!isGroup || displayBio) && (
                     <div className="contact-info__card">
                         <div className="contact-info__label">بیوگرافی</div>
