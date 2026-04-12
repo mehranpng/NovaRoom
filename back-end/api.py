@@ -344,7 +344,9 @@ async def startup_db():
     await cl_messages.create_index("chatId")
     await cl_messages.create_index([("chatId", 1), ("timestamp", -1)])
     await cl_ai_messages.create_index("userId")
-    await cl_ai_messages.create_index([("userId", 1), ("aiChatId", 1), ("timestamp", -1)])
+    await cl_ai_messages.create_index(
+        [("userId", 1), ("aiChatId", 1), ("timestamp", -1)]
+    )
     await cl_ai_chats.create_index([("userId", 1), ("updatedAt", -1)])
 
 
@@ -1357,7 +1359,9 @@ async def remove_uploaded_file(
 ):
     file_doc = await cl_messages.find_one({"file.fileId": file_id}, {"_id": 1})
     if file_doc:
-        raise HTTPException(status_code=409, detail="File is already attached to a message")
+        raise HTTPException(
+            status_code=409, detail="File is already attached to a message"
+        )
 
     deleted = await delete_file(file_id)
     if not deleted:
@@ -1648,11 +1652,14 @@ async def forward_message(
                 or existing_forwarded_from.get("original_sender_id")
                 or ""
             ).strip()
-            existing_name = str(
-                existing_forwarded_from.get("name")
-                or existing_forwarded_from.get("fullName")
+            existing_name = (
+                str(
+                    existing_forwarded_from.get("name")
+                    or existing_forwarded_from.get("fullName")
+                    or "Unknown"
+                ).strip()
                 or "Unknown"
-            ).strip() or "Unknown"
+            )
             existing_username = str(
                 existing_forwarded_from.get("username")
                 or existing_forwarded_from.get("userName")
@@ -2273,7 +2280,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         current_user=user,
                     )
                     await websocket.send_json(
-                        {"type": "unreact_message_ack", "requestId": request_id, **result}
+                        {
+                            "type": "unreact_message_ack",
+                            "requestId": request_id,
+                            **result,
+                        }
                     )
                 except HTTPException as e:
                     await websocket.send_json(
@@ -2297,7 +2308,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         current_user=user,
                     )
                     await websocket.send_json(
-                        {"type": "forward_message_ack", "requestId": request_id, **result}
+                        {
+                            "type": "forward_message_ack",
+                            "requestId": request_id,
+                            **result,
+                        }
                     )
                 except HTTPException as e:
                     await websocket.send_json(
@@ -2356,7 +2371,9 @@ async def ensure_ai_chat(user_id: str, ai_chat_id: str) -> dict:
 @app.get("/ai/chats")
 async def get_ai_chats(current_user: dict = Depends(get_current_user)):
     user_id = current_user["chatId"]
-    rows = await cl_ai_chats.find({"userId": user_id}).sort("updatedAt", -1).to_list(200)
+    rows = (
+        await cl_ai_chats.find({"userId": user_id}).sort("updatedAt", -1).to_list(200)
+    )
     return [
         {
             "id": str(row["_id"]),
@@ -2389,7 +2406,9 @@ async def create_ai_chat(current_user: dict = Depends(get_current_user)):
 
 
 @app.delete("/ai/chats/{ai_chat_id}")
-async def delete_ai_chat(ai_chat_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_ai_chat(
+    ai_chat_id: str, current_user: dict = Depends(get_current_user)
+):
     user_id = current_user["chatId"]
     chat = await ensure_ai_chat(user_id, ai_chat_id)
     await cl_ai_messages.delete_many({"userId": user_id, "aiChatId": ai_chat_id})
@@ -2421,7 +2440,9 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
 
         active_ai_connections.setdefault(user_id, []).append(websocket)
 
-        profile = user.get("profile", {}) if isinstance(user.get("profile"), dict) else {}
+        profile = (
+            user.get("profile", {}) if isinstance(user.get("profile"), dict) else {}
+        )
         user_name = profile.get("name", "")
         username = profile.get("username", "")
         user_bio = profile.get("bio", "")
@@ -2529,7 +2550,9 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "content": full_ai_response,
                             "reasoningContent": full_reasoning_content,
                             "streamCompleted": True,
-                            "reasoningDurationSec": int(max(0, round(time.time() - stream_started_at))),
+                            "reasoningDurationSec": int(
+                                max(0, round(time.time() - stream_started_at))
+                            ),
                         }
                     },
                 )
@@ -2537,7 +2560,11 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 chat_update: Dict[str, Any] = {"updatedAt": utc_now()}
                 if should_generate_title and not stopped:
                     candidate_title = await generate_chat_title(first_user_message)
-                    if isinstance(candidate_title, str) and candidate_title.strip() and candidate_title.strip() != "گفت‌وگوی جدید":
+                    if (
+                        isinstance(candidate_title, str)
+                        and candidate_title.strip()
+                        and candidate_title.strip() != "گفت‌وگوی جدید"
+                    ):
                         generated_title = candidate_title.strip()[:56]
                         chat_update["title"] = generated_title
                 await cl_ai_chats.update_one(
@@ -2560,7 +2587,9 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "reasoningEnabled": bool(reasoning_mode),
                             "isStreaming": False,
                             "streamCompleted": True,
-                            "reasoningDurationSec": int(max(0, round(time.time() - stream_started_at))),
+                            "reasoningDurationSec": int(
+                                max(0, round(time.time() - stream_started_at))
+                            ),
                             "timestamp": message_ts_ms,
                         },
                     },
@@ -2594,7 +2623,10 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     except HTTPException:
                         await safe_send_ai(
                             user_id,
-                            {"type": "ai_error", "message": "گفت‌وگوی انتخاب‌شده معتبر نیست."}
+                            {
+                                "type": "ai_error",
+                                "message": "گفت‌وگوی انتخاب‌شده معتبر نیست.",
+                            },
                         )
                         continue
 
@@ -2607,7 +2639,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                         {
                             "type": "ai_error",
                             "message": "حداکثر 30 پیام در هر گفتگو مجاز است. لطفاً گفت‌وگوی جدید باز کنید.",
-                        }
+                        },
                     )
                     continue
 
@@ -2642,14 +2674,19 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     memory_summary = ai_chat.get("summary", "").strip()
 
                 history_docs = (
-                    await cl_ai_messages.find({"userId": user_id, "aiChatId": ai_chat_id})
+                    await cl_ai_messages.find(
+                        {"userId": user_id, "aiChatId": ai_chat_id}
+                    )
                     .sort("timestamp", -1)
                     .limit(6)
                     .to_list(6)
                 )
                 history_docs.reverse()
 
-                messages = [{"role": doc["role"], "content": doc["content"]} for doc in history_docs]
+                messages = [
+                    {"role": doc["role"], "content": doc["content"]}
+                    for doc in history_docs
+                ]
 
                 refreshed_summary = await generate_conversation_summary(
                     messages,
@@ -2708,7 +2745,11 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
     except Exception:
         print(f"AI WebSocket Error for {user_id}: {traceback.format_exc()}")
     finally:
-        if user_id and user_id in active_ai_connections and websocket in active_ai_connections[user_id]:
+        if (
+            user_id
+            and user_id in active_ai_connections
+            and websocket in active_ai_connections[user_id]
+        ):
             active_ai_connections[user_id].remove(websocket)
             if not active_ai_connections[user_id]:
                 del active_ai_connections[user_id]
@@ -2739,7 +2780,9 @@ async def get_ai_messages(
             "text": m.get("content", ""),
             "reasoningContent": m.get("reasoningContent", ""),
             "reasoningEnabled": bool(m.get("reasoningEnabled", False)),
-            "isStreaming": bool(m["role"] == "assistant" and not bool(m.get("streamCompleted", True))),
+            "isStreaming": bool(
+                m["role"] == "assistant" and not bool(m.get("streamCompleted", True))
+            ),
             "streamCompleted": bool(m.get("streamCompleted", True)),
             "reasoningDurationSec": int(m.get("reasoningDurationSec", 0) or 0),
             "timestamp": dt_to_epoch_ms(m.get("timestamp")),

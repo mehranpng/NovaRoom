@@ -445,13 +445,6 @@ export function ChatRoom({
         }
     };
 
-    const consumeUnreadForOpenSession = () => {
-        if (unreadConsumedInSessionRef.current) return;
-        if (displayUnreadCount <= 0) return;
-        unreadConsumedInSessionRef.current = true;
-        window.setTimeout(() => onConsumeInitialUnread?.(chatId), 0);
-    };
-
     useEffect(() => {
         return () => {
             if (openedGroupAvatarObjectUrlRef.current) {
@@ -1563,138 +1556,138 @@ export function ChatRoom({
 
         return (
             <>
-            <div className="contact-info">
-                <div className="contact-info__header">
-                    <button className="contact-info__back" onClick={() => {
-                        setShowMembersList(false);
-                        if (onCloseForcedContactInfo) {
-                            onCloseForcedContactInfo(chatId);
-                            return;
-                        }
-                    }} type="button"><ArrowLeft size={20} /></button>
-                    <div className="contact-info__title">اطلاعات گروه</div>
-                    <div className="contact-info__spacer" />
-                    {isVerifiedUser && (
-                        <button
-                            type="button"
-                            className="icon-btn"
-                            aria-label="Edit group"
-                            title="ویرایش گروه"
-                            onClick={() => {
-                                setOpenGroupEditorFromMembers(true);
-                                setShowMembersList(false);
-                                setShowContactInfo(true);
-                            }}
-                        >
-                            <Pencil size={18} />
-                        </button>
-                    )}
-                </div>
-
-                <div className="contact-info__content">
-                    <div className="contact-info__avatar">
-                        <button
-                            type="button"
-                            onClick={openGroupAvatarViewer}
-                            style={{ background: 'none', border: 'none', padding: 0, cursor: contact.avatar ? 'zoom-in' : 'default' }}
-                            aria-label="Open group avatar"
-                        >
-                            <Avatar name={contact.name} size="xl" src={contact.avatar} />
-                        </button>
-                        <div className="contact-info__name" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{contact.name}</div>
-                        <div className="contact-info__status chat-room__contact-status--online" style={{ color: '#22c55e' }}>
-                            {membersList.length} عضو • {onlineCount} آنلاین
-                        </div>
-                    </div>
-
-                    {inviteLink && (
-                        <div className="contact-info__card">
-                            <div className="contact-info__label">لینک دعوت</div>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                                <div className="contact-info__mono" style={{ fontSize: 13, wordBreak: 'break-all', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <Users size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
-                                    {inviteLink}
-                                </div>
-                                <button type="button" className="icon-btn" style={{ flexShrink: 0 }} onClick={() => navigator.clipboard.writeText(inviteLink).catch(() => { })}>
-                                    <Copy size={18} />
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="contact-info__card" style={{ padding: '8px 12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <Search size={15} style={{ opacity: 0.5, flexShrink: 0 }} />
-                            <input type="text" placeholder="جستجو در اعضا..." value={memberSearch} onChange={e => setMemberSearch(e.target.value)}
-                                style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, fontSize: 14, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', direction: 'rtl' }} />
-                        </div>
-                    </div>
-                    <div style={{ padding: '8px 4px 4px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'Vazir, sans-serif' }}>اعضا ({membersList.length})</div>
-                    <div className="contact-info__card" style={{ padding: 0, overflow: 'hidden' }}>
-                        {membersLoading && membersList.length === 0 ? (
-                            Array.from({ length: 6 }).map((_, idx) => (
-                                <div key={`members-loading-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderTop: idx > 0 ? '1px solid var(--border-primary)' : 'none' }}>
-                                    <span className="skeleton" style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0 }} />
-                                    <div style={{ flex: 1 }}>
-                                        <div className="skeleton" style={{ height: 12, width: idx % 2 === 0 ? '52%' : '64%', borderRadius: 6, marginBottom: 8 }} />
-                                        <div className="skeleton" style={{ height: 10, width: idx % 2 === 0 ? '30%' : '38%', borderRadius: 6 }} />
-                                    </div>
-                                </div>
-                            ))
-                        ) : sortedFiltered.length === 0 ? (
-                            <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)', fontSize: 14 }}>عضوی یافت نشد</div>
-                        ) : (
-                            sortedFiltered.map((member, idx) => (
-                                <div key={member.chatId}
-                                    onClick={() => {
-                                        setShowMembersList(false);
-                                        if (member.chatId === currentUserId) onOpenProfile?.();
-                                        else {
-                                            restoringFromInfoRef.current = true;
-                                            setViewingMemberId(member.chatId);
-                                        }
-                                    }}
-                                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer', borderTop: idx > 0 ? '1px solid var(--border-primary)' : 'none', transition: 'background 0.15s' }}
-                                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
-                                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                                >
-                                    {/* آواتار با dot آنلاین — فقط در همین لیست */}
-                                    <Avatar name={member.name} size="md" src={member.avatar} online={member.online} />
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>
-                                            {member.name}
-                                            {resolveVerified(member.verified) && <VerifiedBadge size={14} />}
-                                        </div>
-                                        <div style={{ fontSize: 13, marginTop: 2 }}>
-                                            {member.online ? (
-                                                <span style={{ color: '#22c55e' }}>آنلاین</span>
-                                            ) : (
-                                                <span style={{ color: 'var(--text-secondary)' }}>
-                                                    {member.username ? `@${member.username}` : 'آفلاین'}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            ))
+                <div className="contact-info">
+                    <div className="contact-info__header">
+                        <button className="contact-info__back" onClick={() => {
+                            setShowMembersList(false);
+                            if (onCloseForcedContactInfo) {
+                                onCloseForcedContactInfo(chatId);
+                                return;
+                            }
+                        }} type="button"><ArrowLeft size={20} /></button>
+                        <div className="contact-info__title">اطلاعات گروه</div>
+                        <div className="contact-info__spacer" />
+                        {isVerifiedUser && (
+                            <button
+                                type="button"
+                                className="icon-btn"
+                                aria-label="Edit group"
+                                title="ویرایش گروه"
+                                onClick={() => {
+                                    setOpenGroupEditorFromMembers(true);
+                                    setShowMembersList(false);
+                                    setShowContactInfo(true);
+                                }}
+                            >
+                                <Pencil size={18} />
+                            </button>
                         )}
                     </div>
+
+                    <div className="contact-info__content">
+                        <div className="contact-info__avatar">
+                            <button
+                                type="button"
+                                onClick={openGroupAvatarViewer}
+                                style={{ background: 'none', border: 'none', padding: 0, cursor: contact.avatar ? 'zoom-in' : 'default' }}
+                                aria-label="Open group avatar"
+                            >
+                                <Avatar name={contact.name} size="xl" src={contact.avatar} />
+                            </button>
+                            <div className="contact-info__name" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{contact.name}</div>
+                            <div className="contact-info__status chat-room__contact-status--online" style={{ color: '#22c55e' }}>
+                                {membersList.length} عضو • {onlineCount} آنلاین
+                            </div>
+                        </div>
+
+                        {inviteLink && (
+                            <div className="contact-info__card">
+                                <div className="contact-info__label">لینک دعوت</div>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                    <div className="contact-info__mono" style={{ fontSize: 13, wordBreak: 'break-all', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <Users size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
+                                        {inviteLink}
+                                    </div>
+                                    <button type="button" className="icon-btn" style={{ flexShrink: 0 }} onClick={() => navigator.clipboard.writeText(inviteLink).catch(() => { })}>
+                                        <Copy size={18} />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="contact-info__card" style={{ padding: '8px 12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <Search size={15} style={{ opacity: 0.5, flexShrink: 0 }} />
+                                <input type="text" placeholder="جستجو در اعضا..." value={memberSearch} onChange={e => setMemberSearch(e.target.value)}
+                                    style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, fontSize: 14, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', direction: 'rtl' }} />
+                            </div>
+                        </div>
+                        <div style={{ padding: '8px 4px 4px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'Vazir, sans-serif' }}>اعضا ({membersList.length})</div>
+                        <div className="contact-info__card" style={{ padding: 0, overflow: 'hidden' }}>
+                            {membersLoading && membersList.length === 0 ? (
+                                Array.from({ length: 6 }).map((_, idx) => (
+                                    <div key={`members-loading-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderTop: idx > 0 ? '1px solid var(--border-primary)' : 'none' }}>
+                                        <span className="skeleton" style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0 }} />
+                                        <div style={{ flex: 1 }}>
+                                            <div className="skeleton" style={{ height: 12, width: idx % 2 === 0 ? '52%' : '64%', borderRadius: 6, marginBottom: 8 }} />
+                                            <div className="skeleton" style={{ height: 10, width: idx % 2 === 0 ? '30%' : '38%', borderRadius: 6 }} />
+                                        </div>
+                                    </div>
+                                ))
+                            ) : sortedFiltered.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)', fontSize: 14 }}>عضوی یافت نشد</div>
+                            ) : (
+                                sortedFiltered.map((member, idx) => (
+                                    <div key={member.chatId}
+                                        onClick={() => {
+                                            setShowMembersList(false);
+                                            if (member.chatId === currentUserId) onOpenProfile?.();
+                                            else {
+                                                restoringFromInfoRef.current = true;
+                                                setViewingMemberId(member.chatId);
+                                            }
+                                        }}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer', borderTop: idx > 0 ? '1px solid var(--border-primary)' : 'none', transition: 'background 0.15s' }}
+                                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+                                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                    >
+                                        {/* آواتار با dot آنلاین — فقط در همین لیست */}
+                                        <Avatar name={member.name} size="md" src={member.avatar} online={member.online} />
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>
+                                                {member.name}
+                                                {resolveVerified(member.verified) && <VerifiedBadge size={14} />}
+                                            </div>
+                                            <div style={{ fontSize: 13, marginTop: 2 }}>
+                                                {member.online ? (
+                                                    <span style={{ color: '#22c55e' }}>آنلاین</span>
+                                                ) : (
+                                                    <span style={{ color: 'var(--text-secondary)' }}>
+                                                        {member.username ? `@${member.username}` : 'آفلاین'}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
                 </div>
-            </div>
-            {openedGroupAvatar && (
-                <ImageMediaViewer
-                    imageUrl={openedGroupAvatar.url}
-                    token={token}
-                    downloadFile={{ fileId: openedGroupAvatar.fileId, fileName: openedGroupAvatar.fileName }}
-                    onClose={() => {
-                        setOpenedGroupAvatar(null);
-                        if (openedGroupAvatarObjectUrlRef.current) {
-                            URL.revokeObjectURL(openedGroupAvatarObjectUrlRef.current);
-                            openedGroupAvatarObjectUrlRef.current = null;
-                        }
-                    }}
-                />
-            )}
+                {openedGroupAvatar && (
+                    <ImageMediaViewer
+                        imageUrl={openedGroupAvatar.url}
+                        token={token}
+                        downloadFile={{ fileId: openedGroupAvatar.fileId, fileName: openedGroupAvatar.fileName }}
+                        onClose={() => {
+                            setOpenedGroupAvatar(null);
+                            if (openedGroupAvatarObjectUrlRef.current) {
+                                URL.revokeObjectURL(openedGroupAvatarObjectUrlRef.current);
+                                openedGroupAvatarObjectUrlRef.current = null;
+                            }
+                        }}
+                    />
+                )}
             </>
         );
     }
@@ -2234,26 +2227,26 @@ export function ChatRoom({
             <AnimatePresence>
                 {!hideScrollBtnUntilBottom && (newMsgCount > 0 || showScrollBtn) && (
                     <motion.button
-                    type="button"
-                    aria-label="Jump to latest messages"
-                    onClick={() => {
-                        setHideScrollBtnUntilBottom(true);
-                        scrollToBottom(true);
-                        setNewMsgCount(0);
-                        setShowScrollBtn(false);
-                    }}
-                    animate={{ opacity: 1 }}
-                    initial={{ opacity: 0 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.14, ease: 'easeOut' }}
-                    style={{ position: 'absolute', right: 16, bottom: scrollButtonBottom, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px', zIndex: 12 }}>
-                    <ArrowDown size={16} color="currentColor" />
-                    {newMsgCount > 0 && (
-                        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{newMsgCount}</span>
-                            <span style={{ width: 6, height: 6, borderRadius: 999, background: '#2F80ED', marginTop: 4 }} />
-                        </span>
-                    )}
+                        type="button"
+                        aria-label="Jump to latest messages"
+                        onClick={() => {
+                            setHideScrollBtnUntilBottom(true);
+                            scrollToBottom(true);
+                            setNewMsgCount(0);
+                            setShowScrollBtn(false);
+                        }}
+                        animate={{ opacity: 1 }}
+                        initial={{ opacity: 0 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.14, ease: 'easeOut' }}
+                        style={{ position: 'absolute', right: 16, bottom: scrollButtonBottom, display: 'flex', alignItems: 'center', gap: 10, padding: newMsgCount > 0 ? '8px 10px' : '10px', borderRadius: 999, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 6px 20px rgba(0,0,0,0.10)', cursor: 'pointer', fontSize: 12, lineHeight: '12px', zIndex: 12 }}>
+                        <ArrowDown size={16} color="currentColor" />
+                        {newMsgCount > 0 && (
+                            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{newMsgCount}</span>
+                                <span style={{ width: 6, height: 6, borderRadius: 999, background: '#2F80ED', marginTop: 4 }} />
+                            </span>
+                        )}
                     </motion.button>
                 )}
             </AnimatePresence>
@@ -2327,14 +2320,14 @@ export function ChatRoom({
                 {confirmDeleteChat && (
                     <motion.div className="chat-room-modal-overlay" ref={confirmDeleteChatRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16, ease: 'easeOut' }}>
                         <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 12, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.985 }} transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}>
-                        <h3 className="chat-room-confirm-modal__title">{isGroupChat ? 'گروه حذف شود؟' : 'گفتگو حذف شود؟'}</h3>
-                        <p className="chat-room-confirm-modal__text">
-                            {isGroupChat ? 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.' : 'این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'}
-                        </p>
-                        <div className="chat-room-confirm-modal__actions">
-                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteChat(false)} type="button">لغو</button>
-                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doDeleteChat} type="button">حذف</button>
-                        </div>
+                            <h3 className="chat-room-confirm-modal__title">{isGroupChat ? 'گروه حذف شود؟' : 'گفتگو حذف شود؟'}</h3>
+                            <p className="chat-room-confirm-modal__text">
+                                {isGroupChat ? 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.' : 'این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'}
+                            </p>
+                            <div className="chat-room-confirm-modal__actions">
+                                <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteChat(false)} type="button">لغو</button>
+                                <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doDeleteChat} type="button">حذف</button>
+                            </div>
                         </motion.div>
                     </motion.div>
                 )}
@@ -2344,12 +2337,12 @@ export function ChatRoom({
                 {confirmLeaveGroup && (
                     <motion.div className="chat-room-modal-overlay" ref={confirmLeaveGroupRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16, ease: 'easeOut' }}>
                         <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 12, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.985 }} transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}>
-                        <h3 className="chat-room-confirm-modal__title">خروج از گروه؟</h3>
-                        <p className="chat-room-confirm-modal__text">آیا می‌خواهید از گروه خارج شوید؟ گروه برای شما حذف خواهد شد.</p>
-                        <div className="chat-room-confirm-modal__actions">
-                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmLeaveGroup(false)} type="button">لغو</button>
-                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doLeaveGroup} type="button">خروج</button>
-                        </div>
+                            <h3 className="chat-room-confirm-modal__title">خروج از گروه؟</h3>
+                            <p className="chat-room-confirm-modal__text">آیا می‌خواهید از گروه خارج شوید؟ گروه برای شما حذف خواهد شد.</p>
+                            <div className="chat-room-confirm-modal__actions">
+                                <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmLeaveGroup(false)} type="button">لغو</button>
+                                <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={doLeaveGroup} type="button">خروج</button>
+                            </div>
                         </motion.div>
                     </motion.div>
                 )}
@@ -2359,12 +2352,12 @@ export function ChatRoom({
                 {confirmDeleteMsg && (
                     <motion.div className="chat-room-modal-overlay" ref={confirmDeleteMsgRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16, ease: 'easeOut' }}>
                         <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 12, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.985 }} transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}>
-                        <h3 className="chat-room-confirm-modal__title">این پیام حذف شود؟</h3>
-                        <p className="chat-room-confirm-modal__text">این عمل پیام را کامل حذف میکند.</p>
-                        <div className="chat-room-confirm-modal__actions">
-                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteMsg(null)} type="button">لغو</button>
-                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={confirmDeleteMessage} type="button">حذف</button>
-                        </div>
+                            <h3 className="chat-room-confirm-modal__title">این پیام حذف شود؟</h3>
+                            <p className="chat-room-confirm-modal__text">این عمل پیام را کامل حذف میکند.</p>
+                            <div className="chat-room-confirm-modal__actions">
+                                <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteMsg(null)} type="button">لغو</button>
+                                <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={confirmDeleteMessage} type="button">حذف</button>
+                            </div>
                         </motion.div>
                     </motion.div>
                 )}

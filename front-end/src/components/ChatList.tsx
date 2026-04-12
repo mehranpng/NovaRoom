@@ -960,7 +960,7 @@ export function ChatList({
                                                 <Pin
                                                     size={14}
                                                     className="chat-list__pin-icon"
-                                                    title="سنجاق شده"
+                                                    aria-label="سنجاق شده"
                                                     style={{ opacity: 0.95, fill: 'currentColor' }}
                                                 />
                                             ) : null}
