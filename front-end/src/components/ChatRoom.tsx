@@ -402,6 +402,8 @@ export function ChatRoom({
     const prevLenRef = useRef(0);
     const pendingOlderAdjustRef = useRef<{ prevHeight: number; prevTop: number } | null>(null);
     const pendingRangeLoadTypeRef = useRef<'older' | 'newer' | null>(null);
+    const suppressIncomingBadgeRef = useRef(false);
+    const hasOlderMessagesRef = useRef(hasOlderMessages);
     const openedAtRef = useRef<number>(Date.now());
     const initialScrollDoneRef = useRef(false);
     const lastChatIdRef = useRef<string | null>(null);
@@ -918,6 +920,7 @@ export function ChatRoom({
         if (!el) return false;
         markProgrammaticScroll();
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        startHighlight(normalizedId);
         if (highlightRafRef.current) cancelAnimationFrame(highlightRafRef.current);
         const startedAt = performance.now();
         const check = () => {
@@ -950,7 +953,6 @@ export function ChatRoom({
 
     const scrollToMessage = async (messageId: string) => {
         if (tryScrollToMessage(messageId)) return;
-        if (!onResolveReplyTargetMessage) return;
 
         const normalizedId = String(messageId);
         const controller = new AbortController();
@@ -958,9 +960,35 @@ export function ChatRoom({
         replyJumpAbortRef.current = controller;
         setReplyJumpLoading({ messageId: normalizedId });
         try {
-            const loaded = await onResolveReplyTargetMessage(chatId, normalizedId, controller.signal);
-            if (!loaded || controller.signal.aborted) return;
-            requestAnimationFrame(() => { tryScrollToMessage(normalizedId); });
+            const waitForTarget = async (tries = 10, delay = 90) => {
+                for (let i = 0; i < tries; i += 1) {
+                    if (controller.signal.aborted) return false;
+                    if (tryScrollToMessage(normalizedId)) return true;
+                    await new Promise((resolve) => window.setTimeout(resolve, delay));
+                }
+                return false;
+            };
+
+            let loadedByTargetedFetch = false;
+            if (onResolveReplyTargetMessage) {
+                suppressIncomingBadgeRef.current = true;
+                loadedByTargetedFetch = await onResolveReplyTargetMessage(chatId, normalizedId, controller.signal);
+                if (controller.signal.aborted) return;
+                if (loadedByTargetedFetch) {
+                    const found = await waitForTarget();
+                    if (found || controller.signal.aborted) return;
+                }
+            }
+
+            if (!onLoadOlderMessages) return;
+            for (let page = 0; page < 10; page += 1) {
+                if (controller.signal.aborted) return;
+                if (!hasOlderMessagesRef.current) return;
+                suppressIncomingBadgeRef.current = true;
+                await Promise.resolve(onLoadOlderMessages(chatId));
+                const found = await waitForTarget(7, 80);
+                if (found) return;
+            }
         } catch {
             // ignore
         } finally {
@@ -1259,6 +1287,10 @@ export function ChatRoom({
         setReplyJumpLoading(null);
     }, [chatId]);
 
+    useEffect(() => {
+        hasOlderMessagesRef.current = hasOlderMessages;
+    }, [hasOlderMessages]);
+
     // When opening a chat with unread messages, compute anchor once for this open session.
     useEffect(() => {
         if (unreadAnchorId) return;
@@ -1364,6 +1396,11 @@ export function ChatRoom({
                 prevLenRef.current = messages.length;
                 return;
             }
+            if (suppressIncomingBadgeRef.current) {
+                suppressIncomingBadgeRef.current = false;
+                prevLenRef.current = messages.length;
+                return;
+            }
             if (nearBottom) {
                 const openedRecently = Date.now() - openedAtRef.current < 1600;
                 const shouldAnimate = !openedRecently && added <= 2;
@@ -1438,6 +1475,7 @@ export function ChatRoom({
         if (container.scrollTop <= 48 && hasOlderMessages && !loadingOlderMessages && !localLoadingOlder) {
             pendingRangeLoadTypeRef.current = 'older';
             pendingOlderAdjustRef.current = { prevHeight: container.scrollHeight, prevTop: container.scrollTop };
+            suppressIncomingBadgeRef.current = true;
             setLocalLoadingOlder(true);
             Promise.resolve(onLoadOlderMessages?.(chatId)).finally(() => {
                 setLocalLoadingOlder(false);
@@ -1446,6 +1484,7 @@ export function ChatRoom({
         const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
         if (distanceToBottom <= 48 && hasNewerMessages && !loadingNewerMessages && !localLoadingNewer) {
             pendingRangeLoadTypeRef.current = 'newer';
+            suppressIncomingBadgeRef.current = true;
             setLocalLoadingNewer(true);
             Promise.resolve(onLoadNewerMessages?.(chatId)).finally(() => {
                 setLocalLoadingNewer(false);
@@ -2544,8 +2583,7 @@ export function ChatRoom({
                             exit={{ opacity: 0, scale: 0.96, y: 8 }}
                             transition={{ duration: 0.18, ease: 'easeOut' }}
                         >
-                            <span className="chat-range-loader chat-range-loader--active" />
-                            <div className="reply-jump-overlay__title">در حال بارگذاری پیام ریپلای...</div>
+                            <span className="chat-range-loader chat-range-loader--active reply-jump-overlay__loader" />
                             <button type="button" className="reply-jump-overlay__cancel" onClick={cancelReplyJump}>
                                 لغو
                             </button>
