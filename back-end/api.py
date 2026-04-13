@@ -130,6 +130,22 @@ def _derive_enc_key(token: str, scope: str) -> bytes:
     return hashlib.sha256(material).digest()
 
 
+def _derive_enc_key_legacy_shared(scope: str) -> bytes:
+    material = f"{SECRET_KEY}|shared|{scope}".encode("utf-8")
+    return hashlib.sha256(material).digest()
+
+
+def _derive_enc_key_legacy_scoped_tokenhash(token: str, scope: str) -> bytes:
+    token_hint = hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()[:16]
+    material = f"{SECRET_KEY}|{scope}|{token_hint}".encode("utf-8")
+    return hashlib.sha256(material).digest()
+
+
+def _derive_enc_key_legacy_token_raw(token: str, scope: str) -> bytes:
+    material = f"{SECRET_KEY}|{token}|{scope}".encode("utf-8")
+    return hashlib.sha256(material).digest()
+
+
 def _xor_stream(data: bytes, key: bytes, nonce: bytes) -> bytes:
     out = bytearray(len(data))
     counter = 0
@@ -170,11 +186,18 @@ def decrypt_scoped_text(cipher: Any, token: str, scope: str) -> str:
         nonce = raw[:ENC_NONCE_SIZE]
         body = raw[ENC_NONCE_SIZE:-ENC_TAG_SIZE]
         tag = raw[-ENC_TAG_SIZE:]
-        key = _derive_enc_key(token, scope)
-        expected = hmac.new(key, nonce + body, hashlib.sha256).digest()[:ENC_TAG_SIZE]
-        if not hmac.compare_digest(tag, expected):
-            return ""
-        return _xor_stream(body, key, nonce).decode("utf-8", errors="ignore")
+        candidate_keys = [
+            _derive_enc_key(token, scope),
+            _derive_enc_key_legacy_shared(scope),
+            _derive_enc_key_legacy_scoped_tokenhash(token, scope),
+            _derive_enc_key_legacy_token_raw(token, scope),
+        ]
+        for key in candidate_keys:
+            expected = hmac.new(key, nonce + body, hashlib.sha256).digest()[:ENC_TAG_SIZE]
+            if not hmac.compare_digest(tag, expected):
+                continue
+            return _xor_stream(body, key, nonce).decode("utf-8", errors="ignore")
+        return ""
     except Exception:
         return ""
 
@@ -189,7 +212,11 @@ def decrypt_with_fallback(cipher: Any, token: str, scope: str) -> str:
     plain = decrypt_scoped_text(cipher, token, scope)
     if plain:
         return plain
-    return decrypt_scoped_text(cipher, LEGACY_BOOTSTRAP_TOKEN, scope)
+    legacy_plain = decrypt_scoped_text(cipher, LEGACY_BOOTSTRAP_TOKEN, scope)
+    if legacy_plain:
+        return legacy_plain
+    # Prevent empty UI bubbles when decrypt fails for unknown legacy formats.
+    return "🔐"
 
 
 def user_bio_scope(chat_id: str) -> str:
