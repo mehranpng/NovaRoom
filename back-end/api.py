@@ -2517,7 +2517,14 @@ async def broadcast(user_ids: Iterable[str], payload: dict):
 
 
 async def safe_send_ai(user_id: str, message: dict):
-    conns = list(active_ai_connections.get(user_id, []))
+    conns: List[WebSocket] = []
+    seen_ws: set[int] = set()
+    for ws in [*active_ai_connections.get(user_id, []), *active_connections.get(user_id, [])]:
+        ws_id = id(ws)
+        if ws_id in seen_ws:
+            continue
+        seen_ws.add(ws_id)
+        conns.append(ws)
     if not conns:
         return
 
@@ -2534,9 +2541,13 @@ async def safe_send_ai(user_id: str, message: dict):
         for dead_ws in dead_connections:
             if dead_ws in active_ai_connections.get(user_id, []):
                 active_ai_connections[user_id].remove(dead_ws)
+            if dead_ws in active_connections.get(user_id, []):
+                active_connections[user_id].remove(dead_ws)
 
         if not active_ai_connections.get(user_id):
             active_ai_connections.pop(user_id, None)
+        if not active_connections.get(user_id):
+            active_connections.pop(user_id, None)
 
 
 async def try_object_id(value: Any) -> Optional[ObjectId]:
@@ -2582,10 +2593,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
         is_first_connection = not active_connections.get(chat_id)
         active_connections.setdefault(chat_id, []).append(websocket)
-        # /ws is the primary socket used by the frontend for both normal and AI events.
-        # Keep this socket in the AI connection pool too, so streamed AI chunks are sent
-        # in realtime (otherwise client only sees them after page refresh via REST fetch).
-        active_ai_connections.setdefault(chat_id, []).append(websocket)
         profile = (
             user.get("profile", {}) if isinstance(user.get("profile"), dict) else {}
         )
