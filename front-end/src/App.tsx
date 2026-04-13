@@ -663,8 +663,8 @@ export function App() {
         setAIReasoningPending(Boolean(message?.reasoningEnabled));
     }, [activeAIChatId, appendAIMessage]);
 
-    const handleAIStreamChunk = useCallback((payload: { messageId: string; text: string; reasoningContent?: string; hasMainContent?: boolean }) => {
-        const { messageId, text, reasoningContent = '', hasMainContent = false } = payload;
+    const handleAIStreamChunk = useCallback((payload: { messageId: string; text: string; chunk?: string; reasoningContent?: string; reasoningChunk?: string; hasMainContent?: boolean }) => {
+        const { messageId, text, chunk = '', reasoningContent = '', reasoningChunk = '', hasMainContent = false } = payload;
         if (!messageId) return;
         if (!aiStreamStartedRef.current[messageId] && hasMainContent) {
             aiStreamStartedRef.current[messageId] = true;
@@ -692,8 +692,8 @@ export function App() {
                     ...prev,
                     [aiChatId]: [...current, {
                         ...fallback,
-                        text,
-                        reasoningContent,
+                        text: text || chunk || '',
+                        reasoningContent: reasoningContent || reasoningChunk || '',
                         seen: true,
                         isStreaming: true,
                         streamCompleted: false,
@@ -701,10 +701,12 @@ export function App() {
                 };
             }
             const next = [...current];
+            const mergedText = text || `${next[idx].text || ''}${chunk || ''}`;
+            const mergedReasoning = reasoningContent || `${next[idx].reasoningContent || ''}${reasoningChunk || ''}`;
             next[idx] = {
                 ...next[idx],
-                text,
-                reasoningContent,
+                text: mergedText,
+                reasoningContent: mergedReasoning,
                 seen: true,
                 isStreaming: true,
                 streamCompleted: false,
@@ -715,34 +717,44 @@ export function App() {
 
     const handleAIStreamDone = useCallback((payload: any) => {
         const message = payload?.message || payload;
-        const aiChatId = String(message.aiChatId || activeAIChatId || '');
-        if (!aiChatId) return;
-        const messageWithChatId: Message = {
+        const preferredChatId = String(message.aiChatId || activeAIChatId || '');
+        const messageId = String(message?.id || '');
+        if (!messageId && !preferredChatId) return;
+        const messageWithChatIdBase: Message = {
             ...message,
-            chatId: aiChatId,
+            chatId: preferredChatId,
             seen: true,
             isStreaming: false,
             streamCompleted: true,
             reasoningContent: String(message?.reasoningContent || ''),
         };
+        let resolvedChatId = preferredChatId;
         setAIMessagesByChat(prev => {
-            const current = prev[aiChatId] || [];
+            if (!resolvedChatId && messageId) {
+                const foundEntry = Object.entries(prev).find(([, arr]) => arr.some((m) => m.id === messageId));
+                resolvedChatId = foundEntry?.[0] || '';
+            }
+            if (!resolvedChatId) return prev;
+            const messageWithChatId: Message = { ...messageWithChatIdBase, chatId: resolvedChatId };
+            const current = prev[resolvedChatId] || [];
             const idx = current.findIndex((m) => m.id === messageWithChatId.id);
-            if (idx === -1) return { ...prev, [aiChatId]: [...current, messageWithChatId] };
+            if (idx === -1) return { ...prev, [resolvedChatId]: [...current, messageWithChatId] };
             const next = [...current];
             next[idx] = { ...next[idx], ...messageWithChatId };
-            return { ...prev, [aiChatId]: next };
+            return { ...prev, [resolvedChatId]: next };
         });
         setAITyping(false);
         setAIResponding(false);
         setAIReasoningPending(false);
         setAIRespondingChatId(null);
-        delete aiStreamStartedRef.current[messageWithChatId.id];
-        delete aiPendingStreamMetaRef.current[messageWithChatId.id];
+        if (messageId) {
+            delete aiStreamStartedRef.current[messageId];
+            delete aiPendingStreamMetaRef.current[messageId];
+        }
         const nextTitle = typeof payload?.title === 'string' ? payload.title.trim() : '';
-        if (nextTitle) {
+        if (nextTitle && preferredChatId) {
             setAIChats((prev) => prev.map((chat) => (
-                chat.id === aiChatId ? { ...chat, title: nextTitle } : chat
+                chat.id === preferredChatId ? { ...chat, title: nextTitle } : chat
             )));
         }
         vibrate([18]);

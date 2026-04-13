@@ -901,15 +901,24 @@ export function ChatRoom({
     };
 
     const scrollToMessage = (messageId: string) => {
-        const el = messageElsRef.current.get(messageId);
+        const normalizedId = String(messageId);
         const container = messagesContainerRef.current;
-        if (!el || !container) return;
+        if (!container) return;
+        let el = messageElsRef.current.get(normalizedId);
+        if (!el) {
+            const escapedId = typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+                ? CSS.escape(normalizedId)
+                : normalizedId.replace(/"/g, '\\"');
+            el = container.querySelector(`[data-message-id="${escapedId}"]`) as HTMLElement | null;
+        }
+        if (!el) return;
         markProgrammaticScroll();
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         if (highlightRafRef.current) cancelAnimationFrame(highlightRafRef.current);
         const startedAt = performance.now();
         const check = () => {
-            const target = messageElsRef.current.get(messageId);
+            const target = messageElsRef.current.get(normalizedId)
+                || (messagesContainerRef.current?.querySelector(`[data-message-id="${normalizedId.replace(/"/g, '\\"')}"]`) as HTMLElement | null);
             const cont = messagesContainerRef.current;
             if (!target || !cont) return;
             const cr = cont.getBoundingClientRect();
@@ -917,7 +926,7 @@ export function ChatRoom({
             const isVisible = tr.bottom > cr.top + 24 && tr.top < cr.bottom - 24;
             const nearCenter = Math.abs((tr.top + tr.bottom) / 2 - (cr.top + cr.bottom) / 2) < 120;
             if ((isVisible && nearCenter) || performance.now() - startedAt > 3000) {
-                startHighlight(messageId);
+                startHighlight(normalizedId);
                 highlightRafRef.current = null;
                 return;
             }
@@ -2114,6 +2123,7 @@ export function ChatRoom({
 
                                         <div
                                             ref={(el) => { if (!el) { messageElsRef.current.delete(m.id); return; } messageElsRef.current.set(m.id, el); }}
+                                            data-message-id={m.id}
                                             className={isMine ? `message-bubble message-bubble--mine ${shape}` : `message-bubble message-bubble--theirs ${shape}`}
                                             onClick={(e) => {
                                                 e.stopPropagation();
