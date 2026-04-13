@@ -14,6 +14,12 @@ interface UseWebSocketProps {
     onTypingStatus?: (chatId: string, userId: string, isTyping: boolean) => void;
     onConnectionChange?: (isConnected: boolean) => void;
     onReconnectExhausted?: () => void;
+    onAINewMessage?: (message: any) => void;
+    onAIError?: (message: string) => void;
+    onAIUserMessageSaved?: (message: any, clientId?: string, title?: string) => void;
+    onAIStreamStart?: (message: any) => void;
+    onAIStreamChunk?: (payload: { messageId: string; text: string; chunk?: string; reasoningContent?: string; reasoningChunk?: string; hasMainContent?: boolean }) => void;
+    onAIStreamDone?: (payload: any) => void;
 }
 
 type OutgoingEvent =
@@ -27,6 +33,8 @@ type OutgoingEvent =
     | { type: 'unreact_message'; requestId: string; chatId: string; messageId: string }
     | { type: 'forward_message'; requestId: string; messageId: string; targetChatId: string }
     | { type: 'typing'; chatId: string; isTyping: boolean }
+    | { type: 'ai_message'; text: string; aiChatId: string; clientId?: string; useReasoner?: boolean }
+    | { type: 'ai_stop' }
     | { type: 'ping' };
 
 const WS_RECONNECT_DELAY_MS = 1500;
@@ -45,21 +53,57 @@ export function useWebSocket({
     onTypingStatus,
     onConnectionChange,
     onReconnectExhausted,
+    onAINewMessage,
+    onAIError,
+    onAIUserMessageSaved,
+    onAIStreamStart,
+    onAIStreamChunk,
+    onAIStreamDone,
 }: UseWebSocketProps) {
     const socketRef = useRef<WebSocket | null>(null);
     const isConnectedRef = useRef(false);
     const [connectionState, setConnectionState] = useState<'connected' | 'connecting' | 'disconnected'>('disconnected');
     const [reconnectExhausted, setReconnectExhausted] = useState(false);
 
-    // Queue outgoing events while socket is not OPEN (fixes lost "seen" on reconnect).
     const outboxRef = useRef<string[]>([]);
-
     const reconnectTimerRef = useRef<number | null>(null);
     const shouldReconnectRef = useRef(true);
     const reconnectAttemptsRef = useRef(0);
     const lastPongAtRef = useRef<number>(Date.now());
     const pendingRequestsRef = useRef<Map<string, { resolve: (data: any) => void; reject: (error: Error) => void; timeoutId: number }>>(new Map());
     const requestCounterRef = useRef(0);
+
+    const onNewMessageRef = useRef(onNewMessage);
+    const onMessageEditedRef = useRef(onMessageEdited);
+    const onMessageDeletedRef = useRef(onMessageDeleted);
+    const onUserStatusChangeRef = useRef(onUserStatusChange);
+    const onMessagesSeenRef = useRef(onMessagesSeen);
+    const onReactionUpdatedRef = useRef(onReactionUpdated);
+    const onTypingStatusRef = useRef(onTypingStatus);
+    const onConnectionChangeRef = useRef(onConnectionChange);
+    const onReconnectExhaustedRef = useRef(onReconnectExhausted);
+    const onAINewMessageRef = useRef(onAINewMessage);
+    const onAIErrorRef = useRef(onAIError);
+    const onAIUserMessageSavedRef = useRef(onAIUserMessageSaved);
+    const onAIStreamStartRef = useRef(onAIStreamStart);
+    const onAIStreamChunkRef = useRef(onAIStreamChunk);
+    const onAIStreamDoneRef = useRef(onAIStreamDone);
+
+    useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
+    useEffect(() => { onMessageEditedRef.current = onMessageEdited; }, [onMessageEdited]);
+    useEffect(() => { onMessageDeletedRef.current = onMessageDeleted; }, [onMessageDeleted]);
+    useEffect(() => { onUserStatusChangeRef.current = onUserStatusChange; }, [onUserStatusChange]);
+    useEffect(() => { onMessagesSeenRef.current = onMessagesSeen; }, [onMessagesSeen]);
+    useEffect(() => { onReactionUpdatedRef.current = onReactionUpdated; }, [onReactionUpdated]);
+    useEffect(() => { onTypingStatusRef.current = onTypingStatus; }, [onTypingStatus]);
+    useEffect(() => { onConnectionChangeRef.current = onConnectionChange; }, [onConnectionChange]);
+    useEffect(() => { onReconnectExhaustedRef.current = onReconnectExhausted; }, [onReconnectExhausted]);
+    useEffect(() => { onAINewMessageRef.current = onAINewMessage; }, [onAINewMessage]);
+    useEffect(() => { onAIErrorRef.current = onAIError; }, [onAIError]);
+    useEffect(() => { onAIUserMessageSavedRef.current = onAIUserMessageSaved; }, [onAIUserMessageSaved]);
+    useEffect(() => { onAIStreamStartRef.current = onAIStreamStart; }, [onAIStreamStart]);
+    useEffect(() => { onAIStreamChunkRef.current = onAIStreamChunk; }, [onAIStreamChunk]);
+    useEffect(() => { onAIStreamDoneRef.current = onAIStreamDone; }, [onAIStreamDone]);
 
     const rejectAllPendingRequests = useCallback((reason: string) => {
         for (const [, pending] of pendingRequestsRef.current) {
@@ -86,7 +130,6 @@ export function useWebSocket({
             try {
                 ws.send(payload);
             } catch {
-                // Put it back and let reconnect handle it.
                 outboxRef.current.unshift(payload);
                 break;
             }
@@ -100,7 +143,7 @@ export function useWebSocket({
         if (reconnectAttemptsRef.current >= WS_MAX_RECONNECT_ATTEMPTS) {
             setReconnectExhausted(true);
             setConnectionState('disconnected');
-            onReconnectExhausted?.();
+            onReconnectExhaustedRef.current?.();
             return;
         }
 
@@ -109,7 +152,7 @@ export function useWebSocket({
             reconnectAttemptsRef.current += 1;
             connect();
         }, WS_RECONNECT_DELAY_MS);
-    }, [token, onReconnectExhausted]);
+    }, [token]);
 
     const connect = useCallback(() => {
         if (!token) return;
@@ -131,7 +174,7 @@ export function useWebSocket({
             setReconnectExhausted(false);
             setConnectionState('connected');
             lastPongAtRef.current = Date.now();
-            onConnectionChange?.(true);
+            onConnectionChangeRef.current?.(true);
             flushOutbox();
         };
 
@@ -139,19 +182,38 @@ export function useWebSocket({
             try {
                 const data = JSON.parse(event.data);
                 if (data.type === 'new_message') {
-                    onNewMessage(data.chatId, data.message);
+                    onNewMessageRef.current(data.chatId, data.message);
                 } else if (data.type === 'message_edited') {
-                    onMessageEdited?.(data.chatId, data.message);
+                    onMessageEditedRef.current?.(data.chatId, data.message);
                 } else if (data.type === 'message_deleted') {
-                    onMessageDeleted?.(data.chatId, data.messageId, data.lastMessage);
+                    onMessageDeletedRef.current?.(data.chatId, data.messageId, data.lastMessage);
                 } else if (data.type === 'user_status') {
-                    onUserStatusChange?.(data.userId, data.online);
+                    onUserStatusChangeRef.current?.(data.userId, data.online);
                 } else if (data.type === 'messages_seen') {
-                    onMessagesSeen?.(data.chatId);
+                    onMessagesSeenRef.current?.(data.chatId);
                 } else if (data.type === 'reaction_updated') {
-                    onReactionUpdated?.(data.chatId, data.messageId, data.reactions);
+                    onReactionUpdatedRef.current?.(data.chatId, data.messageId, data.reactions);
                 } else if (data.type === 'typing') {
-                    onTypingStatus?.(data.chatId, data.userId, Boolean(data.isTyping));
+                    onTypingStatusRef.current?.(data.chatId, data.userId, Boolean(data.isTyping));
+                } else if (data.type === 'ai_response') {
+                    onAINewMessageRef.current?.(data.message);
+                } else if (data.type === 'ai_response_start') {
+                    onAIStreamStartRef.current?.(data.message);
+                } else if (data.type === 'ai_response_chunk') {
+                    onAIStreamChunkRef.current?.({
+                        messageId: data.messageId,
+                        text: data.text ?? '',
+                        chunk: data.chunk ?? '',
+                        reasoningContent: data.reasoningContent ?? '',
+                        reasoningChunk: data.reasoningChunk ?? '',
+                        hasMainContent: Boolean(data.hasMainContent),
+                    });
+                } else if (data.type === 'ai_response_done') {
+                    onAIStreamDoneRef.current?.(data);
+                } else if (data.type === 'ai_user_message_saved') {
+                    onAIUserMessageSavedRef.current?.(data.message, data.clientId, data.title);
+                } else if (data.type === 'ai_error') {
+                    onAIErrorRef.current?.(String(data.message || 'خطا در سرویس هوش مصنوعی'));
                 } else if (data.type === 'block_status_changed') {
                     window.dispatchEvent(new Event('novaroom:block_status_changed'));
                 } else if (data.type === 'pong') {
@@ -179,13 +241,9 @@ export function useWebSocket({
         ws.onclose = () => {
             isConnectedRef.current = false;
             setConnectionState('connecting');
-            onConnectionChange?.(false);
-
-            // Important: release ref so connect() can create a new socket.
+            onConnectionChangeRef.current?.(false);
             socketRef.current = null;
             rejectAllPendingRequests('WebSocket disconnected');
-
-            // Reconnect (single timer) to restore realtime status/seen updates.
             scheduleReconnect();
         };
 
@@ -194,7 +252,7 @@ export function useWebSocket({
         };
 
         socketRef.current = ws;
-    }, [token, onNewMessage, onMessageEdited, onMessageDeleted, onUserStatusChange, onMessagesSeen, onReactionUpdated, onTypingStatus, onConnectionChange, scheduleReconnect, rejectAllPendingRequests]);
+    }, [token, scheduleReconnect, rejectAllPendingRequests]);
 
     const send = useCallback(
         (event: OutgoingEvent): boolean => {
@@ -212,7 +270,6 @@ export function useWebSocket({
                 }
             }
 
-            // Queue for later and make sure we are (re)connecting.
             outboxRef.current.push(payload);
             connect();
             scheduleReconnect();
@@ -265,6 +322,19 @@ export function useWebSocket({
         [send]
     );
 
+    const sendAIMessage = useCallback(
+        (text: string, aiChatId: string, clientId?: string, useReasoner = false) => {
+            if (typeof text !== 'string' || !text.trim() || text.length > 3000) return false;
+            if (!aiChatId) return false;
+            return send({ type: 'ai_message', text, aiChatId, clientId, useReasoner: Boolean(useReasoner) });
+        },
+        [send]
+    );
+
+    const stopAIGeneration = useCallback(() => {
+        return send({ type: 'ai_stop' });
+    }, [send]);
+
     const disconnect = useCallback(() => {
         shouldReconnectRef.current = false;
         clearReconnectTimer();
@@ -276,9 +346,9 @@ export function useWebSocket({
             rejectAllPendingRequests('WebSocket disconnected');
             isConnectedRef.current = false;
             setConnectionState('disconnected');
-            onConnectionChange?.(false);
+            onConnectionChangeRef.current?.(false);
         }
-    }, [onConnectionChange, rejectAllPendingRequests]);
+    }, [rejectAllPendingRequests]);
 
     const sendRequest = useCallback((event: OutgoingEvent & { requestId: string }, timeoutMs = 10000) => {
         return new Promise<any>((resolve, reject) => {
@@ -290,7 +360,6 @@ export function useWebSocket({
             pendingRequestsRef.current.set(event.requestId, { resolve, reject, timeoutId });
             const ok = send(event);
             if (!ok) {
-                // keep pending; it may flush after reconnect.
                 connect();
             }
         });
@@ -355,7 +424,6 @@ export function useWebSocket({
         };
     }, [token, connect, disconnect]);
 
-    // Optional: keep connection warm on some proxies.
     useEffect(() => {
         if (!token) return;
 
@@ -386,6 +454,8 @@ export function useWebSocket({
         reactMessage,
         unreactMessage,
         forwardMessage,
+        sendAIMessage,
+        stopAIGeneration,
         isConnected: isConnectedRef.current,
         connectionState,
         reconnectExhausted,

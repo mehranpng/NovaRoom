@@ -3,7 +3,6 @@ import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-
 import type { Message, View, User, Chat, ChatLastMessage, FileMetadata, AIChatSummary } from './types';
 import { apiFetch } from './config/api';
 import { useWebSocket } from './hooks/useWebSocket';
-import { useAIWebSocket } from './hooks/useAIWebSocket';
 import { ChatList } from './components/ChatList';
 import { ChatRoom } from './components/ChatRoom';
 import { AIChatRoom } from './components/AIChatRoom';
@@ -749,7 +748,7 @@ export function App() {
     }, []);
 
     // WebSocket initialization
-    const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen, sendTyping, reconnectExhausted, reconnectNow } = useWebSocket({
+    const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen, sendTyping, reconnectExhausted, reconnectNow, sendAIMessage, stopAIGeneration } = useWebSocket({
         token: localStorage.getItem('token'),
         onNewMessage: handleNewMessage,
         onMessageEdited: handleMessageEdited,
@@ -760,6 +759,12 @@ export function App() {
         onTypingStatus: handleTypingStatus,
         onConnectionChange: setWsConnected,
         onReconnectExhausted: handleWsReconnectExhausted,
+        onAINewMessage: handleNewAIMessage,
+        onAIError: handleAIError,
+        onAIUserMessageSaved: handleAIUserMessageSaved,
+        onAIStreamStart: handleAIStreamStart,
+        onAIStreamChunk: handleAIStreamChunk,
+        onAIStreamDone: handleAIStreamDone,
     });
 
     useEffect(() => {
@@ -786,17 +791,6 @@ export function App() {
             })
             .catch((err) => console.error('Failed to sync messages after reconnect', err));
     }, [wsConnected, isAuthenticated, loadChats, activeChatId, currentUser, sendSeen]);
-
-    // AI WebSocket initialization
-    const { sendMessage: sendAIMessage, stopGeneration: stopAIGeneration } = useAIWebSocket({
-        token: localStorage.getItem('token'),
-        onNewMessage: handleNewAIMessage,
-        onError: handleAIError,
-        onUserMessageSaved: handleAIUserMessageSaved,
-        onAIStreamStart: handleAIStreamStart,
-        onAIStreamChunk: handleAIStreamChunk,
-        onAIStreamDone: handleAIStreamDone,
-    });
 
     // Check auth on mount
     useEffect(() => {

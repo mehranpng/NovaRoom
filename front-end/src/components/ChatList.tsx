@@ -199,7 +199,10 @@ function extractLastMessageText(lastMessage: any): string {
 
 function getLastMessagePreview(lastMessage: any, fallback: string): string {
     if (!lastMessage) return fallback;
-    const text = extractLastMessageText(lastMessage);
+    const text = extractLastMessageText(lastMessage)
+        .replace(/\[(file|image|video|audio)\]/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
     const file = extractLastMessageFile(lastMessage);
     if (file) {
         const prefix = getFilePreviewLabel(file);

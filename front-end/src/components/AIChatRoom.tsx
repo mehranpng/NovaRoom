@@ -223,7 +223,7 @@ export function AIChatRoom({
     const [renameTitleInput, setRenameTitleInput] = useState('');
     const [renameBusy, setRenameBusy] = useState(false);
     const [pinnedAIChatIds, setPinnedAIChatIds] = useState<string[]>([]);
-    const [aiDrawerScrollTop, setAIDrawerScrollTop] = useState(0);
+    const aiDrawerScrollTopRef = useRef(0);
 
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
     const aiChatActionMenuRef = useRef<HTMLDivElement | null>(null);
@@ -536,10 +536,10 @@ export function AIChatRoom({
         const raf = window.requestAnimationFrame(() => {
             const list = aiDrawerListRef.current;
             if (!list) return;
-            list.scrollTop = aiDrawerScrollTop;
+            list.scrollTop = aiDrawerScrollTopRef.current;
         });
         return () => window.cancelAnimationFrame(raf);
-    }, [aiChatsDrawerOpen, aiDrawerScrollTop]);
+    }, [aiChatsDrawerOpen]);
 
     const persistPinnedAIChats = (ids: string[]) => {
         localStorage.setItem(PINNED_AI_CHATS_STORAGE_KEY, JSON.stringify({ ids }));
@@ -973,7 +973,7 @@ export function AIChatRoom({
                             <div
                                 className="ai-chat-drawer__list"
                                 ref={aiDrawerListRef}
-                                onScroll={(e) => setAIDrawerScrollTop(e.currentTarget.scrollTop)}
+                                onScroll={(e) => { aiDrawerScrollTopRef.current = e.currentTarget.scrollTop; }}
                             >
                                 {sortedAIChats.map((chat) => (
                                     <div key={chat.id} className="ai-chat-drawer__item">

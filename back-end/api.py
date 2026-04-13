@@ -2033,8 +2033,171 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
             await websocket.close(code=1008)
             return
 
+        active_ai_connections.setdefault(chat_id, []).append(websocket)
         is_first_connection = not active_connections.get(chat_id)
         active_connections.setdefault(chat_id, []).append(websocket)
+        profile = (
+            user.get("profile", {}) if isinstance(user.get("profile"), dict) else {}
+        )
+        user_name = profile.get("name", "")
+        username = profile.get("username", "")
+        user_bio = profile.get("bio", "")
+
+        async def stream_ai_reply(
+            ai_chat_id: str,
+            prompt_messages: List[Dict[str, str]],
+            memory_summary: str,
+            model_name: str,
+            reasoning_mode: bool,
+            should_generate_title: bool = False,
+            first_user_message: str = "",
+            is_temporary_chat: bool = False,
+        ):
+            ai_message_doc = {
+                "userId": chat_id,
+                "aiChatId": ai_chat_id,
+                "role": "assistant",
+                "content": "",
+                "reasoningContent": "",
+                "reasoningEnabled": bool(reasoning_mode),
+                "streamCompleted": False,
+                "timestamp": utc_now(),
+            }
+            result = await cl_ai_messages.insert_one(ai_message_doc)
+            ai_msg_id = str(result.inserted_id)
+            message_ts_ms = dt_to_epoch_ms(ai_message_doc["timestamp"])
+
+            await safe_send_ai(
+                chat_id,
+                {
+                    "type": "ai_response_start",
+                    "message": {
+                        "id": ai_msg_id,
+                        "aiChatId": ai_chat_id,
+                        "senderId": "ai",
+                        "text": "",
+                        "reasoningContent": "",
+                        "reasoningEnabled": bool(reasoning_mode),
+                        "isStreaming": True,
+                        "streamCompleted": False,
+                        "timestamp": message_ts_ms,
+                    },
+                },
+            )
+
+            stopped = False
+            full_ai_response = ""
+            full_reasoning_content = ""
+            stream_started_at = time.time()
+            first_main_content_at: Optional[float] = None
+            try:
+                async for chunk in generate_ai_response_stream(
+                    prompt_messages,
+                    user_name=user_name,
+                    username=username,
+                    chat_id=chat_id,
+                    bio=user_bio,
+                    conversation_summary=memory_summary,
+                    model=model_name,
+                    reasoning_mode=reasoning_mode,
+                ):
+                    text_chunk = ""
+                    reasoning_chunk = ""
+                    if isinstance(chunk, dict):
+                        text_chunk = str(chunk.get("content") or "")
+                        reasoning_chunk = str(chunk.get("reasoning_content") or "")
+                    elif isinstance(chunk, str):
+                        text_chunk = chunk
+
+                    if text_chunk:
+                        full_ai_response += text_chunk
+                        if first_main_content_at is None:
+                            first_main_content_at = time.time()
+                    if reasoning_chunk:
+                        full_reasoning_content += reasoning_chunk
+
+                    await cl_ai_messages.update_one(
+                        {"_id": result.inserted_id},
+                        {
+                            "$set": {
+                                "content": full_ai_response,
+                                "reasoningContent": full_reasoning_content,
+                                "streamCompleted": False,
+                            }
+                        },
+                    )
+                    await safe_send_ai(
+                        chat_id,
+                        {
+                            "type": "ai_response_chunk",
+                            "aiChatId": ai_chat_id,
+                            "messageId": ai_msg_id,
+                            "chunk": text_chunk,
+                            "reasoningChunk": reasoning_chunk,
+                            "text": full_ai_response,
+                            "reasoningContent": full_reasoning_content,
+                            "hasMainContent": bool(full_ai_response),
+                        },
+                    )
+            except asyncio.CancelledError:
+                stopped = True
+                raise
+            finally:
+                reasoning_duration_sec = int(
+                    max(
+                        0,
+                        round((first_main_content_at or time.time()) - stream_started_at),
+                    )
+                )
+                await cl_ai_messages.update_one(
+                    {"_id": result.inserted_id},
+                    {
+                        "$set": {
+                            "content": full_ai_response,
+                            "reasoningContent": full_reasoning_content,
+                            "streamCompleted": True,
+                            "reasoningDurationSec": reasoning_duration_sec,
+                        }
+                    },
+                )
+                generated_title = ""
+                chat_update: Dict[str, Any] = {"updatedAt": utc_now()}
+                if is_temporary_chat:
+                    chat_update["title"] = "گفتوگوی موقت"
+                elif should_generate_title and not stopped:
+                    candidate_title = await generate_chat_title(first_user_message)
+                    if (
+                        isinstance(candidate_title, str)
+                        and candidate_title.strip()
+                        and candidate_title.strip() != "گفتوگوی جدید"
+                    ):
+                        generated_title = candidate_title.strip()[:56]
+                        chat_update["title"] = generated_title
+                await cl_ai_chats.update_one(
+                    {"_id": await try_object_id(ai_chat_id), "userId": chat_id},
+                    {"$set": chat_update},
+                )
+
+                await safe_send_ai(
+                    chat_id,
+                    {
+                        "type": "ai_response_done",
+                        "stopped": stopped,
+                        "title": generated_title,
+                        "message": {
+                            "id": ai_msg_id,
+                            "aiChatId": ai_chat_id,
+                            "senderId": "ai",
+                            "text": full_ai_response,
+                            "reasoningContent": full_reasoning_content,
+                            "reasoningEnabled": bool(reasoning_mode),
+                            "isStreaming": False,
+                            "streamCompleted": True,
+                            "reasoningDurationSec": reasoning_duration_sec,
+                            "timestamp": message_ts_ms,
+                        },
+                    },
+                )
 
         if is_first_connection:
             await cl_users.update_one({"chatId": chat_id}, {"$set": {"online": True}})
@@ -2539,6 +2702,128 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "error": str(e.detail),
                         }
                     )
+            elif data.get("type") == "ai_message":
+                text = data.get("text")
+                client_id = data.get("clientId")
+                ai_chat_id = str(data.get("aiChatId") or "").strip()
+                use_reasoner = bool(data.get("useReasoner"))
+                model_name = "deepseek-reasoner" if use_reasoner else "deepseek-chat"
+
+                if not isinstance(text, str) or not text.strip():
+                    continue
+                if len(text) > MAX_AI_MESSAGE_LENGTH:
+                    continue
+
+                try:
+                    ai_chat = await ensure_ai_chat(chat_id, ai_chat_id)
+                except HTTPException:
+                    await asyncio.sleep(0.12)
+                    try:
+                        ai_chat = await ensure_ai_chat(chat_id, ai_chat_id)
+                    except HTTPException:
+                        await safe_send_ai(
+                            chat_id,
+                            {
+                                "type": "ai_error",
+                                "message": "گفتوگوی انتخاب‌شده معتبر نیست.",
+                            },
+                        )
+                        continue
+
+                user_msg_count = await cl_ai_messages.count_documents(
+                    {"userId": chat_id, "aiChatId": ai_chat_id, "role": "user"}
+                )
+                if user_msg_count >= MAX_AI_MESSAGES_PER_CHAT:
+                    await safe_send_ai(
+                        chat_id,
+                        {
+                            "type": "ai_error",
+                            "message": "حداکثر 30 پیام در هر گفتوگو مجاز است. لطفاً گفتوگوی جدید باز کنید.",
+                        },
+                    )
+                    continue
+
+                user_message_doc = {
+                    "userId": chat_id,
+                    "aiChatId": ai_chat_id,
+                    "role": "user",
+                    "content": text,
+                    "timestamp": utc_now(),
+                }
+                user_insert = await cl_ai_messages.insert_one(user_message_doc)
+
+                await safe_send_ai(
+                    chat_id,
+                    {
+                        "type": "ai_user_message_saved",
+                        "title": "",
+                        "clientId": client_id if isinstance(client_id, str) else None,
+                        "message": {
+                            "id": str(user_insert.inserted_id),
+                            "aiChatId": ai_chat_id,
+                            "senderId": chat_id,
+                            "text": text,
+                            "timestamp": dt_to_epoch_ms(user_message_doc["timestamp"]),
+                        },
+                    },
+                )
+
+                memory_summary = ""
+                if isinstance(ai_chat.get("summary"), str):
+                    memory_summary = ai_chat.get("summary", "").strip()
+
+                history_docs = (
+                    await cl_ai_messages.find({"userId": chat_id, "aiChatId": ai_chat_id})
+                    .sort("timestamp", -1)
+                    .limit(6)
+                    .to_list(6)
+                )
+                history_docs.reverse()
+                messages = [{"role": doc["role"], "content": doc["content"]} for doc in history_docs]
+
+                refreshed_summary = await generate_conversation_summary(
+                    messages,
+                    previous_summary=memory_summary,
+                    user_name=user_name,
+                    username=username,
+                    chat_id=chat_id,
+                    bio=user_bio,
+                )
+                await cl_ai_chats.update_one(
+                    {"_id": ai_chat["_id"], "userId": chat_id},
+                    {"$set": {"summary": refreshed_summary, "updatedAt": utc_now()}},
+                )
+
+                current_stream_task = active_ai_stream_tasks.get(chat_id)
+                if current_stream_task and not current_stream_task.done():
+                    current_stream_task.cancel()
+                    try:
+                        await current_stream_task
+                    except asyncio.CancelledError:
+                        pass
+
+                new_stream_task = asyncio.create_task(
+                    stream_ai_reply(
+                        ai_chat_id,
+                        messages,
+                        refreshed_summary,
+                        model_name,
+                        use_reasoner,
+                        should_generate_title=(user_msg_count == 0),
+                        first_user_message=text,
+                        is_temporary_chat=bool(ai_chat.get("isTemporary", False)),
+                    )
+                )
+                active_ai_stream_tasks[chat_id] = new_stream_task
+            elif data.get("type") == "ai_stop":
+                current_stream_task = active_ai_stream_tasks.get(chat_id)
+                if current_stream_task and not current_stream_task.done():
+                    current_stream_task.cancel()
+                    try:
+                        await current_stream_task
+                    except asyncio.CancelledError:
+                        pass
+                active_ai_stream_tasks.pop(chat_id, None)
 
             elif data.get("type") == "ping":
                 await websocket.send_json({"type": "pong"})
@@ -2548,6 +2833,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
     except Exception:
         print(f"WebSocket Error for {chat_id}: {traceback.format_exc()}")
     finally:
+        if chat_id and chat_id in active_ai_connections:
+            if websocket in active_ai_connections[chat_id]:
+                active_ai_connections[chat_id].remove(websocket)
+            if not active_ai_connections[chat_id]:
+                del active_ai_connections[chat_id]
+
         if chat_id and chat_id in active_connections:
             if websocket in active_connections[chat_id]:
                 active_connections[chat_id].remove(websocket)
