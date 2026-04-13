@@ -1306,23 +1306,6 @@ export function ChatRoom({
         }
 
         const added = messages.length - prevLenRef.current;
-        const finishedOlderRangeLoad =
-            pendingRangeLoadTypeRef.current === 'older'
-            && !loadingOlderMessages
-            && pendingOlderAdjustRef.current
-            && added > 0;
-        if (finishedOlderRangeLoad) {
-            const snap = pendingOlderAdjustRef.current;
-            if (snap) {
-                const delta = container.scrollHeight - snap.prevHeight;
-                markProgrammaticScroll();
-                container.scrollTop = snap.prevTop + Math.max(0, delta);
-            }
-            pendingOlderAdjustRef.current = null;
-            pendingRangeLoadTypeRef.current = null;
-            prevLenRef.current = messages.length;
-            return;
-        }
         if (pendingRangeLoadTypeRef.current === 'newer' && !loadingNewerMessages) {
             pendingRangeLoadTypeRef.current = null;
         }
@@ -1347,6 +1330,22 @@ export function ChatRoom({
         prevLenRef.current = messages.length;
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [messages, messages.length, chatId, loading, displayUnreadCount, unreadAnchorId, currentUserId, loadingOlderMessages, loadingNewerMessages]);
+
+    useLayoutEffect(() => {
+        const container = messagesContainerRef.current;
+        const snap = pendingOlderAdjustRef.current;
+        if (!container || !snap) return;
+        if (pendingRangeLoadTypeRef.current !== 'older') return;
+        if (loadingOlderMessages || localLoadingOlder) return;
+        if (messages.length <= prevLenRef.current) return;
+
+        const delta = container.scrollHeight - snap.prevHeight;
+        markProgrammaticScroll();
+        container.scrollTop = snap.prevTop + Math.max(0, delta);
+        pendingOlderAdjustRef.current = null;
+        pendingRangeLoadTypeRef.current = null;
+        prevLenRef.current = messages.length;
+    }, [messages.length, loadingOlderMessages, localLoadingOlder]);
 
     const onMessagesScroll = () => {
         const container = messagesContainerRef.current;

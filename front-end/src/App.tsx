@@ -604,10 +604,13 @@ export function App() {
         if (!aiChatId) return;
         setAIMessagesByChat((prev) => {
             const existing = prev[aiChatId] || [];
-            if (existing.some((m) => m.id === message.id)) {
-                return prev;
+            const idx = existing.findIndex((m) => m.id === message.id);
+            if (idx === -1) {
+                return { ...prev, [aiChatId]: [...existing, message] };
             }
-            return { ...prev, [aiChatId]: [...existing, message] };
+            const next = [...existing];
+            next[idx] = { ...next[idx], ...message };
+            return { ...prev, [aiChatId]: next };
         });
         setAIChats((prev) => {
             const idx = prev.findIndex((c) => c.id === aiChatId);
