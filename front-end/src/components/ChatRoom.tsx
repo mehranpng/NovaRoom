@@ -386,6 +386,8 @@ export function ChatRoom({
     const [newMsgCount, setNewMsgCount] = useState(0);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     const [hideScrollBtnUntilBottom, setHideScrollBtnUntilBottom] = useState(false);
+    const [localLoadingOlder, setLocalLoadingOlder] = useState(false);
+    const [localLoadingNewer, setLocalLoadingNewer] = useState(false);
     const [chatStats, setChatStats] = useState<{ totalMembers: number; onlineMembers: number } | null>(null);
     const [groupMembers, setGroupMembers] = useState<Record<string, GroupMember>>({});
     const [membersLoading, setMembersLoading] = useState(false);
@@ -396,6 +398,8 @@ export function ChatRoom({
     const isAtBottomRef = useRef(true);
 
     const prevLenRef = useRef(0);
+    const pendingOlderAdjustRef = useRef<{ prevHeight: number; prevTop: number } | null>(null);
+    const pendingRangeLoadTypeRef = useRef<'older' | 'newer' | null>(null);
     const openedAtRef = useRef<number>(Date.now());
     const initialScrollDoneRef = useRef(false);
     const lastChatIdRef = useRef<string | null>(null);
@@ -1198,6 +1202,13 @@ export function ChatRoom({
         }
     }, [initialUnreadCount, displayUnreadCount]);
 
+    useEffect(() => {
+        setLocalLoadingOlder(false);
+        setLocalLoadingNewer(false);
+        pendingOlderAdjustRef.current = null;
+        pendingRangeLoadTypeRef.current = null;
+    }, [chatId]);
+
     // When opening a chat with unread messages, compute anchor once for this open session.
     useEffect(() => {
         if (unreadAnchorId) return;
@@ -1295,7 +1306,31 @@ export function ChatRoom({
         }
 
         const added = messages.length - prevLenRef.current;
+        const finishedOlderRangeLoad =
+            pendingRangeLoadTypeRef.current === 'older'
+            && !loadingOlderMessages
+            && pendingOlderAdjustRef.current
+            && added > 0;
+        if (finishedOlderRangeLoad) {
+            const snap = pendingOlderAdjustRef.current;
+            if (snap) {
+                const delta = container.scrollHeight - snap.prevHeight;
+                markProgrammaticScroll();
+                container.scrollTop = snap.prevTop + Math.max(0, delta);
+            }
+            pendingOlderAdjustRef.current = null;
+            pendingRangeLoadTypeRef.current = null;
+            prevLenRef.current = messages.length;
+            return;
+        }
+        if (pendingRangeLoadTypeRef.current === 'newer' && !loadingNewerMessages) {
+            pendingRangeLoadTypeRef.current = null;
+        }
         if (added > 0) {
+            if (pendingRangeLoadTypeRef.current) {
+                prevLenRef.current = messages.length;
+                return;
+            }
             if (nearBottom) {
                 const openedRecently = Date.now() - openedAtRef.current < 1600;
                 const shouldAnimate = !openedRecently && added <= 2;
@@ -1311,7 +1346,7 @@ export function ChatRoom({
         }
         prevLenRef.current = messages.length;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [messages, messages.length, chatId, loading, displayUnreadCount, unreadAnchorId, currentUserId]);
+    }, [messages, messages.length, chatId, loading, displayUnreadCount, unreadAnchorId, currentUserId, loadingOlderMessages, loadingNewerMessages]);
 
     const onMessagesScroll = () => {
         const container = messagesContainerRef.current;
@@ -1351,12 +1386,21 @@ export function ChatRoom({
         // keep memory fresh (in-memory only)
         saveScroll(chatId);
 
-        if (container.scrollTop <= 48 && hasOlderMessages && !loadingOlderMessages) {
-            void onLoadOlderMessages?.(chatId);
+        if (container.scrollTop <= 48 && hasOlderMessages && !loadingOlderMessages && !localLoadingOlder) {
+            pendingRangeLoadTypeRef.current = 'older';
+            pendingOlderAdjustRef.current = { prevHeight: container.scrollHeight, prevTop: container.scrollTop };
+            setLocalLoadingOlder(true);
+            Promise.resolve(onLoadOlderMessages?.(chatId)).finally(() => {
+                setLocalLoadingOlder(false);
+            });
         }
         const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-        if (distanceToBottom <= 48 && hasNewerMessages && !loadingNewerMessages) {
-            void onLoadNewerMessages?.(chatId);
+        if (distanceToBottom <= 48 && hasNewerMessages && !loadingNewerMessages && !localLoadingNewer) {
+            pendingRangeLoadTypeRef.current = 'newer';
+            setLocalLoadingNewer(true);
+            Promise.resolve(onLoadNewerMessages?.(chatId)).finally(() => {
+                setLocalLoadingNewer(false);
+            });
         }
     };
 
@@ -1952,7 +1996,7 @@ export function ChatRoom({
                 <div className="chat-room__messages-inner">
                     {loading ? <ChatMessagesSkeleton /> : (
                         <>
-                            {loadingOlderMessages && (
+                            {(loadingOlderMessages || localLoadingOlder) && (
                                 <div className="chat-range-loader-wrap">
                                     <span className="chat-range-loader chat-range-loader--active" />
                                 </div>
@@ -2232,7 +2276,7 @@ export function ChatRoom({
                                 </div>
                             );
                             })}
-                            {loadingNewerMessages && (
+                            {(loadingNewerMessages || localLoadingNewer) && (
                                 <div className="chat-range-loader-wrap">
                                     <span className="chat-range-loader chat-range-loader--active" />
                                 </div>
