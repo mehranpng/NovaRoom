@@ -191,6 +191,16 @@ def decrypt_with_fallback(cipher: Any, token: str, scope: str) -> str:
     return decrypt_scoped_text(cipher, LEGACY_BOOTSTRAP_TOKEN, scope)
 
 
+def user_bio_scope(chat_id: str) -> str:
+    return f"user-bio:{chat_id}"
+
+
+def decrypt_user_bio(user_doc: Dict[str, Any], token: str = "") -> str:
+    chat_id = str(user_doc.get("chatId") or "")
+    profile = user_doc.get("profile") or {}
+    return decrypt_with_fallback(profile.get("bio", ""), token, user_bio_scope(chat_id))
+
+
 def dt_to_epoch_ms(dt: Any) -> int:
     if dt is None:
         return int(utc_now().timestamp() * 1000)
@@ -464,6 +474,9 @@ async def get_current_user(
     if not user:
         raise HTTPException(status_code=401, detail="Invalid token")
     user["_session_token"] = credentials.credentials
+    user.setdefault("profile", {})
+    user["profile"]["bio"] = decrypt_user_bio(user, credentials.credentials)
+    user["online"] = bool(active_connections.get(user.get("chatId", "")))
     return user
 
 
@@ -480,6 +493,33 @@ async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
     await cl_users.update_one(
         {"chatId": user["chatId"]},
         {"$set": {"login.sessions": next_sessions}, "$unset": {"login.token": ""}},
+    )
+    user_id = user["chatId"]
+    for ws in list(active_connections.get(user_id, [])):
+        try:
+            await ws.close(code=1008)
+        except Exception:
+            pass
+    active_connections.pop(user_id, None)
+
+    for ws in list(active_ai_connections.get(user_id, [])):
+        try:
+            await ws.close(code=1008)
+        except Exception:
+            pass
+    active_ai_connections.pop(user_id, None)
+
+    await cl_users.update_one({"chatId": user_id}, {"$set": {"online": False}})
+    user_chats = await cl_chats.find({"participants": user_id}).to_list(None)
+    contacts_to_notify = set()
+    for chat in user_chats:
+        for p in chat.get("participants", []):
+            if p != user_id:
+                contacts_to_notify.add(p)
+    allowed_contacts = await _filter_recipients_by_block_status(user_id, contacts_to_notify)
+    await broadcast(
+        allowed_contacts,
+        {"type": "user_status", "userId": user_id, "online": False},
     )
     return {"message": "Logged out"}
 
@@ -597,10 +637,38 @@ async def startup_db():
         [("userId", 1), ("aiChatId", 1), ("timestamp", -1)]
     )
     await cl_ai_chats.create_index([("userId", 1), ("updatedAt", -1)])
+    await cl_users.update_many({}, {"$set": {"online": False}})
     await migrate_unencrypted_messages()
 
 
 async def migrate_unencrypted_messages():
+    async for u in cl_users.find(
+        {
+            "$or": [
+                {"profile.bioEncrypted": {"$ne": True}},
+                {"profile.bio": {"$not": {"$regex": f"^{ENC_PREFIX}"}}},
+            ]
+        }
+    ):
+        chat_id = str(u.get("chatId") or "")
+        if not chat_id:
+            continue
+        bio = str(((u.get("profile") or {}).get("bio")) or "")
+        encrypted_bio = (
+            encrypt_scoped_text(bio, LEGACY_BOOTSTRAP_TOKEN, user_bio_scope(chat_id))
+            if bio and not is_ciphertext(bio)
+            else bio
+        )
+        await cl_users.update_one(
+            {"_id": u["_id"]},
+            {
+                "$set": {
+                    "profile.bio": encrypted_bio,
+                    "profile.bioEncrypted": True,
+                }
+            },
+        )
+
     async for m in cl_messages.find(
         {"$or": [{"textEncrypted": {"$ne": True}}, {"text": {"$not": {"$regex": f"^{ENC_PREFIX}"}}}]}
     ):
@@ -889,7 +957,8 @@ async def complete_registration(req: CompleteRegistrationRequest):
         "profile": {
             "name": req.name,
             "username": desired_username,
-            "bio": "",
+            "bio": encrypt_scoped_text("", "", user_bio_scope(chat_id)),
+            "bioEncrypted": True,
             "avatar": "",
         },
         "online": False,
@@ -999,9 +1068,9 @@ async def login(req: LoginRequest):
             "chatId": user["chatId"],
             "username": user["profile"]["username"],
             "name": user["profile"]["name"],
-            "bio": user["profile"]["bio"],
+            "bio": decrypt_user_bio(user, token),
             "avatar": user["profile"]["avatar"],
-            "online": user.get("online", False),
+            "online": bool(active_connections.get(user["chatId"])),
             "verified": bool(user.get("verified", False)),
             "registrationDate": user.get("registrationDate"),
         },
@@ -1053,7 +1122,10 @@ async def update_profile(
         update_data["profile.username"] = desired
 
     if updates.bio is not None:
-        update_data["profile.bio"] = updates.bio
+        update_data["profile.bio"] = encrypt_scoped_text(
+            updates.bio, "", user_bio_scope(current_user["chatId"])
+        )
+        update_data["profile.bioEncrypted"] = True
 
     if updates.avatar is not None:
         avatar_value = str(updates.avatar).strip()
@@ -1156,8 +1228,8 @@ async def search_users(
             "username": u["profile"]["username"],
             "name": u["profile"]["name"],
             "avatar": u["profile"]["avatar"],
-            "bio": u["profile"]["bio"],
-            "online": u.get("online", False),
+            "bio": decrypt_user_bio(u, str(current_user.get("_session_token") or "")),
+            "online": bool(active_connections.get(u["chatId"])),
             "verified": bool(u.get("verified", False)),
             "registrationDate": u.get("registrationDate"),
         }
@@ -1463,14 +1535,20 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                     "bio": (
                         "گروه"
                         if is_group
-                        else (other_user["profile"]["bio"] if other_user else "")
+                        else (
+                            decrypt_user_bio(other_user, session_token)
+                            if other_user
+                            else ""
+                        )
                     ),
                     "online": (
                         False
                         if is_group
                         else (
                             False if blocked_relation else (
-                                other_user.get("online", False) if other_user else False
+                                bool(active_connections.get(other_user.get("chatId", "")))
+                                if other_user
+                                else False
                             )
                         )
                     ),
@@ -1592,9 +1670,11 @@ async def get_chat_members(
                 or u.get("chatId", ""),
                 "username": profile.get("username", ""),
                 "avatar": profile.get("avatar", ""),
-                "bio": profile.get("bio", ""),
+                "bio": decrypt_user_bio(
+                    u, str(current_user.get("_session_token") or "")
+                ),
                 "verified": u.get("verified", False),
-                "online": u.get("online", False),
+                "online": bool(active_connections.get(u.get("chatId", ""))),
             }
         )
     return result
@@ -2346,7 +2426,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
             return
         chat_id = user.get("chatId")
 
-        active_ai_connections.setdefault(chat_id, []).append(websocket)
         is_first_connection = not active_connections.get(chat_id)
         active_connections.setdefault(chat_id, []).append(websocket)
         profile = (
@@ -2354,7 +2433,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
         )
         user_name = profile.get("name", "")
         username = profile.get("username", "")
-        user_bio = profile.get("bio", "")
+        user_bio = decrypt_user_bio(user, token)
 
         async def stream_ai_reply(
             ai_chat_id: str,
@@ -3404,7 +3483,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
         )
         user_name = profile.get("name", "")
         username = profile.get("username", "")
-        user_bio = profile.get("bio", "")
+        user_bio = decrypt_user_bio(user, token)
 
         async def stream_ai_reply(
             ai_chat_id: str,
