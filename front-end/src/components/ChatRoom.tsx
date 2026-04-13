@@ -959,7 +959,7 @@ export function ChatRoom({
         replyJumpAbortRef.current = controller;
         setReplyJumpLoading({ messageId: normalizedId });
         try {
-            const waitForTarget = async (tries = 5, delay = 60) => {
+            const waitForTarget = async (tries = 20, delay = 100) => {
                 for (let i = 0; i < tries; i += 1) {
                     if (controller.signal.aborted) return false;
                     if (tryScrollToMessage(normalizedId)) return true;
@@ -971,11 +971,26 @@ export function ChatRoom({
             if (!onResolveReplyTargetMessage) return;
             suppressIncomingBadgeRef.current = true;
             const loadedByTargetedFetch = await onResolveReplyTargetMessage(chatId, normalizedId, controller.signal);
-            if (!loadedByTargetedFetch || controller.signal.aborted) {
+            if (controller.signal.aborted) return;
+            if (!loadedByTargetedFetch) {
                 if (!controller.signal.aborted) alert('پیام ریپلای‌شده پیدا نشد.');
                 return;
             }
-            void waitForTarget();
+            let found = await waitForTarget();
+            if (found || controller.signal.aborted) return;
+
+            // یک تلاش دوباره بدون نیاز به کلیک مجدد کاربر
+            suppressIncomingBadgeRef.current = true;
+            const loadedAgain = await onResolveReplyTargetMessage(chatId, normalizedId, controller.signal);
+            if (controller.signal.aborted) return;
+            if (!loadedAgain) {
+                alert('پیام ریپلای‌شده پیدا نشد.');
+                return;
+            }
+            found = await waitForTarget(12, 90);
+            if (!found && !controller.signal.aborted) {
+                alert('پرش به پیام انجام نشد. دوباره تلاش کنید.');
+            }
         } catch {
             // ignore
         } finally {
