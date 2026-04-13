@@ -403,6 +403,8 @@ export function ChatRoom({
     const pendingOlderAdjustRef = useRef<{ prevHeight: number; prevTop: number } | null>(null);
     const pendingRangeLoadTypeRef = useRef<'older' | 'newer' | null>(null);
     const suppressIncomingBadgeRef = useRef(false);
+    const hasOlderMessagesRef = useRef(hasOlderMessages);
+    const hasNewerMessagesRef = useRef(hasNewerMessages);
     const openedAtRef = useRef<number>(Date.now());
     const initialScrollDoneRef = useRef(false);
     const lastChatIdRef = useRef<string | null>(null);
@@ -973,6 +975,16 @@ export function ChatRoom({
             const loadedByTargetedFetch = await onResolveReplyTargetMessage(chatId, normalizedId, controller.signal);
             if (controller.signal.aborted) return;
             if (!loadedByTargetedFetch) {
+                if (onLoadOlderMessages) {
+                    for (let i = 0; i < 12; i += 1) {
+                        if (controller.signal.aborted) return;
+                        if (!hasOlderMessagesRef.current) break;
+                        suppressIncomingBadgeRef.current = true;
+                        await Promise.resolve(onLoadOlderMessages(chatId));
+                        const foundInFallback = await waitForTarget(7, 85);
+                        if (foundInFallback || controller.signal.aborted) return;
+                    }
+                }
                 if (!controller.signal.aborted) alert('پیام ریپلای‌شده پیدا نشد.');
                 return;
             }
@@ -989,6 +1001,16 @@ export function ChatRoom({
             }
             found = await waitForTarget(12, 90);
             if (!found && !controller.signal.aborted) {
+                if (onLoadOlderMessages) {
+                    for (let i = 0; i < 10; i += 1) {
+                        if (controller.signal.aborted) return;
+                        if (!hasOlderMessagesRef.current) break;
+                        suppressIncomingBadgeRef.current = true;
+                        await Promise.resolve(onLoadOlderMessages(chatId));
+                        const foundInFallback = await waitForTarget(6, 85);
+                        if (foundInFallback || controller.signal.aborted) return;
+                    }
+                }
                 alert('پرش به پیام انجام نشد. دوباره تلاش کنید.');
             }
         } catch {
@@ -1289,6 +1311,11 @@ export function ChatRoom({
         setReplyJumpLoading(null);
     }, [chatId]);
 
+    useEffect(() => {
+        hasOlderMessagesRef.current = hasOlderMessages;
+        hasNewerMessagesRef.current = hasNewerMessages;
+    }, [hasOlderMessages, hasNewerMessages]);
+
     // When opening a chat with unread messages, compute anchor once for this open session.
     useEffect(() => {
         if (unreadAnchorId) return;
@@ -1522,6 +1549,22 @@ export function ChatRoom({
         + (uploadedFile ? 1 : 0)
         + (pendingForwardDraft ? 1 : 0);
     const scrollButtonBottom = 96 + (activeInputStackCount * 56);
+
+    const jumpToLatestMessages = async () => {
+        setHideScrollBtnUntilBottom(true);
+        setNewMsgCount(0);
+        setShowScrollBtn(false);
+
+        if (onLoadNewerMessages) {
+            for (let i = 0; i < 20; i += 1) {
+                if (!hasNewerMessagesRef.current) break;
+                suppressIncomingBadgeRef.current = true;
+                await Promise.resolve(onLoadNewerMessages(chatId));
+                await new Promise((resolve) => window.setTimeout(resolve, 40));
+            }
+        }
+        requestAnimationFrame(() => scrollToBottom(true));
+    };
 
     const submit = () => {
         if (isContactBlocked) return;
@@ -2544,12 +2587,7 @@ export function ChatRoom({
                     <motion.button
                         type="button"
                         aria-label="Jump to latest messages"
-                        onClick={() => {
-                            setHideScrollBtnUntilBottom(true);
-                            scrollToBottom(true);
-                            setNewMsgCount(0);
-                            setShowScrollBtn(false);
-                        }}
+                        onClick={() => { void jumpToLatestMessages(); }}
                         animate={{ opacity: 1 }}
                         initial={{ opacity: 0 }}
                         exit={{ opacity: 0 }}
