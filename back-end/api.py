@@ -125,11 +125,7 @@ def utc_now() -> datetime:
 
 
 def _derive_enc_key(token: str, scope: str) -> bytes:
-    if str(scope).startswith("chat:"):
-        material = f"{SECRET_KEY}|shared|{scope}".encode("utf-8")
-    else:
-        token_hint = hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()[:16]
-        material = f"{SECRET_KEY}|{scope}|{token_hint}".encode("utf-8")
+    material = f"{SECRET_KEY}|{scope}".encode("utf-8")
     return hashlib.sha256(material).digest()
 
 
@@ -648,6 +644,35 @@ async def migrate_unencrypted_messages():
             )
         if updates:
             await cl_ai_messages.update_one({"_id": m["_id"]}, {"$set": updates})
+
+    async for c in cl_ai_chats.find(
+        {
+            "$or": [
+                {"titleEncrypted": {"$ne": True}},
+                {"summaryEncrypted": {"$ne": True}},
+                {"title": {"$not": {"$regex": f"^{ENC_PREFIX}"}}},
+                {"summary": {"$not": {"$regex": f"^{ENC_PREFIX}"}}},
+            ]
+        }
+    ):
+        chat_id = str(c.get("_id"))
+        scope = f"ai-chat-meta:{chat_id}"
+        updates: Dict[str, Any] = {
+            "titleEncrypted": True,
+            "summaryEncrypted": True,
+        }
+        title = str(c.get("title") or "")
+        summary = str(c.get("summary") or "")
+        if title and not is_ciphertext(title):
+            updates["title"] = encrypt_scoped_text(
+                title, LEGACY_BOOTSTRAP_TOKEN, scope
+            )
+        if summary and not is_ciphertext(summary):
+            updates["summary"] = encrypt_scoped_text(
+                summary, LEGACY_BOOTSTRAP_TOKEN, scope
+            )
+        if updates:
+            await cl_ai_chats.update_one({"_id": c["_id"]}, {"$set": updates})
 
 
 @app.get("/profile/me/pins")
@@ -2461,7 +2486,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 generated_title = ""
                 chat_update: Dict[str, Any] = {"updatedAt": utc_now()}
                 if is_temporary_chat:
-                    chat_update["title"] = "گفتوگوی موقت"
+                    chat_update["title"] = encrypt_scoped_text(
+                        "گفتوگوی موقت", "", f"ai-chat-meta:{ai_chat_id}"
+                    )
+                    chat_update["titleEncrypted"] = True
                 elif should_generate_title and not stopped:
                     candidate_title = await generate_chat_title(first_user_message)
                     if (
@@ -2470,7 +2498,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         and candidate_title.strip() != "گفتوگوی جدید"
                     ):
                         generated_title = candidate_title.strip()[:56]
-                        chat_update["title"] = generated_title
+                        chat_update["title"] = encrypt_scoped_text(
+                            generated_title, "", f"ai-chat-meta:{ai_chat_id}"
+                        )
+                        chat_update["titleEncrypted"] = True
                 await cl_ai_chats.update_one(
                     {"_id": await try_object_id(ai_chat_id), "userId": chat_id},
                     {"$set": chat_update},
@@ -3099,7 +3130,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 memory_summary = ""
                 if isinstance(ai_chat.get("summary"), str):
-                    memory_summary = ai_chat.get("summary", "").strip()
+                    memory_summary = decrypt_with_fallback(
+                        ai_chat.get("summary", ""),
+                        token,
+                        f"ai-chat-meta:{ai_chat_id}",
+                    ).strip()
 
                 history_docs = (
                     await cl_ai_messages.find({"userId": chat_id, "aiChatId": ai_chat_id})
@@ -3128,7 +3163,17 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 )
                 await cl_ai_chats.update_one(
                     {"_id": ai_chat["_id"], "userId": chat_id},
-                    {"$set": {"summary": refreshed_summary, "updatedAt": utc_now()}},
+                    {
+                        "$set": {
+                            "summary": encrypt_scoped_text(
+                                refreshed_summary,
+                                "",
+                                f"ai-chat-meta:{ai_chat_id}",
+                            ),
+                            "summaryEncrypted": True,
+                            "updatedAt": utc_now(),
+                        }
+                    },
                 )
 
                 current_stream_task = active_ai_stream_tasks.get(chat_id)
@@ -3219,6 +3264,7 @@ async def ensure_ai_chat(user_id: str, ai_chat_id: str) -> dict:
 @app.get("/ai/chats")
 async def get_ai_chats(current_user: dict = Depends(get_current_user)):
     user_id = current_user["chatId"]
+    session_token = str(current_user.get("_session_token") or "")
     rows = (
         await cl_ai_chats.find(
             {"userId": user_id, "$or": [{"isTemporary": {"$exists": False}}, {"isTemporary": False}]}
@@ -3227,8 +3273,19 @@ async def get_ai_chats(current_user: dict = Depends(get_current_user)):
     return [
         {
             "id": str(row["_id"]),
-            "title": row.get("title") or "گفتوگوی جدید",
-            "summary": row.get("summary") or "",
+            "title": (
+                decrypt_with_fallback(
+                    row.get("title") or "",
+                    session_token,
+                    f"ai-chat-meta:{str(row['_id'])}",
+                )
+                or "گفتوگوی جدید"
+            ),
+            "summary": decrypt_with_fallback(
+                row.get("summary") or "",
+                session_token,
+                f"ai-chat-meta:{str(row['_id'])}",
+            ),
             "updatedAt": dt_to_epoch_ms(row.get("updatedAt")),
         }
         for row in rows
@@ -3249,16 +3306,29 @@ async def create_ai_chat(
     now = utc_now()
     chat_doc = {
         "userId": user_id,
-        "title": "گفتوگوی موقت" if is_temporary else "گفتوگوی جدید",
+        "title": "",
         "summary": "",
+        "titleEncrypted": True,
+        "summaryEncrypted": True,
         "createdAt": now,
         "updatedAt": now,
         "isTemporary": is_temporary,
     }
     inserted = await cl_ai_chats.insert_one(chat_doc)
+    scope = f"ai-chat-meta:{str(inserted.inserted_id)}"
+    plain_title = "گفتوگوی موقت" if is_temporary else "گفتوگوی جدید"
+    await cl_ai_chats.update_one(
+        {"_id": inserted.inserted_id},
+        {
+            "$set": {
+                "title": encrypt_scoped_text(plain_title, "", scope),
+                "summary": encrypt_scoped_text("", "", scope),
+            }
+        },
+    )
     return {
         "id": str(inserted.inserted_id),
-        "title": chat_doc["title"],
+        "title": plain_title,
         "summary": "",
         "updatedAt": dt_to_epoch_ms(now),
         "isTemporary": is_temporary,
@@ -3283,12 +3353,23 @@ async def rename_ai_chat(
 
     await cl_ai_chats.update_one(
         {"_id": chat["_id"]},
-        {"$set": {"title": next_title}},
+        {
+            "$set": {
+                "title": encrypt_scoped_text(
+                    next_title, "", f"ai-chat-meta:{str(chat['_id'])}"
+                ),
+                "titleEncrypted": True,
+            }
+        },
     )
     return {
         "id": ai_chat_id,
         "title": next_title,
-        "summary": chat.get("summary") or "",
+        "summary": decrypt_with_fallback(
+            chat.get("summary") or "",
+            str(current_user.get("_session_token") or ""),
+            f"ai-chat-meta:{str(chat['_id'])}",
+        ),
         "updatedAt": dt_to_epoch_ms(chat.get("updatedAt")),
     }
 
@@ -3458,7 +3539,10 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 generated_title = ""
                 chat_update: Dict[str, Any] = {"updatedAt": utc_now()}
                 if is_temporary_chat:
-                    chat_update["title"] = "گفتوگوی موقت"
+                    chat_update["title"] = encrypt_scoped_text(
+                        "گفتوگوی موقت", "", f"ai-chat-meta:{ai_chat_id}"
+                    )
+                    chat_update["titleEncrypted"] = True
                 elif should_generate_title and not stopped:
                     candidate_title = await generate_chat_title(first_user_message)
                     if (
@@ -3467,7 +3551,10 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                         and candidate_title.strip() != "گفتوگوی جدید"
                     ):
                         generated_title = candidate_title.strip()[:56]
-                        chat_update["title"] = generated_title
+                        chat_update["title"] = encrypt_scoped_text(
+                            generated_title, "", f"ai-chat-meta:{ai_chat_id}"
+                        )
+                        chat_update["titleEncrypted"] = True
                 await cl_ai_chats.update_one(
                     {"_id": await try_object_id(ai_chat_id), "userId": user_id},
                     {"$set": chat_update},
@@ -3571,7 +3658,11 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 memory_summary = ""
                 if isinstance(ai_chat.get("summary"), str):
-                    memory_summary = ai_chat.get("summary", "").strip()
+                    memory_summary = decrypt_with_fallback(
+                        ai_chat.get("summary", ""),
+                        token,
+                        f"ai-chat-meta:{ai_chat_id}",
+                    ).strip()
 
                 history_docs = (
                     await cl_ai_messages.find(
@@ -3605,7 +3696,10 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     {"_id": ai_chat["_id"], "userId": user_id},
                     {
                         "$set": {
-                            "summary": refreshed_summary,
+                            "summary": encrypt_scoped_text(
+                                refreshed_summary, "", f"ai-chat-meta:{ai_chat_id}"
+                            ),
+                            "summaryEncrypted": True,
                             "updatedAt": utc_now(),
                         }
                     },
