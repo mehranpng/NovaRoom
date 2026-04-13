@@ -5,6 +5,9 @@ from pathlib import Path
 from typing import Optional, Tuple
 from datetime import datetime, timezone
 import mimetypes
+import hashlib
+import hmac
+import secrets
 
 # Base directory for file uploads
 UPLOAD_DIR = Path("uploads")
@@ -31,6 +34,55 @@ DANGEROUS_EXTENSIONS = {
     ".pkg",
     ".msi",
 }
+FILE_MAGIC = b"NRF1"
+FILE_NONCE_SIZE = 16
+FILE_TAG_SIZE = 16
+
+
+def _file_key() -> bytes:
+    raw_secret = os.getenv("SECRET_KEY", "") or "dev-secret-change-me"
+    return hashlib.sha256(f"{raw_secret}|file-storage".encode("utf-8")).digest()
+
+
+def _xor_stream(data: bytes, key: bytes, nonce: bytes) -> bytes:
+    out = bytearray(len(data))
+    counter = 0
+    idx = 0
+    while idx < len(data):
+        block = hashlib.sha256(key + nonce + counter.to_bytes(8, "big")).digest()
+        for b in block:
+            if idx >= len(data):
+                break
+            out[idx] = data[idx] ^ b
+            idx += 1
+        counter += 1
+    return bytes(out)
+
+
+def encrypt_file_bytes(plain: bytes) -> bytes:
+    if plain.startswith(FILE_MAGIC):
+        return plain
+    key = _file_key()
+    nonce = secrets.token_bytes(FILE_NONCE_SIZE)
+    cipher = _xor_stream(plain, key, nonce)
+    tag = hmac.new(key, nonce + cipher, hashlib.sha256).digest()[:FILE_TAG_SIZE]
+    return FILE_MAGIC + nonce + cipher + tag
+
+
+def decrypt_file_bytes(raw: bytes) -> bytes:
+    if not raw.startswith(FILE_MAGIC):
+        return raw
+    if len(raw) < len(FILE_MAGIC) + FILE_NONCE_SIZE + FILE_TAG_SIZE:
+        return b""
+    body = raw[len(FILE_MAGIC) :]
+    nonce = body[:FILE_NONCE_SIZE]
+    cipher = body[FILE_NONCE_SIZE:-FILE_TAG_SIZE]
+    tag = body[-FILE_TAG_SIZE:]
+    key = _file_key()
+    expected = hmac.new(key, nonce + cipher, hashlib.sha256).digest()[:FILE_TAG_SIZE]
+    if not hmac.compare_digest(tag, expected):
+        return b""
+    return _xor_stream(cipher, key, nonce)
 
 
 def is_allowed_file(filename: str) -> bool:
@@ -77,7 +129,7 @@ async def save_uploaded_file(file_content: bytes, original_filename: str) -> dic
 
     # Save file
     async with aiofiles.open(file_path, "wb") as f:
-        await f.write(file_content)
+        await f.write(encrypt_file_bytes(file_content))
 
     # Detect MIME type
     mime_type, _ = mimetypes.guess_type(sanitized_name)
@@ -111,6 +163,30 @@ async def delete_file(file_id: str) -> bool:
 def validate_file_access(file_id: str) -> bool:
     file_path = get_file_path(file_id)
     return file_path.exists() and file_path.is_file()
+
+
+async def read_file_content(file_id: str) -> Optional[bytes]:
+    file_path = get_file_path(file_id)
+    if not file_path.exists() or not file_path.is_file():
+        return None
+    async with aiofiles.open(file_path, "rb") as f:
+        raw = await f.read()
+    return decrypt_file_bytes(raw)
+
+
+async def encrypt_existing_uploads() -> int:
+    converted = 0
+    for file_path in UPLOAD_DIR.iterdir():
+        if not file_path.is_file():
+            continue
+        async with aiofiles.open(file_path, "rb") as f:
+            raw = await f.read()
+        if raw.startswith(FILE_MAGIC):
+            continue
+        async with aiofiles.open(file_path, "wb") as f:
+            await f.write(encrypt_file_bytes(raw))
+        converted += 1
+    return converted
 
 
 async def cleanup_orphaned_files(db_file_ids: set) -> int:

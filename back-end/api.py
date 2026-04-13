@@ -10,7 +10,7 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from pydantic import BaseModel
 from datetime import datetime, timedelta, timezone
 import jwt
@@ -47,7 +47,8 @@ from file_service import (
     save_uploaded_file,
     delete_file,
     validate_file_access,
-    get_file_path,
+    read_file_content,
+    encrypt_existing_uploads,
     MAX_FILE_SIZE,
 )
 
@@ -639,6 +640,7 @@ async def startup_db():
     await cl_ai_chats.create_index([("userId", 1), ("updatedAt", -1)])
     await cl_users.update_many({}, {"$set": {"online": False}})
     await migrate_unencrypted_messages()
+    await encrypt_existing_uploads()
 
 
 async def migrate_unencrypted_messages():
@@ -1882,13 +1884,10 @@ async def download_file(
     if not validate_file_access(file_id):
         raise HTTPException(status_code=404, detail="File not found")
 
-    # Get file path
-    file_path = get_file_path(file_id)
-
-    # Return file
-    return FileResponse(
-        path=str(file_path), filename=file_id, media_type="application/octet-stream"
-    )
+    decrypted = await read_file_content(file_id)
+    if decrypted is None:
+        raise HTTPException(status_code=404, detail="File not found")
+    return Response(content=decrypted, media_type="application/octet-stream")
 
 
 @app.delete("/files/{file_id}")
