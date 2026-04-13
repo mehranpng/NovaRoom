@@ -53,6 +53,12 @@ interface ChatRoomProps {
     onTypingChange?: (chatId: string, isTyping: boolean) => void;
     isUserBlocked?: (user: User) => boolean;
     onToggleBlockUser?: (user: User) => void | Promise<void>;
+    hasOlderMessages?: boolean;
+    hasNewerMessages?: boolean;
+    loadingOlderMessages?: boolean;
+    loadingNewerMessages?: boolean;
+    onLoadOlderMessages?: (chatId: string) => void | Promise<void>;
+    onLoadNewerMessages?: (chatId: string) => void | Promise<void>;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000;
@@ -309,6 +315,12 @@ export function ChatRoom({
     onTypingChange,
     isUserBlocked,
     onToggleBlockUser,
+    hasOlderMessages = false,
+    hasNewerMessages = false,
+    loadingOlderMessages = false,
+    loadingNewerMessages = false,
+    onLoadOlderMessages,
+    onLoadNewerMessages,
 }: ChatRoomProps) {
     const MAX_CHAT_MESSAGE_LENGTH = 6000;
     const currentChat = useMemo(
@@ -1338,6 +1350,14 @@ export function ChatRoom({
 
         // keep memory fresh (in-memory only)
         saveScroll(chatId);
+
+        if (container.scrollTop <= 48 && hasOlderMessages && !loadingOlderMessages) {
+            void onLoadOlderMessages?.(chatId);
+        }
+        const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+        if (distanceToBottom <= 48 && hasNewerMessages && !loadingNewerMessages) {
+            void onLoadNewerMessages?.(chatId);
+        }
     };
 
     const items = useMemo(() => messages.map((m, idx) => {
@@ -1931,7 +1951,13 @@ export function ChatRoom({
             >
                 <div className="chat-room__messages-inner">
                     {loading ? <ChatMessagesSkeleton /> : (
-                        items.map(({ m, isMine, dayBreak, shape }) => {
+                        <>
+                            {loadingOlderMessages && (
+                                <div className="chat-range-loader-wrap">
+                                    <span className="chat-range-loader chat-range-loader--active" />
+                                </div>
+                            )}
+                            {items.map(({ m, isMine, dayBreak, shape }) => {
                             const isHighlighted = highlightId === m.id;
                             const dragX = dragState.id === m.id ? dragState.x : 0;
                             const dragActive = dragState.id === m.id ? dragState.active : false;
@@ -2205,7 +2231,13 @@ export function ChatRoom({
                                     </div>
                                 </div>
                             );
-                        })
+                            })}
+                            {loadingNewerMessages && (
+                                <div className="chat-range-loader-wrap">
+                                    <span className="chat-range-loader chat-range-loader--active" />
+                                </div>
+                            )}
+                        </>
                     )}
                     <div ref={messagesEndRef} />
                 </div>

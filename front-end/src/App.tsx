@@ -29,7 +29,20 @@ const normalizeTimestamp = (ts: unknown): number => {
     return Date.now();
 };
 
+const mergeMessages = (base: Message[], incoming: Message[], mode: 'replace' | 'prepend' | 'append'): Message[] => {
+    const byId = new Map<string, Message>();
+    if (mode === 'replace') {
+        for (const m of incoming) byId.set(m.id, m);
+        return Array.from(byId.values()).sort((a, b) => normalizeTimestamp(a.timestamp) - normalizeTimestamp(b.timestamp));
+    }
+    const combined = mode === 'prepend' ? [...incoming, ...base] : [...base, ...incoming];
+    for (const m of combined) byId.set(m.id, m);
+    return Array.from(byId.values()).sort((a, b) => normalizeTimestamp(a.timestamp) - normalizeTimestamp(b.timestamp));
+};
+
 export function App() {
+    const MESSAGE_PAGE_SIZE = 50;
+    const MESSAGE_WINDOW_LIMIT = 220;
     const navigate = useNavigate();
     const location = useLocation();
     const [authToken, setAuthToken] = useState<string | null>(() => localStorage.getItem('token'));
@@ -40,6 +53,14 @@ export function App() {
     const [activeChatId, setActiveChatId] = useState<string | null>(null);
     const [chats, setChats] = useState<Chat[]>([]);
     const [messages, setMessages] = useState<Record<string, Message[]>>({});
+    const [messageRangeState, setMessageRangeState] = useState<Record<string, {
+        hasOlder: boolean;
+        hasNewer: boolean;
+        loadingOlder: boolean;
+        loadingNewer: boolean;
+        oldestCursor?: { cursorTs: number; cursorId: string } | null;
+        newestCursor?: { cursorTs: number; cursorId: string } | null;
+    }>>({});
     const [newChatModalOpen, setNewChatModalOpen] = useState(false);
     const [wsConnected, setWsConnected] = useState(false);
     const [wsReconnectExhausted, setWsReconnectExhausted] = useState(false);
@@ -355,6 +376,7 @@ export function App() {
             setPendingUser(null);
             setChats([]);
             setMessages({});
+            setMessageRangeState({});
             setNewChatModalOpen(false);
             setIsInitialChatsLoad(true);
             setMessagesLoadedOnce({});
@@ -435,7 +457,7 @@ export function App() {
             }
             return {
                 ...prev,
-                [chatId]: [...currentMessages, newMsg]
+                [chatId]: [...currentMessages, newMsg].slice(-MESSAGE_WINDOW_LIMIT)
             };
         });
 
@@ -788,20 +810,14 @@ export function App() {
         loadChats(false);
 
         if (!activeChatId) return;
-        apiFetch(`/chats/${activeChatId}/messages?limit=100`)
-            .then((msgs) => {
-                setMessages(prev => {
-                    const incoming = Array.isArray(msgs) ? msgs : [];
-                    const existing = prev[activeChatId] || [];
-                    if (incoming.length === 0 && existing.length > 0) return prev;
-                    return { ...prev, [activeChatId]: incoming };
-                });
+        fetchPagedMessages(activeChatId, { direction: 'latest', mode: 'replace' })
+            .then(() => {
                 if (currentUser && activeChatId !== `saved_messages_${currentUser.chatId}`) {
                     sendSeen(activeChatId);
                 }
             })
             .catch((err) => console.error('Failed to sync messages after reconnect', err));
-    }, [wsConnected, isAuthenticated, loadChats, activeChatId, currentUser, sendSeen]);
+    }, [wsConnected, isAuthenticated, loadChats, activeChatId, currentUser, sendSeen, fetchPagedMessages]);
 
     // Check auth on mount (without bouncing user to /login first)
     useEffect(() => {
@@ -844,6 +860,47 @@ export function App() {
     useEffect(() => {
         if (isAuthenticated) loadChats();
     }, [isAuthenticated, loadChats]);
+
+    const fetchPagedMessages = useCallback(async (
+        chatId: string,
+        params?: { direction?: 'latest' | 'older' | 'newer'; cursorTs?: number; cursorId?: string; mode?: 'replace' | 'prepend' | 'append' }
+    ) => {
+        const direction = params?.direction || 'latest';
+        const mode = params?.mode || 'replace';
+        const qs = new URLSearchParams({
+            include_meta: 'true',
+            limit: String(MESSAGE_PAGE_SIZE),
+            direction,
+        });
+        if (params?.cursorTs) qs.set('cursor_ts', String(params.cursorTs));
+        if (params?.cursorId) qs.set('cursor_id', params.cursorId);
+
+        const res = await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages?${qs.toString()}`);
+        const chunk: Message[] = Array.isArray(res?.messages) ? res.messages : [];
+
+        setMessages((prev) => {
+            const merged = mergeMessages(prev[chatId] || [], chunk, mode);
+            if (merged.length <= MESSAGE_WINDOW_LIMIT) return { ...prev, [chatId]: merged };
+            if (mode === 'prepend') {
+                return { ...prev, [chatId]: merged.slice(0, MESSAGE_WINDOW_LIMIT) };
+            }
+            return { ...prev, [chatId]: merged.slice(-MESSAGE_WINDOW_LIMIT) };
+        });
+
+        setMessageRangeState((prev) => ({
+            ...prev,
+            [chatId]: {
+                ...(prev[chatId] || { loadingOlder: false, loadingNewer: false }),
+                hasOlder: Boolean(res?.hasOlder),
+                hasNewer: Boolean(res?.hasNewer),
+                oldestCursor: res?.oldestCursor || null,
+                newestCursor: res?.newestCursor || null,
+                loadingOlder: false,
+                loadingNewer: false,
+            },
+        }));
+        return chunk.length;
+    }, []);
 
 
     useEffect(() => {
@@ -901,19 +958,13 @@ export function App() {
         }
 
         try {
-            let msgs = await apiFetch(`/chats/${chatId}/messages?limit=100`);
-            if ((!Array.isArray(msgs) || msgs.length === 0) && chatLoadRequestRef.current === requestId) {
+            let loadedCount = await fetchPagedMessages(chatId, { direction: 'latest', mode: 'replace' });
+            if (loadedCount === 0 && chatLoadRequestRef.current === requestId) {
                 // Retry once for occasional race/network hiccups when rapidly switching chats.
                 await new Promise((resolve) => window.setTimeout(resolve, 180));
-                msgs = await apiFetch(`/chats/${chatId}/messages?limit=100`);
+                loadedCount = await fetchPagedMessages(chatId, { direction: 'latest', mode: 'replace' });
             }
             if (chatLoadRequestRef.current !== requestId) return;
-            setMessages(prev => {
-                const incoming = Array.isArray(msgs) ? msgs : [];
-                const existing = prev[chatId] || [];
-                if (incoming.length === 0 && existing.length > 0) return prev;
-                return { ...prev, [chatId]: incoming };
-            });
             setMessagesLoadedOnce(prev => ({ ...prev, [chatId]: true }));
 
             if (currentUser && chatId !== `saved_messages_${currentUser.chatId}`) {
@@ -929,7 +980,47 @@ export function App() {
         }
 
         loadChats(false);
-    }, [loadChats, sendSeen, messagesLoadedOnce, currentUser, navigate]);
+    }, [loadChats, sendSeen, messagesLoadedOnce, currentUser, navigate, fetchPagedMessages]);
+
+    const loadOlderMessages = useCallback(async (chatId: string) => {
+        const state = messageRangeState[chatId];
+        if (!state?.hasOlder || state.loadingOlder || !state.oldestCursor) return;
+        setMessageRangeState((prev) => ({
+            ...prev,
+            [chatId]: { ...(prev[chatId] || state), loadingOlder: true },
+        }));
+        await fetchPagedMessages(chatId, {
+            direction: 'older',
+            cursorTs: state.oldestCursor.cursorTs,
+            cursorId: state.oldestCursor.cursorId,
+            mode: 'prepend',
+        }).catch(() => {
+            setMessageRangeState((prev) => ({
+                ...prev,
+                [chatId]: { ...(prev[chatId] || state), loadingOlder: false },
+            }));
+        });
+    }, [messageRangeState, fetchPagedMessages]);
+
+    const loadNewerMessages = useCallback(async (chatId: string) => {
+        const state = messageRangeState[chatId];
+        if (!state?.hasNewer || state.loadingNewer || !state.newestCursor) return;
+        setMessageRangeState((prev) => ({
+            ...prev,
+            [chatId]: { ...(prev[chatId] || state), loadingNewer: true },
+        }));
+        await fetchPagedMessages(chatId, {
+            direction: 'newer',
+            cursorTs: state.newestCursor.cursorTs,
+            cursorId: state.newestCursor.cursorId,
+            mode: 'append',
+        }).catch(() => {
+            setMessageRangeState((prev) => ({
+                ...prev,
+                [chatId]: { ...(prev[chatId] || state), loadingNewer: false },
+            }));
+        });
+    }, [messageRangeState, fetchPagedMessages]);
 
 
     useEffect(() => {
@@ -1123,14 +1214,13 @@ export function App() {
         });
         playChatSound('send');
         try {
-            const targetMessages = await apiFetch(`/chats/${encodeURIComponent(targetChatId)}/messages?limit=100`);
-            setMessages((prev) => ({ ...prev, [targetChatId]: Array.isArray(targetMessages) ? targetMessages : prev[targetChatId] || [] }));
+            await fetchPagedMessages(targetChatId, { direction: 'latest', mode: 'replace' });
             setMessagesLoadedOnce((prev) => ({ ...prev, [targetChatId]: true }));
         } catch (e) {
             console.error('Failed to refresh forwarded target chat messages', e);
         }
         loadChats(false);
-    }, [playChatSound, loadChats]);
+    }, [playChatSound, loadChats, fetchPagedMessages]);
 
     const handleSetPendingForwardDraft = useCallback((targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => {
         if (!targetChatId || !draft?.sourceChatId || !draft?.messageId) return;
@@ -1326,6 +1416,10 @@ export function App() {
             return rest;
         });
         setMessagesLoadedOnce(prev => {
+            const { [chatId]: _, ...rest } = prev;
+            return rest;
+        });
+        setMessageRangeState(prev => {
             const { [chatId]: _, ...rest } = prev;
             return rest;
         });
@@ -1600,6 +1694,7 @@ export function App() {
     const activeChat = chats.find(c => c.id === activeChatId) || null;
     const activeMessages = activeChatId ? messages[activeChatId] || [] : [];
     const activeMessagesLoading = activeChatId ? messagesLoading[activeChatId] || false : false;
+    const activeRange = activeChatId ? messageRangeState[activeChatId] : undefined;
     const isSavedMessagesActive = currentUser && activeChatId === `saved_messages_${currentUser.chatId}`;
     const aiMessages = activeAIChatId ? aiMessagesByChat[activeAIChatId] || [] : [];
     const activeAIChat = aiChats.find((c) => c.id === activeAIChatId) || null;
@@ -1716,6 +1811,12 @@ export function App() {
                                 onTypingChange={(targetChatId, isTyping) => sendTyping(targetChatId, isTyping)}
                                 isUserBlocked={isUserBlocked}
                                 onToggleBlockUser={toggleBlockUser}
+                                hasOlderMessages={Boolean(activeRange?.hasOlder)}
+                                hasNewerMessages={Boolean(activeRange?.hasNewer)}
+                                loadingOlderMessages={Boolean(activeRange?.loadingOlder)}
+                                loadingNewerMessages={Boolean(activeRange?.loadingNewer)}
+                                onLoadOlderMessages={loadOlderMessages}
+                                onLoadNewerMessages={loadNewerMessages}
                             />
                         ) : (
                             <EmptyState />

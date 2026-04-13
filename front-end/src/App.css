@@ -3090,6 +3090,32 @@ body,
     color: var(--text-secondary);
 }
 
+.chat-range-loader-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 8px 0;
+}
+
+.chat-range-loader {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid color-mix(in oklab, var(--accent-primary) 35%, transparent);
+    border-top-color: var(--accent-primary);
+    animation: chatRangeSpin 0.85s linear infinite;
+    opacity: 0.35;
+}
+
+.chat-range-loader--active {
+    opacity: 0.95;
+}
+
+@keyframes chatRangeSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .results {
     max-height: min(520px, calc(var(--app-height, 100dvh) - 220px));
     overflow-y: auto;

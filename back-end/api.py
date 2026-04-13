@@ -1748,25 +1748,79 @@ async def delete_chat(chat_id: str, current_user: dict = Depends(get_current_use
 
 @app.get("/chats/{chat_id}/messages")
 async def get_messages(
-    chat_id: str, limit: int = 50, current_user: dict = Depends(get_current_user)
+    chat_id: str,
+    limit: int = 50,
+    direction: str = Query("latest", pattern="^(latest|older|newer)$"),
+    cursor_ts: Optional[int] = None,
+    cursor_id: Optional[str] = None,
+    include_meta: bool = False,
+    current_user: dict = Depends(get_current_user),
 ):
     current_user_id = current_user["chatId"]
     session_token = str(current_user.get("_session_token") or "")
     chat_scope = f"chat:{chat_id}"
 
+    safe_limit = max(1, min(int(limit or 50), 200))
+
+    def _cursor_filter() -> Optional[Dict[str, Any]]:
+        if cursor_ts is None:
+            return None
+        cursor_dt = datetime.fromtimestamp(cursor_ts / 1000, tz=timezone.utc).replace(
+            tzinfo=None
+        )
+        oid = ObjectId(cursor_id) if ObjectId.is_valid(str(cursor_id or "")) else None
+        if direction == "older":
+            return (
+                {
+                    "$or": [
+                        {"timestamp": {"$lt": cursor_dt}},
+                        {"timestamp": cursor_dt, "_id": {"$lt": oid}},
+                    ]
+                }
+                if oid
+                else {"timestamp": {"$lt": cursor_dt}}
+            )
+        if direction == "newer":
+            return (
+                {
+                    "$or": [
+                        {"timestamp": {"$gt": cursor_dt}},
+                        {"timestamp": cursor_dt, "_id": {"$gt": oid}},
+                    ]
+                }
+                if oid
+                else {"timestamp": {"$gt": cursor_dt}}
+            )
+        return None
+
+    def _has_more_filter(ts_ms: int, oid: str, op: str) -> Dict[str, Any]:
+        dt = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).replace(tzinfo=None)
+        return {
+            "$or": [
+                {"timestamp": {op: dt}},
+                {"timestamp": dt, "_id": {op: ObjectId(oid)}},
+            ]
+        }
+
     # Check if this is saved messages
     saved_chat_id = get_saved_messages_id(current_user_id)
     if chat_id == saved_chat_id:
         # For saved messages, don't mark as seen (no seenBy logic needed)
+        query: Dict[str, Any] = {"chatId": chat_id}
+        extra = _cursor_filter()
+        if extra:
+            query = {"$and": [query, extra]}
+        order = -1 if direction in ("latest", "older") else 1
         msgs = (
-            await cl_messages.find({"chatId": chat_id})
-            .sort("timestamp", -1)
-            .limit(limit)
-            .to_list(limit)
+            await cl_messages.find(query)
+            .sort([("timestamp", order), ("_id", order)])
+            .limit(safe_limit)
+            .to_list(safe_limit)
         )
-        msgs.reverse()
+        if direction in ("latest", "older"):
+            msgs.reverse()
 
-        return [
+        payload = [
             {
                 "id": str(m["_id"]),
                 "chatId": m["chatId"],
@@ -1800,6 +1854,43 @@ async def get_messages(
             }
             for m in msgs
         ]
+        if not include_meta:
+            return payload
+        if not payload:
+            return {
+                "messages": [],
+                "hasOlder": False,
+                "hasNewer": False,
+                "oldestCursor": None,
+                "newestCursor": None,
+            }
+        oldest = payload[0]
+        newest = payload[-1]
+        return {
+            "messages": payload,
+            "hasOlder": (
+                await cl_messages.count_documents(
+                    {"chatId": chat_id, **_has_more_filter(oldest["timestamp"], oldest["id"], "$lt")},
+                    limit=1,
+                )
+                > 0
+            ),
+            "hasNewer": (
+                await cl_messages.count_documents(
+                    {"chatId": chat_id, **_has_more_filter(newest["timestamp"], newest["id"], "$gt")},
+                    limit=1,
+                )
+                > 0
+            ),
+            "oldestCursor": {
+                "cursorTs": oldest["timestamp"],
+                "cursorId": oldest["id"],
+            },
+            "newestCursor": {
+                "cursorTs": newest["timestamp"],
+                "cursorId": newest["id"],
+            },
+        }
 
     chat_doc = await cl_chats.find_one({"_id": chat_id}, {"participants": 1})
     participants: List[str] = chat_doc.get("participants", []) if chat_doc else []
@@ -1812,13 +1903,19 @@ async def get_messages(
         {"$addToSet": {"seenBy": current_user_id}},
     )
 
+    query: Dict[str, Any] = {"chatId": chat_id}
+    extra = _cursor_filter()
+    if extra:
+        query = {"$and": [query, extra]}
+    order = -1 if direction in ("latest", "older") else 1
     msgs = (
-        await cl_messages.find({"chatId": chat_id})
-        .sort("timestamp", -1)
-        .limit(limit)
-        .to_list(limit)
+        await cl_messages.find(query)
+        .sort([("timestamp", order), ("_id", order)])
+        .limit(safe_limit)
+        .to_list(safe_limit)
     )
-    msgs.reverse()
+    if direction in ("latest", "older"):
+        msgs.reverse()
 
     def compute_seen(m: dict) -> bool:
         seen_by = m.get("seenBy", []) or []
@@ -1837,7 +1934,7 @@ async def get_messages(
         # For incoming messages (only used by UI as theirs), keep it consistent.
         return current_user_id in seen_by
 
-    return [
+    payload = [
         {
             "id": str(m["_id"]),
             "chatId": m["chatId"],
@@ -1869,6 +1966,37 @@ async def get_messages(
         }
         for m in msgs
     ]
+    if not include_meta:
+        return payload
+    if not payload:
+        return {
+            "messages": [],
+            "hasOlder": False,
+            "hasNewer": False,
+            "oldestCursor": None,
+            "newestCursor": None,
+        }
+    oldest = payload[0]
+    newest = payload[-1]
+    return {
+        "messages": payload,
+        "hasOlder": (
+            await cl_messages.count_documents(
+                {"chatId": chat_id, **_has_more_filter(oldest["timestamp"], oldest["id"], "$lt")},
+                limit=1,
+            )
+            > 0
+        ),
+        "hasNewer": (
+            await cl_messages.count_documents(
+                {"chatId": chat_id, **_has_more_filter(newest["timestamp"], newest["id"], "$gt")},
+                limit=1,
+            )
+            > 0
+        ),
+        "oldestCursor": {"cursorTs": oldest["timestamp"], "cursorId": oldest["id"]},
+        "newestCursor": {"cursorTs": newest["timestamp"], "cursorId": newest["id"]},
+    }
 
 
 # File upload endpoint
