@@ -1048,35 +1048,46 @@ export function App() {
             `/chats/${encodeURIComponent(chatId)}/messages?include_meta=true&around_id=${encodeURIComponent(messageId)}&limit=${MESSAGE_PAGE_SIZE}`,
             `/messages/${encodeURIComponent(messageId)}/context?chatId=${encodeURIComponent(chatId)}&include_meta=true&limit=${MESSAGE_PAGE_SIZE}`,
         ];
-
-        for (const endpoint of candidateEndpoints) {
-            try {
-                const res = await apiFetch(endpoint, { signal });
+        const controllers = candidateEndpoints.map(() => new AbortController());
+        const abortAll = () => controllers.forEach((c) => c.abort());
+        if (signal) {
+            if (signal.aborted) return false;
+            signal.addEventListener('abort', abortAll, { once: true });
+        }
+        try {
+            const winner = await Promise.any(candidateEndpoints.map(async (endpoint, idx) => {
+                const res = await apiFetch(endpoint, { signal: controllers[idx].signal });
                 const chunk: Message[] = Array.isArray(res?.messages)
                     ? res.messages
                     : (Array.isArray(res?.data?.messages) ? res.data.messages : []);
-                if (!Array.isArray(chunk) || chunk.length === 0) continue;
+                if (!Array.isArray(chunk) || chunk.length === 0) {
+                    throw new Error('empty context');
+                }
+                return { res, chunk };
+            }));
+            abortAll();
+            if (signal?.aborted) return false;
 
-                setMessages((prev) => ({ ...prev, [chatId]: chunk }));
-                setMessageRangeState((prev) => ({
-                    ...prev,
-                    [chatId]: {
-                        ...(prev[chatId] || { loadingOlder: false, loadingNewer: false }),
-                        hasOlder: Boolean(res?.hasOlder ?? res?.data?.hasOlder),
-                        hasNewer: Boolean(res?.hasNewer ?? res?.data?.hasNewer),
-                        oldestCursor: res?.oldestCursor ?? res?.data?.oldestCursor ?? null,
-                        newestCursor: res?.newestCursor ?? res?.data?.newestCursor ?? null,
-                        loadingOlder: false,
-                        loadingNewer: false,
-                    },
-                }));
-                return true;
-            } catch (error) {
-                if (signal?.aborted) return false;
-                continue;
-            }
+            setMessages((prev) => ({ ...prev, [chatId]: winner.chunk }));
+            setMessageRangeState((prev) => ({
+                ...prev,
+                [chatId]: {
+                    ...(prev[chatId] || { loadingOlder: false, loadingNewer: false }),
+                    hasOlder: Boolean(winner.res?.hasOlder ?? winner.res?.data?.hasOlder),
+                    hasNewer: Boolean(winner.res?.hasNewer ?? winner.res?.data?.hasNewer),
+                    oldestCursor: winner.res?.oldestCursor ?? winner.res?.data?.oldestCursor ?? null,
+                    newestCursor: winner.res?.newestCursor ?? winner.res?.data?.newestCursor ?? null,
+                    loadingOlder: false,
+                    loadingNewer: false,
+                },
+            }));
+            return true;
+        } catch {
+            if (signal?.aborted) return false;
+            return false;
+        } finally {
+            if (signal) signal.removeEventListener('abort', abortAll);
         }
-        return false;
     }, []);
 
 

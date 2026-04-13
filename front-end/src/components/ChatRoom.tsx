@@ -403,7 +403,6 @@ export function ChatRoom({
     const pendingOlderAdjustRef = useRef<{ prevHeight: number; prevTop: number } | null>(null);
     const pendingRangeLoadTypeRef = useRef<'older' | 'newer' | null>(null);
     const suppressIncomingBadgeRef = useRef(false);
-    const hasOlderMessagesRef = useRef(hasOlderMessages);
     const openedAtRef = useRef<number>(Date.now());
     const initialScrollDoneRef = useRef(false);
     const lastChatIdRef = useRef<string | null>(null);
@@ -960,7 +959,7 @@ export function ChatRoom({
         replyJumpAbortRef.current = controller;
         setReplyJumpLoading({ messageId: normalizedId });
         try {
-            const waitForTarget = async (tries = 10, delay = 90) => {
+            const waitForTarget = async (tries = 5, delay = 60) => {
                 for (let i = 0; i < tries; i += 1) {
                     if (controller.signal.aborted) return false;
                     if (tryScrollToMessage(normalizedId)) return true;
@@ -969,26 +968,11 @@ export function ChatRoom({
                 return false;
             };
 
-            let loadedByTargetedFetch = false;
-            if (onResolveReplyTargetMessage) {
-                suppressIncomingBadgeRef.current = true;
-                loadedByTargetedFetch = await onResolveReplyTargetMessage(chatId, normalizedId, controller.signal);
-                if (controller.signal.aborted) return;
-                if (loadedByTargetedFetch) {
-                    const found = await waitForTarget();
-                    if (found || controller.signal.aborted) return;
-                }
-            }
-
-            if (!onLoadOlderMessages) return;
-            for (let page = 0; page < 10; page += 1) {
-                if (controller.signal.aborted) return;
-                if (!hasOlderMessagesRef.current) return;
-                suppressIncomingBadgeRef.current = true;
-                await Promise.resolve(onLoadOlderMessages(chatId));
-                const found = await waitForTarget(7, 80);
-                if (found) return;
-            }
+            if (!onResolveReplyTargetMessage) return;
+            suppressIncomingBadgeRef.current = true;
+            const loadedByTargetedFetch = await onResolveReplyTargetMessage(chatId, normalizedId, controller.signal);
+            if (!loadedByTargetedFetch || controller.signal.aborted) return;
+            void waitForTarget();
         } catch {
             // ignore
         } finally {
@@ -1287,10 +1271,6 @@ export function ChatRoom({
         setReplyJumpLoading(null);
     }, [chatId]);
 
-    useEffect(() => {
-        hasOlderMessagesRef.current = hasOlderMessages;
-    }, [hasOlderMessages]);
-
     // When opening a chat with unread messages, compute anchor once for this open session.
     useEffect(() => {
         if (unreadAnchorId) return;
@@ -1437,6 +1417,7 @@ export function ChatRoom({
     const onMessagesScroll = () => {
         const container = messagesContainerRef.current;
         if (!container) return;
+        if (replyJumpLoading) return;
 
         // Ignore programmatic scroll events first (initial unread jump / restore / auto-scroll).
         // These events should not consume unread state.
@@ -2084,7 +2065,7 @@ export function ChatRoom({
                 <div className="chat-room__messages-inner">
                     {loading ? <ChatMessagesSkeleton /> : (
                         <>
-                            {(loadingOlderMessages || localLoadingOlder) && (
+                            {(loadingOlderMessages || localLoadingOlder) && !replyJumpLoading && (
                                 <div className="chat-range-loader-wrap">
                                     <span className="chat-range-loader chat-range-loader--active" />
                                 </div>
@@ -2365,7 +2346,7 @@ export function ChatRoom({
                                 </div>
                             );
                             })}
-                            {(loadingNewerMessages || localLoadingNewer) && (
+                            {(loadingNewerMessages || localLoadingNewer) && !replyJumpLoading && (
                                 <div className="chat-range-loader-wrap">
                                     <span className="chat-range-loader chat-range-loader--active" />
                                 </div>
