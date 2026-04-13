@@ -971,7 +971,10 @@ export function ChatRoom({
             if (!onResolveReplyTargetMessage) return;
             suppressIncomingBadgeRef.current = true;
             const loadedByTargetedFetch = await onResolveReplyTargetMessage(chatId, normalizedId, controller.signal);
-            if (!loadedByTargetedFetch || controller.signal.aborted) return;
+            if (!loadedByTargetedFetch || controller.signal.aborted) {
+                if (!controller.signal.aborted) alert('پیام ریپلای‌شده پیدا نشد.');
+                return;
+            }
             void waitForTarget();
         } catch {
             // ignore

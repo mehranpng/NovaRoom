@@ -3117,25 +3117,25 @@ body,
     position: fixed;
     inset: 0;
     z-index: 40;
-    background: transparent;
+    background: rgba(0, 0, 0, 0.42);
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
 .reply-jump-overlay__card {
-    width: min(156px, calc(100% - 56px));
-    min-height: 156px;
+    width: 138px;
+    min-height: 118px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-primary);
     border-radius: 12px;
-    padding: 14px 12px 12px;
+    padding: 10px;
     box-shadow: 0 16px 36px rgba(0, 0, 0, 0.25);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 12px;
+    gap: 8px;
 }
 
 .reply-jump-overlay__loader {
@@ -3151,7 +3151,7 @@ body,
     color: var(--text-primary);
     font-family: inherit;
     font-size: 13px;
-    padding: 7px 14px;
+    padding: 5px 10px;
     cursor: pointer;
 }
 

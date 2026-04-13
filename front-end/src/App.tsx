@@ -1047,6 +1047,9 @@ export function App() {
             `/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/context?include_meta=true&limit=${MESSAGE_PAGE_SIZE}`,
             `/chats/${encodeURIComponent(chatId)}/messages?include_meta=true&around_id=${encodeURIComponent(messageId)}&limit=${MESSAGE_PAGE_SIZE}`,
             `/messages/${encodeURIComponent(messageId)}/context?chatId=${encodeURIComponent(chatId)}&include_meta=true&limit=${MESSAGE_PAGE_SIZE}`,
+            `/chats/${encodeURIComponent(chatId)}/messages?include_meta=true&direction=latest&limit=${MESSAGE_PAGE_SIZE}&cursor_id=${encodeURIComponent(messageId)}`,
+            `/chats/${encodeURIComponent(chatId)}/messages?include_meta=true&direction=older&limit=${MESSAGE_PAGE_SIZE}&cursor_id=${encodeURIComponent(messageId)}`,
+            `/chats/${encodeURIComponent(chatId)}/messages?include_meta=true&direction=newer&limit=${MESSAGE_PAGE_SIZE}&cursor_id=${encodeURIComponent(messageId)}`,
         ];
         const controllers = candidateEndpoints.map(() => new AbortController());
         const abortAll = () => controllers.forEach((c) => c.abort());
