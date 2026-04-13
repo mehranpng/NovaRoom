@@ -32,6 +32,8 @@ const normalizeTimestamp = (ts: unknown): number => {
 export function App() {
     const navigate = useNavigate();
     const location = useLocation();
+    const [authToken, setAuthToken] = useState<string | null>(() => localStorage.getItem('token'));
+    const [isAuthChecking, setIsAuthChecking] = useState(true);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [view, setView] = useState<View>('chatList');
@@ -344,6 +346,7 @@ export function App() {
 
     const handleLogout = useCallback(() => {
         localStorage.removeItem('token');
+        setAuthToken(null);
         setIsAuthenticated(false);
         setCurrentUser(null);
         setView('chatList');
@@ -749,7 +752,7 @@ export function App() {
 
     // WebSocket initialization
     const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen, sendTyping, reconnectExhausted, reconnectNow, sendAIMessage, stopAIGeneration } = useWebSocket({
-        token: localStorage.getItem('token'),
+        token: authToken,
         onNewMessage: handleNewMessage,
         onMessageEdited: handleMessageEdited,
         onMessageDeleted: handleMessageDeleted,
@@ -792,21 +795,31 @@ export function App() {
             .catch((err) => console.error('Failed to sync messages after reconnect', err));
     }, [wsConnected, isAuthenticated, loadChats, activeChatId, currentUser, sendSeen]);
 
-    // Check auth on mount
+    // Check auth on mount (without bouncing user to /login first)
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        if (token) {
-            apiFetch('/profile/me')
-                .then(user => {
-                    setCurrentUser(user);
-                    setIsAuthenticated(true);
-                })
-                .catch(() => localStorage.removeItem('token'));
+        if (!authToken) {
+            setIsAuthChecking(false);
+            return;
         }
-    }, []);
+        apiFetch('/profile/me')
+            .then(user => {
+                setCurrentUser(user);
+                setIsAuthenticated(true);
+            })
+            .catch(() => {
+                localStorage.removeItem('token');
+                setAuthToken(null);
+                setIsAuthenticated(false);
+                setCurrentUser(null);
+            })
+            .finally(() => {
+                setIsAuthChecking(false);
+            });
+    }, [authToken]);
 
     const handleLoginSuccess = (user: User, token: string) => {
         localStorage.setItem('token', token);
+        setAuthToken(token);
         setCurrentUser(user);
         setIsAuthenticated(true);
         navigate('/', { replace: true });
@@ -814,6 +827,7 @@ export function App() {
 
     const handleRegisterSuccess = (user: User, token: string) => {
         localStorage.setItem('token', token);
+        setAuthToken(token);
         setCurrentUser(user);
         setIsAuthenticated(true);
         navigate('/', { replace: true });
@@ -1535,6 +1549,10 @@ export function App() {
             verified: false,
         };
     };
+
+    if (isAuthChecking) {
+        return null;
+    }
 
     // --- Unauthenticated routes ---
     if (!isAuthenticated) {

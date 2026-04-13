@@ -23,6 +23,7 @@ import traceback
 import asyncio
 import time
 import hashlib
+import secrets
 from bson import ObjectId
 import re
 import uuid
@@ -70,7 +71,8 @@ else:
     SECRET_KEY = _raw_secret
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_DAYS = 7
+ACCESS_TOKEN_EXPIRE_DAYS = 30
+MAX_ACTIVE_SESSIONS = 10
 
 client = AsyncIOMotorClient(os.getenv("MONGO_DB"))
 db = client["Messenger"]
@@ -272,24 +274,115 @@ class OfficialChEditRequest(BaseModel):
 async def create_access_token(data: dict) -> str:
     to_encode = data.copy()
     expire = utc_now() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
-    to_encode.update({"exp": expire})
+    to_encode.update({"exp": expire, "jti": secrets.token_urlsafe(24)})
     return await jwt_encode_async(to_encode)
+
+
+def hash_access_token(raw_token: str) -> str:
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+def _normalize_session_list(user_doc: dict) -> List[dict]:
+    login = (user_doc or {}).get("login") or {}
+    sessions = login.get("sessions") or []
+    if not isinstance(sessions, list):
+        sessions = []
+    now = utc_now()
+    valid_sessions: List[dict] = []
+    for item in sessions:
+        if not isinstance(item, dict):
+            continue
+        token_hash = str(item.get("tokenHash") or "").strip()
+        if not token_hash:
+            continue
+        expires_at = item.get("expiresAt")
+        if isinstance(expires_at, datetime):
+            exp_dt = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
+            if exp_dt <= now:
+                continue
+        valid_sessions.append(
+            {
+                "tokenHash": token_hash,
+                "createdAt": item.get("createdAt") or now,
+                "lastUsedAt": item.get("lastUsedAt") or now,
+                "expiresAt": expires_at,
+            }
+        )
+    valid_sessions.sort(key=lambda s: dt_to_epoch_ms(s.get("createdAt")), reverse=True)
+    return valid_sessions[:MAX_ACTIVE_SESSIONS]
+
+
+async def attach_session_to_user(chat_id: str, token: str):
+    user = await cl_users.find_one({"chatId": chat_id}, {"login": 1})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    payload = await jwt_decode_async(token)
+    exp_ts = payload.get("exp")
+    if isinstance(exp_ts, (int, float)):
+        expires_at = datetime.fromtimestamp(float(exp_ts), tz=timezone.utc)
+    else:
+        expires_at = utc_now() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+    sessions = _normalize_session_list(user)
+    sessions.insert(
+        0,
+        {
+            "tokenHash": hash_access_token(token),
+            "createdAt": utc_now(),
+            "lastUsedAt": utc_now(),
+            "expiresAt": expires_at,
+        },
+    )
+    deduped: List[dict] = []
+    seen_hashes = set()
+    for item in sessions:
+        h = item["tokenHash"]
+        if h in seen_hashes:
+            continue
+        seen_hashes.add(h)
+        deduped.append(item)
+        if len(deduped) >= MAX_ACTIVE_SESSIONS:
+            break
+    await cl_users.update_one(
+        {"chatId": chat_id},
+        {"$set": {"login.sessions": deduped}, "$unset": {"login.token": ""}},
+    )
+
+
+async def get_user_from_session_token(token: str) -> Optional[dict]:
+    try:
+        payload = await jwt_decode_async(token)
+    except Exception:
+        return None
+    chat_id = payload.get("chatId")
+    if not chat_id:
+        return None
+    user = await cl_users.find_one({"chatId": chat_id})
+    if not user:
+        return None
+
+    token_hash = hash_access_token(token)
+    sessions = _normalize_session_list(user)
+    if any(s.get("tokenHash") == token_hash for s in sessions):
+        await cl_users.update_one(
+            {"chatId": chat_id, "login.sessions.tokenHash": token_hash},
+            {"$set": {"login.sessions.$.lastUsedAt": utc_now()}},
+        )
+        return user
+
+    legacy_token = ((user.get("login") or {}).get("token") or "").strip()
+    if legacy_token and legacy_token == token:
+        await attach_session_to_user(chat_id, token)
+        return await cl_users.find_one({"chatId": chat_id})
+    return None
 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
-    try:
-        payload = await jwt_decode_async(credentials.credentials)
-        chat_id: Optional[str] = payload.get("chatId")
-        if not chat_id:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        user = await cl_users.find_one({"chatId": chat_id})
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-        return user
-    except jwt.PyJWTError:
+    user = await get_user_from_session_token(credentials.credentials)
+    if not user:
         raise HTTPException(status_code=401, detail="Invalid token")
+    return user
 
 
 def get_chat_id_for_two(part1: str, part2: str) -> str:
@@ -394,6 +487,7 @@ def _user_can_pin_chat(user_id: str, chat_id: str) -> bool:
 async def startup_db():
     await cl_users.create_index("chatId", unique=True)
     await cl_users.create_index("login.email", unique=True)
+    await cl_users.create_index("login.sessions.tokenHash")
     await cl_users.create_index("profile.username", unique=True)
     await cl_chats.create_index([("participants", 1)])
     await cl_chats.create_index([("updatedAt", -1)])
@@ -616,7 +710,7 @@ async def complete_registration(req: CompleteRegistrationRequest):
     # Create user document
     user_doc = {
         "chatId": chat_id,
-        "login": {"email": req.email, "password": hashed_password, "token": None},
+        "login": {"email": req.email, "password": hashed_password, "sessions": []},
         "profile": {
             "name": req.name,
             "username": desired_username,
@@ -637,8 +731,8 @@ async def complete_registration(req: CompleteRegistrationRequest):
     # Generate token
     token = await create_access_token({"chatId": chat_id})
 
-    # Update token in database
-    await cl_users.update_one({"chatId": chat_id}, {"$set": {"login.token": token}})
+    # Save hashed token session in database
+    await attach_session_to_user(chat_id, token)
 
     return {
         "token": token,
@@ -693,7 +787,11 @@ async def verify_and_reset_password(req: PasswordResetVerifyRequest):
 
     # Update password
     await cl_users.update_one(
-        {"login.email": req.email}, {"$set": {"login.password": hashed_password}}
+        {"login.email": req.email},
+        {
+            "$set": {"login.password": hashed_password, "login.sessions": []},
+            "$unset": {"login.token": ""},
+        },
     )
 
     # Clear the reset code
@@ -718,9 +816,7 @@ async def login(req: LoginRequest):
 
     token = await create_access_token({"chatId": user["chatId"]})
 
-    await cl_users.update_one(
-        {"chatId": user["chatId"]}, {"$set": {"login.token": token}}
-    )
+    await attach_session_to_user(user["chatId"], token)
 
     return {
         "token": token,
@@ -2017,21 +2113,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
     chat_id: Optional[str] = None
 
     try:
-        try:
-            payload = await jwt_decode_async(token)
-            chat_id = payload.get("chatId")
-        except Exception:
-            await websocket.close(code=1008)
-            return
-
-        if not chat_id:
-            await websocket.close(code=1008)
-            return
-
-        user = await cl_users.find_one({"chatId": chat_id})
+        user = await get_user_from_session_token(token)
         if not user:
             await websocket.close(code=1008)
             return
+        chat_id = user.get("chatId")
 
         active_ai_connections.setdefault(chat_id, []).append(websocket)
         is_first_connection = not active_connections.get(chat_id)
@@ -2973,21 +3059,11 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
     user_id: Optional[str] = None
 
     try:
-        try:
-            payload = await jwt_decode_async(token)
-            user_id = payload.get("chatId")
-        except Exception:
-            await websocket.close(code=1008)
-            return
-
-        if not user_id:
-            await websocket.close(code=1008)
-            return
-
-        user = await cl_users.find_one({"chatId": user_id})
+        user = await get_user_from_session_token(token)
         if not user:
             await websocket.close(code=1008)
             return
+        user_id = user.get("chatId")
 
         active_ai_connections.setdefault(user_id, []).append(websocket)
 
