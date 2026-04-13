@@ -804,21 +804,6 @@ export function App() {
         setWsReconnectExhausted(reconnectExhausted);
     }, [reconnectExhausted]);
 
-    useEffect(() => {
-        if (!wsConnected || !isAuthenticated) return;
-        setWsReconnectExhausted(false);
-        loadChats(false);
-
-        if (!activeChatId) return;
-        fetchPagedMessages(activeChatId, { direction: 'latest', mode: 'replace' })
-            .then(() => {
-                if (currentUser && activeChatId !== `saved_messages_${currentUser.chatId}`) {
-                    sendSeen(activeChatId);
-                }
-            })
-            .catch((err) => console.error('Failed to sync messages after reconnect', err));
-    }, [wsConnected, isAuthenticated, loadChats, activeChatId, currentUser, sendSeen, fetchPagedMessages]);
-
     // Check auth on mount (without bouncing user to /login first)
     useEffect(() => {
         if (!authToken) {
@@ -901,6 +886,21 @@ export function App() {
         }));
         return chunk.length;
     }, []);
+
+    useEffect(() => {
+        if (!wsConnected || !isAuthenticated) return;
+        setWsReconnectExhausted(false);
+        loadChats(false);
+
+        if (!activeChatId) return;
+        fetchPagedMessages(activeChatId, { direction: 'latest', mode: 'replace' })
+            .then(() => {
+                if (currentUser && activeChatId !== `saved_messages_${currentUser.chatId}`) {
+                    sendSeen(activeChatId);
+                }
+            })
+            .catch((err) => console.error('Failed to sync messages after reconnect', err));
+    }, [wsConnected, isAuthenticated, loadChats, activeChatId, currentUser, sendSeen, fetchPagedMessages]);
 
 
     useEffect(() => {
