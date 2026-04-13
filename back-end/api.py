@@ -360,8 +360,16 @@ async def get_user_from_session_token(token: str) -> Optional[dict]:
     if not user:
         return None
 
+    raw_sessions = ((user.get("login") or {}).get("sessions") or [])
+    if not isinstance(raw_sessions, list):
+        raw_sessions = []
     token_hash = hash_access_token(token)
     sessions = _normalize_session_list(user)
+    if len(sessions) != len(raw_sessions):
+        await cl_users.update_one(
+            {"chatId": chat_id},
+            {"$set": {"login.sessions": sessions}, "$unset": {"login.token": ""}},
+        )
     if any(s.get("tokenHash") == token_hash for s in sessions):
         await cl_users.update_one(
             {"chatId": chat_id, "login.sessions.tokenHash": token_hash},
@@ -383,6 +391,23 @@ async def get_current_user(
     if not user:
         raise HTTPException(status_code=401, detail="Invalid token")
     return user
+
+
+@app.post("/auth/logout")
+async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    user = await get_user_from_session_token(credentials.credentials)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    token_hash = hash_access_token(credentials.credentials)
+    sessions = _normalize_session_list(user)
+    next_sessions = [s for s in sessions if s.get("tokenHash") != token_hash]
+
+    await cl_users.update_one(
+        {"chatId": user["chatId"]},
+        {"$set": {"login.sessions": next_sessions}, "$unset": {"login.token": ""}},
+    )
+    return {"message": "Logged out"}
 
 
 def get_chat_id_for_two(part1: str, part2: str) -> str:

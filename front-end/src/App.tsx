@@ -345,31 +345,39 @@ export function App() {
     }, [blockedChatIds, isAuthenticated, loadChats]);
 
     const handleLogout = useCallback(() => {
-        localStorage.removeItem('token');
-        setAuthToken(null);
-        setIsAuthenticated(false);
-        setCurrentUser(null);
-        setView('chatList');
-        setActiveChatId(null);
-        setPendingUser(null);
-        setChats([]);
-        setMessages({});
-        setNewChatModalOpen(false);
-        setIsInitialChatsLoad(true);
-        setMessagesLoadedOnce({});
-        setShowAIChat(false);
-        setAIChats([]);
-        setActiveAIChatId(null);
-        setAIMessagesByChat({});
-        setTemporaryAIChat(false);
-        setAIRespondingChatId(null);
-        setPendingForwardDrafts({});
-        newGroupTimestamps.current = {};
-        setOpenChatUnread(null);
-        Object.values(typingTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
-        typingTimeoutsRef.current = {};
-        setTypingUserIdsByChat({});
-        navigate('/login', { replace: true });
+        const finalizeLogout = () => {
+            localStorage.removeItem('token');
+            setAuthToken(null);
+            setIsAuthenticated(false);
+            setCurrentUser(null);
+            setView('chatList');
+            setActiveChatId(null);
+            setPendingUser(null);
+            setChats([]);
+            setMessages({});
+            setNewChatModalOpen(false);
+            setIsInitialChatsLoad(true);
+            setMessagesLoadedOnce({});
+            setShowAIChat(false);
+            setAIChats([]);
+            setActiveAIChatId(null);
+            setAIMessagesByChat({});
+            setTemporaryAIChat(false);
+            setAIRespondingChatId(null);
+            setPendingForwardDrafts({});
+            newGroupTimestamps.current = {};
+            setOpenChatUnread(null);
+            Object.values(typingTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
+            typingTimeoutsRef.current = {};
+            setTypingUserIdsByChat({});
+            navigate('/login', { replace: true });
+        };
+
+        apiFetch('/auth/logout', { method: 'POST' })
+            .catch((err) => {
+                console.warn('Logout session cleanup failed:', err);
+            })
+            .finally(finalizeLogout);
     }, [navigate]);
 
     const handleTypingStatus = useCallback((chatId: string, userId: string, isTyping: boolean) => {
