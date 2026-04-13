@@ -3094,17 +3094,26 @@ body,
     display: flex;
     justify-content: center;
     align-items: center;
+    min-height: 34px;
     padding: 8px 0;
+    opacity: 0;
+    transition: opacity 160ms ease;
+    pointer-events: none;
+}
+
+.chat-range-loader-wrap--active {
+    opacity: 1;
 }
 
 .chat-range-loader {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
-    border: 2px solid color-mix(in oklab, var(--accent-primary) 35%, transparent);
+    border: 2px solid color-mix(in oklab, var(--accent-primary) 25%, transparent);
     border-top-color: var(--accent-primary);
-    animation: chatRangeSpin 0.85s linear infinite;
-    opacity: 0.35;
+    animation: chatRangeSpin 0.72s linear infinite;
+    opacity: 0.25;
+    transition: opacity 160ms ease;
 }
 
 .chat-range-loader--active {

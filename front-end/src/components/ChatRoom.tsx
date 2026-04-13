@@ -1435,6 +1435,8 @@ export function ChatRoom({
         + (uploadedFile ? 1 : 0)
         + (pendingForwardDraft ? 1 : 0);
     const scrollButtonBottom = 96 + (activeInputStackCount * 56);
+    const isTopRangeLoading = loadingOlderMessages || localLoadingOlder;
+    const isBottomRangeLoading = loadingNewerMessages || localLoadingNewer;
 
     const submit = () => {
         if (isContactBlocked) return;
@@ -1996,11 +1998,12 @@ export function ChatRoom({
                 <div className="chat-room__messages-inner">
                     {loading ? <ChatMessagesSkeleton /> : (
                         <>
-                            {(loadingOlderMessages || localLoadingOlder) && (
-                                <div className="chat-range-loader-wrap">
-                                    <span className="chat-range-loader chat-range-loader--active" />
-                                </div>
-                            )}
+                            <div
+                                className={isTopRangeLoading ? 'chat-range-loader-wrap chat-range-loader-wrap--active' : 'chat-range-loader-wrap'}
+                                aria-hidden={!isTopRangeLoading}
+                            >
+                                <span className={isTopRangeLoading ? 'chat-range-loader chat-range-loader--active' : 'chat-range-loader'} />
+                            </div>
                             {items.map(({ m, isMine, dayBreak, shape }) => {
                             const isHighlighted = highlightId === m.id;
                             const dragX = dragState.id === m.id ? dragState.x : 0;
@@ -2276,11 +2279,12 @@ export function ChatRoom({
                                 </div>
                             );
                             })}
-                            {(loadingNewerMessages || localLoadingNewer) && (
-                                <div className="chat-range-loader-wrap">
-                                    <span className="chat-range-loader chat-range-loader--active" />
-                                </div>
-                            )}
+                            <div
+                                className={isBottomRangeLoading ? 'chat-range-loader-wrap chat-range-loader-wrap--active' : 'chat-range-loader-wrap'}
+                                aria-hidden={!isBottomRangeLoading}
+                            >
+                                <span className={isBottomRangeLoading ? 'chat-range-loader chat-range-loader--active' : 'chat-range-loader'} />
+                            </div>
                         </>
                     )}
                     <div ref={messagesEndRef} />
