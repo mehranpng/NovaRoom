@@ -165,7 +165,7 @@ export function useWebSocket({
         clearReconnectTimer();
         setConnectionState('connecting');
 
-        const wsUrl = `${API_BASE_URL.replace('http', 'ws')}/ws?token=${token}`;
+        const wsUrl = `${API_BASE_URL.replace('http', 'ws')}/ws?token=${encodeURIComponent(token)}`;
         const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {

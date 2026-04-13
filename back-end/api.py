@@ -24,6 +24,8 @@ import asyncio
 import time
 import hashlib
 import secrets
+import base64
+import hmac
 from bson import ObjectId
 import re
 import uuid
@@ -112,10 +114,85 @@ MAX_PINNED_CHATS = 20
 MAX_CHAT_MESSAGE_LENGTH = 6000
 MAX_AI_MESSAGE_LENGTH = 3000
 MAX_AI_MESSAGES_PER_CHAT = 30
+ENC_PREFIX = "enc:v1:"
+ENC_NONCE_SIZE = 16
+ENC_TAG_SIZE = 16
+LEGACY_BOOTSTRAP_TOKEN = "__bootstrap_migration__"
 
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _derive_enc_key(token: str, scope: str) -> bytes:
+    if str(scope).startswith("chat:"):
+        material = f"{SECRET_KEY}|shared|{scope}".encode("utf-8")
+    else:
+        token_hint = hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()[:16]
+        material = f"{SECRET_KEY}|{scope}|{token_hint}".encode("utf-8")
+    return hashlib.sha256(material).digest()
+
+
+def _xor_stream(data: bytes, key: bytes, nonce: bytes) -> bytes:
+    out = bytearray(len(data))
+    counter = 0
+    idx = 0
+    while idx < len(data):
+        block = hashlib.sha256(key + nonce + counter.to_bytes(8, "big")).digest()
+        for b in block:
+            if idx >= len(data):
+                break
+            out[idx] = data[idx] ^ b
+            idx += 1
+        counter += 1
+    return bytes(out)
+
+
+def encrypt_scoped_text(plain: str, token: str, scope: str) -> str:
+    text = str(plain or "")
+    if not text:
+        return ""
+    key = _derive_enc_key(token, scope)
+    nonce = secrets.token_bytes(ENC_NONCE_SIZE)
+    encrypted = _xor_stream(text.encode("utf-8"), key, nonce)
+    tag = hmac.new(key, nonce + encrypted, hashlib.sha256).digest()[:ENC_TAG_SIZE]
+    payload = base64.urlsafe_b64encode(nonce + encrypted + tag).decode("ascii")
+    return f"{ENC_PREFIX}{payload}"
+
+
+def decrypt_scoped_text(cipher: Any, token: str, scope: str) -> str:
+    value = str(cipher or "")
+    if not value:
+        return ""
+    if not value.startswith(ENC_PREFIX):
+        return value
+    try:
+        raw = base64.urlsafe_b64decode(value[len(ENC_PREFIX) :].encode("ascii"))
+        if len(raw) < ENC_NONCE_SIZE + ENC_TAG_SIZE:
+            return ""
+        nonce = raw[:ENC_NONCE_SIZE]
+        body = raw[ENC_NONCE_SIZE:-ENC_TAG_SIZE]
+        tag = raw[-ENC_TAG_SIZE:]
+        key = _derive_enc_key(token, scope)
+        expected = hmac.new(key, nonce + body, hashlib.sha256).digest()[:ENC_TAG_SIZE]
+        if not hmac.compare_digest(tag, expected):
+            return ""
+        return _xor_stream(body, key, nonce).decode("utf-8", errors="ignore")
+    except Exception:
+        return ""
+
+
+def is_ciphertext(value: Any) -> bool:
+    return isinstance(value, str) and value.startswith(ENC_PREFIX)
+
+
+def decrypt_with_fallback(cipher: Any, token: str, scope: str) -> str:
+    if not is_ciphertext(cipher):
+        return str(cipher or "")
+    plain = decrypt_scoped_text(cipher, token, scope)
+    if plain:
+        return plain
+    return decrypt_scoped_text(cipher, LEGACY_BOOTSTRAP_TOKEN, scope)
 
 
 def dt_to_epoch_ms(dt: Any) -> int:
@@ -390,6 +467,7 @@ async def get_current_user(
     user = await get_user_from_session_token(credentials.credentials)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid token")
+    user["_session_token"] = credentials.credentials
     return user
 
 
@@ -523,6 +601,53 @@ async def startup_db():
         [("userId", 1), ("aiChatId", 1), ("timestamp", -1)]
     )
     await cl_ai_chats.create_index([("userId", 1), ("updatedAt", -1)])
+    await migrate_unencrypted_messages()
+
+
+async def migrate_unencrypted_messages():
+    async for m in cl_messages.find(
+        {"$or": [{"textEncrypted": {"$ne": True}}, {"text": {"$not": {"$regex": f"^{ENC_PREFIX}"}}}]}
+    ):
+        chat_scope = f"chat:{m.get('chatId', '')}"
+        updates: Dict[str, Any] = {"textEncrypted": True}
+        txt = str(m.get("text") or "")
+        if txt and not is_ciphertext(txt):
+            updates["text"] = encrypt_scoped_text(txt, LEGACY_BOOTSTRAP_TOKEN, chat_scope)
+        reply = m.get("replyTo")
+        if isinstance(reply, dict):
+            r_txt = str(reply.get("text") or "")
+            if r_txt and not is_ciphertext(r_txt):
+                updates["replyTo"] = {
+                    **reply,
+                    "text": encrypt_scoped_text(
+                        r_txt, LEGACY_BOOTSTRAP_TOKEN, chat_scope
+                    ),
+                }
+        reasoning = str(m.get("reasoningContent") or "")
+        if reasoning and not is_ciphertext(reasoning):
+            updates["reasoningContent"] = encrypt_scoped_text(
+                reasoning, LEGACY_BOOTSTRAP_TOKEN, chat_scope
+            )
+        if updates:
+            await cl_messages.update_one({"_id": m["_id"]}, {"$set": updates})
+
+    async for m in cl_ai_messages.find(
+        {"$or": [{"contentEncrypted": {"$ne": True}}, {"content": {"$not": {"$regex": f"^{ENC_PREFIX}"}}}]}
+    ):
+        ai_scope = f"ai:{m.get('aiChatId', '')}"
+        updates = {"contentEncrypted": True}
+        content = str(m.get("content") or "")
+        if content and not is_ciphertext(content):
+            updates["content"] = encrypt_scoped_text(
+                content, LEGACY_BOOTSTRAP_TOKEN, ai_scope
+            )
+        reasoning = str(m.get("reasoningContent") or "")
+        if reasoning and not is_ciphertext(reasoning):
+            updates["reasoningContent"] = encrypt_scoped_text(
+                reasoning, LEGACY_BOOTSTRAP_TOKEN, ai_scope
+            )
+        if updates:
+            await cl_ai_messages.update_one({"_id": m["_id"]}, {"$set": updates})
 
 
 @app.get("/profile/me/pins")
@@ -1201,6 +1326,7 @@ async def update_group(
 @app.get("/chats")
 async def get_chat_list(current_user: dict = Depends(get_current_user)):
     my_id = current_user["chatId"]
+    session_token = str(current_user.get("_session_token") or "")
     my_blocked_ids = set(_get_blocked_from_user_doc(current_user))
     chats = (
         await cl_chats.find({"participants": my_id}).sort("updatedAt", -1).to_list(50)
@@ -1266,8 +1392,12 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
 
         last_msg = chat.get("lastMessage")
         if isinstance(last_msg, dict) and last_msg.get("timestamp") is not None:
+            chat_scope = f"chat:{chat.get('_id', '')}"
             last_msg = {
                 **last_msg,
+                "text": decrypt_with_fallback(
+                    last_msg.get("text", ""), session_token, chat_scope
+                ),
                 "timestamp": dt_to_epoch_ms(last_msg.get("timestamp")),
             }
 
@@ -1358,7 +1488,9 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
             doc = saved_msg[0]
             saved_last_msg = {
                 "id": str(doc["_id"]),
-                "text": doc.get("text", ""),
+                "text": decrypt_with_fallback(
+                    doc.get("text", ""), session_token, f"chat:{saved_chat_id}"
+                ),
                 "senderId": doc.get("senderId"),
                 "timestamp": dt_to_epoch_ms(doc.get("timestamp")),
                 "file": doc.get("file"),
@@ -1485,6 +1617,8 @@ async def get_messages(
     chat_id: str, limit: int = 50, current_user: dict = Depends(get_current_user)
 ):
     current_user_id = current_user["chatId"]
+    session_token = str(current_user.get("_session_token") or "")
+    chat_scope = f"chat:{chat_id}"
 
     # Check if this is saved messages
     saved_chat_id = get_saved_messages_id(current_user_id)
@@ -1503,15 +1637,30 @@ async def get_messages(
                 "id": str(m["_id"]),
                 "chatId": m["chatId"],
                 "senderId": m["senderId"],
-                "text": m.get("text", ""),
+                "text": decrypt_with_fallback(
+                    m.get("text", ""), session_token, chat_scope
+                ),
                 "timestamp": dt_to_epoch_ms(m.get("timestamp")),
                 "seen": True,
-                "replyTo": m.get("replyTo"),
+                "replyTo": (
+                    {
+                        **m.get("replyTo"),
+                        "text": decrypt_with_fallback(
+                            (m.get("replyTo") or {}).get("text", ""),
+                            session_token,
+                            chat_scope,
+                        ),
+                    }
+                    if isinstance(m.get("replyTo"), dict)
+                    else None
+                ),
                 "edited": bool(m.get("editedAt")),
                 "reactions": aggregate_reactions(m.get("reactions", [])),
                 "forwardedFrom": m.get("forwardedFrom"),
                 "file": m.get("file"),
-                "reasoningContent": m.get("reasoningContent", ""),
+                "reasoningContent": decrypt_with_fallback(
+                    m.get("reasoningContent", ""), session_token, chat_scope
+                ),
                 "reasoningEnabled": bool(m.get("reasoningEnabled", False)),
                 "reasoningDurationSec": int(m.get("reasoningDurationSec", 0) or 0),
             }
@@ -1559,15 +1708,28 @@ async def get_messages(
             "id": str(m["_id"]),
             "chatId": m["chatId"],
             "senderId": m["senderId"],
-            "text": m.get("text", ""),
+            "text": decrypt_with_fallback(m.get("text", ""), session_token, chat_scope),
             "timestamp": dt_to_epoch_ms(m.get("timestamp")),
             "seen": compute_seen(m),
-            "replyTo": m.get("replyTo"),
+            "replyTo": (
+                {
+                    **m.get("replyTo"),
+                    "text": decrypt_with_fallback(
+                        (m.get("replyTo") or {}).get("text", ""),
+                        session_token,
+                        chat_scope,
+                    ),
+                }
+                if isinstance(m.get("replyTo"), dict)
+                else None
+            ),
             "edited": bool(m.get("editedAt")),
             "reactions": aggregate_reactions(m.get("reactions", [])),
             "forwardedFrom": m.get("forwardedFrom"),
             "file": m.get("file"),
-            "reasoningContent": m.get("reasoningContent", ""),
+            "reasoningContent": decrypt_with_fallback(
+                m.get("reasoningContent", ""), session_token, chat_scope
+            ),
             "reasoningEnabled": bool(m.get("reasoningEnabled", False)),
             "reasoningDurationSec": int(m.get("reasoningDurationSec", 0) or 0),
         }
@@ -1834,6 +1996,7 @@ async def forward_message(
     req: ForwardMessageRequest, current_user: dict = Depends(get_current_user)
 ):
     user_id = current_user["chatId"]
+    session_token = str(current_user.get("_session_token") or "")
     message_id = req.messageId
     target_chat_id = req.targetChatId
 
@@ -1914,8 +2077,13 @@ async def forward_message(
                 "name": profile.get("name") or profile.get("username") or user_id,
                 "username": profile.get("username", ""),
             }
-        message_text = original_msg.get("content", "")
-        reasoning_content = str(original_msg.get("reasoningContent") or "")
+        source_ai_scope = f"ai:{original_msg.get('aiChatId', '')}"
+        message_text = decrypt_with_fallback(
+            original_msg.get("content", ""), session_token, source_ai_scope
+        )
+        reasoning_content = decrypt_with_fallback(
+            str(original_msg.get("reasoningContent") or ""), session_token, source_ai_scope
+        )
         reasoning_enabled = bool(original_msg.get("reasoningEnabled", False))
         reasoning_duration_sec = int(original_msg.get("reasoningDurationSec", 0) or 0)
     else:
@@ -1967,23 +2135,32 @@ async def forward_message(
                     original_sender["profile"]["username"] if original_sender else ""
                 ),
             }
-        message_text = original_msg.get("text", "")
+        source_chat_scope = f"chat:{original_msg.get('chatId', '')}"
+        message_text = decrypt_with_fallback(
+            original_msg.get("text", ""), session_token, source_chat_scope
+        )
         file_data = original_msg.get("file")
-        reasoning_content = str(original_msg.get("reasoningContent") or "")
+        reasoning_content = decrypt_with_fallback(
+            str(original_msg.get("reasoningContent") or ""), session_token, source_chat_scope
+        )
         reasoning_enabled = bool(original_msg.get("reasoningEnabled", False))
         reasoning_duration_sec = int(original_msg.get("reasoningDurationSec", 0) or 0)
 
     # Create forwarded message
+    target_scope = f"chat:{target_chat_id}"
     forwarded_msg = {
         "chatId": target_chat_id,
         "senderId": user_id,
-        "text": message_text,
+        "text": encrypt_scoped_text(message_text, session_token, target_scope),
+        "textEncrypted": True,
         "timestamp": utc_now(),
         "seenBy": [user_id],
         "replyTo": None,  # Forwarded messages don't preserve replies
         "reactions": [],
         "forwardedFrom": forwarded_from_info,
-        "reasoningContent": reasoning_content,
+        "reasoningContent": encrypt_scoped_text(
+            reasoning_content, session_token, target_scope
+        ),
         "reasoningEnabled": reasoning_enabled,
         "reasoningDurationSec": reasoning_duration_sec,
     }
@@ -1997,7 +2174,7 @@ async def forward_message(
 
     last_msg = {
         "id": msg_id,
-        "text": forwarded_msg["text"],
+        "text": message_text,
         "senderId": user_id,
         "timestamp": forwarded_msg["timestamp"],
         "file": file_data,
@@ -2025,10 +2202,10 @@ async def forward_message(
             "type": "new_message",
             "chatId": target_chat_id,
             "message": {
-                "id": msg_id,
-                "chatId": target_chat_id,
-                "senderId": user_id,
-                "text": forwarded_msg["text"],
+                                "id": msg_id,
+                                "chatId": target_chat_id,
+                                "senderId": user_id,
+                                "text": message_text,
                 "timestamp": dt_to_epoch_ms(forwarded_msg["timestamp"]),
                 "seen": False,
                 "replyTo": None,
@@ -2112,7 +2289,7 @@ async def try_object_id(value: Any) -> Optional[ObjectId]:
         return None
 
 
-async def build_last_message(chat_id: str) -> Optional[dict]:
+async def build_last_message(chat_id: str, session_token: str = "") -> Optional[dict]:
     m = (
         await cl_messages.find({"chatId": chat_id})
         .sort("timestamp", -1)
@@ -2125,7 +2302,7 @@ async def build_last_message(chat_id: str) -> Optional[dict]:
     doc = m[0]
     return {
         "id": str(doc["_id"]),
-        "text": doc.get("text", ""),
+        "text": decrypt_with_fallback(doc.get("text", ""), session_token, f"chat:{chat_id}"),
         "senderId": doc.get("senderId"),
         "timestamp": doc.get("timestamp"),
         "file": doc.get("file"),
@@ -2164,12 +2341,14 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
             first_user_message: str = "",
             is_temporary_chat: bool = False,
         ):
+            ai_scope = f"ai:{ai_chat_id}"
             ai_message_doc = {
                 "userId": chat_id,
                 "aiChatId": ai_chat_id,
                 "role": "assistant",
-                "content": "",
-                "reasoningContent": "",
+                "content": encrypt_scoped_text("", token, ai_scope),
+                "contentEncrypted": True,
+                "reasoningContent": encrypt_scoped_text("", token, ai_scope),
                 "reasoningEnabled": bool(reasoning_mode),
                 "streamCompleted": False,
                 "timestamp": utc_now(),
@@ -2231,8 +2410,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         {"_id": result.inserted_id},
                         {
                             "$set": {
-                                "content": full_ai_response,
-                                "reasoningContent": full_reasoning_content,
+                                "content": encrypt_scoped_text(
+                                    full_ai_response, token, ai_scope
+                                ),
+                                "reasoningContent": encrypt_scoped_text(
+                                    full_reasoning_content, token, ai_scope
+                                ),
                                 "streamCompleted": False,
                             }
                         },
@@ -2264,8 +2447,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     {"_id": result.inserted_id},
                     {
                         "$set": {
-                            "content": full_ai_response,
-                            "reasoningContent": full_reasoning_content,
+                            "content": encrypt_scoped_text(
+                                full_ai_response, token, ai_scope
+                            ),
+                            "reasoningContent": encrypt_scoped_text(
+                                full_reasoning_content, token, ai_scope
+                            ),
                             "streamCompleted": True,
                             "reasoningDurationSec": reasoning_duration_sec,
                         }
@@ -2380,6 +2567,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             continue
 
                 reply_to = None
+                chat_scope = f"chat:{chat_id_target}"
                 if reply_to_id:
                     oid = await try_object_id(reply_to_id)
                     if oid:
@@ -2390,18 +2578,26 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             reply_to = {
                                 "id": str(base["_id"]),
                                 "senderId": base.get("senderId"),
-                                "text": base.get("text", ""),
+                                "text": decrypt_with_fallback(
+                                    base.get("text", ""), token, chat_scope
+                                ),
                             }
 
+                encrypted_text = encrypt_scoped_text(text, token, chat_scope)
                 message_doc = {
                     "chatId": chat_id_target,
                     "senderId": chat_id,
-                    "text": text,
+                    "text": encrypted_text,
+                    "textEncrypted": True,
                     "timestamp": utc_now(),
                     "seenBy": [chat_id],
                     "replyTo": reply_to,
                     "reactions": [],
                 }
+                if reply_to and isinstance(reply_to.get("text"), str):
+                    message_doc["replyTo"]["text"] = encrypt_scoped_text(
+                        reply_to.get("text", ""), token, chat_scope
+                    )
 
                 # Add file data if present
                 if file_data:
@@ -2412,7 +2608,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 last_msg = {
                     "id": msg_id,
-                    "text": text if text else "[File]",
+                    "text": encrypted_text if text else "[File]",
                     "senderId": chat_id,
                     "timestamp": message_doc["timestamp"],
                     "file": file_data,
@@ -2490,7 +2686,15 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 await cl_messages.update_one(
                     {"_id": oid},
-                    {"$set": {"text": new_text, "editedAt": utc_now()}},
+                    {
+                        "$set": {
+                            "text": encrypt_scoped_text(
+                                new_text, token, f"chat:{chat_id_target}"
+                            ),
+                            "textEncrypted": True,
+                            "editedAt": utc_now(),
+                        }
+                    },
                 )
 
                 # Update lastMessage text if it points to this message.
@@ -2499,7 +2703,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         {"_id": chat_id_target, "lastMessage.id": message_id},
                         {
                             "$set": {
-                                "lastMessage.text": new_text,
+                                "lastMessage.text": encrypt_scoped_text(
+                                    new_text, token, f"chat:{chat_id_target}"
+                                ),
                                 "updatedAt": utc_now(),
                             }
                         },
@@ -2526,7 +2732,18 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         "text": new_text,
                         "timestamp": dt_to_epoch_ms(msg.get("timestamp")),
                         "seen": False,
-                        "replyTo": msg.get("replyTo"),
+                        "replyTo": (
+                            {
+                                **msg.get("replyTo"),
+                                "text": decrypt_with_fallback(
+                                    (msg.get("replyTo") or {}).get("text", ""),
+                                    token,
+                                    f"chat:{chat_id_target}",
+                                ),
+                            }
+                            if isinstance(msg.get("replyTo"), dict)
+                            else None
+                        ),
                         "edited": True,
                         "reactions": aggregate_reactions(msg.get("reactions", [])),
                         "file": msg.get("file"),
@@ -2577,7 +2794,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 # Rebuild lastMessage if needed.
                 last_msg = None
                 if not is_saved:
-                    last_msg = await build_last_message(chat_id_target)
+                    last_msg = await build_last_message(chat_id_target, token)
                     await cl_chats.update_one(
                         {"_id": chat_id_target},
                         {"$set": {"lastMessage": last_msg, "updatedAt": utc_now()}},
@@ -2858,7 +3075,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     "userId": chat_id,
                     "aiChatId": ai_chat_id,
                     "role": "user",
-                    "content": text,
+                    "content": encrypt_scoped_text(text, token, f"ai:{ai_chat_id}"),
+                    "contentEncrypted": True,
                     "timestamp": utc_now(),
                 }
                 user_insert = await cl_ai_messages.insert_one(user_message_doc)
@@ -2890,7 +3108,15 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     .to_list(6)
                 )
                 history_docs.reverse()
-                messages = [{"role": doc["role"], "content": doc["content"]} for doc in history_docs]
+                messages = [
+                    {
+                        "role": doc["role"],
+                        "content": decrypt_with_fallback(
+                            doc.get("content", ""), token, f"ai:{ai_chat_id}"
+                        ),
+                    }
+                    for doc in history_docs
+                ]
 
                 refreshed_summary = await generate_conversation_summary(
                     messages,
@@ -3109,12 +3335,14 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
             first_user_message: str = "",
             is_temporary_chat: bool = False,
         ):
+            ai_scope = f"ai:{ai_chat_id}"
             ai_message_doc = {
                 "userId": user_id,
                 "aiChatId": ai_chat_id,
                 "role": "assistant",
-                "content": "",
-                "reasoningContent": "",
+                "content": encrypt_scoped_text("", token, ai_scope),
+                "contentEncrypted": True,
+                "reasoningContent": encrypt_scoped_text("", token, ai_scope),
                 "reasoningEnabled": bool(reasoning_mode),
                 "streamCompleted": False,
                 "timestamp": utc_now(),
@@ -3176,8 +3404,12 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                         {"_id": result.inserted_id},
                         {
                             "$set": {
-                                "content": full_ai_response,
-                                "reasoningContent": full_reasoning_content,
+                                "content": encrypt_scoped_text(
+                                    full_ai_response, token, ai_scope
+                                ),
+                                "reasoningContent": encrypt_scoped_text(
+                                    full_reasoning_content, token, ai_scope
+                                ),
                                 "streamCompleted": False,
                             }
                         },
@@ -3212,8 +3444,12 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     {"_id": result.inserted_id},
                     {
                         "$set": {
-                            "content": full_ai_response,
-                            "reasoningContent": full_reasoning_content,
+                            "content": encrypt_scoped_text(
+                                full_ai_response, token, ai_scope
+                            ),
+                            "reasoningContent": encrypt_scoped_text(
+                                full_reasoning_content, token, ai_scope
+                            ),
                             "streamCompleted": True,
                             "reasoningDurationSec": reasoning_duration_sec,
                         }
@@ -3311,7 +3547,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     "userId": user_id,
                     "aiChatId": ai_chat_id,
                     "role": "user",
-                    "content": text,
+                    "content": encrypt_scoped_text(text, token, f"ai:{ai_chat_id}"),
+                    "contentEncrypted": True,
                     "timestamp": utc_now(),
                 }
                 user_insert = await cl_ai_messages.insert_one(user_message_doc)
@@ -3347,7 +3584,12 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 history_docs.reverse()
 
                 messages = [
-                    {"role": doc["role"], "content": doc["content"]}
+                    {
+                        "role": doc["role"],
+                        "content": decrypt_with_fallback(
+                            doc.get("content", ""), token, f"ai:{ai_chat_id}"
+                        ),
+                    }
                     for doc in history_docs
                 ]
 
@@ -3426,6 +3668,8 @@ async def get_ai_messages(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = current_user["chatId"]
+    session_token = str(current_user.get("_session_token") or "")
+    ai_scope = f"ai:{chatId}"
     await ensure_ai_chat(user_id, chatId)
 
     msgs = (
@@ -3441,8 +3685,10 @@ async def get_ai_messages(
             "id": str(m["_id"]),
             "aiChatId": chatId,
             "senderId": "ai" if m["role"] == "assistant" else user_id,
-            "text": m.get("content", ""),
-            "reasoningContent": m.get("reasoningContent", ""),
+            "text": decrypt_with_fallback(m.get("content", ""), session_token, ai_scope),
+            "reasoningContent": decrypt_with_fallback(
+                m.get("reasoningContent", ""), session_token, ai_scope
+            ),
             "reasoningEnabled": bool(m.get("reasoningEnabled", False)),
             "isStreaming": bool(
                 m["role"] == "assistant" and not bool(m.get("streamCompleted", True))
