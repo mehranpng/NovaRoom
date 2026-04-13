@@ -673,7 +673,11 @@ export function App() {
             vibrate([8, 40, 8, 55, 10]);
         }
         setAIMessagesByChat(prev => {
-            const aiChatId = aiPendingStreamMetaRef.current[messageId]?.chatId || activeAIChatId || '';
+            let aiChatId = aiPendingStreamMetaRef.current[messageId]?.chatId || activeAIChatId || '';
+            if (!aiChatId) {
+                const foundEntry = Object.entries(prev).find(([, arr]) => arr.some((m) => m.id === messageId));
+                aiChatId = foundEntry?.[0] || '';
+            }
             if (!aiChatId) return prev;
             const current = prev[aiChatId] || [];
             const idx = current.findIndex((m) => m.id === messageId);
@@ -1036,6 +1040,44 @@ export function App() {
             }));
         });
     }, [messageRangeState, fetchPagedMessages]);
+
+    const resolveReplyTargetMessage = useCallback(async (chatId: string, messageId: string, signal?: AbortSignal): Promise<boolean> => {
+        if (!chatId || !messageId) return false;
+        const candidateEndpoints = [
+            `/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/context?include_meta=true&limit=${MESSAGE_PAGE_SIZE}`,
+            `/chats/${encodeURIComponent(chatId)}/messages?include_meta=true&around_id=${encodeURIComponent(messageId)}&limit=${MESSAGE_PAGE_SIZE}`,
+            `/messages/${encodeURIComponent(messageId)}/context?chatId=${encodeURIComponent(chatId)}&include_meta=true&limit=${MESSAGE_PAGE_SIZE}`,
+        ];
+
+        for (const endpoint of candidateEndpoints) {
+            try {
+                const res = await apiFetch(endpoint, { signal });
+                const chunk: Message[] = Array.isArray(res?.messages)
+                    ? res.messages
+                    : (Array.isArray(res?.data?.messages) ? res.data.messages : []);
+                if (!Array.isArray(chunk) || chunk.length === 0) continue;
+
+                setMessages((prev) => ({ ...prev, [chatId]: chunk }));
+                setMessageRangeState((prev) => ({
+                    ...prev,
+                    [chatId]: {
+                        ...(prev[chatId] || { loadingOlder: false, loadingNewer: false }),
+                        hasOlder: Boolean(res?.hasOlder ?? res?.data?.hasOlder),
+                        hasNewer: Boolean(res?.hasNewer ?? res?.data?.hasNewer),
+                        oldestCursor: res?.oldestCursor ?? res?.data?.oldestCursor ?? null,
+                        newestCursor: res?.newestCursor ?? res?.data?.newestCursor ?? null,
+                        loadingOlder: false,
+                        loadingNewer: false,
+                    },
+                }));
+                return true;
+            } catch (error) {
+                if (signal?.aborted) return false;
+                continue;
+            }
+        }
+        return false;
+    }, []);
 
 
     useEffect(() => {
@@ -1832,6 +1874,7 @@ export function App() {
                                 loadingNewerMessages={Boolean(activeRange?.loadingNewer)}
                                 onLoadOlderMessages={loadOlderMessages}
                                 onLoadNewerMessages={loadNewerMessages}
+                                onResolveReplyTargetMessage={resolveReplyTargetMessage}
                             />
                         ) : (
                             <EmptyState />

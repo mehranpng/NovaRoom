@@ -59,6 +59,7 @@ interface ChatRoomProps {
     loadingNewerMessages?: boolean;
     onLoadOlderMessages?: (chatId: string) => void | Promise<void>;
     onLoadNewerMessages?: (chatId: string) => void | Promise<void>;
+    onResolveReplyTargetMessage?: (chatId: string, messageId: string, signal?: AbortSignal) => Promise<boolean>;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000;
@@ -321,6 +322,7 @@ export function ChatRoom({
     loadingNewerMessages = false,
     onLoadOlderMessages,
     onLoadNewerMessages,
+    onResolveReplyTargetMessage,
 }: ChatRoomProps) {
     const MAX_CHAT_MESSAGE_LENGTH = 6000;
     const currentChat = useMemo(
@@ -430,7 +432,9 @@ export function ChatRoom({
     const [openedImage, setOpenedImage] = useState<{ url: string; file: FileMetadata | null } | null>(null);
     const [openedVideo, setOpenedVideo] = useState<{ url: string; file: FileMetadata | null } | null>(null);
     const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId: string; fileName: string } | null>(null);
+    const [replyJumpLoading, setReplyJumpLoading] = useState<null | { messageId: string }>(null);
     const openedGroupAvatarObjectUrlRef = useRef<string | null>(null);
+    const replyJumpAbortRef = useRef<AbortController | null>(null);
 
     // Auto-jump bookkeeping to avoid saving an automatic scroll position as user's scroll memory.
     const autoJumpedToUnreadRef = useRef(false);
@@ -900,10 +904,10 @@ export function ChatRoom({
         highlightTimeoutRef.current = window.setTimeout(() => setHighlightId(null), 1000);
     };
 
-    const scrollToMessage = (messageId: string) => {
+    const tryScrollToMessage = (messageId: string): boolean => {
         const normalizedId = String(messageId);
         const container = messagesContainerRef.current;
-        if (!container) return;
+        if (!container) return false;
         let el = messageElsRef.current.get(normalizedId);
         if (!el) {
             const escapedId = typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
@@ -911,7 +915,7 @@ export function ChatRoom({
                 : normalizedId.replace(/"/g, '\\"');
             el = container.querySelector(`[data-message-id="${escapedId}"]`) as HTMLElement | null;
         }
-        if (!el) return;
+        if (!el) return false;
         markProgrammaticScroll();
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         if (highlightRafRef.current) cancelAnimationFrame(highlightRafRef.current);
@@ -933,6 +937,38 @@ export function ChatRoom({
             highlightRafRef.current = requestAnimationFrame(check);
         };
         highlightRafRef.current = requestAnimationFrame(check);
+        return true;
+    };
+
+    const cancelReplyJump = () => {
+        if (replyJumpAbortRef.current) {
+            replyJumpAbortRef.current.abort();
+            replyJumpAbortRef.current = null;
+        }
+        setReplyJumpLoading(null);
+    };
+
+    const scrollToMessage = async (messageId: string) => {
+        if (tryScrollToMessage(messageId)) return;
+        if (!onResolveReplyTargetMessage) return;
+
+        const normalizedId = String(messageId);
+        const controller = new AbortController();
+        if (replyJumpAbortRef.current) replyJumpAbortRef.current.abort();
+        replyJumpAbortRef.current = controller;
+        setReplyJumpLoading({ messageId: normalizedId });
+        try {
+            const loaded = await onResolveReplyTargetMessage(chatId, normalizedId, controller.signal);
+            if (!loaded || controller.signal.aborted) return;
+            requestAnimationFrame(() => { tryScrollToMessage(normalizedId); });
+        } catch {
+            // ignore
+        } finally {
+            if (replyJumpAbortRef.current === controller) {
+                replyJumpAbortRef.current = null;
+                setReplyJumpLoading(null);
+            }
+        }
     };
 
     const doCopyMessage = async (m: Message) => {
@@ -1216,6 +1252,11 @@ export function ChatRoom({
         setLocalLoadingNewer(false);
         pendingOlderAdjustRef.current = null;
         pendingRangeLoadTypeRef.current = null;
+        if (replyJumpAbortRef.current) {
+            replyJumpAbortRef.current.abort();
+            replyJumpAbortRef.current = null;
+        }
+        setReplyJumpLoading(null);
     }, [chatId]);
 
     // When opening a chat with unread messages, compute anchor once for this open session.
@@ -2172,9 +2213,9 @@ export function ChatRoom({
                                             )}
 
                                             {m.replyTo && (
-                                                <div onClick={(e) => { e.stopPropagation(); scrollToMessage(m.replyTo!.id); }}
+                                                <div onClick={(e) => { e.stopPropagation(); void scrollToMessage(m.replyTo!.id); }}
                                                     role="button" tabIndex={0}
-                                                    onKeyDown={(e) => { if (e.key === 'Enter') scrollToMessage(m.replyTo!.id); }}
+                                                    onKeyDown={(e) => { if (e.key === 'Enter') void scrollToMessage(m.replyTo!.id); }}
                                                     className="message-reply-box"
                                                     style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
                                                     <div className="message-reply-box__label">پاسخ</div>
@@ -2484,6 +2525,32 @@ export function ChatRoom({
                             </span>
                         )}
                     </motion.button>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {replyJumpLoading && (
+                    <motion.div
+                        className="reply-jump-overlay"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.16, ease: 'easeOut' }}
+                    >
+                        <motion.div
+                            className="reply-jump-overlay__card"
+                            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                            transition={{ duration: 0.18, ease: 'easeOut' }}
+                        >
+                            <span className="chat-range-loader chat-range-loader--active" />
+                            <div className="reply-jump-overlay__title">در حال بارگذاری پیام ریپلای...</div>
+                            <button type="button" className="reply-jump-overlay__cancel" onClick={cancelReplyJump}>
+                                لغو
+                            </button>
+                        </motion.div>
+                    </motion.div>
                 )}
             </AnimatePresence>
 
