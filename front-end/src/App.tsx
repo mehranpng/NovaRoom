@@ -17,7 +17,7 @@ import { MusicPlayerProvider } from './contexts/MusicPlayerContext';
 import { cx } from './utils/cx';
 import { NotificationCenter } from './components/NotificationCenter';
 import { notify } from './utils/notificationBus';
-import { decryptBioClientSide, decryptMessageClientSide, encryptBioClientSide } from './utils/e2ee';
+import { decryptBioClientSide, decryptMessageClientSide, encryptBioClientSide, encryptChatTextClientSide } from './utils/e2ee';
 import './App.css';
 
 const normalizeTimestamp = (ts: unknown): number => {
@@ -1294,9 +1294,24 @@ export function App() {
 
     const handleForwardMessage = useCallback(async (sourceChatId: string, messageId: string, targetChatId: string) => {
         pendingForwardSendHintsRef.current[targetChatId] = (pendingForwardSendHintsRef.current[targetChatId] || 0) + 1;
+        const sourceChatMessage = (messages[sourceChatId] || []).find((m) => m.id === messageId);
+        const sourceAIMessage = (aiMessagesByChat[sourceChatId] || []).find((m) => m.id === messageId);
+        const sourceMessage = sourceChatMessage || sourceAIMessage || null;
+        const encryptedText = sourceMessage
+            ? await encryptChatTextClientSide(String(sourceMessage.text || ''), authToken || '', targetChatId)
+            : undefined;
+        const encryptedReasoning = sourceMessage?.reasoningContent
+            ? await encryptChatTextClientSide(String(sourceMessage.reasoningContent || ''), authToken || '', targetChatId)
+            : undefined;
         await apiFetch('/messages/forward', {
             method: 'POST',
-            body: JSON.stringify({ sourceChatId, messageId, targetChatId }),
+            body: JSON.stringify({
+                sourceChatId,
+                messageId,
+                targetChatId,
+                encryptedText,
+                encryptedReasoningContent: encryptedReasoning,
+            }),
         });
         playChatSound('send');
         try {
@@ -1306,7 +1321,7 @@ export function App() {
             console.error('Failed to refresh forwarded target chat messages', e);
         }
         loadChats(false);
-    }, [playChatSound, loadChats, fetchPagedMessages]);
+    }, [playChatSound, loadChats, fetchPagedMessages, messages, aiMessagesByChat, authToken]);
 
     const handleSetPendingForwardDraft = useCallback((targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => {
         if (!targetChatId || !draft?.sourceChatId || !draft?.messageId) return;

@@ -1665,7 +1665,7 @@ body,
 }
 
 .message-pending-indicator {
-    font-size: 12px;
+    font-size: 15px;
     font-weight: 700;
     opacity: 0.9;
     margin-left: 2px;

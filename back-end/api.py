@@ -396,6 +396,8 @@ class ReactionRequest(BaseModel):
 class ForwardMessageRequest(BaseModel):
     messageId: str
     targetChatId: str
+    encryptedText: Optional[str] = None
+    encryptedReasoningContent: Optional[str] = None
 
 
 class OfficialChSendRequest(BaseModel):
@@ -2343,6 +2345,15 @@ async def forward_message(
                     status_code=403, detail="Direct chat is blocked between users"
                 )
 
+    provided_encrypted_text = (
+        str(req.encryptedText).strip() if isinstance(req.encryptedText, str) else ""
+    )
+    provided_encrypted_reasoning = (
+        str(req.encryptedReasoningContent).strip()
+        if isinstance(req.encryptedReasoningContent, str)
+        else ""
+    )
+
     # Get original sender info and file data
     file_data = None
     if is_ai_message:
@@ -2433,19 +2444,27 @@ async def forward_message(
 
     # Create forwarded message
     target_scope = f"chat:{target_chat_id}"
+    encrypted_forward_text = (
+        provided_encrypted_text
+        if provided_encrypted_text
+        else encrypt_scoped_text(message_text, session_token, target_scope)
+    )
+    encrypted_forward_reasoning = (
+        provided_encrypted_reasoning
+        if provided_encrypted_reasoning
+        else encrypt_scoped_text(reasoning_content, session_token, target_scope)
+    )
     forwarded_msg = {
         "chatId": target_chat_id,
         "senderId": user_id,
-        "text": encrypt_scoped_text(message_text, session_token, target_scope),
+        "text": encrypted_forward_text,
         "textEncrypted": True,
         "timestamp": utc_now(),
         "seenBy": [user_id],
         "replyTo": None,  # Forwarded messages don't preserve replies
         "reactions": [],
         "forwardedFrom": forwarded_from_info,
-        "reasoningContent": encrypt_scoped_text(
-            reasoning_content, session_token, target_scope
-        ),
+        "reasoningContent": encrypted_forward_reasoning,
         "reasoningEnabled": reasoning_enabled,
         "reasoningDurationSec": reasoning_duration_sec,
     }
@@ -2459,7 +2478,7 @@ async def forward_message(
 
     last_msg = {
         "id": msg_id,
-        "text": message_text,
+        "text": encrypted_forward_text if message_text else "[File]",
         "senderId": user_id,
         "timestamp": forwarded_msg["timestamp"],
         "file": file_data,
@@ -2490,7 +2509,7 @@ async def forward_message(
                                 "id": msg_id,
                                 "chatId": target_chat_id,
                                 "senderId": user_id,
-                                "text": message_text,
+                                "text": encrypted_forward_text if message_text else "",
                 "timestamp": dt_to_epoch_ms(forwarded_msg["timestamp"]),
                 "seen": False,
                 "replyTo": None,
@@ -2498,7 +2517,7 @@ async def forward_message(
                 "reactions": [],
                 "forwardedFrom": forwarded_from_info,
                 "file": file_data,
-                "reasoningContent": reasoning_content,
+                "reasoningContent": encrypted_forward_reasoning,
                 "reasoningEnabled": reasoning_enabled,
                 "reasoningDurationSec": reasoning_duration_sec,
             },
