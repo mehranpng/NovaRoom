@@ -69,22 +69,26 @@ const buildSharedMaterial = (scope: string) => `novaroom-client-shared|${scope |
 export const encryptClientText = async (plain: string, token: string, scope: string, mode: 'legacy' | 'shared' = 'legacy'): Promise<string> => {
     const text = String(plain || '');
     if (!text) return '';
+    try {
+        const material = mode === 'shared' ? buildSharedMaterial(scope) : buildLegacyMaterial(token, scope);
+        const key = await deriveKey(material);
+        const nonce = crypto.getRandomValues(new Uint8Array(ENC_NONCE_SIZE));
+        const encrypted = await xorStream(toUtf8(text), key, nonce);
+        const nonceAndEncrypted = new Uint8Array(nonce.length + encrypted.length);
+        nonceAndEncrypted.set(nonce, 0);
+        nonceAndEncrypted.set(encrypted, nonce.length);
 
-    const material = mode === 'shared' ? buildSharedMaterial(scope) : buildLegacyMaterial(token, scope);
-    const key = await deriveKey(material);
-    const nonce = crypto.getRandomValues(new Uint8Array(ENC_NONCE_SIZE));
-    const encrypted = await xorStream(toUtf8(text), key, nonce);
-    const nonceAndEncrypted = new Uint8Array(nonce.length + encrypted.length);
-    nonceAndEncrypted.set(nonce, 0);
-    nonceAndEncrypted.set(encrypted, nonce.length);
+        const tag = await hmacTag(key, nonceAndEncrypted);
+        const full = new Uint8Array(nonce.length + encrypted.length + tag.length);
+        full.set(nonce, 0);
+        full.set(encrypted, nonce.length);
+        full.set(tag, nonce.length + encrypted.length);
 
-    const tag = await hmacTag(key, nonceAndEncrypted);
-    const full = new Uint8Array(nonce.length + encrypted.length + tag.length);
-    full.set(nonce, 0);
-    full.set(encrypted, nonce.length);
-    full.set(tag, nonce.length + encrypted.length);
-
-    return `${ENC_PREFIX}${toBase64Url(full)}`;
+        return `${ENC_PREFIX}${toBase64Url(full)}`;
+    } catch {
+        // Never block message/profile flows if browser crypto is unavailable.
+        return text;
+    }
 };
 
 export const decryptClientText = async (cipher: string, token: string, scope: string): Promise<string> => {
@@ -119,7 +123,7 @@ export const decryptClientText = async (cipher: string, token: string, scope: st
         }
         return value;
     } catch {
-        return '';
+        return value;
     }
 };
 
