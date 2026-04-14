@@ -3114,24 +3114,22 @@ body,
     position: sticky;
     top: 0;
     z-index: 2;
-    background: linear-gradient(to bottom, var(--bg-primary), transparent);
 }
 
 .chat-range-loader-wrap--bottom {
     position: sticky;
     bottom: 0;
     z-index: 2;
-    background: linear-gradient(to top, var(--bg-primary), transparent);
 }
 
 .chat-range-loader {
     width: 22px;
     height: 22px;
     border-radius: 50%;
-    border: 2px solid color-mix(in oklab, var(--accent-primary) 45%, transparent);
+    border: 2px solid rgba(47, 128, 237, 0.35);
     border-top-color: var(--accent-primary);
     animation: chatRangeSpin 0.85s linear infinite;
-    opacity: 0.55;
+    opacity: 0.95;
 }
 
 .chat-range-loader--active {

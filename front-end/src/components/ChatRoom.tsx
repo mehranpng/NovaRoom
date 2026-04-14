@@ -409,6 +409,7 @@ export function ChatRoom({
     const unreadConsumedInSessionRef = useRef(false);
     const restoringFromInfoRef = useRef(false);
     const restoreTopAfterInfoRef = useRef<number | null>(null);
+    const lastScrollTopRef = useRef(0);
 
     // Scroll memory: keep per-chat scroll position in memory until refresh.
     // IMPORTANT: only restore exact scrollTop if user actually scrolled in that chat (prevents "always open at top").
@@ -1209,6 +1210,7 @@ export function ChatRoom({
         pendingOlderAdjustRef.current = null;
         pendingOlderAnchorRef.current = null;
         pendingRangeLoadTypeRef.current = null;
+        lastScrollTopRef.current = 0;
     }, [chatId]);
 
     // When opening a chat with unread messages, compute anchor once for this open session.
@@ -1265,7 +1267,7 @@ export function ChatRoom({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [showContactInfo, forwardSourceUser, viewingMemberId, showMembersList, chatId]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         const container = messagesContainerRef.current;
         if (!container) { prevLenRef.current = messages.length; return; }
         const nearBottom = computeNearBottom();
@@ -1364,6 +1366,11 @@ export function ChatRoom({
     const onMessagesScroll = () => {
         const container = messagesContainerRef.current;
         if (!container) return;
+        const currentTop = container.scrollTop;
+        const lastTop = lastScrollTopRef.current;
+        const scrollingUp = currentTop < lastTop - 1;
+        const scrollingDown = currentTop > lastTop + 1;
+        lastScrollTopRef.current = currentTop;
 
         // Ignore programmatic scroll events first (initial unread jump / restore / auto-scroll).
         // These events should not consume unread state.
@@ -1399,7 +1406,7 @@ export function ChatRoom({
         // keep memory fresh (in-memory only)
         saveScroll(chatId);
 
-        if (container.scrollTop <= 48 && hasOlderMessages && !loadingOlderMessages && !localLoadingOlder) {
+        if (container.scrollTop <= 48 && scrollingUp && hasOlderMessages && !loadingOlderMessages && !localLoadingOlder) {
             pendingRangeLoadTypeRef.current = 'older';
             pendingOlderAdjustRef.current = { prevHeight: container.scrollHeight, prevTop: container.scrollTop };
             const containerRect = container.getBoundingClientRect();
@@ -1420,7 +1427,17 @@ export function ChatRoom({
             });
         }
         const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-        if (distanceToBottom <= 48 && hasNewerMessages && !loadingNewerMessages && !localLoadingNewer) {
+        // IMPORTANT: avoid triggering "newer" load when user is already at absolute bottom
+        // and just does an overscroll/pull gesture. Only load newer while actively scrolling down
+        // from inside the list (not at bottom-most end).
+        if (
+            distanceToBottom > 12
+            && distanceToBottom <= 96
+            && scrollingDown
+            && hasNewerMessages
+            && !loadingNewerMessages
+            && !localLoadingNewer
+        ) {
             pendingRangeLoadTypeRef.current = 'newer';
             setLocalLoadingNewer(true);
             Promise.resolve(onLoadNewerMessages?.(chatId)).finally(() => {
