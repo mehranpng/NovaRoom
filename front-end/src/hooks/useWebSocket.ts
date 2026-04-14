@@ -230,6 +230,18 @@ export function useWebSocket({
                 } else if (data.type === 'ai_response_start') {
                     onAIStreamStartRef.current?.(data.message);
                 } else if (data.type === 'ai_response_chunk') {
+                    if (typeof data?.text === 'string' && data?.aiChatId) {
+                        data.text = await decryptForScopes(data.text, [`ai:${data.aiChatId}`]);
+                    }
+                    if (typeof data?.reasoningContent === 'string' && data?.aiChatId) {
+                        data.reasoningContent = await decryptForScopes(data.reasoningContent, [`ai:${data.aiChatId}`]);
+                    }
+                    if (typeof data?.chunk === 'string' && data?.aiChatId) {
+                        data.chunk = await decryptForScopes(data.chunk, [`ai:${data.aiChatId}`]);
+                    }
+                    if (typeof data?.reasoningChunk === 'string' && data?.aiChatId) {
+                        data.reasoningChunk = await decryptForScopes(data.reasoningChunk, [`ai:${data.aiChatId}`]);
+                    }
                     onAIStreamChunkRef.current?.({
                         messageId: data.messageId,
                         text: data.text ?? '',

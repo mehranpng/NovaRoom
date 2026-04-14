@@ -79,15 +79,23 @@ async function deriveEncKey(token: string, scope: string): Promise<Uint8Array> {
   return sha256(enc.encode(`${getSharedSecret()}|${token}|${scope}`));
 }
 
+async function deriveSharedKey(scope: string): Promise<Uint8Array> {
+  return sha256(enc.encode(`${getSharedSecret()}|shared|${scope}`));
+}
+
 async function deriveLegacyKeys(token: string, scope: string): Promise<Uint8Array[]> {
   const tokenHintHex = Array.from(await sha256(enc.encode(String(token || '')))).map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
   return Promise.all([
+    deriveSharedKey(scope),
     deriveEncKey(token, scope),
+    deriveEncKey(LEGACY_BOOTSTRAP_TOKEN, scope),
     sha256(enc.encode(`${getSharedSecret()}|shared|${scope}`)),
     sha256(enc.encode(`${getSharedSecret()}|${scope}|${tokenHintHex}`)),
     sha256(enc.encode(`${getSharedSecret()}|${token}|${scope}`)),
   ]);
 }
+
+const LEGACY_BOOTSTRAP_TOKEN = 'bootstrap:v1';
 
 export function isCiphertext(value: unknown): value is string {
   return typeof value === 'string' && value.startsWith(ENC_PREFIX);
@@ -97,7 +105,7 @@ export async function encryptScopedText(plain: string, token: string, scope: str
   const text = String(plain || '');
   if (!text) return '';
   if (isCiphertext(text)) return text;
-  const key = await deriveEncKey(token, scope);
+  const key = await deriveSharedKey(scope);
   const nonce = crypto.getRandomValues(new Uint8Array(ENC_NONCE_SIZE));
   const body = await xorStream(enc.encode(text), key, nonce);
   const tag = (await hmacSha256(key, concatBytes(nonce, body))).slice(0, ENC_TAG_SIZE);

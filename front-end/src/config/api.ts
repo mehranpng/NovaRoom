@@ -1,4 +1,4 @@
-import { decryptScopedText, encryptScopedText, isCiphertext } from '../utils/e2ee';
+import { decryptScopedText, encryptFileBytes, encryptScopedText, isCiphertext } from '../utils/e2ee';
 
 const isDev = import.meta.env.VITE_IS_DEV_ENVIRONMENT === 'true';
 
@@ -42,8 +42,8 @@ async function decryptAny(value: any, token: string, scopeHints: string[], ctx: 
     }
     if (value && typeof value === 'object') {
         const obj: Record<string, any> = { ...value };
-        const chatId = String(obj.chatId || ctx.chatId || '');
-        const aiChatId = String(obj.aiChatId || ctx.aiChatId || '');
+        const chatId = String(obj.chatId || ((obj.participantIds || obj.lastMessage) ? obj.id : '') || ctx.chatId || '');
+        const aiChatId = String(obj.aiChatId || ((obj.title !== undefined || obj.summary !== undefined) ? obj.id : '') || ctx.aiChatId || '');
         const userChatId = String(obj.chatId || ctx.userChatId || '');
         const localScopes = [...scopeHints];
         if (chatId && (obj.text !== undefined || obj.lastMessage || obj.messages || obj.replyTo)) localScopes.unshift(`chat:${chatId}`);
@@ -91,6 +91,21 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
 
     if (token && typeof requestOptions.body === 'string') {
         requestOptions.body = await encryptRequestBody(endpoint, requestOptions.body, token);
+    }
+    if (token && endpoint === '/files/upload' && typeof FormData !== 'undefined' && requestOptions.body instanceof FormData) {
+        const original = requestOptions.body;
+        const next = new FormData();
+        for (const [key, value] of original.entries()) {
+            if (value instanceof File || value instanceof Blob) {
+                const raw = new Uint8Array(await value.arrayBuffer());
+                const encrypted = await encryptFileBytes(raw);
+                const fileName = value instanceof File ? value.name : 'upload.bin';
+                next.append(key, new Blob([encrypted], { type: (value as Blob).type || 'application/octet-stream' }), fileName);
+            } else {
+                next.append(key, String(value));
+            }
+        }
+        requestOptions.body = next;
     }
 
     const isFormData = typeof FormData !== 'undefined' && requestOptions.body instanceof FormData;

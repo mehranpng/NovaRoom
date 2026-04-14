@@ -167,7 +167,12 @@ def encrypt_scoped_text(plain: str, token: str, scope: str) -> str:
         return ""
     if is_ciphertext(text):
         return text
-    return text
+    key = _derive_enc_key_legacy_shared(scope)
+    nonce = secrets.token_bytes(ENC_NONCE_SIZE)
+    encrypted = _xor_stream(text.encode("utf-8"), key, nonce)
+    tag = hmac.new(key, nonce + encrypted, hashlib.sha256).digest()[:ENC_TAG_SIZE]
+    payload = base64.urlsafe_b64encode(nonce + encrypted + tag).decode("ascii")
+    return f"{ENC_PREFIX}{payload}"
 
 
 def decrypt_scoped_text(cipher: Any, token: str, scope: str) -> str:
