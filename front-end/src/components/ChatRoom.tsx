@@ -817,7 +817,7 @@ export function ChatRoom({
                             bio: m.bio || '',
                             chatId: id,
                             verified: m.verified,
-                            online: Boolean(m.online),
+                            online: id === currentUserId ? true : Boolean(m.online),
                         };
                     });
                     setGroupMembers(map);
@@ -1309,11 +1309,10 @@ export function ChatRoom({
         const finishedOlderRangeLoad =
             pendingRangeLoadTypeRef.current === 'older'
             && !loadingOlderMessages
-            && pendingOlderAdjustRef.current
-            && added > 0;
+            && pendingOlderAdjustRef.current;
         if (finishedOlderRangeLoad) {
             const snap = pendingOlderAdjustRef.current;
-            if (snap) {
+            if (snap && added > 0) {
                 const delta = container.scrollHeight - snap.prevHeight;
                 markProgrammaticScroll();
                 container.scrollTop = snap.prevTop + Math.max(0, delta);
@@ -1435,6 +1434,21 @@ export function ChatRoom({
         + (uploadedFile ? 1 : 0)
         + (pendingForwardDraft ? 1 : 0);
     const scrollButtonBottom = 96 + (activeInputStackCount * 56);
+
+    const jumpToLatest = () => {
+        setHideScrollBtnUntilBottom(true);
+        setNewMsgCount(0);
+        setShowScrollBtn(false);
+        scrollToBottom(true);
+        [140, 320, 560].forEach((delay) => {
+            window.setTimeout(() => {
+                scrollToBottom(false);
+                if (computeNearBottom()) {
+                    setHideScrollBtnUntilBottom(false);
+                }
+            }, delay);
+        });
+    };
 
     const submit = () => {
         if (isContactBlocked) return;
@@ -1766,7 +1780,7 @@ export function ChatRoom({
                             </button>
                             <div className="contact-info__name" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{contact.name}</div>
                             <div className="contact-info__status chat-room__contact-status--online" style={{ color: '#22c55e' }}>
-                                {membersList.length} عضو • {onlineCount} آنلاین
+                                {membersList.length} عضو • {Math.max(onlineCount, Number(chatStats?.onlineMembers || 0))} آنلاین
                             </div>
                         </div>
 
@@ -2460,12 +2474,7 @@ export function ChatRoom({
                     <motion.button
                         type="button"
                         aria-label="Jump to latest messages"
-                        onClick={() => {
-                            setHideScrollBtnUntilBottom(true);
-                            scrollToBottom(true);
-                            setNewMsgCount(0);
-                            setShowScrollBtn(false);
-                        }}
+                        onClick={jumpToLatest}
                         animate={{ opacity: 1 }}
                         initial={{ opacity: 0 }}
                         exit={{ opacity: 0 }}

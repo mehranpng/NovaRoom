@@ -68,6 +68,8 @@ export function App() {
     const [typingUserIdsByChat, setTypingUserIdsByChat] = useState<Record<string, string[]>>({});
     const [blockedChatIds, setBlockedChatIds] = useState<string[]>([]);
     const typingTimeoutsRef = useRef<Record<string, number>>({});
+    const userPresenceRef = useRef<Record<string, { online: boolean; updatedAt: number }>>({});
+    const presenceOfflineGraceTimersRef = useRef<Record<string, number>>({});
 
     const isUserBlocked = useCallback((user: Partial<User> | null | undefined): boolean => {
         if (!user) return false;
@@ -329,6 +331,15 @@ export function App() {
                 const decryptedOtherBio = c?.otherUser?.chatId
                     ? await decryptBioClientSide(String(c.otherUser.bio || ''), authToken || '', String(c.otherUser.chatId || ''))
                     : c?.otherUser?.bio;
+                const otherChatId = String(c?.otherUser?.chatId || '').trim();
+                const otherUsername = String(c?.otherUser?.username || '').trim();
+                const presenceCandidateIds = [otherChatId, otherUsername].filter(Boolean);
+                const presenceMatch = presenceCandidateIds
+                    .map((id) => userPresenceRef.current[id])
+                    .find(Boolean);
+                const resolvedOnline = typeof presenceMatch?.online === 'boolean'
+                    ? presenceMatch.online
+                    : Boolean(c?.otherUser?.online);
                 if (!c?.lastMessage) {
                     // No real message yet. Use the creation timestamp recorded when the
                     // user created this group in the current session, so it stays at the
@@ -337,13 +348,13 @@ export function App() {
                     const pinnedTs = newGroupTimestamps.current[c.id] ?? 0;
                     return {
                         ...c,
-                        otherUser: c?.otherUser ? { ...c.otherUser, bio: decryptedOtherBio || '' } : c?.otherUser,
+                        otherUser: c?.otherUser ? { ...c.otherUser, bio: decryptedOtherBio || '', online: resolvedOnline } : c?.otherUser,
                         lastMessage: { id: '', text: '', senderId: '', timestamp: pinnedTs },
                     } as Chat;
                 }
                 return {
                     ...c,
-                    otherUser: c?.otherUser ? { ...c.otherUser, bio: decryptedOtherBio || '' } : c?.otherUser,
+                    otherUser: c?.otherUser ? { ...c.otherUser, bio: decryptedOtherBio || '', online: resolvedOnline } : c?.otherUser,
                     lastMessage: {
                         ...decryptedLastMessage,
                         timestamp: normalizeTimestamp(c.lastMessage.timestamp),
@@ -400,6 +411,9 @@ export function App() {
             setOpenChatUnread(null);
             Object.values(typingTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
             typingTimeoutsRef.current = {};
+            Object.values(presenceOfflineGraceTimersRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
+            presenceOfflineGraceTimersRef.current = {};
+            userPresenceRef.current = {};
             setTypingUserIdsByChat({});
             navigate('/login', { replace: true });
         };
@@ -587,14 +601,55 @@ export function App() {
     }, []);
 
     const handleUserStatusChange = useCallback((userId: string, online: boolean) => {
+        const normalizedUserId = String(userId || '').trim();
+        if (!normalizedUserId) return;
+        const now = Date.now();
+        const prevPresence = userPresenceRef.current[normalizedUserId];
+        const prevOnline = prevPresence?.online;
+        const setPresence = (nextOnline: boolean) => {
+            userPresenceRef.current[normalizedUserId] = { online: nextOnline, updatedAt: Date.now() };
+        };
+        if (presenceOfflineGraceTimersRef.current[normalizedUserId]) {
+            window.clearTimeout(presenceOfflineGraceTimersRef.current[normalizedUserId]);
+            delete presenceOfflineGraceTimersRef.current[normalizedUserId];
+        }
+        // Prevent rapid online/offline flapping by delaying "offline" if user was
+        // seen online recently. This keeps UI stable while transient reconnects happen.
+        if (!online && prevOnline && (now - (prevPresence?.updatedAt || 0)) < 12000) {
+            presenceOfflineGraceTimersRef.current[normalizedUserId] = window.setTimeout(() => {
+                setPresence(false);
+                setChats((prev) => prev.map((chat) => {
+                    const ou = chat.otherUser || {};
+                    const participantIds = Array.isArray(chat.participantIds) ? chat.participantIds.map((id: any) => String(id || '').trim()) : [];
+                    const candidateIds = [
+                        String(ou.chatId || '').trim(),
+                        String(ou.username || '').trim(),
+                        ...participantIds,
+                    ].filter(Boolean);
+                    if (!candidateIds.includes(normalizedUserId)) return chat;
+                    return { ...chat, otherUser: { ...ou, online: false } };
+                }));
+                delete presenceOfflineGraceTimersRef.current[normalizedUserId];
+            }, 3200);
+            return;
+        }
+
+        setPresence(Boolean(online));
         setChats(prev => prev.map(chat => {
-            if (chat.otherUser && (chat.otherUser.username === userId || chat.participantIds.includes(userId))) {
+            const ou = chat.otherUser || {};
+            const participantIds = Array.isArray(chat.participantIds) ? chat.participantIds.map((id: any) => String(id || '').trim()) : [];
+            const candidateIds = [
+                String(ou.chatId || '').trim(),
+                String(ou.username || '').trim(),
+                ...participantIds,
+            ].filter(Boolean);
+            if (candidateIds.includes(normalizedUserId)) {
                 const blockedByMe = Boolean((chat.otherUser as any)?.blockedByMe);
                 const blockedByOther = Boolean((chat.otherUser as any)?.blockedByOther);
                 if (blockedByMe || blockedByOther) {
                     return { ...chat, otherUser: { ...chat.otherUser, online: false } };
                 }
-                return { ...chat, otherUser: { ...chat.otherUser, online } };
+                return { ...chat, otherUser: { ...chat.otherUser, online: Boolean(online) } };
             }
             return chat;
         }));
@@ -931,6 +986,13 @@ export function App() {
             })
             .catch((err) => console.error('Failed to sync messages after reconnect', err));
     }, [wsConnected, isAuthenticated, loadChats, activeChatId, currentUser, sendSeen, fetchPagedMessages]);
+
+    useEffect(() => {
+        return () => {
+            Object.values(presenceOfflineGraceTimersRef.current).forEach((id) => window.clearTimeout(id));
+            presenceOfflineGraceTimersRef.current = {};
+        };
+    }, []);
 
 
     useEffect(() => {
@@ -1342,8 +1404,9 @@ export function App() {
                 }),
             });
             playChatSound('send');
-            await fetchPagedMessages(targetChatId, { direction: 'latest', mode: 'replace' });
-            setMessagesLoadedOnce((prev) => ({ ...prev, [targetChatId]: true }));
+            // Do not force a full replace right away; eventual consistency can briefly
+            // hide optimistic forwarded messages. We keep optimistic row visible until
+            // websocket/new sync confirms server copy.
         } catch (e) {
             console.error('Failed to refresh forwarded target chat messages', e);
             setMessages((prev) => ({
@@ -1352,7 +1415,7 @@ export function App() {
             }));
         }
         loadChats(false);
-    }, [playChatSound, loadChats, fetchPagedMessages, messages, aiMessagesByChat, authToken, currentUser?.chatId]);
+    }, [playChatSound, loadChats, messages, aiMessagesByChat, authToken, currentUser?.chatId]);
 
     const handleSetPendingForwardDraft = useCallback((targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => {
         if (!targetChatId || !draft?.sourceChatId || !draft?.messageId) return;

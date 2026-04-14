@@ -182,25 +182,45 @@ export function useWebSocket({
         ws.onmessage = (event) => {
             const processMessage = async () => {
                 const data = JSON.parse(event.data);
+                const dataType = String(data?.type || '').trim();
                 if (data.type === 'new_message') {
-                    const message = await decryptMessageClientSide(data.message, token, data.chatId);
-                    onNewMessageRef.current(data.chatId, message);
+                    const resolvedChatId = String(data?.chatId || data?.message?.chatId || '').trim();
+                    if (!resolvedChatId) return;
+                    const message = await decryptMessageClientSide(data.message, token, resolvedChatId);
+                    onNewMessageRef.current(resolvedChatId, message);
                 } else if (data.type === 'message_edited') {
-                    const message = await decryptMessageClientSide(data.message, token, data.chatId);
-                    onMessageEditedRef.current?.(data.chatId, message);
+                    const resolvedChatId = String(data?.chatId || data?.message?.chatId || '').trim();
+                    if (!resolvedChatId) return;
+                    const message = await decryptMessageClientSide(data.message, token, resolvedChatId);
+                    onMessageEditedRef.current?.(resolvedChatId, message);
                 } else if (data.type === 'message_deleted') {
+                    const resolvedChatId = String(data?.chatId || '').trim();
+                    if (!resolvedChatId) return;
                     const lastMessage = data.lastMessage
-                        ? await decryptMessageClientSide(data.lastMessage, token, data.chatId)
+                        ? await decryptMessageClientSide(data.lastMessage, token, resolvedChatId)
                         : data.lastMessage;
-                    onMessageDeletedRef.current?.(data.chatId, data.messageId, lastMessage);
-                } else if (data.type === 'user_status') {
-                    onUserStatusChangeRef.current?.(data.userId, data.online);
+                    onMessageDeletedRef.current?.(resolvedChatId, String(data.messageId || ''), lastMessage);
+                } else if (dataType === 'user_status' || dataType === 'presence' || dataType === 'status_update') {
+                    const resolvedUserId = String(data.userId || data.chatId || data.username || data.memberId || '').trim();
+                    const resolvedOnline = Boolean(data.online ?? data.isOnline ?? data.status === 'online');
+                    if (resolvedUserId) {
+                        onUserStatusChangeRef.current?.(resolvedUserId, resolvedOnline);
+                    }
                 } else if (data.type === 'messages_seen') {
-                    onMessagesSeenRef.current?.(data.chatId);
+                    const resolvedChatId = String(data?.chatId || '').trim();
+                    if (resolvedChatId) onMessagesSeenRef.current?.(resolvedChatId);
                 } else if (data.type === 'reaction_updated') {
-                    onReactionUpdatedRef.current?.(data.chatId, data.messageId, data.reactions);
+                    const resolvedChatId = String(data?.chatId || '').trim();
+                    const resolvedMessageId = String(data?.messageId || data?.message?.id || '').trim();
+                    if (resolvedChatId && resolvedMessageId) {
+                        onReactionUpdatedRef.current?.(resolvedChatId, resolvedMessageId, Array.isArray(data.reactions) ? data.reactions : []);
+                    }
                 } else if (data.type === 'typing') {
-                    onTypingStatusRef.current?.(data.chatId, data.userId, Boolean(data.isTyping));
+                    const resolvedChatId = String(data?.chatId || '').trim();
+                    const resolvedUserId = String(data?.userId || data?.chatUserId || data?.username || '').trim();
+                    if (resolvedChatId && resolvedUserId) {
+                        onTypingStatusRef.current?.(resolvedChatId, resolvedUserId, Boolean(data.isTyping));
+                    }
                 } else if (data.type === 'ai_response') {
                     onAINewMessageRef.current?.(data.message);
                 } else if (data.type === 'ai_response_start') {
