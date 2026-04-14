@@ -149,7 +149,8 @@ def _derive_enc_key_legacy_token_raw(token: str, scope: str) -> bytes:
 
 
 def _is_server_managed_scope(scope: str) -> bool:
-    return str(scope or "").startswith("ai:")
+    value = str(scope or "")
+    return value.startswith("ai:") or value.startswith("ai-chat:") or value.startswith("ai-chat-meta:")
 
 def _xor_stream(data: bytes, key: bytes, nonce: bytes) -> bytes:
     out = bytearray(len(data))
@@ -398,6 +399,7 @@ class ForwardMessageRequest(BaseModel):
     targetChatId: str
     encryptedText: Optional[str] = None
     encryptedReasoningContent: Optional[str] = None
+    clientId: Optional[str] = None
 
 
 class OfficialChSendRequest(BaseModel):
@@ -2353,6 +2355,7 @@ async def forward_message(
         if isinstance(req.encryptedReasoningContent, str)
         else ""
     )
+    client_id = str(req.clientId or "").strip()
 
     # Get original sender info and file data
     file_data = None
@@ -2520,6 +2523,7 @@ async def forward_message(
                 "reasoningContent": encrypted_forward_reasoning,
                 "reasoningEnabled": reasoning_enabled,
                 "reasoningDurationSec": reasoning_duration_sec,
+                "clientId": client_id or None,
             },
         }
         await broadcast(participants_to_notify, msg_payload)

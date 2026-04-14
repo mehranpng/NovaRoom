@@ -1295,33 +1295,64 @@ export function App() {
     const handleForwardMessage = useCallback(async (sourceChatId: string, messageId: string, targetChatId: string) => {
         pendingForwardSendHintsRef.current[targetChatId] = (pendingForwardSendHintsRef.current[targetChatId] || 0) + 1;
         const sourceChatMessage = (messages[sourceChatId] || []).find((m) => m.id === messageId);
-        const sourceAIMessage = (aiMessagesByChat[sourceChatId] || []).find((m) => m.id === messageId);
-        const sourceMessage = sourceChatMessage || sourceAIMessage || null;
+        const sourceAIMessageExact = (aiMessagesByChat[sourceChatId] || []).find((m) => m.id === messageId);
+        const sourceAIMessageFallback = sourceAIMessageExact
+            ? null
+            : Object.values(aiMessagesByChat).flat().find((m) => m.id === messageId);
+        const sourceMessage = sourceChatMessage || sourceAIMessageExact || sourceAIMessageFallback || null;
+        const forwardClientId = `fwd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const now = Date.now();
+        if (sourceMessage) {
+            const optimisticForward: Message = {
+                id: forwardClientId,
+                clientId: forwardClientId,
+                chatId: targetChatId,
+                senderId: currentUser?.chatId || '',
+                text: String(sourceMessage.text || ''),
+                timestamp: now,
+                seen: false,
+                deliveryStatus: 'sending',
+                file: sourceMessage.file,
+                forwardedFrom: sourceMessage.forwardedFrom,
+                reasoningContent: sourceMessage.reasoningContent,
+                reasoningEnabled: sourceMessage.reasoningEnabled,
+                reasoningDurationSec: sourceMessage.reasoningDurationSec,
+            };
+            setMessages((prev) => ({
+                ...prev,
+                [targetChatId]: [...(prev[targetChatId] || []), optimisticForward].slice(-MESSAGE_WINDOW_LIMIT),
+            }));
+        }
         const encryptedText = sourceMessage
             ? await encryptChatTextClientSide(String(sourceMessage.text || ''), authToken || '', targetChatId)
             : undefined;
         const encryptedReasoning = sourceMessage?.reasoningContent
             ? await encryptChatTextClientSide(String(sourceMessage.reasoningContent || ''), authToken || '', targetChatId)
             : undefined;
-        await apiFetch('/messages/forward', {
-            method: 'POST',
-            body: JSON.stringify({
-                sourceChatId,
-                messageId,
-                targetChatId,
-                encryptedText,
-                encryptedReasoningContent: encryptedReasoning,
-            }),
-        });
-        playChatSound('send');
         try {
+            await apiFetch('/messages/forward', {
+                method: 'POST',
+                body: JSON.stringify({
+                    sourceChatId,
+                    messageId,
+                    targetChatId,
+                    encryptedText,
+                    encryptedReasoningContent: encryptedReasoning,
+                    clientId: forwardClientId,
+                }),
+            });
+            playChatSound('send');
             await fetchPagedMessages(targetChatId, { direction: 'latest', mode: 'replace' });
             setMessagesLoadedOnce((prev) => ({ ...prev, [targetChatId]: true }));
         } catch (e) {
             console.error('Failed to refresh forwarded target chat messages', e);
+            setMessages((prev) => ({
+                ...prev,
+                [targetChatId]: (prev[targetChatId] || []).filter((m) => m.id !== forwardClientId),
+            }));
         }
         loadChats(false);
-    }, [playChatSound, loadChats, fetchPagedMessages, messages, aiMessagesByChat, authToken]);
+    }, [playChatSound, loadChats, fetchPagedMessages, messages, aiMessagesByChat, authToken, currentUser?.chatId]);
 
     const handleSetPendingForwardDraft = useCallback((targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => {
         if (!targetChatId || !draft?.sourceChatId || !draft?.messageId) return;
