@@ -368,6 +368,7 @@ export function App() {
     const handleLogout = useCallback(() => {
         const finalizeLogout = () => {
             localStorage.removeItem('token');
+            localStorage.removeItem('e2ee_secret');
             setAuthToken(null);
             setIsAuthenticated(false);
             setCurrentUser(null);
@@ -817,6 +818,7 @@ export function App() {
             })
             .catch(() => {
                 localStorage.removeItem('token');
+                localStorage.removeItem('e2ee_secret');
                 setAuthToken(null);
                 setIsAuthenticated(false);
                 setCurrentUser(null);

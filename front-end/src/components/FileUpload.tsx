@@ -181,9 +181,9 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         try {
             const rawBytes = new Uint8Array(await file.arrayBuffer());
             const encryptedBytes = await encryptFileBytes(rawBytes);
-            const encryptedFile = new File([encryptedBytes], file.name, { type: file.type || 'application/octet-stream' });
             const formData = new FormData();
-            formData.append('file', encryptedFile);
+            const encryptedBlob = new Blob([encryptedBytes], { type: file.type || 'application/octet-stream' });
+            formData.append('file', encryptedBlob, file.name);
             const xhr = new XMLHttpRequest();
 
             // Track upload progress

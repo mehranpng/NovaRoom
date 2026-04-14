@@ -2,7 +2,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { API_BASE_URL } from '../config/api';
 import type { FileMetadata } from '../types';
-import { decryptScopedText, encryptScopedText } from '../utils/e2ee';
+import { decryptScopedText, encryptScopedText, isCiphertext } from '../utils/e2ee';
 
 interface UseWebSocketProps {
     token: string | null;
@@ -110,9 +110,9 @@ export function useWebSocket({
     const decryptForScopes = useCallback(async (value: string, scopes: string[]) => {
         for (const scope of scopes) {
             const plain = await decryptScopedText(value, token || '', scope);
-            if (plain !== '🔐') return plain;
+            if (!isCiphertext(plain)) return plain;
             const fallback = await decryptScopedText(value, LEGACY_BOOTSTRAP_TOKEN, scope);
-            if (fallback !== '🔐') return fallback;
+            if (!isCiphertext(fallback)) return fallback;
         }
         return value;
     }, [token]);

@@ -263,6 +263,7 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     token: str
     user: dict
+    e2eeSecret: Optional[str] = None
 
 
 class ProfileUpdate(BaseModel):
@@ -972,6 +973,7 @@ async def complete_registration(req: CompleteRegistrationRequest):
 
     return {
         "token": token,
+        "e2eeSecret": SECRET_KEY,
         "user": {
             "chatId": chat_id,
             "username": desired_username,
@@ -1056,6 +1058,7 @@ async def login(req: LoginRequest):
 
     return {
         "token": token,
+        "e2eeSecret": SECRET_KEY,
         "user": {
             "chatId": user["chatId"],
             "username": user["profile"]["username"],
@@ -1072,6 +1075,7 @@ async def login(req: LoginRequest):
 @app.get("/profile/me")
 async def get_profile(current_user: dict = Depends(get_current_user)):
     return {
+        "e2eeSecret": SECRET_KEY,
         "chatId": current_user["chatId"],
         "username": current_user["profile"]["username"],
         "name": current_user["profile"]["name"],

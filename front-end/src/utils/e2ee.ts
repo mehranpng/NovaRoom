@@ -9,6 +9,10 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 function getSharedSecret(): string {
+  if (typeof localStorage !== 'undefined') {
+    const runtimeSecret = localStorage.getItem('e2ee_secret');
+    if (runtimeSecret) return runtimeSecret;
+  }
   return import.meta.env.VITE_E2EE_SECRET || 'dev-secret-change-me';
 }
 
@@ -115,9 +119,9 @@ export async function decryptScopedText(cipher: string, token: string, scope: st
       const plain = await xorStream(body, key, nonce);
       return dec.decode(plain);
     }
-    return '🔐';
+    return cipher;
   } catch {
-    return '🔐';
+    return cipher;
   }
 }
 

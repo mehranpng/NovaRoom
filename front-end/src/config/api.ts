@@ -25,37 +25,42 @@ export const getHeaders = (includeAuth = true) => {
 
 const LEGACY_BOOTSTRAP_TOKEN = 'bootstrap:v1';
 
-async function decryptAny(value: any, token: string, scopeHints: string[]): Promise<any> {
+type ScopeContext = { chatId?: string; aiChatId?: string; userChatId?: string };
+
+async function decryptAny(value: any, token: string, scopeHints: string[], ctx: ScopeContext = {}): Promise<any> {
     if (typeof value === 'string' && isCiphertext(value)) {
         for (const scope of scopeHints) {
             const plain = await decryptScopedText(value, token, scope);
-            if (plain !== '🔐') return plain;
+            if (!isCiphertext(plain)) return plain;
             const fallback = await decryptScopedText(value, LEGACY_BOOTSTRAP_TOKEN, scope);
-            if (fallback !== '🔐') return fallback;
+            if (!isCiphertext(fallback)) return fallback;
         }
-        return '🔐';
+        return value;
     }
     if (Array.isArray(value)) {
-        return Promise.all(value.map((v) => decryptAny(v, token, scopeHints)));
+        return Promise.all(value.map((v) => decryptAny(v, token, scopeHints, ctx)));
     }
     if (value && typeof value === 'object') {
         const obj: Record<string, any> = { ...value };
-        const chatId = String(obj.chatId || obj.id || '');
-        const aiChatId = String(obj.aiChatId || obj.id || '');
-        const userChatId = String(obj.chatId || '');
+        const chatId = String(obj.chatId || ctx.chatId || '');
+        const aiChatId = String(obj.aiChatId || ctx.aiChatId || '');
+        const userChatId = String(obj.chatId || ctx.userChatId || '');
         const localScopes = [...scopeHints];
-        if (chatId) localScopes.unshift(`chat:${chatId}`);
+        if (chatId && (obj.text !== undefined || obj.lastMessage || obj.messages || obj.replyTo)) localScopes.unshift(`chat:${chatId}`);
         if (aiChatId && (obj.content !== undefined || obj.title !== undefined || obj.summary !== undefined)) {
             localScopes.unshift(`ai:${aiChatId}`);
         }
+        const nextCtx: ScopeContext = { chatId, aiChatId, userChatId: userChatId || chatId };
 
         for (const [k, v] of Object.entries(obj)) {
             if (typeof v === 'string' && isCiphertext(v)) {
                 const scopes = [...localScopes];
                 if (k === 'bio' && userChatId) scopes.unshift(`user-bio:${userChatId}`);
+                if ((k === 'text' || k === 'reasoningContent') && chatId) scopes.unshift(`chat:${chatId}`);
+                if ((k === 'content' || k === 'title' || k === 'summary' || k === 'reasoningContent') && aiChatId) scopes.unshift(`ai:${aiChatId}`);
                 obj[k] = await decryptAny(v, token, scopes);
             } else {
-                obj[k] = await decryptAny(v, token, localScopes);
+                obj[k] = await decryptAny(v, token, localScopes, nextCtx);
             }
         }
         return obj;
@@ -84,7 +89,7 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
     const token = localStorage.getItem('token') || '';
     let requestOptions = { ...options };
 
-    if (token && typeof requestOptions.body === 'string' && requestOptions.headers && (requestOptions.headers as any)['Content-Type'] !== undefined) {
+    if (token && typeof requestOptions.body === 'string') {
         requestOptions.body = await encryptRequestBody(endpoint, requestOptions.body, token);
     }
 
@@ -104,6 +109,9 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
     }
 
     const data = await response.json();
+    if (data && typeof data === 'object' && typeof data.e2eeSecret === 'string') {
+        localStorage.setItem('e2ee_secret', data.e2eeSecret);
+    }
     if (!token) return data;
 
     const hints: string[] = [];
