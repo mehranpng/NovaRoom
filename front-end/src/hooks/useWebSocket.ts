@@ -2,6 +2,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { API_BASE_URL } from '../config/api';
 import type { FileMetadata } from '../types';
+import { decryptMessageClientSide, encryptChatTextClientSide } from '../utils/e2ee';
 
 interface UseWebSocketProps {
     token: string | null;
@@ -179,14 +180,19 @@ export function useWebSocket({
         };
 
         ws.onmessage = (event) => {
-            try {
+            const processMessage = async () => {
                 const data = JSON.parse(event.data);
                 if (data.type === 'new_message') {
-                    onNewMessageRef.current(data.chatId, data.message);
+                    const message = await decryptMessageClientSide(data.message, token, data.chatId);
+                    onNewMessageRef.current(data.chatId, message);
                 } else if (data.type === 'message_edited') {
-                    onMessageEditedRef.current?.(data.chatId, data.message);
+                    const message = await decryptMessageClientSide(data.message, token, data.chatId);
+                    onMessageEditedRef.current?.(data.chatId, message);
                 } else if (data.type === 'message_deleted') {
-                    onMessageDeletedRef.current?.(data.chatId, data.messageId, data.lastMessage);
+                    const lastMessage = data.lastMessage
+                        ? await decryptMessageClientSide(data.lastMessage, token, data.chatId)
+                        : data.lastMessage;
+                    onMessageDeletedRef.current?.(data.chatId, data.messageId, lastMessage);
                 } else if (data.type === 'user_status') {
                     onUserStatusChangeRef.current?.(data.userId, data.online);
                 } else if (data.type === 'messages_seen') {
@@ -233,9 +239,11 @@ export function useWebSocket({
                         pending.resolve(data);
                     }
                 }
-            } catch (err) {
+            };
+
+            processMessage().catch((err) => {
                 console.error('WebSocket message parse error:', err);
-            }
+            });
         };
 
         ws.onclose = () => {
@@ -279,23 +287,25 @@ export function useWebSocket({
     );
 
     const sendMessage = useCallback(
-        (chatId: string, text: string, replyToId?: string, file?: FileMetadata) => {
+        async (chatId: string, text: string, replyToId?: string, file?: FileMetadata) => {
             if (typeof text !== 'string') return false;
             if (text.length > MAX_CHAT_MESSAGE_LENGTH) return false;
             if (!chatId || (!text.trim() && !file)) return false;
-            return send({ type: 'message', chatId, text, replyToId, file });
+            const encryptedText = text.trim() ? await encryptChatTextClientSide(text, token || '', chatId) : '';
+            return send({ type: 'message', chatId, text: encryptedText, replyToId, file });
         },
-        [send]
+        [send, token]
     );
 
     const editMessage = useCallback(
-        (chatId: string, messageId: string, text: string) => {
+        async (chatId: string, messageId: string, text: string) => {
             if (typeof text !== 'string') return false;
             if (text.length > MAX_CHAT_MESSAGE_LENGTH) return false;
             if (!chatId || !messageId || !text.trim()) return false;
-            return send({ type: 'edit_message', chatId, messageId, text });
+            const encryptedText = await encryptChatTextClientSide(text, token || '', chatId);
+            return send({ type: 'edit_message', chatId, messageId, text: encryptedText });
         },
-        [send]
+        [send, token]
     );
 
     const deleteMessage = useCallback(

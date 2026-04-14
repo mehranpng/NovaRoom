@@ -17,6 +17,7 @@ import { MusicPlayerProvider } from './contexts/MusicPlayerContext';
 import { cx } from './utils/cx';
 import { NotificationCenter } from './components/NotificationCenter';
 import { notify } from './utils/notificationBus';
+import { decryptBioClientSide, decryptMessageClientSide, encryptBioClientSide } from './utils/e2ee';
 import './App.css';
 
 const normalizeTimestamp = (ts: unknown): number => {
@@ -321,7 +322,13 @@ export function App() {
         try {
             const data = await apiFetch('/chats');
 
-            const normalized: Chat[] = (data as any[]).map((c) => {
+            const normalized: Chat[] = await Promise.all((data as any[]).map(async (c) => {
+                const decryptedLastMessage = c?.lastMessage
+                    ? await decryptMessageClientSide(c.lastMessage, authToken || '', String(c.id || ''))
+                    : null;
+                const decryptedOtherBio = c?.otherUser?.chatId
+                    ? await decryptBioClientSide(String(c.otherUser.bio || ''), authToken || '', String(c.otherUser.chatId || ''))
+                    : c?.otherUser?.bio;
                 if (!c?.lastMessage) {
                     // No real message yet. Use the creation timestamp recorded when the
                     // user created this group in the current session, so it stays at the
@@ -330,17 +337,19 @@ export function App() {
                     const pinnedTs = newGroupTimestamps.current[c.id] ?? 0;
                     return {
                         ...c,
+                        otherUser: c?.otherUser ? { ...c.otherUser, bio: decryptedOtherBio || '' } : c?.otherUser,
                         lastMessage: { id: '', text: '', senderId: '', timestamp: pinnedTs },
                     } as Chat;
                 }
                 return {
                     ...c,
+                    otherUser: c?.otherUser ? { ...c.otherUser, bio: decryptedOtherBio || '' } : c?.otherUser,
                     lastMessage: {
-                        ...c.lastMessage,
+                        ...decryptedLastMessage,
                         timestamp: normalizeTimestamp(c.lastMessage.timestamp),
                     },
                 } as Chat;
-            });
+            }));
 
             // Keep active chat unread badge cleared even if server data is briefly stale.
             const currentActiveChatId = activeChatIdRef.current;
@@ -358,7 +367,7 @@ export function App() {
             console.error('Failed to load chats', error);
             setIsInitialChatsLoad(false);
         }
-    }, [isAuthenticated, isInitialChatsLoad]);
+    }, [isAuthenticated, isInitialChatsLoad, authToken]);
 
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -811,8 +820,9 @@ export function App() {
             return;
         }
         apiFetch('/profile/me')
-            .then(user => {
-                setCurrentUser(user);
+            .then(async (user) => {
+                const decryptedBio = await decryptBioClientSide(String(user?.bio || ''), authToken || '', String(user?.chatId || ''));
+                setCurrentUser({ ...user, bio: decryptedBio });
                 setIsAuthenticated(true);
             })
             .catch(() => {
@@ -861,7 +871,10 @@ export function App() {
         if (params?.cursorId) qs.set('cursor_id', params.cursorId);
 
         const res = await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages?${qs.toString()}`);
-        const chunk: Message[] = Array.isArray(res?.messages) ? res.messages : [];
+        const rawChunk: Message[] = Array.isArray(res?.messages) ? res.messages : [];
+        const chunk: Message[] = await Promise.all(
+            rawChunk.map((message) => decryptMessageClientSide(message, authToken || '', chatId))
+        );
 
         setMessages((prev) => {
             const merged = mergeMessages(prev[chatId] || [], chunk, mode);
@@ -1133,14 +1146,14 @@ export function App() {
 
         if (payload.editMessageId) {
             if (!activeChatId) return;
-            const success = editViaWS(activeChatId, payload.editMessageId, text);
+            const success = await editViaWS(activeChatId, payload.editMessageId, text);
             if (!success) console.warn('WebSocket not connected');
             return;
         }
 
         const savedMessagesId = `saved_messages_${currentUser.chatId}`;
         if (activeChatId === savedMessagesId) {
-            const success = sendViaWS(savedMessagesId, text, payload.replyToId, payload.file);
+            const success = await sendViaWS(savedMessagesId, text, payload.replyToId, payload.file);
             if (!success) console.warn('WebSocket not connected');
             if (success) playChatSound('send');
             loadChats(false);
@@ -1178,7 +1191,7 @@ export function App() {
                 setView('chatRoom');
                 navigate(`/chat/${encodeURIComponent(createdChatId)}`, { replace: true });
 
-                const success = sendViaWS(createdChatId, text, payload.replyToId, payload.file);
+                const success = await sendViaWS(createdChatId, text, payload.replyToId, payload.file);
                 if (!success) console.warn('WebSocket not connected');
                 if (success) playChatSound('send');
 
@@ -1196,7 +1209,7 @@ export function App() {
         const activeChat = chats.find((c) => c.id === activeChatId);
         if (activeChat?.chatType !== 'group' && isBlockedDirectTarget(activeChat?.otherUser)) return;
 
-        const success = sendViaWS(activeChatId, text, payload.replyToId, payload.file);
+        const success = await sendViaWS(activeChatId, text, payload.replyToId, payload.file);
         if (!success) console.warn('WebSocket not connected');
         if (success) playChatSound('send');
     }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, playChatSound, navigate, chats, isUserBlocked]);
@@ -1738,7 +1751,11 @@ export function App() {
                             user={currentUser}
                             onBack={handleBack}
                             onUpdateProfile={async (u) => {
-                                await apiFetch('/profile/me', { method: 'PATCH', body: JSON.stringify(u) });
+                                const payload = { ...u } as any;
+                                if (typeof payload.bio === 'string' && currentUser?.chatId) {
+                                    payload.bio = await encryptBioClientSide(payload.bio, authToken || '', currentUser.chatId);
+                                }
+                                await apiFetch('/profile/me', { method: 'PATCH', body: JSON.stringify(payload) });
                                 setCurrentUser(prev => (prev ? { ...prev, ...u } : null));
                             }}
                         />

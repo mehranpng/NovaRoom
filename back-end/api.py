@@ -146,6 +146,11 @@ def _derive_enc_key_legacy_token_raw(token: str, scope: str) -> bytes:
     return hashlib.sha256(material).digest()
 
 
+
+
+def _is_server_managed_scope(scope: str) -> bool:
+    return str(scope or "").startswith("ai:")
+
 def _xor_stream(data: bytes, key: bytes, nonce: bytes) -> bytes:
     out = bytearray(len(data))
     counter = 0
@@ -165,6 +170,8 @@ def encrypt_scoped_text(plain: str, token: str, scope: str) -> str:
     text = str(plain or "")
     if not text:
         return ""
+    if not _is_server_managed_scope(scope):
+        return text
     key = _derive_enc_key(token, scope)
     nonce = secrets.token_bytes(ENC_NONCE_SIZE)
     encrypted = _xor_stream(text.encode("utf-8"), key, nonce)
@@ -177,6 +184,8 @@ def decrypt_scoped_text(cipher: Any, token: str, scope: str) -> str:
     value = str(cipher or "")
     if not value:
         return ""
+    if not _is_server_managed_scope(scope):
+        return value
     if not value.startswith(ENC_PREFIX):
         return value
     try:
@@ -207,6 +216,8 @@ def is_ciphertext(value: Any) -> bool:
 
 
 def decrypt_with_fallback(cipher: Any, token: str, scope: str) -> str:
+    if not _is_server_managed_scope(scope):
+        return str(cipher or "")
     if not is_ciphertext(cipher):
         return str(cipher or "")
     plain = decrypt_scoped_text(cipher, token, scope)
