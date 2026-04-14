@@ -133,11 +133,11 @@ export const decryptMessageClientSide = async (message: any, token: string, chat
     const next = { ...message };
     if (typeof next.text === 'string') {
         const dec = await decryptClientText(next.text, token, scope);
-        next.text = dec.startsWith(ENC_PREFIX) ? '🔐' : dec;
+        next.text = dec;
     }
     if (next.replyTo && typeof next.replyTo === 'object' && typeof next.replyTo.text === 'string') {
         const decReply = await decryptClientText(next.replyTo.text, token, scope);
-        next.replyTo = { ...next.replyTo, text: decReply.startsWith(ENC_PREFIX) ? '🔐' : decReply };
+        next.replyTo = { ...next.replyTo, text: decReply };
     }
     return next;
 };
