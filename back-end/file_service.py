@@ -4,6 +4,9 @@ from pathlib import Path
 from typing import Optional, Tuple
 from datetime import datetime, timezone
 import mimetypes
+import os
+import hashlib
+import hmac
 
 # Base directory for file uploads
 UPLOAD_DIR = Path("uploads")
@@ -36,9 +39,46 @@ def encrypt_file_bytes(plain: bytes) -> bytes:
     return plain
 
 
+FILE_MAGIC = b"NRF1"
+FILE_NONCE_SIZE = 16
+FILE_TAG_SIZE = 16
+
+
+def _legacy_file_key() -> bytes:
+    raw_secret = os.getenv("SECRET_KEY", "") or "dev-secret-change-me"
+    return hashlib.sha256(f"{raw_secret}|file-storage".encode("utf-8")).digest()
+
+
+def _legacy_xor_stream(data: bytes, key: bytes, nonce: bytes) -> bytes:
+    out = bytearray(len(data))
+    counter = 0
+    idx = 0
+    while idx < len(data):
+        block = hashlib.sha256(key + nonce + counter.to_bytes(8, "big")).digest()
+        for b in block:
+            if idx >= len(data):
+                break
+            out[idx] = data[idx] ^ b
+            idx += 1
+        counter += 1
+    return bytes(out)
+
+
 def decrypt_file_bytes(raw: bytes) -> bytes:
-    # Server-side file decryption has been disabled to support E2EE.
-    return raw
+    # Backward compatibility: decrypt legacy server-encrypted files, if any.
+    if not raw.startswith(FILE_MAGIC):
+        return raw
+    if len(raw) < len(FILE_MAGIC) + FILE_NONCE_SIZE + FILE_TAG_SIZE:
+        return b""
+    body = raw[len(FILE_MAGIC) :]
+    nonce = body[:FILE_NONCE_SIZE]
+    cipher = body[FILE_NONCE_SIZE:-FILE_TAG_SIZE]
+    tag = body[-FILE_TAG_SIZE:]
+    key = _legacy_file_key()
+    expected = hmac.new(key, nonce + cipher, hashlib.sha256).digest()[:FILE_TAG_SIZE]
+    if not hmac.compare_digest(tag, expected):
+        return b""
+    return _legacy_xor_stream(cipher, key, nonce)
 
 
 def is_allowed_file(filename: str) -> bool:
