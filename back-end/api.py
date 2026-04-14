@@ -186,6 +186,10 @@ def decrypt_scoped_text(cipher: Any, token: str, scope: str) -> str:
         return ""
     if not _is_server_managed_scope(scope):
         return value
+    return _decrypt_scoped_text_raw(value, token, scope)
+
+
+def _decrypt_scoped_text_raw(value: str, token: str, scope: str) -> str:
     if not value.startswith(ENC_PREFIX):
         return value
     try:
@@ -217,7 +221,18 @@ def is_ciphertext(value: Any) -> bool:
 
 def decrypt_with_fallback(cipher: Any, token: str, scope: str) -> str:
     if not _is_server_managed_scope(scope):
-        return str(cipher or "")
+        value = str(cipher or "")
+        if not is_ciphertext(value):
+            return value
+        # Compatibility path for legacy non-AI records encrypted server-side
+        # before client-side E2EE rollout.
+        plain = _decrypt_scoped_text_raw(value, token, scope)
+        if plain:
+            return plain
+        legacy_plain = _decrypt_scoped_text_raw(value, LEGACY_BOOTSTRAP_TOKEN, scope)
+        if legacy_plain:
+            return legacy_plain
+        return value
     if not is_ciphertext(cipher):
         return str(cipher or "")
     plain = decrypt_scoped_text(cipher, token, scope)
