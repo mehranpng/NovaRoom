@@ -1,13 +1,9 @@
-import os
 import uuid
 import aiofiles
 from pathlib import Path
 from typing import Optional, Tuple
 from datetime import datetime, timezone
 import mimetypes
-import hashlib
-import hmac
-import secrets
 
 # Base directory for file uploads
 UPLOAD_DIR = Path("uploads")
@@ -34,55 +30,15 @@ DANGEROUS_EXTENSIONS = {
     ".pkg",
     ".msi",
 }
-FILE_MAGIC = b"NRF1"
-FILE_NONCE_SIZE = 16
-FILE_TAG_SIZE = 16
-
-
-def _file_key() -> bytes:
-    raw_secret = os.getenv("SECRET_KEY", "") or "dev-secret-change-me"
-    return hashlib.sha256(f"{raw_secret}|file-storage".encode("utf-8")).digest()
-
-
-def _xor_stream(data: bytes, key: bytes, nonce: bytes) -> bytes:
-    out = bytearray(len(data))
-    counter = 0
-    idx = 0
-    while idx < len(data):
-        block = hashlib.sha256(key + nonce + counter.to_bytes(8, "big")).digest()
-        for b in block:
-            if idx >= len(data):
-                break
-            out[idx] = data[idx] ^ b
-            idx += 1
-        counter += 1
-    return bytes(out)
-
-
 def encrypt_file_bytes(plain: bytes) -> bytes:
-    if plain.startswith(FILE_MAGIC):
-        return plain
-    key = _file_key()
-    nonce = secrets.token_bytes(FILE_NONCE_SIZE)
-    cipher = _xor_stream(plain, key, nonce)
-    tag = hmac.new(key, nonce + cipher, hashlib.sha256).digest()[:FILE_TAG_SIZE]
-    return FILE_MAGIC + nonce + cipher + tag
+    # Server-side file encryption has been disabled to support E2EE.
+    # Back-end must persist file bytes exactly as provided by clients.
+    return plain
 
 
 def decrypt_file_bytes(raw: bytes) -> bytes:
-    if not raw.startswith(FILE_MAGIC):
-        return raw
-    if len(raw) < len(FILE_MAGIC) + FILE_NONCE_SIZE + FILE_TAG_SIZE:
-        return b""
-    body = raw[len(FILE_MAGIC) :]
-    nonce = body[:FILE_NONCE_SIZE]
-    cipher = body[FILE_NONCE_SIZE:-FILE_TAG_SIZE]
-    tag = body[-FILE_TAG_SIZE:]
-    key = _file_key()
-    expected = hmac.new(key, nonce + cipher, hashlib.sha256).digest()[:FILE_TAG_SIZE]
-    if not hmac.compare_digest(tag, expected):
-        return b""
-    return _xor_stream(cipher, key, nonce)
+    # Server-side file decryption has been disabled to support E2EE.
+    return raw
 
 
 def is_allowed_file(filename: str) -> bool:
@@ -175,18 +131,8 @@ async def read_file_content(file_id: str) -> Optional[bytes]:
 
 
 async def encrypt_existing_uploads() -> int:
-    converted = 0
-    for file_path in UPLOAD_DIR.iterdir():
-        if not file_path.is_file():
-            continue
-        async with aiofiles.open(file_path, "rb") as f:
-            raw = await f.read()
-        if raw.startswith(FILE_MAGIC):
-            continue
-        async with aiofiles.open(file_path, "wb") as f:
-            await f.write(encrypt_file_bytes(raw))
-        converted += 1
-    return converted
+    # No-op: migration to server-side encrypted uploads is intentionally disabled.
+    return 0
 
 
 async def cleanup_orphaned_files(db_file_ids: set) -> int:

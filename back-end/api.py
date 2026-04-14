@@ -24,8 +24,6 @@ import asyncio
 import time
 import hashlib
 import secrets
-import base64
-import hmac
 from bson import ObjectId
 import re
 import uuid
@@ -48,7 +46,6 @@ from file_service import (
     delete_file,
     validate_file_access,
     read_file_content,
-    encrypt_existing_uploads,
     MAX_FILE_SIZE,
 )
 
@@ -115,108 +112,29 @@ MAX_PINNED_CHATS = 20
 MAX_CHAT_MESSAGE_LENGTH = 6000
 MAX_AI_MESSAGE_LENGTH = 3000
 MAX_AI_MESSAGES_PER_CHAT = 30
-ENC_PREFIX = "enc:v1:"
-ENC_NONCE_SIZE = 16
-ENC_TAG_SIZE = 16
-LEGACY_BOOTSTRAP_TOKEN = "__bootstrap_migration__"
 
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _derive_enc_key(token: str, scope: str) -> bytes:
-    material = f"{SECRET_KEY}|{scope}".encode("utf-8")
-    return hashlib.sha256(material).digest()
-
-
-def _derive_enc_key_legacy_shared(scope: str) -> bytes:
-    material = f"{SECRET_KEY}|shared|{scope}".encode("utf-8")
-    return hashlib.sha256(material).digest()
-
-
-def _derive_enc_key_legacy_scoped_tokenhash(token: str, scope: str) -> bytes:
-    token_hint = hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()[:16]
-    material = f"{SECRET_KEY}|{scope}|{token_hint}".encode("utf-8")
-    return hashlib.sha256(material).digest()
-
-
-def _derive_enc_key_legacy_token_raw(token: str, scope: str) -> bytes:
-    material = f"{SECRET_KEY}|{token}|{scope}".encode("utf-8")
-    return hashlib.sha256(material).digest()
-
-
-def _xor_stream(data: bytes, key: bytes, nonce: bytes) -> bytes:
-    out = bytearray(len(data))
-    counter = 0
-    idx = 0
-    while idx < len(data):
-        block = hashlib.sha256(key + nonce + counter.to_bytes(8, "big")).digest()
-        for b in block:
-            if idx >= len(data):
-                break
-            out[idx] = data[idx] ^ b
-            idx += 1
-        counter += 1
-    return bytes(out)
-
-
 def encrypt_scoped_text(plain: str, token: str, scope: str) -> str:
-    text = str(plain or "")
-    if not text:
-        return ""
-    key = _derive_enc_key(token, scope)
-    nonce = secrets.token_bytes(ENC_NONCE_SIZE)
-    encrypted = _xor_stream(text.encode("utf-8"), key, nonce)
-    tag = hmac.new(key, nonce + encrypted, hashlib.sha256).digest()[:ENC_TAG_SIZE]
-    payload = base64.urlsafe_b64encode(nonce + encrypted + tag).decode("ascii")
-    return f"{ENC_PREFIX}{payload}"
+    # Server-side text encryption is intentionally disabled for E2EE mode.
+    return str(plain or "")
 
 
 def decrypt_scoped_text(cipher: Any, token: str, scope: str) -> str:
-    value = str(cipher or "")
-    if not value:
-        return ""
-    if not value.startswith(ENC_PREFIX):
-        return value
-    try:
-        raw = base64.urlsafe_b64decode(value[len(ENC_PREFIX) :].encode("ascii"))
-        if len(raw) < ENC_NONCE_SIZE + ENC_TAG_SIZE:
-            return ""
-        nonce = raw[:ENC_NONCE_SIZE]
-        body = raw[ENC_NONCE_SIZE:-ENC_TAG_SIZE]
-        tag = raw[-ENC_TAG_SIZE:]
-        candidate_keys = [
-            _derive_enc_key(token, scope),
-            _derive_enc_key_legacy_shared(scope),
-            _derive_enc_key_legacy_scoped_tokenhash(token, scope),
-            _derive_enc_key_legacy_token_raw(token, scope),
-        ]
-        for key in candidate_keys:
-            expected = hmac.new(key, nonce + body, hashlib.sha256).digest()[:ENC_TAG_SIZE]
-            if not hmac.compare_digest(tag, expected):
-                continue
-            return _xor_stream(body, key, nonce).decode("utf-8", errors="ignore")
-        return ""
-    except Exception:
-        return ""
+    # Server-side text decryption is intentionally disabled for E2EE mode.
+    return str(cipher or "")
 
 
 def is_ciphertext(value: Any) -> bool:
-    return isinstance(value, str) and value.startswith(ENC_PREFIX)
+    # Back-end treats payloads as opaque and never inspects ciphertext format.
+    return False
 
 
 def decrypt_with_fallback(cipher: Any, token: str, scope: str) -> str:
-    if not is_ciphertext(cipher):
-        return str(cipher or "")
-    plain = decrypt_scoped_text(cipher, token, scope)
-    if plain:
-        return plain
-    legacy_plain = decrypt_scoped_text(cipher, LEGACY_BOOTSTRAP_TOKEN, scope)
-    if legacy_plain:
-        return legacy_plain
-    # Prevent empty UI bubbles when decrypt fails for unknown legacy formats.
-    return "🔐"
+    return str(cipher or "")
 
 
 def user_bio_scope(chat_id: str) -> str:
@@ -666,110 +584,11 @@ async def startup_db():
     )
     await cl_ai_chats.create_index([("userId", 1), ("updatedAt", -1)])
     await cl_users.update_many({}, {"$set": {"online": False}})
-    await migrate_unencrypted_messages()
-    await encrypt_existing_uploads()
+    # Server-side encryption migrations are disabled in E2EE mode.
 
 
 async def migrate_unencrypted_messages():
-    async for u in cl_users.find(
-        {
-            "$or": [
-                {"profile.bioEncrypted": {"$ne": True}},
-                {"profile.bio": {"$not": {"$regex": f"^{ENC_PREFIX}"}}},
-            ]
-        }
-    ):
-        chat_id = str(u.get("chatId") or "")
-        if not chat_id:
-            continue
-        bio = str(((u.get("profile") or {}).get("bio")) or "")
-        encrypted_bio = (
-            encrypt_scoped_text(bio, LEGACY_BOOTSTRAP_TOKEN, user_bio_scope(chat_id))
-            if bio and not is_ciphertext(bio)
-            else bio
-        )
-        await cl_users.update_one(
-            {"_id": u["_id"]},
-            {
-                "$set": {
-                    "profile.bio": encrypted_bio,
-                    "profile.bioEncrypted": True,
-                }
-            },
-        )
-
-    async for m in cl_messages.find(
-        {"$or": [{"textEncrypted": {"$ne": True}}, {"text": {"$not": {"$regex": f"^{ENC_PREFIX}"}}}]}
-    ):
-        chat_scope = f"chat:{m.get('chatId', '')}"
-        updates: Dict[str, Any] = {"textEncrypted": True}
-        txt = str(m.get("text") or "")
-        if txt and not is_ciphertext(txt):
-            updates["text"] = encrypt_scoped_text(txt, LEGACY_BOOTSTRAP_TOKEN, chat_scope)
-        reply = m.get("replyTo")
-        if isinstance(reply, dict):
-            r_txt = str(reply.get("text") or "")
-            if r_txt and not is_ciphertext(r_txt):
-                updates["replyTo"] = {
-                    **reply,
-                    "text": encrypt_scoped_text(
-                        r_txt, LEGACY_BOOTSTRAP_TOKEN, chat_scope
-                    ),
-                }
-        reasoning = str(m.get("reasoningContent") or "")
-        if reasoning and not is_ciphertext(reasoning):
-            updates["reasoningContent"] = encrypt_scoped_text(
-                reasoning, LEGACY_BOOTSTRAP_TOKEN, chat_scope
-            )
-        if updates:
-            await cl_messages.update_one({"_id": m["_id"]}, {"$set": updates})
-
-    async for m in cl_ai_messages.find(
-        {"$or": [{"contentEncrypted": {"$ne": True}}, {"content": {"$not": {"$regex": f"^{ENC_PREFIX}"}}}]}
-    ):
-        ai_scope = f"ai:{m.get('aiChatId', '')}"
-        updates = {"contentEncrypted": True}
-        content = str(m.get("content") or "")
-        if content and not is_ciphertext(content):
-            updates["content"] = encrypt_scoped_text(
-                content, LEGACY_BOOTSTRAP_TOKEN, ai_scope
-            )
-        reasoning = str(m.get("reasoningContent") or "")
-        if reasoning and not is_ciphertext(reasoning):
-            updates["reasoningContent"] = encrypt_scoped_text(
-                reasoning, LEGACY_BOOTSTRAP_TOKEN, ai_scope
-            )
-        if updates:
-            await cl_ai_messages.update_one({"_id": m["_id"]}, {"$set": updates})
-
-    async for c in cl_ai_chats.find(
-        {
-            "$or": [
-                {"titleEncrypted": {"$ne": True}},
-                {"summaryEncrypted": {"$ne": True}},
-                {"title": {"$not": {"$regex": f"^{ENC_PREFIX}"}}},
-                {"summary": {"$not": {"$regex": f"^{ENC_PREFIX}"}}},
-            ]
-        }
-    ):
-        chat_id = str(c.get("_id"))
-        scope = f"ai-chat-meta:{chat_id}"
-        updates: Dict[str, Any] = {
-            "titleEncrypted": True,
-            "summaryEncrypted": True,
-        }
-        title = str(c.get("title") or "")
-        summary = str(c.get("summary") or "")
-        if title and not is_ciphertext(title):
-            updates["title"] = encrypt_scoped_text(
-                title, LEGACY_BOOTSTRAP_TOKEN, scope
-            )
-        if summary and not is_ciphertext(summary):
-            updates["summary"] = encrypt_scoped_text(
-                summary, LEGACY_BOOTSTRAP_TOKEN, scope
-            )
-        if updates:
-            await cl_ai_chats.update_one({"_id": c["_id"]}, {"$set": updates})
+    return
 
 
 @app.get("/profile/me/pins")
