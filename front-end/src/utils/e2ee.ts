@@ -126,9 +126,19 @@ const fromBase64Url = (value: string): Uint8Array => {
     return out;
 };
 
+const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
+    const view = bytes as Uint8Array<ArrayBufferLike>;
+    if (view.buffer instanceof ArrayBuffer) {
+        return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
+    }
+    const out = new Uint8Array(view.byteLength);
+    out.set(view);
+    return out.buffer;
+};
+
 const sha256 = async (bytes: Uint8Array): Promise<Uint8Array> => {
     if (typeof crypto !== 'undefined' && crypto.subtle) {
-        const digest = await crypto.subtle.digest('SHA-256', bytes);
+        const digest = await crypto.subtle.digest('SHA-256', toArrayBuffer(bytes));
         return new Uint8Array(digest);
     }
     return sha256Fallback(bytes);
@@ -165,8 +175,8 @@ const xorStream = async (data: Uint8Array, key: Uint8Array, nonce: Uint8Array): 
 
 const hmacTag = async (keyBytes: Uint8Array, payload: Uint8Array): Promise<Uint8Array> => {
     if (typeof crypto !== 'undefined' && crypto.subtle) {
-        const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-        const mac = await crypto.subtle.sign('HMAC', key, payload);
+        const key = await crypto.subtle.importKey('raw', toArrayBuffer(keyBytes), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+        const mac = await crypto.subtle.sign('HMAC', key, toArrayBuffer(payload));
         return new Uint8Array(mac).slice(0, ENC_TAG_SIZE);
     }
     return hmacSha256Fallback(keyBytes, payload).slice(0, ENC_TAG_SIZE);
