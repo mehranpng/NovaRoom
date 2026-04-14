@@ -2,6 +2,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { API_BASE_URL } from '../config/api';
 import type { FileMetadata } from '../types';
+import { decryptScopedText, encryptScopedText } from '../utils/e2ee';
 
 interface UseWebSocketProps {
     token: string | null;
@@ -41,6 +42,7 @@ const WS_RECONNECT_DELAY_MS = 1500;
 const WS_PONG_TIMEOUT_MS = 45000;
 const WS_MAX_RECONNECT_ATTEMPTS = 8;
 const MAX_CHAT_MESSAGE_LENGTH = 6000;
+const LEGACY_BOOTSTRAP_TOKEN = 'bootstrap:v1';
 
 export function useWebSocket({
     token,
@@ -104,6 +106,16 @@ export function useWebSocket({
     useEffect(() => { onAIStreamStartRef.current = onAIStreamStart; }, [onAIStreamStart]);
     useEffect(() => { onAIStreamChunkRef.current = onAIStreamChunk; }, [onAIStreamChunk]);
     useEffect(() => { onAIStreamDoneRef.current = onAIStreamDone; }, [onAIStreamDone]);
+
+    const decryptForScopes = useCallback(async (value: string, scopes: string[]) => {
+        for (const scope of scopes) {
+            const plain = await decryptScopedText(value, token || '', scope);
+            if (plain !== '🔐') return plain;
+            const fallback = await decryptScopedText(value, LEGACY_BOOTSTRAP_TOKEN, scope);
+            if (fallback !== '🔐') return fallback;
+        }
+        return value;
+    }, [token]);
 
     const rejectAllPendingRequests = useCallback((reason: string) => {
         for (const [, pending] of pendingRequestsRef.current) {
@@ -179,11 +191,23 @@ export function useWebSocket({
         };
 
         ws.onmessage = (event) => {
-            try {
+            (async () => {
                 const data = JSON.parse(event.data);
                 if (data.type === 'new_message') {
+                    if (typeof data?.message?.text === 'string' && data.chatId) {
+                        data.message.text = await decryptForScopes(data.message.text, [`chat:${data.chatId}`]);
+                    }
+                    if (typeof data?.message?.reasoningContent === 'string' && data.chatId) {
+                        data.message.reasoningContent = await decryptForScopes(data.message.reasoningContent, [`chat:${data.chatId}`]);
+                    }
+                    if (typeof data?.message?.replyTo?.text === 'string' && data.chatId) {
+                        data.message.replyTo.text = await decryptForScopes(data.message.replyTo.text, [`chat:${data.chatId}`]);
+                    }
                     onNewMessageRef.current(data.chatId, data.message);
                 } else if (data.type === 'message_edited') {
+                    if (typeof data?.message?.text === 'string' && data.chatId) {
+                        data.message.text = await decryptForScopes(data.message.text, [`chat:${data.chatId}`]);
+                    }
                     onMessageEditedRef.current?.(data.chatId, data.message);
                 } else if (data.type === 'message_deleted') {
                     onMessageDeletedRef.current?.(data.chatId, data.messageId, data.lastMessage);
@@ -196,6 +220,12 @@ export function useWebSocket({
                 } else if (data.type === 'typing') {
                     onTypingStatusRef.current?.(data.chatId, data.userId, Boolean(data.isTyping));
                 } else if (data.type === 'ai_response') {
+                    if (typeof data?.message?.text === 'string' && data?.message?.aiChatId) {
+                        data.message.text = await decryptForScopes(data.message.text, [`ai:${data.message.aiChatId}`]);
+                    }
+                    if (typeof data?.message?.reasoningContent === 'string' && data?.message?.aiChatId) {
+                        data.message.reasoningContent = await decryptForScopes(data.message.reasoningContent, [`ai:${data.message.aiChatId}`]);
+                    }
                     onAINewMessageRef.current?.(data.message);
                 } else if (data.type === 'ai_response_start') {
                     onAIStreamStartRef.current?.(data.message);
@@ -233,9 +263,9 @@ export function useWebSocket({
                         pending.resolve(data);
                     }
                 }
-            } catch (err) {
+            })().catch((err) => {
                 console.error('WebSocket message parse error:', err);
-            }
+            });
         };
 
         ws.onclose = () => {
@@ -283,9 +313,13 @@ export function useWebSocket({
             if (typeof text !== 'string') return false;
             if (text.length > MAX_CHAT_MESSAGE_LENGTH) return false;
             if (!chatId || (!text.trim() && !file)) return false;
-            return send({ type: 'message', chatId, text, replyToId, file });
+            void (async () => {
+                const encryptedText = await encryptScopedText(text, token || '', `chat:${chatId}`);
+                return send({ type: 'message', chatId, text: encryptedText, replyToId, file });
+            })();
+            return true;
         },
-        [send]
+        [send, token]
     );
 
     const editMessage = useCallback(
@@ -293,9 +327,13 @@ export function useWebSocket({
             if (typeof text !== 'string') return false;
             if (text.length > MAX_CHAT_MESSAGE_LENGTH) return false;
             if (!chatId || !messageId || !text.trim()) return false;
-            return send({ type: 'edit_message', chatId, messageId, text });
+            void (async () => {
+                const encryptedText = await encryptScopedText(text, token || '', `chat:${chatId}`);
+                return send({ type: 'edit_message', chatId, messageId, text: encryptedText });
+            })();
+            return true;
         },
-        [send]
+        [send, token]
     );
 
     const deleteMessage = useCallback(
@@ -326,9 +364,13 @@ export function useWebSocket({
         (text: string, aiChatId: string, clientId?: string, useReasoner = false) => {
             if (typeof text !== 'string' || !text.trim() || text.length > 3000) return false;
             if (!aiChatId) return false;
-            return send({ type: 'ai_message', text, aiChatId, clientId, useReasoner: Boolean(useReasoner) });
+            void (async () => {
+                const encryptedText = await encryptScopedText(text, token || '', `ai:${aiChatId}`);
+                return send({ type: 'ai_message', text: encryptedText, aiChatId, clientId, useReasoner: Boolean(useReasoner) });
+            })();
+            return true;
         },
-        [send]
+        [send, token]
     );
 
     const stopAIGeneration = useCallback(() => {

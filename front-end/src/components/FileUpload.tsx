@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import type { FileMetadata } from '../types';
 import { API_BASE_URL } from '../config/api';
 import { validateFileSize } from '../utils/fileUtils';
+import { encryptFileBytes } from '../utils/e2ee';
 
 interface FileUploadProps {
     token: string;
@@ -169,8 +170,6 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         setUploading(true);
         setUploadProgress(0);
 
-        const formData = new FormData();
-        formData.append('file', file);
         const task: UploadTask = {
             status: 'uploading',
             fileName: file.name,
@@ -180,6 +179,11 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         uploadTasksByChat.set(chatId, task);
 
         try {
+            const rawBytes = new Uint8Array(await file.arrayBuffer());
+            const encryptedBytes = await encryptFileBytes(rawBytes);
+            const encryptedFile = new File([encryptedBytes], file.name, { type: file.type || 'application/octet-stream' });
+            const formData = new FormData();
+            formData.append('file', encryptedFile);
             const xhr = new XMLHttpRequest();
 
             // Track upload progress
