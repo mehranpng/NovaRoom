@@ -41,11 +41,13 @@ export interface FileMetadata {
 
 export interface Message {
     id: string;
+    clientId?: string;
     chatId: string;
     senderId: string;
     text: string;
     timestamp: number;
     seen: boolean;
+    deliveryStatus?: 'sending' | 'sent';
     replyTo?: MessageReply;
     edited?: boolean;
     reactions?: MessageReaction[];

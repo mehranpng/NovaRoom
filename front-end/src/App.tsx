@@ -458,8 +458,18 @@ export function App() {
     // WebSocket handlers wrapped in useCallback to prevent infinite reconnection loops
     const handleNewMessage = useCallback((chatId: string, newMsg: Message) => {
         let isDuplicateMessage = false;
+        let replacedOptimisticMine = false;
         setMessages(prev => {
             const currentMessages = prev[chatId] || [];
+            if (newMsg.clientId) {
+                const optimisticIdx = currentMessages.findIndex((m) => m.id === newMsg.clientId && m.deliveryStatus === 'sending');
+                if (optimisticIdx !== -1) {
+                    replacedOptimisticMine = true;
+                    const nextMessages = [...currentMessages];
+                    nextMessages[optimisticIdx] = { ...newMsg, deliveryStatus: 'sent' };
+                    return { ...prev, [chatId]: nextMessages.slice(-MESSAGE_WINDOW_LIMIT) };
+                }
+            }
             if (currentMessages.some(m => m.id === newMsg.id)) {
                 isDuplicateMessage = true;
                 return prev;
@@ -473,6 +483,13 @@ export function App() {
         // Prevent double unread increments / duplicated chat-lastMessage updates
         // when the same message event is delivered more than once.
         if (isDuplicateMessage) return;
+
+        if (replacedOptimisticMine) {
+            playChatSound('send');
+            if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                navigator.vibrate(12);
+            }
+        }
 
         const hasChat = chatsRef.current.some(c => c.id === chatId);
         if (!hasChat) {
@@ -1143,6 +1160,50 @@ export function App() {
     const handleSendMessage = useCallback(async (payload: { text: string; replyToId?: string; editMessageId?: string; file?: FileMetadata }) => {
         if (!currentUser) return;
         const text = payload.text;
+        const makeClientId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const pushOptimisticMessage = (targetChatId: string, clientId: string) => {
+            const now = Date.now();
+            const sourceMessages = messages[targetChatId] || [];
+            const replySrc = payload.replyToId ? sourceMessages.find((m) => m.id === payload.replyToId) : null;
+            const optimistic: Message = {
+                id: clientId,
+                clientId,
+                chatId: targetChatId,
+                senderId: currentUser.chatId,
+                text: text || '',
+                timestamp: now,
+                seen: false,
+                deliveryStatus: 'sending',
+                edited: false,
+                reactions: [],
+                file: payload.file,
+                replyTo: replySrc ? { id: replySrc.id, senderId: replySrc.senderId, text: replySrc.text } : undefined,
+            };
+            setMessages((prev) => ({
+                ...prev,
+                [targetChatId]: [...(prev[targetChatId] || []), optimistic].slice(-MESSAGE_WINDOW_LIMIT),
+            }));
+            setChats((prev) => prev.map((chat) => (
+                chat.id === targetChatId
+                    ? {
+                        ...chat,
+                        lastMessage: {
+                            id: clientId,
+                            text: text || '',
+                            senderId: currentUser.chatId,
+                            timestamp: now,
+                            file: payload.file,
+                        },
+                    }
+                    : chat
+            )));
+        };
+        const removeOptimisticMessage = (targetChatId: string, clientId: string) => {
+            setMessages((prev) => ({
+                ...prev,
+                [targetChatId]: (prev[targetChatId] || []).filter((m) => m.id !== clientId),
+            }));
+        };
 
         if (payload.editMessageId) {
             if (!activeChatId) return;
@@ -1153,9 +1214,13 @@ export function App() {
 
         const savedMessagesId = `saved_messages_${currentUser.chatId}`;
         if (activeChatId === savedMessagesId) {
-            const success = await sendViaWS(savedMessagesId, text, payload.replyToId, payload.file);
-            if (!success) console.warn('WebSocket not connected');
-            if (success) playChatSound('send');
+            const clientId = makeClientId();
+            pushOptimisticMessage(savedMessagesId, clientId);
+            const success = await sendViaWS(savedMessagesId, text, payload.replyToId, payload.file, clientId);
+            if (!success) {
+                console.warn('WebSocket not connected');
+                removeOptimisticMessage(savedMessagesId, clientId);
+            }
             loadChats(false);
             return;
         }
@@ -1191,9 +1256,13 @@ export function App() {
                 setView('chatRoom');
                 navigate(`/chat/${encodeURIComponent(createdChatId)}`, { replace: true });
 
-                const success = await sendViaWS(createdChatId, text, payload.replyToId, payload.file);
-                if (!success) console.warn('WebSocket not connected');
-                if (success) playChatSound('send');
+                const clientId = makeClientId();
+                pushOptimisticMessage(createdChatId, clientId);
+                const success = await sendViaWS(createdChatId, text, payload.replyToId, payload.file, clientId);
+                if (!success) {
+                    console.warn('WebSocket not connected');
+                    removeOptimisticMessage(createdChatId, clientId);
+                }
 
                 loadChats(false);
                 return;
@@ -1209,10 +1278,14 @@ export function App() {
         const activeChat = chats.find((c) => c.id === activeChatId);
         if (activeChat?.chatType !== 'group' && isBlockedDirectTarget(activeChat?.otherUser)) return;
 
-        const success = await sendViaWS(activeChatId, text, payload.replyToId, payload.file);
-        if (!success) console.warn('WebSocket not connected');
-        if (success) playChatSound('send');
-    }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, playChatSound, navigate, chats, isUserBlocked]);
+        const clientId = makeClientId();
+        pushOptimisticMessage(activeChatId, clientId);
+        const success = await sendViaWS(activeChatId, text, payload.replyToId, payload.file, clientId);
+        if (!success) {
+            console.warn('WebSocket not connected');
+            removeOptimisticMessage(activeChatId, clientId);
+        }
+    }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, navigate, chats, isUserBlocked, messages]);
 
     const handleDeleteMessage = useCallback((messageId: string) => {
         if (!activeChatId) return;

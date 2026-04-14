@@ -2835,6 +2835,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 chat_id_target = data.get("chatId")
                 text = data.get("text", "")
                 reply_to_id = data.get("replyToId")
+                client_id = data.get("clientId")
                 file_data = data.get("file")  # File metadata from upload endpoint
                 if not isinstance(text, str):
                     continue
@@ -2948,6 +2949,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "edited": False,
                             "reactions": [],
                             "file": file_data,
+                            "clientId": client_id if isinstance(client_id, str) else None,
                         },
                     }
 

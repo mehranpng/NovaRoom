@@ -24,7 +24,7 @@ interface UseWebSocketProps {
 }
 
 type OutgoingEvent =
-    | { type: 'message'; chatId: string; text: string; replyToId?: string; file?: FileMetadata }
+    | { type: 'message'; chatId: string; text: string; replyToId?: string; file?: FileMetadata; clientId?: string }
     | { type: 'edit_message'; chatId: string; messageId: string; text: string }
     | { type: 'delete_message'; chatId: string; messageId: string }
     | { type: 'seen'; chatId: string }
@@ -287,12 +287,12 @@ export function useWebSocket({
     );
 
     const sendMessage = useCallback(
-        async (chatId: string, text: string, replyToId?: string, file?: FileMetadata) => {
+        async (chatId: string, text: string, replyToId?: string, file?: FileMetadata, clientId?: string) => {
             if (typeof text !== 'string') return false;
             if (text.length > MAX_CHAT_MESSAGE_LENGTH) return false;
             if (!chatId || (!text.trim() && !file)) return false;
             const encryptedText = text.trim() ? await encryptChatTextClientSide(text, token || '', chatId) : '';
-            return send({ type: 'message', chatId, text: encryptedText, replyToId, file });
+            return send({ type: 'message', chatId, text: encryptedText, replyToId, file, clientId });
         },
         [send, token]
     );

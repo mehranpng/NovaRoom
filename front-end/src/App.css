@@ -1664,6 +1664,16 @@ body,
     opacity: 1;
 }
 
+.message-pending-indicator {
+    font-size: 12px;
+    font-weight: 700;
+    opacity: 0.9;
+    margin-left: 2px;
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
+}
+
 .chat-room__input-area {
     border-top: 1px solid var(--border-primary);
     background: var(--bg-primary);

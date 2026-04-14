@@ -2266,9 +2266,13 @@ export function ChatRoom({
                                                 <span className="message-time">{formatMessageTime(m.timestamp)}</span>
                                                 {m.edited && <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>ویرایش شده</span>}
                                                 {isMine && (
-                                                    <span className={isSeenForUi ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
-                                                        {isSeenForUi ? '✓✓' : '✓'}
-                                                    </span>
+                                                    m.deliveryStatus === 'sending'
+                                                        ? <span className="message-pending-indicator" aria-label="در حال ارسال">◷</span>
+                                                        : (
+                                                            <span className={isSeenForUi ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
+                                                                {isSeenForUi ? '✓✓' : '✓'}
+                                                            </span>
+                                                        )
                                                 )}
                                             </div>
                                         </div>
