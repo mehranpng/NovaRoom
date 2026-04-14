@@ -17,6 +17,7 @@ import { MusicPlayerProvider } from './contexts/MusicPlayerContext';
 import { cx } from './utils/cx';
 import { NotificationCenter } from './components/NotificationCenter';
 import { notify } from './utils/notificationBus';
+import { decryptTextFromTransport, encryptTextForTransport } from './utils/e2ee';
 import './App.css';
 
 const normalizeTimestamp = (ts: unknown): number => {
@@ -39,6 +40,15 @@ const mergeMessages = (base: Message[], incoming: Message[], mode: 'replace' | '
     for (const m of combined) byId.set(m.id, m);
     return Array.from(byId.values()).sort((a, b) => normalizeTimestamp(a.timestamp) - normalizeTimestamp(b.timestamp));
 };
+
+const decryptMessagePayload = (msg: Message): Message => ({
+    ...msg,
+    text: decryptTextFromTransport(msg.text),
+    replyTo: msg.replyTo ? { ...msg.replyTo, text: decryptTextFromTransport(msg.replyTo.text) } : msg.replyTo,
+    reasoningContent: typeof msg.reasoningContent === 'string'
+        ? decryptTextFromTransport(msg.reasoningContent)
+        : msg.reasoningContent,
+});
 
 export function App() {
     const MESSAGE_PAGE_SIZE = 50;
@@ -291,7 +301,7 @@ export function App() {
                     ...msg,
                     chatId: msg.aiChatId ?? activeAIChatId,
                     seen: true,
-                }));
+                })).map((msg: Message) => decryptMessagePayload(msg));
                 setAIMessagesByChat((prev) => ({ ...prev, [activeAIChatId]: messagesWithChatId }));
                 const pending = [...messagesWithChatId].reverse().find((m) => m.senderId === 'ai' && m.isStreaming);
                 if (pending) {
@@ -333,10 +343,12 @@ export function App() {
                         lastMessage: { id: '', text: '', senderId: '', timestamp: pinnedTs },
                     } as Chat;
                 }
+                const decryptedLastText = decryptTextFromTransport(c.lastMessage.text);
                 return {
                     ...c,
                     lastMessage: {
                         ...c.lastMessage,
+                        text: decryptedLastText,
                         timestamp: normalizeTimestamp(c.lastMessage.timestamp),
                     },
                 } as Chat;
@@ -447,7 +459,8 @@ export function App() {
     }, [currentUser?.chatId]);
 
     // WebSocket handlers wrapped in useCallback to prevent infinite reconnection loops
-    const handleNewMessage = useCallback((chatId: string, newMsg: Message) => {
+    const handleNewMessage = useCallback((chatId: string, incomingMsg: Message) => {
+        const newMsg = decryptMessagePayload(incomingMsg);
         let isDuplicateMessage = false;
         setMessages(prev => {
             const currentMessages = prev[chatId] || [];
@@ -497,7 +510,7 @@ export function App() {
                     ...chat,
                     lastMessage: {
                         id: newMsg.id,
-                        text: newMsg.text,
+                        text: decryptTextFromTransport(newMsg.text),
                         senderId: newMsg.senderId,
                         timestamp: newMsg.timestamp,
                         file: newMsg.file,
@@ -508,7 +521,8 @@ export function App() {
         });
     }, [currentUser?.chatId, loadChats, playChatSound]);
 
-    const handleMessageEdited = useCallback((chatId: string, updated: Message) => {
+    const handleMessageEdited = useCallback((chatId: string, incomingUpdated: Message) => {
+        const updated = decryptMessagePayload(incomingUpdated);
         setMessages(prev => {
             const arr = prev[chatId];
             if (!arr) return prev;
@@ -525,7 +539,7 @@ export function App() {
                 ...c,
                 lastMessage: {
                     ...(c.lastMessage as ChatLastMessage),
-                    text: updated.text,
+                    text: decryptTextFromTransport(updated.text),
                 }
             };
         }));
@@ -548,6 +562,7 @@ export function App() {
                     ...c,
                     lastMessage: {
                         ...lastMessage,
+                        text: decryptTextFromTransport(lastMessage.text),
                         timestamp: normalizeTimestamp(lastMessage.timestamp),
                     }
                 };
@@ -861,7 +876,8 @@ export function App() {
         if (params?.cursorId) qs.set('cursor_id', params.cursorId);
 
         const res = await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages?${qs.toString()}`);
-        const chunk: Message[] = Array.isArray(res?.messages) ? res.messages : [];
+        const chunk: Message[] = (Array.isArray(res?.messages) ? res.messages : [])
+            .map((msg: Message) => decryptMessagePayload(msg));
 
         setMessages((prev) => {
             const merged = mergeMessages(prev[chatId] || [], chunk, mode);
@@ -1130,17 +1146,18 @@ export function App() {
     const handleSendMessage = useCallback(async (payload: { text: string; replyToId?: string; editMessageId?: string; file?: FileMetadata }) => {
         if (!currentUser) return;
         const text = payload.text;
+        const encryptedText = encryptTextForTransport(text);
 
         if (payload.editMessageId) {
             if (!activeChatId) return;
-            const success = editViaWS(activeChatId, payload.editMessageId, text);
+            const success = editViaWS(activeChatId, payload.editMessageId, encryptedText);
             if (!success) console.warn('WebSocket not connected');
             return;
         }
 
         const savedMessagesId = `saved_messages_${currentUser.chatId}`;
         if (activeChatId === savedMessagesId) {
-            const success = sendViaWS(savedMessagesId, text, payload.replyToId, payload.file);
+            const success = sendViaWS(savedMessagesId, encryptedText, payload.replyToId, payload.file);
             if (!success) console.warn('WebSocket not connected');
             if (success) playChatSound('send');
             loadChats(false);
@@ -1178,7 +1195,7 @@ export function App() {
                 setView('chatRoom');
                 navigate(`/chat/${encodeURIComponent(createdChatId)}`, { replace: true });
 
-                const success = sendViaWS(createdChatId, text, payload.replyToId, payload.file);
+                const success = sendViaWS(createdChatId, encryptedText, payload.replyToId, payload.file);
                 if (!success) console.warn('WebSocket not connected');
                 if (success) playChatSound('send');
 
@@ -1196,7 +1213,7 @@ export function App() {
         const activeChat = chats.find((c) => c.id === activeChatId);
         if (activeChat?.chatType !== 'group' && isBlockedDirectTarget(activeChat?.otherUser)) return;
 
-        const success = sendViaWS(activeChatId, text, payload.replyToId, payload.file);
+        const success = sendViaWS(activeChatId, encryptedText, payload.replyToId, payload.file);
         if (!success) console.warn('WebSocket not connected');
         if (success) playChatSound('send');
     }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, playChatSound, navigate, chats, isUserBlocked]);

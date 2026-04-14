@@ -4,6 +4,7 @@ import { Download, Play, Pause } from 'lucide-react';
 import { API_BASE_URL } from '../config/api';
 import { useState, useEffect, useRef } from 'react';
 import { useMusicPlayer } from '../contexts/MusicPlayerContext';
+import { decryptFileBytesFromTransport } from '../utils/e2ee';
 
 interface FileMessageProps {
     file: FileMetadata;
@@ -52,6 +53,19 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
     const rawCoverFileId = (file as any).coverArtFileId || (file as any)?.meta?.coverArtFileId || (file as any)?.metadata?.coverArtFileId;
     const rawCoverUrl = (file.coverArtUrl || (file as any).coverUrl || (file as any)?.meta?.coverArtUrl || (file as any)?.metadata?.coverArtUrl || '').trim();
 
+    const fetchDecodedBlob = async (targetFileId: string): Promise<Blob> => {
+        const response = await fetch(`${API_BASE_URL}/files/${targetFileId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to load file');
+        const encrypted = new Uint8Array(await response.arrayBuffer());
+        const decoded = decryptFileBytesFromTransport(encrypted);
+        const mimeType = targetFileId === file.fileId
+            ? (file.mimeType || 'application/octet-stream')
+            : 'application/octet-stream';
+        return new Blob([decoded], { type: mimeType });
+    };
+
     useEffect(() => {
         if (!isImage) return;
         let objectUrl: string | null = null;
@@ -60,11 +74,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
             try {
                 setImageLoading(true);
                 setImageError(false);
-                const response = await fetch(`${API_BASE_URL}/files/${file.fileId}`, {
-                    headers: { 'Authorization': `Bearer ${token}` },
-                });
-                if (!response.ok) throw new Error('Failed to load image');
-                const blob = await response.blob();
+                const blob = await fetchDecodedBlob(file.fileId);
                 if (!cancelled) {
                     objectUrl = window.URL.createObjectURL(blob);
                     setImageUrl(objectUrl);
@@ -94,11 +104,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
             try {
                 setAudioLoading(true);
                 setAudioError(false);
-                const response = await fetch(`${API_BASE_URL}/files/${file.fileId}`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                if (!response.ok) throw new Error('Failed to load audio');
-                const blob = await response.blob();
+                const blob = await fetchDecodedBlob(file.fileId);
                 if (!cancelled) {
                     objectUrl = window.URL.createObjectURL(blob);
                     setAudioUrl(objectUrl);
@@ -131,11 +137,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
         let cancelled = false;
         const loadCover = async () => {
             try {
-                const response = await fetch(`${API_BASE_URL}/files/${rawCoverFileId}`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                if (!response.ok) throw new Error('Failed to load cover');
-                const blob = await response.blob();
+                const blob = await fetchDecodedBlob(rawCoverFileId);
                 if (!cancelled) {
                     objectUrl = window.URL.createObjectURL(blob);
                     setCoverUrl(objectUrl);
@@ -160,11 +162,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
             try {
                 setVideoLoading(true);
                 setVideoError(false);
-                const response = await fetch(`${API_BASE_URL}/files/${file.fileId}`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                if (!response.ok) throw new Error('Failed to load video');
-                const blob = await response.blob();
+                const blob = await fetchDecodedBlob(file.fileId);
                 if (!cancelled) {
                     objectUrl = window.URL.createObjectURL(blob);
                     setVideoUrl(objectUrl);
@@ -189,11 +187,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
 
     const handleDownload = async () => {
         try {
-            const response = await fetch(`${API_BASE_URL}/files/${file.fileId}`, {
-                headers: { 'Authorization': `Bearer ${token}` },
-            });
-            if (!response.ok) throw new Error('Download failed');
-            const blob = await response.blob();
+            const blob = await fetchDecodedBlob(file.fileId);
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;

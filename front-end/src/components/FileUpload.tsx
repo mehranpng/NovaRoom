@@ -3,6 +3,7 @@ import { File, Image, Music2, Paperclip, Video } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { FileMetadata } from '../types';
 import { API_BASE_URL } from '../config/api';
+import { encryptFileBytesForTransport } from '../utils/e2ee';
 import { validateFileSize } from '../utils/fileUtils';
 
 interface FileUploadProps {
@@ -170,7 +171,14 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         setUploadProgress(0);
 
         const formData = new FormData();
-        formData.append('file', file);
+        const raw = new Uint8Array(await file.arrayBuffer());
+        const encrypted = encryptFileBytesForTransport(raw);
+        const encryptedBlob = new Blob([encrypted], { type: 'application/octet-stream' });
+        const encryptedFile = new File([encryptedBlob], file.name, {
+            type: 'application/octet-stream',
+            lastModified: file.lastModified,
+        });
+        formData.append('file', encryptedFile);
         const task: UploadTask = {
             status: 'uploading',
             fileName: file.name,
@@ -197,6 +205,9 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                 if (xhr.status === 200) {
                     const response = JSON.parse(xhr.responseText);
                     if (response.success && response.file) {
+                        response.file.mimeType = file.type || response.file.mimeType;
+                        response.file.fileSize = file.size;
+                        response.file.e2ee = true;
                         task.status = 'done';
                         task.progress = 100;
                         setUploadProgress(100);
