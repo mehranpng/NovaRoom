@@ -196,15 +196,15 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
             const response = await fetch(`${API_BASE_URL}/files/${fileId}`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
-            if (!response.ok) throw new Error('Failed to load avatar');
+            if (!response.ok) return;
             const blob = await response.blob();
+            if (!blob || blob.size === 0) return;
             if (openedImageObjectUrlRef.current) URL.revokeObjectURL(openedImageObjectUrlRef.current);
             const objectUrl = URL.createObjectURL(blob);
             openedImageObjectUrlRef.current = objectUrl;
             setOpenedProfileImage({ url: objectUrl, fileId });
         } catch (error) {
-            console.error(error);
-            alert('نمایش تصویر پروفایل ممکن نبود');
+            console.debug('Profile avatar preview skipped:', error);
         }
     };
 

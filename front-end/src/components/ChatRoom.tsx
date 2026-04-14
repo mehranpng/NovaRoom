@@ -399,6 +399,7 @@ export function ChatRoom({
 
     const prevLenRef = useRef(0);
     const pendingOlderAdjustRef = useRef<{ prevHeight: number; prevTop: number } | null>(null);
+    const pendingOlderAnchorRef = useRef<{ messageId: string; top: number } | null>(null);
     const pendingRangeLoadTypeRef = useRef<'older' | 'newer' | null>(null);
     const openedAtRef = useRef<number>(Date.now());
     const initialScrollDoneRef = useRef(false);
@@ -1206,6 +1207,7 @@ export function ChatRoom({
         setLocalLoadingOlder(false);
         setLocalLoadingNewer(false);
         pendingOlderAdjustRef.current = null;
+        pendingOlderAnchorRef.current = null;
         pendingRangeLoadTypeRef.current = null;
     }, [chatId]);
 
@@ -1311,13 +1313,25 @@ export function ChatRoom({
             && !loadingOlderMessages
             && pendingOlderAdjustRef.current;
         if (finishedOlderRangeLoad) {
-            const snap = pendingOlderAdjustRef.current;
-            if (snap && added > 0) {
-                const delta = container.scrollHeight - snap.prevHeight;
-                markProgrammaticScroll();
-                container.scrollTop = snap.prevTop + Math.max(0, delta);
+            const anchor = pendingOlderAnchorRef.current;
+            if (anchor && added > 0) {
+                const anchorEl = messageElsRef.current.get(anchor.messageId);
+                if (anchorEl) {
+                    const nextTop = anchorEl.getBoundingClientRect().top;
+                    const delta = nextTop - anchor.top;
+                    markProgrammaticScroll();
+                    container.scrollTop += delta;
+                }
+            } else {
+                const snap = pendingOlderAdjustRef.current;
+                if (snap && added > 0) {
+                    const delta = container.scrollHeight - snap.prevHeight;
+                    markProgrammaticScroll();
+                    container.scrollTop = snap.prevTop + Math.max(0, delta);
+                }
             }
             pendingOlderAdjustRef.current = null;
+            pendingOlderAnchorRef.current = null;
             pendingRangeLoadTypeRef.current = null;
             prevLenRef.current = messages.length;
             return;
@@ -1388,9 +1402,21 @@ export function ChatRoom({
         if (container.scrollTop <= 48 && hasOlderMessages && !loadingOlderMessages && !localLoadingOlder) {
             pendingRangeLoadTypeRef.current = 'older';
             pendingOlderAdjustRef.current = { prevHeight: container.scrollHeight, prevTop: container.scrollTop };
+            const containerRect = container.getBoundingClientRect();
+            let anchor: { messageId: string; top: number } | null = null;
+            for (const msg of messages) {
+                const el = messageElsRef.current.get(msg.id);
+                if (!el) continue;
+                const rect = el.getBoundingClientRect();
+                if (rect.bottom >= containerRect.top + 8) {
+                    anchor = { messageId: msg.id, top: rect.top };
+                    break;
+                }
+            }
+            pendingOlderAnchorRef.current = anchor;
             setLocalLoadingOlder(true);
             Promise.resolve(onLoadOlderMessages?.(chatId)).finally(() => {
-                setLocalLoadingOlder(false);
+                window.setTimeout(() => setLocalLoadingOlder(false), 180);
             });
         }
         const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
@@ -1398,7 +1424,7 @@ export function ChatRoom({
             pendingRangeLoadTypeRef.current = 'newer';
             setLocalLoadingNewer(true);
             Promise.resolve(onLoadNewerMessages?.(chatId)).finally(() => {
-                setLocalLoadingNewer(false);
+                window.setTimeout(() => setLocalLoadingNewer(false), 180);
             });
         }
     };
@@ -2011,7 +2037,7 @@ export function ChatRoom({
                     {loading ? <ChatMessagesSkeleton /> : (
                         <>
                             {(loadingOlderMessages || localLoadingOlder) && (
-                                <div className="chat-range-loader-wrap">
+                                <div className="chat-range-loader-wrap chat-range-loader-wrap--top">
                                     <span className="chat-range-loader chat-range-loader--active" />
                                 </div>
                             )}
@@ -2295,7 +2321,7 @@ export function ChatRoom({
                             );
                             })}
                             {(loadingNewerMessages || localLoadingNewer) && (
-                                <div className="chat-range-loader-wrap">
+                                <div className="chat-range-loader-wrap chat-range-loader-wrap--bottom">
                                     <span className="chat-range-loader chat-range-loader--active" />
                                 </div>
                             )}
