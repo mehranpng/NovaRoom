@@ -1249,6 +1249,18 @@ export function App() {
         sendSeen(activeChatId);
     }, [messages, activeChatId, currentUser, view, sendSeen]);
 
+    const syncPeerKeyForChat = useCallback(async (chatId: string) => {
+        if (!chatId) return;
+        try {
+            const list = await apiFetch('/chats');
+            const chat = Array.isArray(list) ? list.find((c: any) => String(c?.id || '') === String(chatId)) : null;
+            const key = String(chat?.otherUser?.e2eePublicKey || '');
+            if (key) registerChatPeerPublicKey(chatId, key);
+        } catch (err) {
+            console.warn('Failed to sync peer E2EE key', err);
+        }
+    }, []);
+
     const handleSendMessage = useCallback(async (payload: { text: string; replyToId?: string; editMessageId?: string; file?: FileMetadata }) => {
         if (!currentUser) return;
         const text = payload.text;
@@ -1390,18 +1402,6 @@ export function App() {
         if (!activeChatId) return;
         deleteViaWS(activeChatId, messageId);
     }, [activeChatId, deleteViaWS]);
-
-    const syncPeerKeyForChat = useCallback(async (chatId: string) => {
-        if (!chatId) return;
-        try {
-            const list = await apiFetch('/chats');
-            const chat = Array.isArray(list) ? list.find((c: any) => String(c?.id || '') === String(chatId)) : null;
-            const key = String(chat?.otherUser?.e2eePublicKey || '');
-            if (key) registerChatPeerPublicKey(chatId, key);
-        } catch (err) {
-            console.warn('Failed to sync peer E2EE key', err);
-        }
-    }, []);
 
     const handleForwardMessage = useCallback(async (sourceChatId: string, messageId: string, targetChatId: string) => {
         pendingForwardSendHintsRef.current[targetChatId] = (pendingForwardSendHintsRef.current[targetChatId] || 0) + 1;
