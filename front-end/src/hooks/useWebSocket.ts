@@ -311,7 +311,18 @@ export function useWebSocket({
             if (typeof text !== 'string') return false;
             if (text.length > MAX_CHAT_MESSAGE_LENGTH) return false;
             if (!chatId || (!text.trim() && !file)) return false;
-            const encryptedText = text.trim() ? await encryptChatTextClientSide(text, token || '', chatId) : '';
+            let encryptedText = '';
+            try {
+                encryptedText = text.trim() ? await encryptChatTextClientSide(text, token || '', chatId) : '';
+            } catch (error) {
+                const msg = error instanceof Error ? error.message : 'E2EE_ERROR';
+                if (msg === 'E2EE_PEER_KEY_MISSING') {
+                    window.alert('کاربر مقابل هنوز کلید عمومی E2EE ندارد. ارسال پیام ممکن نیست.');
+                } else {
+                    window.alert('رمزنگاری سرتاسری پیام انجام نشد. لطفاً دوباره تلاش کنید.');
+                }
+                return false;
+            }
             return send({ type: 'message', chatId, text: encryptedText, replyToId, file, clientId });
         },
         [send, token]
@@ -322,7 +333,18 @@ export function useWebSocket({
             if (typeof text !== 'string') return false;
             if (text.length > MAX_CHAT_MESSAGE_LENGTH) return false;
             if (!chatId || !messageId || !text.trim()) return false;
-            const encryptedText = await encryptChatTextClientSide(text, token || '', chatId);
+            let encryptedText = '';
+            try {
+                encryptedText = await encryptChatTextClientSide(text, token || '', chatId);
+            } catch (error) {
+                const msg = error instanceof Error ? error.message : 'E2EE_ERROR';
+                if (msg === 'E2EE_PEER_KEY_MISSING') {
+                    window.alert('کاربر مقابل هنوز کلید عمومی E2EE ندارد. ویرایش پیام ممکن نیست.');
+                } else {
+                    window.alert('رمزنگاری سرتاسری پیام انجام نشد. لطفاً دوباره تلاش کنید.');
+                }
+                return false;
+            }
             return send({ type: 'edit_message', chatId, messageId, text: encryptedText });
         },
         [send, token]

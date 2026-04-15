@@ -1558,12 +1558,9 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
 
         last_msg = chat.get("lastMessage")
         if isinstance(last_msg, dict) and last_msg.get("timestamp") is not None:
-            chat_scope = f"chat:{chat.get('_id', '')}"
             last_msg = {
                 **last_msg,
-                "text": decrypt_with_fallback(
-                    last_msg.get("text", ""), session_token, chat_scope
-                ),
+                "text": str(last_msg.get("text", "")),
                 "timestamp": dt_to_epoch_ms(last_msg.get("timestamp")),
             }
 
@@ -1669,9 +1666,7 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
             doc = saved_msg[0]
             saved_last_msg = {
                 "id": str(doc["_id"]),
-                "text": decrypt_with_fallback(
-                    doc.get("text", ""), session_token, f"chat:{saved_chat_id}"
-                ),
+                "text": str(doc.get("text", "")),
                 "senderId": doc.get("senderId"),
                 "timestamp": dt_to_epoch_ms(doc.get("timestamp")),
                 "file": doc.get("file"),

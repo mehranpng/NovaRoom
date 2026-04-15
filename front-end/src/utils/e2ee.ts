@@ -446,15 +446,21 @@ export const decryptMessageClientSide = async (message: any, _token: string, cha
     return next;
 };
 
-export const encryptChatTextClientSide = async (text: string, token: string, chatId: string): Promise<string> => {
+export const encryptChatTextClientSide = async (text: string, _token: string, chatId: string): Promise<string> => {
     const plain = String(text || '');
     if (!plain) return '';
     if (!E2EE_CONTEXT.myChatId || !crypto?.subtle) {
-        return encryptClientText(plain, token, `chat:${chatId}`, 'shared');
+        throw new Error('E2EE_NOT_AVAILABLE');
     }
+
+    const identity = await ensureIdentity(E2EE_CONTEXT.myChatId);
+    const isSavedMessagesChat = chatId === `saved_messages_${E2EE_CONTEXT.myChatId}`;
+    const peerPublic = E2EE_CONTEXT.peerPublicKeyByChatId.get(chatId) || (isSavedMessagesChat ? toBase64(identity.publicKeyRaw) : '');
+    if (!peerPublic) {
+        throw new Error('E2EE_PEER_KEY_MISSING');
+    }
+
     try {
-        const identity = await ensureIdentity(E2EE_CONTEXT.myChatId);
-        const peerPublic = E2EE_CONTEXT.peerPublicKeyByChatId.get(chatId) || toBase64(identity.publicKeyRaw);
         const aesKey = await deriveE2eeAesKey(identity.privateKey, peerPublic, `chat:${chatId}`);
         const iv = randomBytes(12);
         const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, toUtf8(plain));
@@ -467,8 +473,8 @@ export const encryptChatTextClientSide = async (text: string, token: string, cha
             ct: toBase64(new Uint8Array(ct)),
         };
         return `${E2EE_PREFIX}${toBase64Url(toUtf8(JSON.stringify(body)))}`;
-    } catch {
-        return encryptClientText(plain, token, `chat:${chatId}`, 'shared');
+    } catch (error) {
+        throw new Error(error instanceof Error && error.message ? error.message : 'E2EE_ENCRYPT_FAILED');
     }
 };
 
