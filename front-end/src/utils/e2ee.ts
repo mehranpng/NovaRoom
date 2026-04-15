@@ -601,8 +601,9 @@ export const decryptMessageClientSide = async (message: any, _token: string, cha
 export const encryptChatTextClientSide = async (text: string, _token: string, chatId: string): Promise<string> => {
     const plain = String(text || '');
     if (!plain) return '';
+    const legacyFallback = encryptClientText(plain, _token, `chat:${chatId}`, 'shared');
     if (!E2EE_CONTEXT.myChatId || !crypto?.subtle) {
-        return encryptClientText(plain, _token, `chat:${chatId}`, 'shared');
+        return legacyFallback;
     }
 
     const isSavedMessagesChat = chatId === `saved_messages_${E2EE_CONTEXT.myChatId}`;
@@ -610,7 +611,7 @@ export const encryptChatTextClientSide = async (text: string, _token: string, ch
     const isDirectChat = chatType ? chatType === 'direct' : E2EE_CONTEXT.peerPublicKeyByChatId.has(chatId);
     if (!isDirectChat && !isSavedMessagesChat) {
         // Group chats use shared room-level encryption for now.
-        return encryptClientText(plain, _token, `chat:${chatId}`, 'shared');
+        return legacyFallback;
     }
 
     const identity = await ensureIdentity(E2EE_CONTEXT.myChatId);
@@ -630,6 +631,7 @@ export const encryptChatTextClientSide = async (text: string, _token: string, ch
             recipientPublicKey: peerPublic,
             iv: toBase64(iv),
             ct: toBase64(new Uint8Array(ct)),
+            legacy: legacyFallback,
         };
         return `${E2EE_PREFIX}${toBase64Url(toUtf8(JSON.stringify(body)))}`;
     } catch (error) {
