@@ -328,7 +328,11 @@ const decryptE2EEText = async (cipher: string, chatId: string, senderId?: string
         const bodyRaw = JSON.parse(textDecoder.decode(fromBase64Url(cipher.slice(E2EE_PREFIX.length))));
         const identity = await ensureIdentity(E2EE_CONTEXT.myChatId);
         const peerPublic = senderId === E2EE_CONTEXT.myChatId
-            ? (E2EE_CONTEXT.peerPublicKeyByChatId.get(chatId) || toBase64(identity.publicKeyRaw))
+            ? (
+                E2EE_CONTEXT.peerPublicKeyByChatId.get(chatId)
+                || String(bodyRaw.recipientPublicKey || '')
+                || toBase64(identity.publicKeyRaw)
+            )
             : String(bodyRaw.senderPublicKey || '');
         if (!peerPublic) return cipher;
         const aesKey = await deriveE2eeAesKey(identity.privateKey, peerPublic, `chat:${chatId}`);
@@ -346,18 +350,29 @@ const decryptE2EEText = async (cipher: string, chatId: string, senderId?: string
 export const decryptMessageClientSide = async (message: any, _token: string, chatId: string): Promise<any> => {
     if (!message) return message;
     const next = { ...message };
+    const scope = `chat:${chatId}`;
     if (typeof next.text === 'string') {
-        next.text = await decryptE2EEText(next.text, chatId, next.senderId);
+        const e2ee = await decryptE2EEText(next.text, chatId, next.senderId);
+        next.text = e2ee === next.text ? await decryptClientText(next.text, _token, scope) : e2ee;
     }
     if (next.replyTo && typeof next.replyTo === 'object' && typeof next.replyTo.text === 'string') {
-        next.replyTo = { ...next.replyTo, text: await decryptE2EEText(next.replyTo.text, chatId, next.replyTo.senderId) };
+        const e2eeReply = await decryptE2EEText(next.replyTo.text, chatId, next.replyTo.senderId);
+        next.replyTo = {
+            ...next.replyTo,
+            text: e2eeReply === next.replyTo.text
+                ? await decryptClientText(next.replyTo.text, _token, scope)
+                : e2eeReply,
+        };
     }
     return next;
 };
 
-export const encryptChatTextClientSide = async (text: string, _token: string, chatId: string): Promise<string> => {
+export const encryptChatTextClientSide = async (text: string, token: string, chatId: string): Promise<string> => {
     const plain = String(text || '');
-    if (!plain || !E2EE_CONTEXT.myChatId || !crypto?.subtle) return plain;
+    if (!plain) return '';
+    if (!E2EE_CONTEXT.myChatId || !crypto?.subtle) {
+        return encryptClientText(plain, token, `chat:${chatId}`, 'shared');
+    }
     try {
         const identity = await ensureIdentity(E2EE_CONTEXT.myChatId);
         const peerPublic = E2EE_CONTEXT.peerPublicKeyByChatId.get(chatId) || toBase64(identity.publicKeyRaw);
@@ -368,12 +383,13 @@ export const encryptChatTextClientSide = async (text: string, _token: string, ch
             v: 1,
             alg: 'ECDH-P256+AES-GCM',
             senderPublicKey: toBase64(identity.publicKeyRaw),
+            recipientPublicKey: peerPublic,
             iv: toBase64(iv),
             ct: toBase64(new Uint8Array(ct)),
         };
         return `${E2EE_PREFIX}${toBase64Url(toUtf8(JSON.stringify(body)))}`;
     } catch {
-        return plain;
+        return encryptClientText(plain, token, `chat:${chatId}`, 'shared');
     }
 };
 
