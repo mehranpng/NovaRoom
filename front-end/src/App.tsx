@@ -70,6 +70,7 @@ export function App() {
     const typingTimeoutsRef = useRef<Record<string, number>>({});
     const userPresenceRef = useRef<Record<string, { online: boolean; updatedAt: number }>>({});
     const presenceOfflineGraceTimersRef = useRef<Record<string, number>>({});
+    const realtimeRecoveryInFlightRef = useRef(false);
 
     const isUserBlocked = useCallback((user: Partial<User> | null | undefined): boolean => {
         if (!user) return false;
@@ -986,6 +987,67 @@ export function App() {
             })
             .catch((err) => console.error('Failed to sync messages after reconnect', err));
     }, [wsConnected, isAuthenticated, loadChats, activeChatId, currentUser, sendSeen, fetchPagedMessages]);
+
+    useEffect(() => {
+        if (!isAuthenticated) return;
+
+        const syncFromServer = async () => {
+            if (realtimeRecoveryInFlightRef.current) return;
+            if (document.visibilityState !== 'visible') return;
+            realtimeRecoveryInFlightRef.current = true;
+            try {
+                await loadChats(false);
+
+                const targetChatId = activeChatIdRef.current;
+                if (!targetChatId || viewRef.current !== 'chatRoom' || showAIChat) return;
+
+                const state = messageRangeState[targetChatId];
+                if (state?.newestCursor) {
+                    await fetchPagedMessages(targetChatId, {
+                        direction: 'newer',
+                        cursorTs: state.newestCursor.cursorTs,
+                        cursorId: state.newestCursor.cursorId,
+                        mode: 'append',
+                    });
+                } else if (messagesLoadedOnce[targetChatId]) {
+                    await fetchPagedMessages(targetChatId, { direction: 'latest', mode: 'replace' });
+                }
+
+                if (currentUser && targetChatId !== `saved_messages_${currentUser.chatId}`) {
+                    sendSeen(targetChatId);
+                }
+            } catch (err) {
+                console.warn('Realtime recovery sync failed', err);
+            } finally {
+                realtimeRecoveryInFlightRef.current = false;
+            }
+        };
+
+        const intervalId = window.setInterval(() => {
+            void syncFromServer();
+        }, 4000);
+
+        const handleVisibilityOrFocus = () => {
+            void syncFromServer();
+        };
+        document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+        window.addEventListener('focus', handleVisibilityOrFocus);
+
+        return () => {
+            window.clearInterval(intervalId);
+            document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+            window.removeEventListener('focus', handleVisibilityOrFocus);
+        };
+    }, [
+        isAuthenticated,
+        loadChats,
+        fetchPagedMessages,
+        currentUser,
+        sendSeen,
+        messagesLoadedOnce,
+        messageRangeState,
+        showAIChat,
+    ]);
 
     useEffect(() => {
         return () => {

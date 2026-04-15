@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 import jwt
 import bcrypt
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 import os
 from dotenv import load_dotenv
 from typing import List, Dict, Optional, Any, Iterable
@@ -259,7 +260,6 @@ def decrypt_user_bio(user_doc: Dict[str, Any], token: str = "") -> str:
 def dt_to_epoch_ms(dt: Any) -> int:
     if dt is None:
         return int(utc_now().timestamp() * 1000)
-
     if isinstance(dt, (int, float)):
         # support ms/seconds
         v = float(dt)
@@ -277,6 +277,54 @@ def dt_to_epoch_ms(dt: Any) -> int:
         return int(float(dt))
     except Exception:
         return int(utc_now().timestamp() * 1000)
+
+
+def resolve_user_online_state(user_doc: Optional[Dict[str, Any]]) -> bool:
+    if not user_doc:
+        return False
+    if bool(user_doc.get("online")):
+        return True
+    try:
+        return int(user_doc.get("wsConnectionCount", 0)) > 0
+    except Exception:
+        return False
+
+
+async def mark_user_connected(user_id: str) -> bool:
+    if not user_id:
+        return False
+    prev = await cl_users.find_one_and_update(
+        {"chatId": user_id},
+        {"$inc": {"wsConnectionCount": 1}, "$set": {"online": True}},
+        return_document=ReturnDocument.BEFORE,
+        projection={"online": 1, "wsConnectionCount": 1},
+    )
+    prev_online = resolve_user_online_state(prev)
+    return not prev_online
+
+
+async def mark_user_disconnected(user_id: str) -> bool:
+    if not user_id:
+        return False
+    after = await cl_users.find_one_and_update(
+        {"chatId": user_id},
+        {"$inc": {"wsConnectionCount": -1}},
+        return_document=ReturnDocument.AFTER,
+        projection={"wsConnectionCount": 1, "online": 1},
+    )
+    current_count = 0
+    if after:
+        try:
+            current_count = int(after.get("wsConnectionCount", 0))
+        except Exception:
+            current_count = 0
+    if current_count > 0:
+        return False
+    await cl_users.update_one(
+        {"chatId": user_id},
+        {"$set": {"online": False, "wsConnectionCount": 0}},
+    )
+    return True
 
 
 def normalize_username(value: Optional[str]) -> str:
@@ -534,7 +582,7 @@ async def get_current_user(
     user["_session_token"] = credentials.credentials
     user.setdefault("profile", {})
     user["profile"]["bio"] = decrypt_user_bio(user, credentials.credentials)
-    user["online"] = bool(active_connections.get(user.get("chatId", "")))
+    user["online"] = resolve_user_online_state(user)
     return user
 
 
@@ -567,7 +615,9 @@ async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
             pass
     active_ai_connections.pop(user_id, None)
 
-    await cl_users.update_one({"chatId": user_id}, {"$set": {"online": False}})
+    await cl_users.update_one(
+        {"chatId": user_id}, {"$set": {"online": False, "wsConnectionCount": 0}}
+    )
     user_chats = await cl_chats.find({"participants": user_id}).to_list(None)
     contacts_to_notify = set()
     for chat in user_chats:
@@ -695,7 +745,7 @@ async def startup_db():
         [("userId", 1), ("aiChatId", 1), ("timestamp", -1)]
     )
     await cl_ai_chats.create_index([("userId", 1), ("updatedAt", -1)])
-    await cl_users.update_many({}, {"$set": {"online": False}})
+    await cl_users.update_many({}, {"$set": {"online": False, "wsConnectionCount": 0}})
     await migrate_unencrypted_messages()
     await encrypt_existing_uploads()
 
@@ -1129,7 +1179,7 @@ async def login(req: LoginRequest):
             "name": user["profile"]["name"],
             "bio": decrypt_user_bio(user, token),
             "avatar": user["profile"]["avatar"],
-            "online": bool(active_connections.get(user["chatId"])),
+            "online": resolve_user_online_state(user),
             "verified": bool(user.get("verified", False)),
             "registrationDate": user.get("registrationDate"),
         },
@@ -1288,7 +1338,7 @@ async def search_users(
             "name": u["profile"]["name"],
             "avatar": u["profile"]["avatar"],
             "bio": decrypt_user_bio(u, str(current_user.get("_session_token") or "")),
-            "online": bool(active_connections.get(u["chatId"])),
+            "online": resolve_user_online_state(u),
             "verified": bool(u.get("verified", False)),
             "registrationDate": u.get("registrationDate"),
         }
@@ -1605,7 +1655,7 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                         if is_group
                         else (
                             False if blocked_relation else (
-                                bool(active_connections.get(other_user.get("chatId", "")))
+                                resolve_user_online_state(other_user)
                                 if other_user
                                 else False
                             )
@@ -1733,7 +1783,7 @@ async def get_chat_members(
                     u, str(current_user.get("_session_token") or "")
                 ),
                 "verified": u.get("verified", False),
-                "online": bool(active_connections.get(u.get("chatId", ""))),
+                "online": resolve_user_online_state(u),
             }
         )
     return result
@@ -2640,8 +2690,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
             return
         chat_id = user.get("chatId")
 
-        is_first_connection = not active_connections.get(chat_id)
         active_connections.setdefault(chat_id, []).append(websocket)
+        became_online = await mark_user_connected(chat_id)
         profile = (
             user.get("profile", {}) if isinstance(user.get("profile"), dict) else {}
         )
@@ -2821,9 +2871,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     },
                 )
 
-        if is_first_connection:
-            await cl_users.update_one({"chatId": chat_id}, {"$set": {"online": True}})
-
+        if became_online:
             # Notify contacts (only on first active connection)
             user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
             contacts_to_notify = set()
@@ -3523,27 +3571,25 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
             if not active_connections[chat_id]:
                 del active_connections[chat_id]
 
-                await cl_users.update_one(
-                    {"chatId": chat_id}, {"$set": {"online": False}}
-                )
+                became_offline = await mark_user_disconnected(chat_id)
+                if became_offline:
+                    # Notify contacts of offline status (only when last connection is gone)
+                    user_chats = await cl_chats.find({"participants": chat_id}).to_list(
+                        None
+                    )
+                    contacts_to_notify = set()
+                    for chat in user_chats:
+                        for p in chat.get("participants", []):
+                            if p != chat_id:
+                                contacts_to_notify.add(p)
 
-                # Notify contacts of offline status (only when last connection is gone)
-                user_chats = await cl_chats.find({"participants": chat_id}).to_list(
-                    None
-                )
-                contacts_to_notify = set()
-                for chat in user_chats:
-                    for p in chat.get("participants", []):
-                        if p != chat_id:
-                            contacts_to_notify.add(p)
-
-                allowed_contacts = await _filter_recipients_by_block_status(
-                    chat_id, contacts_to_notify
-                )
-                await broadcast(
-                    allowed_contacts,
-                    {"type": "user_status", "userId": chat_id, "online": False},
-                )
+                    allowed_contacts = await _filter_recipients_by_block_status(
+                        chat_id, contacts_to_notify
+                    )
+                    await broadcast(
+                        allowed_contacts,
+                        {"type": "user_status", "userId": chat_id, "online": False},
+                    )
 
 
 async def ensure_ai_chat(user_id: str, ai_chat_id: str) -> dict:
