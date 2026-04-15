@@ -129,7 +129,7 @@ async def save_uploaded_file(file_content: bytes, original_filename: str) -> dic
 
     # Save file
     async with aiofiles.open(file_path, "wb") as f:
-        await f.write(encrypt_file_bytes(file_content))
+        await f.write(file_content)
 
     # Detect MIME type
     mime_type, _ = mimetypes.guess_type(sanitized_name)
@@ -175,18 +175,9 @@ async def read_file_content(file_id: str) -> Optional[bytes]:
 
 
 async def encrypt_existing_uploads() -> int:
-    converted = 0
-    for file_path in UPLOAD_DIR.iterdir():
-        if not file_path.is_file():
-            continue
-        async with aiofiles.open(file_path, "rb") as f:
-            raw = await f.read()
-        if raw.startswith(FILE_MAGIC):
-            continue
-        async with aiofiles.open(file_path, "wb") as f:
-            await f.write(encrypt_file_bytes(raw))
-        converted += 1
-    return converted
+    # Deprecated: new uploads are encrypted client-side.
+    # Keep as a no-op to avoid mutating existing client-encrypted files.
+    return 0
 
 
 async def cleanup_orphaned_files(db_file_ids: set) -> int:

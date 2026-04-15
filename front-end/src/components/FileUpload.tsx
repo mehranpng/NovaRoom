@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import type { FileMetadata } from '../types';
 import { API_BASE_URL } from '../config/api';
 import { validateFileSize } from '../utils/fileUtils';
+import { encryptFileBytesClientSide } from '../utils/e2ee';
 
 interface FileUploadProps {
     token: string;
@@ -168,9 +169,6 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
     const uploadFile = async (file: File) => {
         setUploading(true);
         setUploadProgress(0);
-
-        const formData = new FormData();
-        formData.append('file', file);
         const task: UploadTask = {
             status: 'uploading',
             fileName: file.name,
@@ -180,6 +178,17 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         uploadTasksByChat.set(chatId, task);
 
         try {
+            const plainBytes = new Uint8Array(await file.arrayBuffer());
+            const encryptedBytes = await encryptFileBytesClientSide(plainBytes, token, chatId);
+            const encryptedBlob = new Blob([encryptedBytes], { type: 'application/octet-stream' });
+            const encryptedFile = new File([encryptedBlob], file.name, {
+                type: 'application/octet-stream',
+                lastModified: file.lastModified,
+            });
+
+            const formData = new FormData();
+            formData.append('file', encryptedFile);
+
             const xhr = new XMLHttpRequest();
 
             // Track upload progress
@@ -197,10 +206,16 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                 if (xhr.status === 200) {
                     const response = JSON.parse(xhr.responseText);
                     if (response.success && response.file) {
+                        const result: FileMetadata = {
+                            ...response.file,
+                            fileName: file.name,
+                            fileSize: file.size,
+                            mimeType: file.type || response.file.mimeType,
+                        };
                         task.status = 'done';
                         task.progress = 100;
                         setUploadProgress(100);
-                        task.result = response.file;
+                        task.result = result;
                         pushTaskUpdate(task);
                     } else {
                         throw new Error('Invalid response');

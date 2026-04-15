@@ -2234,6 +2234,7 @@ export function ChatRoom({
                                                 <FileMessage
                                                     file={m.file}
                                                     token={token}
+                                                    chatId={chatId}
                                                     onMediaLoad={() => handleInitialMediaReady(m.id)}
                                                     onImageClick={(imageUrl, file) => setOpenedImage({ url: imageUrl, file })}
                                                     onVideoClick={(videoUrl, file) => setOpenedVideo({ url: videoUrl, file })}

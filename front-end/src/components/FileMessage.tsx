@@ -4,10 +4,12 @@ import { Download, Play, Pause } from 'lucide-react';
 import { API_BASE_URL } from '../config/api';
 import { useState, useEffect, useRef } from 'react';
 import { useMusicPlayer } from '../contexts/MusicPlayerContext';
+import { decryptFileBytesClientSide } from '../utils/e2ee';
 
 interface FileMessageProps {
     file: FileMetadata;
     token: string;
+    chatId: string;
     onMediaLoad?: () => void;
     onImageClick?: (imageUrl: string, file: FileMetadata) => void;
     onVideoClick?: (videoUrl: string, file: FileMetadata) => void;
@@ -25,7 +27,7 @@ function formatDuration(seconds: number): string {
     return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoClick }: FileMessageProps) {
+export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, onVideoClick }: FileMessageProps) {
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [imageLoading, setImageLoading] = useState(false);
     const [imageError, setImageError] = useState(false);
@@ -52,6 +54,12 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
     const rawCoverFileId = (file as any).coverArtFileId || (file as any)?.meta?.coverArtFileId || (file as any)?.metadata?.coverArtFileId;
     const rawCoverUrl = (file.coverArtUrl || (file as any).coverUrl || (file as any)?.meta?.coverArtUrl || (file as any)?.metadata?.coverArtUrl || '').trim();
 
+    const decodeResponseBlob = async (response: Response, preferredType?: string): Promise<Blob> => {
+        const encryptedBytes = new Uint8Array(await response.arrayBuffer());
+        const plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, chatId);
+        return new Blob([plainBytes], { type: preferredType || response.headers.get('content-type') || 'application/octet-stream' });
+    };
+
     useEffect(() => {
         if (!isImage) return;
         let objectUrl: string | null = null;
@@ -64,7 +72,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
                     headers: { 'Authorization': `Bearer ${token}` },
                 });
                 if (!response.ok) throw new Error('Failed to load image');
-                const blob = await response.blob();
+                const blob = await decodeResponseBlob(response, file.mimeType);
                 if (!cancelled) {
                     objectUrl = window.URL.createObjectURL(blob);
                     setImageUrl(objectUrl);
@@ -98,7 +106,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 if (!response.ok) throw new Error('Failed to load audio');
-                const blob = await response.blob();
+                const blob = await decodeResponseBlob(response, file.mimeType);
                 if (!cancelled) {
                     objectUrl = window.URL.createObjectURL(blob);
                     setAudioUrl(objectUrl);
@@ -135,7 +143,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 if (!response.ok) throw new Error('Failed to load cover');
-                const blob = await response.blob();
+                const blob = await decodeResponseBlob(response);
                 if (!cancelled) {
                     objectUrl = window.URL.createObjectURL(blob);
                     setCoverUrl(objectUrl);
@@ -164,7 +172,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 if (!response.ok) throw new Error('Failed to load video');
-                const blob = await response.blob();
+                const blob = await decodeResponseBlob(response, file.mimeType);
                 if (!cancelled) {
                     objectUrl = window.URL.createObjectURL(blob);
                     setVideoUrl(objectUrl);
@@ -193,7 +201,7 @@ export function FileMessage({ file, token, onMediaLoad, onImageClick, onVideoCli
                 headers: { 'Authorization': `Bearer ${token}` },
             });
             if (!response.ok) throw new Error('Download failed');
-            const blob = await response.blob();
+            const blob = await decodeResponseBlob(response, file.mimeType);
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;

@@ -1,6 +1,7 @@
 const ENC_PREFIX = 'enc:v1:';
 const ENC_NONCE_SIZE = 16;
 const ENC_TAG_SIZE = 16;
+const FILE_PREFIX = 'ncf:v1:';
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -279,4 +280,65 @@ export const encryptBioClientSide = async (bio: string, token: string, chatId: s
 
 export const decryptBioClientSide = async (bio: string, token: string, chatId: string): Promise<string> => {
     return decryptClientText(bio, token, `user-bio:${chatId}`);
+};
+
+const bytesToPrefixedPayload = (prefix: string, bytes: Uint8Array): Uint8Array => {
+    const payload = `${prefix}${toBase64Url(bytes)}`;
+    return toUtf8(payload);
+};
+
+const prefixedPayloadToBytes = (raw: Uint8Array, prefix: string): Uint8Array | null => {
+    try {
+        const text = textDecoder.decode(raw);
+        if (!text.startsWith(prefix)) return null;
+        return fromBase64Url(text.slice(prefix.length));
+    } catch {
+        return null;
+    }
+};
+
+export const encryptFileBytesClientSide = async (plain: Uint8Array, _token: string, chatId: string): Promise<Uint8Array> => {
+    if (!plain.length) return plain;
+    try {
+        const scope = `chat:${chatId}`;
+        const key = await deriveKey(buildSharedMaterial(scope));
+        const nonce = randomBytes(ENC_NONCE_SIZE);
+        const encrypted = await xorStream(plain, key, nonce);
+        const nonceAndEncrypted = new Uint8Array(nonce.length + encrypted.length);
+        nonceAndEncrypted.set(nonce, 0);
+        nonceAndEncrypted.set(encrypted, nonce.length);
+        const tag = await hmacTag(key, nonceAndEncrypted);
+        const full = new Uint8Array(nonce.length + encrypted.length + tag.length);
+        full.set(nonce, 0);
+        full.set(encrypted, nonce.length);
+        full.set(tag, nonce.length + encrypted.length);
+        return bytesToPrefixedPayload(FILE_PREFIX, full);
+    } catch {
+        return plain;
+    }
+};
+
+export const decryptFileBytesClientSide = async (raw: Uint8Array, _token: string, chatId: string): Promise<Uint8Array> => {
+    if (!raw.length) return raw;
+    const packed = prefixedPayloadToBytes(raw, FILE_PREFIX);
+    if (!packed) return raw;
+
+    if (packed.length < ENC_NONCE_SIZE + ENC_TAG_SIZE) return raw;
+
+    try {
+        const nonce = packed.slice(0, ENC_NONCE_SIZE);
+        const body = packed.slice(ENC_NONCE_SIZE, packed.length - ENC_TAG_SIZE);
+        const tag = packed.slice(packed.length - ENC_TAG_SIZE);
+        const nonceAndBody = new Uint8Array(nonce.length + body.length);
+        nonceAndBody.set(nonce, 0);
+        nonceAndBody.set(body, nonce.length);
+        const scope = `chat:${chatId}`;
+        const key = await deriveKey(buildSharedMaterial(scope));
+        const expectedTag = await hmacTag(key, nonceAndBody);
+        const sameTag = tag.length === expectedTag.length && tag.every((b, i) => b === expectedTag[i]);
+        if (!sameTag) return raw;
+        return xorStream(body, key, nonce);
+    } catch {
+        return raw;
+    }
 };
