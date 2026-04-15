@@ -254,10 +254,7 @@ export const decryptClientText = async (cipher: string, token: string, scope: st
 };
 
 const E2EE_PREFIX = 'enc:e2ee:v1:';
-// Temporary compatibility guard:
-// Direct-chat E2EE can break when account keys become desynced across devices/sessions.
-// Keep this off until full multi-device key sync is implemented server-side.
-const DIRECT_E2EE_ENABLED = false;
+const DIRECT_E2EE_ENABLED = true;
 const E2EE_CONTEXT = {
     myChatId: '',
     peerPublicKeyByChatId: new Map<string, string>(),
@@ -534,6 +531,13 @@ const decryptE2EEText = async (cipher: string, chatId: string, senderId?: string
         return cipher;
     }
 
+    // Opportunistically refresh peer key from payload to avoid stale chat-list keys.
+    // This helps direct chats recover after key rotation on the other side.
+    const senderPublicKeyInPayload = String(bodyRaw.senderPublicKey || bodyRaw.sender_public_key || '');
+    if (senderPublicKeyInPayload && chatId) {
+        E2EE_CONTEXT.peerPublicKeyByChatId.set(chatId, senderPublicKeyInPayload);
+    }
+
     // Resolve which chatId to use as our own identity.
     // If E2EE_CONTEXT.myChatId is set use it; otherwise derive it from payload.
     const myChatId = E2EE_CONTEXT.myChatId || '';
@@ -571,7 +575,7 @@ const decryptE2EEText = async (cipher: string, chatId: string, senderId?: string
             } else {
                 // Someone else sent it — peer is the sender
                 peerPublic =
-                    String(bodyRaw.senderPublicKey || bodyRaw.sender_public_key || '') ||
+                    senderPublicKeyInPayload ||
                     String(E2EE_CONTEXT.peerPublicKeyByChatId.get(chatId) || '');
             }
 
