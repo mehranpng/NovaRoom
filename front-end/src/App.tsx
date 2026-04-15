@@ -155,7 +155,7 @@ export function App() {
             sendSoundRef.current = null;
             receiveSoundRef.current = null;
         };
-    }, []);
+    }, [authToken]);
 
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -1000,7 +1000,7 @@ export function App() {
             },
         }));
         return chunk.length;
-    }, []);
+    }, [authToken]);
 
     useEffect(() => {
         if (!wsConnected || !isAuthenticated) return;
