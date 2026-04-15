@@ -303,6 +303,38 @@ const listKnownIdentityChatIds = async (): Promise<string[]> => {
 
 const identityStorageKey = (chatId: string) => `messenger.e2ee.identity.${chatId}`;
 
+const readIdentityFromLocalStorage = async (chatId: string): Promise<{ privateKey: CryptoKey; publicKeyRaw: Uint8Array } | null> => {
+    try {
+        const raw = localStorage.getItem(identityStorageKey(chatId));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed?.privateJwk || !parsed?.publicKeyRaw) return null;
+        const privateKey = await crypto.subtle.importKey(
+            'jwk',
+            parsed.privateJwk,
+            { name: 'ECDH', namedCurve: 'P-256' },
+            false,
+            ['deriveBits']
+        );
+        const identity = { privateKey, publicKeyRaw: fromBase64(String(parsed.publicKeyRaw || '')) };
+        IDENTITY_MEMORY_CACHE.set(chatId, identity);
+        return identity;
+    } catch {
+        return null;
+    }
+};
+
+const writeIdentityToLocalStorage = (chatId: string, privateJwk: JsonWebKey, publicKeyRaw: Uint8Array): void => {
+    try {
+        localStorage.setItem(identityStorageKey(chatId), JSON.stringify({
+            privateJwk,
+            publicKeyRaw: toBase64(publicKeyRaw),
+        }));
+    } catch {
+        // Ignore localStorage write failures (quota/private mode restrictions).
+    }
+};
+
 const openE2EEDb = async (): Promise<IDBDatabase> => {
     if (typeof indexedDB === 'undefined') throw new Error('IndexedDB unavailable');
     return new Promise((resolve, reject) => {
@@ -390,6 +422,7 @@ const findIdentityChatIdByPublicKey = async (publicKeyB64: string): Promise<stri
 
 const writeIdentityToDb = async (chatId: string, privateKey: CryptoKey, publicKeyRaw: Uint8Array, privateJwk: JsonWebKey): Promise<void> => {
     IDENTITY_MEMORY_CACHE.set(chatId, { privateKey, publicKeyRaw });
+    writeIdentityToLocalStorage(chatId, privateJwk, publicKeyRaw);
     try {
         const db = await openE2EEDb();
         try {
@@ -426,24 +459,8 @@ const ensureIdentity = async (chatId: string): Promise<{ privateKey: CryptoKey; 
     }
     if (dbIdentity) return dbIdentity;
 
-    // One-time migration from old localStorage format (if present), then delete it.
-    const existing = localStorage.getItem(identityStorageKey(chatId));
-    if (existing) {
-        const parsed = JSON.parse(existing);
-        const imported = await crypto.subtle.importKey(
-            'jwk',
-            parsed.privateJwk,
-            { name: 'ECDH', namedCurve: 'P-256' },
-            true,
-            ['deriveBits']
-        );
-        const migratedJwk = await crypto.subtle.exportKey('jwk', imported);
-        const nonExtractable = await crypto.subtle.importKey('jwk', migratedJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
-        const migrated = { privateKey: nonExtractable, publicKeyRaw: fromBase64(parsed.publicKeyRaw) };
-        await writeIdentityToDb(chatId, migrated.privateKey, migrated.publicKeyRaw, migratedJwk);
-        localStorage.removeItem(identityStorageKey(chatId));
-        return migrated;
-    }
+    const localIdentity = await readIdentityFromLocalStorage(chatId);
+    if (localIdentity) return localIdentity;
 
     const keyPair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
     const privateJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
