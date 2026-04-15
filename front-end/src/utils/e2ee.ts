@@ -254,6 +254,10 @@ export const decryptClientText = async (cipher: string, token: string, scope: st
 };
 
 const E2EE_PREFIX = 'enc:e2ee:v1:';
+// Temporary compatibility guard:
+// Direct-chat E2EE can break when account keys become desynced across devices/sessions.
+// Keep this off until full multi-device key sync is implemented server-side.
+const DIRECT_E2EE_ENABLED = false;
 const E2EE_CONTEXT = {
     myChatId: '',
     peerPublicKeyByChatId: new Map<string, string>(),
@@ -628,6 +632,9 @@ export const encryptChatTextClientSide = async (text: string, _token: string, ch
     const isDirectChat = chatType ? chatType === 'direct' : E2EE_CONTEXT.peerPublicKeyByChatId.has(chatId);
     if (!isDirectChat && !isSavedMessagesChat) {
         // Group chats use shared room-level encryption for now.
+        return legacyFallback;
+    }
+    if (!DIRECT_E2EE_ENABLED) {
         return legacyFallback;
     }
 
