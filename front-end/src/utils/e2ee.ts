@@ -395,9 +395,11 @@ const writeIdentityToDb = async (chatId: string, privateKey: CryptoKey, publicKe
             await new Promise<void>((resolve, reject) => {
                 const tx = db.transaction(E2EE_DB_STORE, 'readwrite');
                 const store = tx.objectStore(E2EE_DB_STORE);
+                // Important for mobile/WebView compatibility:
+                // Persist only serializable fields. Some environments fail the whole write
+                // when a CryptoKey object is included in IndexedDB payload.
                 store.put({
                     chatId,
-                    privateKey,
                     privateJwk,
                     publicKeyRaw: toBase64(publicKeyRaw),
                 });
