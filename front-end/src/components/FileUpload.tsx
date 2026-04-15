@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { File, Image, Music2, Paperclip, Video } from 'lucide-react';
+import { File as FileIcon, Image, Music2, Paperclip, Video } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { FileMetadata } from '../types';
 import { API_BASE_URL } from '../config/api';
@@ -181,7 +181,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             const plainBytes = new Uint8Array(await file.arrayBuffer());
             const encryptedBytes = await encryptFileBytesClientSide(plainBytes, token, chatId);
             const encryptedBlob = new Blob([encryptedBytes], { type: 'application/octet-stream' });
-            const encryptedFile = new File([encryptedBlob], file.name, {
+            const encryptedFile = new window.File([encryptedBlob], file.name, {
                 type: 'application/octet-stream',
                 lastModified: file.lastModified,
             });
@@ -375,7 +375,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                         </motion.button>
                         <motion.button type="button" className="file-upload-picker-item" onClick={openPicker(fileInputRef)}
                             whileHover={{ x: -2 }} whileTap={{ scale: 0.98 }}>
-                            <span className="file-upload-picker-item__label"><File size={16} />فایل</span>
+                            <span className="file-upload-picker-item__label"><FileIcon size={16} />فایل</span>
                         </motion.button>
                     </motion.div>
                 )}

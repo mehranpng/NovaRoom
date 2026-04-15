@@ -170,7 +170,11 @@ async def read_file_content(file_id: str) -> Optional[bytes]:
     if not file_path.exists() or not file_path.is_file():
         return None
     async with aiofiles.open(file_path, "rb") as f:
-        return await f.read()
+        raw = await f.read()
+    # Legacy compatibility: old files were encrypted server-side with NRF1.
+    if raw.startswith(FILE_MAGIC):
+        return decrypt_file_bytes(raw)
+    return raw
 
 
 async def encrypt_existing_uploads() -> int:

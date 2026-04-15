@@ -2,6 +2,7 @@ const ENC_PREFIX = 'enc:v1:';
 const ENC_NONCE_SIZE = 16;
 const ENC_TAG_SIZE = 16;
 const FILE_MAGIC = new Uint8Array([0x4e, 0x43, 0x46, 0x31]); // NCF1
+const FILE_TEXT_PREFIX = 'ncf:v1:';
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -314,8 +315,20 @@ export const encryptFileBytesClientSide = async (plain: Uint8Array, _token: stri
 
 export const decryptFileBytesClientSide = async (raw: Uint8Array, _token: string, chatId: string): Promise<Uint8Array> => {
     if (!raw.length) return raw;
-    if (!hasFileMagic(raw)) return raw;
-    const packed = raw.slice(FILE_MAGIC.length);
+    let packed: Uint8Array | null = null;
+    if (hasFileMagic(raw)) {
+        packed = raw.slice(FILE_MAGIC.length);
+    } else {
+        try {
+            const maybeText = textDecoder.decode(raw);
+            if (maybeText.startsWith(FILE_TEXT_PREFIX)) {
+                packed = fromBase64Url(maybeText.slice(FILE_TEXT_PREFIX.length));
+            }
+        } catch {
+            packed = null;
+        }
+    }
+    if (!packed) return raw;
     if (packed.length < ENC_NONCE_SIZE + ENC_TAG_SIZE) return raw;
 
     try {
