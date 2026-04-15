@@ -306,8 +306,29 @@ const readIdentityFromDb = async (chatId: string): Promise<{ privateKey: CryptoK
             req.onsuccess = () => resolve(req.result || null);
             req.onerror = () => reject(req.error || new Error('Failed to read E2EE key'));
         });
-        if (!row?.privateKey || !row?.publicKeyRaw) return null;
-        const identity = { privateKey: row.privateKey as CryptoKey, publicKeyRaw: fromBase64(String(row.publicKeyRaw || '')) };
+        if (!row?.publicKeyRaw) return null;
+
+        let privateKey: CryptoKey | null = null;
+
+        // Try to use the stored CryptoKey directly (desktop browsers)
+        if (row.privateKey && typeof row.privateKey === 'object' && 'type' in row.privateKey) {
+            privateKey = row.privateKey as CryptoKey;
+        }
+
+        // Fallback: re-import from stored JWK (mobile WebViews that can't structured-clone CryptoKey)
+        if (!privateKey && row.privateJwk) {
+            privateKey = await crypto.subtle.importKey(
+                'jwk',
+                row.privateJwk,
+                { name: 'ECDH', namedCurve: 'P-256' },
+                false,
+                ['deriveBits'],
+            );
+        }
+
+        if (!privateKey) return null;
+
+        const identity = { privateKey, publicKeyRaw: fromBase64(String(row.publicKeyRaw || '')) };
         IDENTITY_MEMORY_CACHE.set(chatId, identity);
         return identity;
     } finally {
@@ -315,7 +336,7 @@ const readIdentityFromDb = async (chatId: string): Promise<{ privateKey: CryptoK
     }
 };
 
-const writeIdentityToDb = async (chatId: string, privateKey: CryptoKey, publicKeyRaw: Uint8Array): Promise<void> => {
+const writeIdentityToDb = async (chatId: string, privateKey: CryptoKey, publicKeyRaw: Uint8Array, privateJwk: JsonWebKey): Promise<void> => {
     IDENTITY_MEMORY_CACHE.set(chatId, { privateKey, publicKeyRaw });
     try {
         const db = await openE2EEDb();
@@ -323,9 +344,11 @@ const writeIdentityToDb = async (chatId: string, privateKey: CryptoKey, publicKe
             await new Promise<void>((resolve, reject) => {
                 const tx = db.transaction(E2EE_DB_STORE, 'readwrite');
                 const store = tx.objectStore(E2EE_DB_STORE);
+                // Store both: CryptoKey object (desktop) and JWK (mobile fallback)
                 store.put({
                     chatId,
                     privateKey,
+                    privateJwk,
                     publicKeyRaw: toBase64(publicKeyRaw),
                 });
                 tx.oncomplete = () => resolve();
@@ -336,8 +359,7 @@ const writeIdentityToDb = async (chatId: string, privateKey: CryptoKey, publicKe
             db.close();
         }
     } catch {
-        // Some mobile browsers/webviews fail structured-clone persistence for CryptoKey.
-        // Keep an in-memory key for the current session so E2EE still works on-device.
+        // Keep in-memory key for current session if IndexedDB write fails entirely.
     }
 };
 
@@ -359,20 +381,24 @@ const ensureIdentity = async (chatId: string): Promise<{ privateKey: CryptoKey; 
             'jwk',
             parsed.privateJwk,
             { name: 'ECDH', namedCurve: 'P-256' },
-            false,
+            true,
             ['deriveBits']
         );
-        const migrated = { privateKey: imported, publicKeyRaw: fromBase64(parsed.publicKeyRaw) };
-        await writeIdentityToDb(chatId, migrated.privateKey, migrated.publicKeyRaw);
+        const migratedJwk = await crypto.subtle.exportKey('jwk', imported);
+        const nonExtractable = await crypto.subtle.importKey('jwk', migratedJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+        const migrated = { privateKey: nonExtractable, publicKeyRaw: fromBase64(parsed.publicKeyRaw) };
+        await writeIdentityToDb(chatId, migrated.privateKey, migrated.publicKeyRaw, migratedJwk);
         localStorage.removeItem(identityStorageKey(chatId));
         return migrated;
     }
 
+    // Generate new key pair — always extractable so we can persist JWK for mobile fallback
     const keyPair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
     const privateJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+    // Re-import as non-extractable for runtime use
     const privateKey = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
     const publicRaw = new Uint8Array(await crypto.subtle.exportKey('raw', keyPair.publicKey));
-    await writeIdentityToDb(chatId, privateKey, publicRaw);
+    await writeIdentityToDb(chatId, privateKey, publicRaw, privateJwk);
     return { privateKey, publicKeyRaw: publicRaw };
 };
 
