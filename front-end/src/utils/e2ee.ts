@@ -426,7 +426,7 @@ const ensureIdentity = async (chatId: string): Promise<{ privateKey: CryptoKey; 
 };
 
 const importEcdhPublic = async (rawB64: string): Promise<CryptoKey> => {
-    return crypto.subtle.importKey('raw', fromBase64(rawB64), { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+    return crypto.subtle.importKey('raw', toArrayBuffer(fromBase64(rawB64)), { name: 'ECDH', namedCurve: 'P-256' }, false, []);
 };
 
 const deriveE2eeAesKey = async (privateKey: CryptoKey, peerPublicRawB64: string, scope: string): Promise<CryptoKey> => {
@@ -506,16 +506,16 @@ const decryptE2EEText = async (cipher: string, chatId: string, senderId?: string
                 toBase64(identity.publicKeyRaw);
         } else {
             // Someone else sent it — peer is the sender
-            peerPublic = String(bodyRaw.senderPublicKey || '');
+            peerPublic = String(bodyRaw.senderPublicKey || '') || E2EE_CONTEXT.peerPublicKeyByChatId.get(chatId) || '';
         }
 
         if (!peerPublic) return cipher;
 
         const aesKey = await deriveE2eeAesKey(identity.privateKey, peerPublic, `chat:${chatId}`);
         const decrypted = await crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv: fromBase64(bodyRaw.iv) },
+            { name: 'AES-GCM', iv: toArrayBuffer(fromBase64(bodyRaw.iv)) },
             aesKey,
-            fromBase64(bodyRaw.ct)
+            toArrayBuffer(fromBase64(bodyRaw.ct))
         );
         return textDecoder.decode(new Uint8Array(decrypted));
     } catch {
@@ -567,7 +567,7 @@ export const encryptChatTextClientSide = async (text: string, _token: string, ch
     try {
         const aesKey = await deriveE2eeAesKey(identity.privateKey, peerPublic, `chat:${chatId}`);
         const iv = randomBytes(12);
-        const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, toUtf8(plain));
+        const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: toArrayBuffer(iv) }, aesKey, toArrayBuffer(toUtf8(plain)));
         const body = {
             v: 1,
             alg: 'ECDH-P256+AES-GCM',
