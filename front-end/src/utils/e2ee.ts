@@ -455,7 +455,7 @@ export const encryptChatTextClientSide = async (text: string, _token: string, ch
     const plain = String(text || '');
     if (!plain) return '';
     if (!E2EE_CONTEXT.myChatId || !crypto?.subtle) {
-        throw new Error('E2EE_NOT_AVAILABLE');
+        return encryptClientText(plain, _token, `chat:${chatId}`, 'shared');
     }
 
     const identity = await ensureIdentity(E2EE_CONTEXT.myChatId);
@@ -476,6 +476,7 @@ export const encryptChatTextClientSide = async (text: string, _token: string, ch
             recipientPublicKey: peerPublic,
             iv: toBase64(iv),
             ct: toBase64(new Uint8Array(ct)),
+            legacy: await encryptClientText(plain, _token, `chat:${chatId}`, 'shared'),
         };
         return `${E2EE_PREFIX}${toBase64Url(toUtf8(JSON.stringify(body)))}`;
     } catch (error) {
