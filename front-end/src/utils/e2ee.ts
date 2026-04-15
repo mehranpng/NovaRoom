@@ -333,6 +333,35 @@ const readIdentityFromDb = async (chatId: string): Promise<{ privateKey: CryptoK
     }
 };
 
+const findIdentityChatIdByPublicKey = async (publicKeyB64: string): Promise<string> => {
+    const target = String(publicKeyB64 || '');
+    if (!target) return '';
+
+    for (const [chatId, identity] of IDENTITY_MEMORY_CACHE.entries()) {
+        if (toBase64(identity.publicKeyRaw) === target) return chatId;
+    }
+
+    try {
+        const db = await openE2EEDb();
+        try {
+            const rows = await new Promise<any[]>((resolve, reject) => {
+                const tx = db.transaction(E2EE_DB_STORE, 'readonly');
+                const store = tx.objectStore(E2EE_DB_STORE);
+                const req = store.getAll();
+                req.onsuccess = () => resolve(Array.isArray(req.result) ? req.result : []);
+                req.onerror = () => reject(req.error || new Error('Failed to scan E2EE keys'));
+            });
+
+            const match = rows.find((row) => String(row?.publicKeyRaw || '') === target);
+            return String(match?.chatId || '');
+        } finally {
+            db.close();
+        }
+    } catch {
+        return '';
+    }
+};
+
 const writeIdentityToDb = async (chatId: string, privateKey: CryptoKey, publicKeyRaw: Uint8Array, privateJwk: JsonWebKey): Promise<void> => {
     IDENTITY_MEMORY_CACHE.set(chatId, { privateKey, publicKeyRaw });
     try {
@@ -447,7 +476,7 @@ const decryptE2EEText = async (cipher: string, chatId: string, senderId?: string
     }
 
     // Resolve which chatId to use as our own identity.
-    // If E2EE_CONTEXT.myChatId is set use it; otherwise try to derive from payload.
+    // If E2EE_CONTEXT.myChatId is set use it; otherwise derive it from payload.
     const myChatId = E2EE_CONTEXT.myChatId || '';
 
     // The recipient's public key is embedded in the payload — use it to find our identity.
@@ -455,16 +484,16 @@ const decryptE2EEText = async (cipher: string, chatId: string, senderId?: string
 
     // Determine which identity to load:
     // 1. Use myChatId from context (normal path)
-    // 2. If myChatId missing, scan IndexedDB for an identity whose publicKeyRaw matches recipientPublicKey in payload
+    // 2. If myChatId missing, scan IndexedDB/in-memory cache for identity matching recipientPublicKey
     let identityChatId = myChatId;
     if (!identityChatId && recipientPublicKeyInPayload) {
-        // Try chatId itself as a last resort — the caller already knows which chat this is
-        identityChatId = chatId;
+        identityChatId = await findIdentityChatIdByPublicKey(recipientPublicKeyInPayload);
     }
     if (!identityChatId) return cipher;
 
     try {
-        const identity = await ensureIdentity(identityChatId);
+        const identity = await readIdentityFromDb(identityChatId);
+        if (!identity) return cipher;
 
         // Determine peer public key to derive shared secret
         const isSelf = senderId === identityChatId;
