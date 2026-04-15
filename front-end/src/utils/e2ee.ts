@@ -254,23 +254,127 @@ export const decryptClientText = async (cipher: string, token: string, scope: st
     }
 };
 
-export const decryptMessageClientSide = async (message: any, token: string, chatId: string): Promise<any> => {
+const E2EE_PREFIX = 'enc:e2ee:v1:';
+const E2EE_CONTEXT = {
+    myChatId: '',
+    peerPublicKeyByChatId: new Map<string, string>(),
+};
+
+const toBase64 = (bytes: Uint8Array): string => {
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+};
+
+const fromBase64 = (value: string): Uint8Array => {
+    const binary = atob(value);
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
+    return out;
+};
+
+const identityStorageKey = (chatId: string) => `messenger.e2ee.identity.${chatId}`;
+
+const ensureIdentity = async (chatId: string): Promise<{ privateKey: CryptoKey; publicKeyRaw: Uint8Array }> => {
+    if (!chatId || !crypto?.subtle) throw new Error('E2EE unavailable');
+    const existing = localStorage.getItem(identityStorageKey(chatId));
+    if (existing) {
+        const parsed = JSON.parse(existing);
+        const privateKey = await crypto.subtle.importKey('jwk', parsed.privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+        return { privateKey, publicKeyRaw: fromBase64(parsed.publicKeyRaw) };
+    }
+    const keyPair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+    const privateJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+    const publicRaw = new Uint8Array(await crypto.subtle.exportKey('raw', keyPair.publicKey));
+    localStorage.setItem(identityStorageKey(chatId), JSON.stringify({ privateJwk, publicKeyRaw: toBase64(publicRaw) }));
+    return { privateKey: keyPair.privateKey, publicKeyRaw: publicRaw };
+};
+
+const importEcdhPublic = async (rawB64: string): Promise<CryptoKey> => {
+    return crypto.subtle.importKey('raw', fromBase64(rawB64), { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+};
+
+const deriveE2eeAesKey = async (privateKey: CryptoKey, peerPublicRawB64: string, scope: string): Promise<CryptoKey> => {
+    const peerPublic = await importEcdhPublic(peerPublicRawB64);
+    const sharedBits = await crypto.subtle.deriveBits({ name: 'ECDH', public: peerPublic }, privateKey, 256);
+    const ikm = await crypto.subtle.importKey('raw', sharedBits, 'HKDF', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+        { name: 'HKDF', hash: 'SHA-256', salt: toUtf8(scope), info: toUtf8('messenger-e2ee-v1') },
+        ikm,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt']
+    );
+};
+
+export const configureE2EEContext = (myChatId: string, peerPublicKeyByChatId: Record<string, string>): void => {
+    E2EE_CONTEXT.myChatId = String(myChatId || '');
+    E2EE_CONTEXT.peerPublicKeyByChatId = new Map(Object.entries(peerPublicKeyByChatId || {}).filter(([, v]) => Boolean(v)));
+};
+
+export const registerChatPeerPublicKey = (chatId: string, publicKey: string): void => {
+    if (!chatId || !publicKey) return;
+    E2EE_CONTEXT.peerPublicKeyByChatId.set(chatId, publicKey);
+};
+
+export const ensureAndGetE2EEPublicKey = async (chatId: string): Promise<string> => {
+    const identity = await ensureIdentity(chatId);
+    return toBase64(identity.publicKeyRaw);
+};
+
+const decryptE2EEText = async (cipher: string, chatId: string, senderId?: string): Promise<string> => {
+    if (!cipher.startsWith(E2EE_PREFIX) || !E2EE_CONTEXT.myChatId) return cipher;
+    try {
+        const bodyRaw = JSON.parse(textDecoder.decode(fromBase64Url(cipher.slice(E2EE_PREFIX.length))));
+        const identity = await ensureIdentity(E2EE_CONTEXT.myChatId);
+        const peerPublic = senderId === E2EE_CONTEXT.myChatId
+            ? (E2EE_CONTEXT.peerPublicKeyByChatId.get(chatId) || toBase64(identity.publicKeyRaw))
+            : String(bodyRaw.senderPublicKey || '');
+        if (!peerPublic) return cipher;
+        const aesKey = await deriveE2eeAesKey(identity.privateKey, peerPublic, `chat:${chatId}`);
+        const decrypted = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv: fromBase64(bodyRaw.iv) },
+            aesKey,
+            fromBase64(bodyRaw.ct)
+        );
+        return textDecoder.decode(new Uint8Array(decrypted));
+    } catch {
+        return cipher;
+    }
+};
+
+export const decryptMessageClientSide = async (message: any, _token: string, chatId: string): Promise<any> => {
     if (!message) return message;
-    const scope = `chat:${chatId}`;
     const next = { ...message };
     if (typeof next.text === 'string') {
-        const dec = await decryptClientText(next.text, token, scope);
-        next.text = dec;
+        next.text = await decryptE2EEText(next.text, chatId, next.senderId);
     }
     if (next.replyTo && typeof next.replyTo === 'object' && typeof next.replyTo.text === 'string') {
-        const decReply = await decryptClientText(next.replyTo.text, token, scope);
-        next.replyTo = { ...next.replyTo, text: decReply };
+        next.replyTo = { ...next.replyTo, text: await decryptE2EEText(next.replyTo.text, chatId, next.replyTo.senderId) };
     }
     return next;
 };
 
-export const encryptChatTextClientSide = async (text: string, token: string, chatId: string): Promise<string> => {
-    return encryptClientText(text, token, `chat:${chatId}`, 'shared');
+export const encryptChatTextClientSide = async (text: string, _token: string, chatId: string): Promise<string> => {
+    const plain = String(text || '');
+    if (!plain || !E2EE_CONTEXT.myChatId || !crypto?.subtle) return plain;
+    try {
+        const identity = await ensureIdentity(E2EE_CONTEXT.myChatId);
+        const peerPublic = E2EE_CONTEXT.peerPublicKeyByChatId.get(chatId) || toBase64(identity.publicKeyRaw);
+        const aesKey = await deriveE2eeAesKey(identity.privateKey, peerPublic, `chat:${chatId}`);
+        const iv = randomBytes(12);
+        const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, toUtf8(plain));
+        const body = {
+            v: 1,
+            alg: 'ECDH-P256+AES-GCM',
+            senderPublicKey: toBase64(identity.publicKeyRaw),
+            iv: toBase64(iv),
+            ct: toBase64(new Uint8Array(ct)),
+        };
+        return `${E2EE_PREFIX}${toBase64Url(toUtf8(JSON.stringify(body)))}`;
+    } catch {
+        return plain;
+    }
 };
 
 export const encryptBioClientSide = async (bio: string, token: string, chatId: string): Promise<string> => {

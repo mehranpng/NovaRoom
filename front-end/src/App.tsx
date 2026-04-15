@@ -17,7 +17,7 @@ import { MusicPlayerProvider } from './contexts/MusicPlayerContext';
 import { cx } from './utils/cx';
 import { NotificationCenter } from './components/NotificationCenter';
 import { notify } from './utils/notificationBus';
-import { decryptBioClientSide, decryptMessageClientSide, encryptBioClientSide, encryptChatTextClientSide } from './utils/e2ee';
+import { configureE2EEContext, decryptBioClientSide, decryptMessageClientSide, encryptBioClientSide, encryptChatTextClientSide, ensureAndGetE2EEPublicKey, registerChatPeerPublicKey } from './utils/e2ee';
 import './App.css';
 
 const normalizeTimestamp = (ts: unknown): number => {
@@ -928,6 +928,36 @@ export function App() {
         if (isAuthenticated) loadChats();
     }, [isAuthenticated, loadChats]);
 
+    useEffect(() => {
+        const myId = String(currentUser?.chatId || '');
+        const peerMap: Record<string, string> = {};
+        chats.forEach((chat) => {
+            const key = String(chat?.otherUser?.e2eePublicKey || '');
+            if (chat?.id && key) peerMap[String(chat.id)] = key;
+        });
+        configureE2EEContext(myId, peerMap);
+    }, [currentUser?.chatId, chats]);
+
+    useEffect(() => {
+        const token = authToken || '';
+        const myId = String(currentUser?.chatId || '');
+        if (!token || !myId) return;
+        (async () => {
+            try {
+                const publicKey = await ensureAndGetE2EEPublicKey(myId);
+                if (publicKey && publicKey !== String(currentUser?.e2eePublicKey || '')) {
+                    await apiFetch('/profile/me', {
+                        method: 'PATCH',
+                        body: JSON.stringify({ e2eePublicKey: publicKey }),
+                    });
+                    setCurrentUser((prev) => prev ? { ...prev, e2eePublicKey: publicKey } : prev);
+                }
+            } catch (err) {
+                console.warn('E2EE key publish failed', err);
+            }
+        })();
+    }, [authToken, currentUser?.chatId]);
+
     const fetchPagedMessages = useCallback(async (
         chatId: string,
         params?: { direction?: 'latest' | 'older' | 'newer'; cursorTs?: number; cursorId?: string; mode?: 'replace' | 'prepend' | 'append' }
@@ -1312,6 +1342,9 @@ export function App() {
                     };
                     return [newChat, ...prev];
                 });
+                if (pendingUser?.e2eePublicKey) {
+                    registerChatPeerPublicKey(createdChatId, pendingUser.e2eePublicKey);
+                }
 
                 setActiveChatId(createdChatId);
                 setPendingUser(null);

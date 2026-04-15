@@ -334,6 +334,7 @@ class ProfileUpdate(BaseModel):
     username: Optional[str] = None
     bio: Optional[str] = None
     avatar: Optional[str] = None
+    e2eePublicKey: Optional[str] = None
 
 
 class UserSearchResult(BaseModel):
@@ -345,6 +346,7 @@ class UserSearchResult(BaseModel):
     online: bool
     verified: bool = False
     registrationDate: Optional[str] = None
+    e2eePublicKey: Optional[str] = None
 
 
 class ChatCreateRequest(BaseModel):
@@ -1048,6 +1050,7 @@ async def complete_registration(req: CompleteRegistrationRequest):
             "online": False,
             "verified": False,
             "registrationDate": registration_date,
+            "e2eePublicKey": "",
         },
     }
 
@@ -1132,6 +1135,7 @@ async def login(req: LoginRequest):
             "online": bool(active_connections.get(user["chatId"])),
             "verified": bool(user.get("verified", False)),
             "registrationDate": user.get("registrationDate"),
+            "e2eePublicKey": str(user.get("e2ee", {}).get("publicKey") or ""),
         },
     }
 
@@ -1147,6 +1151,7 @@ async def get_profile(current_user: dict = Depends(get_current_user)):
         "online": current_user.get("online", False),
         "verified": bool(current_user.get("verified", False)),
         "registrationDate": current_user.get("registrationDate"),
+        "e2eePublicKey": str(current_user.get("e2ee", {}).get("publicKey") or ""),
     }
 
 
@@ -1189,6 +1194,10 @@ async def update_profile(
     if updates.avatar is not None:
         avatar_value = str(updates.avatar).strip()
         update_data["profile.avatar"] = avatar_value
+
+    if updates.e2eePublicKey is not None:
+        pub = str(updates.e2eePublicKey).strip()
+        update_data["e2ee.publicKey"] = pub
 
     if update_data:
         await cl_users.update_one(
@@ -1291,6 +1300,7 @@ async def search_users(
             "online": bool(active_connections.get(u["chatId"])),
             "verified": bool(u.get("verified", False)),
             "registrationDate": u.get("registrationDate"),
+            "e2eePublicKey": str(u.get("e2ee", {}).get("publicKey") or ""),
         }
         for u in users
     ]
@@ -1627,6 +1637,15 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                         if is_group
                         else (
                             other_user.get("registrationDate") if other_user else None
+                        )
+                    ),
+                    "e2eePublicKey": (
+                        ""
+                        if is_group
+                        else (
+                            str(other_user.get("e2ee", {}).get("publicKey") or "")
+                            if other_user
+                            else ""
                         )
                     ),
                     "isGroup": is_group,
@@ -2862,7 +2881,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 file_data = data.get("file")  # File metadata from upload endpoint
                 if not isinstance(text, str):
                     continue
-                if len(text) > MAX_CHAT_MESSAGE_LENGTH:
+                if len(text) > (MAX_CHAT_MESSAGE_LENGTH * 4):
                     continue
 
                 # Allow empty text if file is present
@@ -2892,7 +2911,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             continue
 
                 reply_to = None
-                chat_scope = f"chat:{chat_id_target}"
                 if reply_to_id:
                     oid = await try_object_id(reply_to_id)
                     if oid:
@@ -2903,12 +2921,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             reply_to = {
                                 "id": str(base["_id"]),
                                 "senderId": base.get("senderId"),
-                                "text": decrypt_with_fallback(
-                                    base.get("text", ""), token, chat_scope
-                                ),
+                                "text": str(base.get("text", "")),
                             }
 
-                encrypted_text = encrypt_scoped_text(text, token, chat_scope)
+                encrypted_text = text
                 message_doc = {
                     "chatId": chat_id_target,
                     "senderId": chat_id,
@@ -2920,9 +2936,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     "reactions": [],
                 }
                 if reply_to and isinstance(reply_to.get("text"), str):
-                    message_doc["replyTo"]["text"] = encrypt_scoped_text(
-                        reply_to.get("text", ""), token, chat_scope
-                    )
+                    message_doc["replyTo"]["text"] = reply_to.get("text", "")
 
                 # Add file data if present
                 if file_data:
@@ -2965,7 +2979,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "id": msg_id,
                             "chatId": chat_id_target,
                             "senderId": chat_id,
-                            "text": text,
+                            "text": encrypted_text,
                             "timestamp": dt_to_epoch_ms(message_doc.get("timestamp")),
                             "seen": False,
                             "replyTo": reply_to,
@@ -2990,7 +3004,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     or not new_text.strip()
                 ):
                     continue
-                if len(new_text) > MAX_CHAT_MESSAGE_LENGTH:
+                if len(new_text) > (MAX_CHAT_MESSAGE_LENGTH * 4):
                     continue
 
                 oid = await try_object_id(message_id)
@@ -3014,9 +3028,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     {"_id": oid},
                     {
                         "$set": {
-                            "text": encrypt_scoped_text(
-                                new_text, token, f"chat:{chat_id_target}"
-                            ),
+                            "text": new_text,
                             "textEncrypted": True,
                             "editedAt": utc_now(),
                         }
@@ -3029,9 +3041,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         {"_id": chat_id_target, "lastMessage.id": message_id},
                         {
                             "$set": {
-                                "lastMessage.text": encrypt_scoped_text(
-                                    new_text, token, f"chat:{chat_id_target}"
-                                ),
+                                "lastMessage.text": new_text,
                                 "updatedAt": utc_now(),
                             }
                         },
@@ -3061,11 +3071,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         "replyTo": (
                             {
                                 **msg.get("replyTo"),
-                                "text": decrypt_with_fallback(
-                                    (msg.get("replyTo") or {}).get("text", ""),
-                                    token,
-                                    f"chat:{chat_id_target}",
-                                ),
+                                "text": str((msg.get("replyTo") or {}).get("text", "")),
                             }
                             if isinstance(msg.get("replyTo"), dict)
                             else None

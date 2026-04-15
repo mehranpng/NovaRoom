@@ -7,6 +7,7 @@ export interface User {
     online: boolean;
     verified?: boolean;
     registrationDate?: string;
+    e2eePublicKey?: string;
 }
 
 export interface MessageReply {
