@@ -218,10 +218,20 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                         task.result = result;
                         pushTaskUpdate(task);
                     } else {
-                        throw new Error('Invalid response');
+                        console.error('Invalid upload response:', response);
+                        alert('خطا در آپلود فایل');
+                        task.status = 'error';
+                        pushTaskUpdate(task);
+                        uploadTasksByChat.delete(chatId);
+                        resetUpload();
                     }
                 } else {
-                    throw new Error(`Upload failed: ${xhr.status}`);
+                    console.error(`Upload failed: ${xhr.status}`, xhr.responseText);
+                    alert('خطا در آپلود فایل');
+                    task.status = 'error';
+                    pushTaskUpdate(task);
+                    uploadTasksByChat.delete(chatId);
+                    resetUpload();
                 }
             });
 

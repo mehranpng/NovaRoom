@@ -170,8 +170,7 @@ async def read_file_content(file_id: str) -> Optional[bytes]:
     if not file_path.exists() or not file_path.is_file():
         return None
     async with aiofiles.open(file_path, "rb") as f:
-        raw = await f.read()
-    return decrypt_file_bytes(raw)
+        return await f.read()
 
 
 async def encrypt_existing_uploads() -> int:

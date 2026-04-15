@@ -1,7 +1,7 @@
 const ENC_PREFIX = 'enc:v1:';
 const ENC_NONCE_SIZE = 16;
 const ENC_TAG_SIZE = 16;
-const FILE_PREFIX = 'ncf:v1:';
+const FILE_MAGIC = new Uint8Array([0x4e, 0x43, 0x46, 0x31]); // NCF1
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -282,19 +282,12 @@ export const decryptBioClientSide = async (bio: string, token: string, chatId: s
     return decryptClientText(bio, token, `user-bio:${chatId}`);
 };
 
-const bytesToPrefixedPayload = (prefix: string, bytes: Uint8Array): Uint8Array => {
-    const payload = `${prefix}${toBase64Url(bytes)}`;
-    return toUtf8(payload);
-};
-
-const prefixedPayloadToBytes = (raw: Uint8Array, prefix: string): Uint8Array | null => {
-    try {
-        const text = textDecoder.decode(raw);
-        if (!text.startsWith(prefix)) return null;
-        return fromBase64Url(text.slice(prefix.length));
-    } catch {
-        return null;
+const hasFileMagic = (raw: Uint8Array): boolean => {
+    if (raw.length < FILE_MAGIC.length) return false;
+    for (let i = 0; i < FILE_MAGIC.length; i += 1) {
+        if (raw[i] !== FILE_MAGIC[i]) return false;
     }
+    return true;
 };
 
 export const encryptFileBytesClientSide = async (plain: Uint8Array, _token: string, chatId: string): Promise<Uint8Array> => {
@@ -308,11 +301,12 @@ export const encryptFileBytesClientSide = async (plain: Uint8Array, _token: stri
         nonceAndEncrypted.set(nonce, 0);
         nonceAndEncrypted.set(encrypted, nonce.length);
         const tag = await hmacTag(key, nonceAndEncrypted);
-        const full = new Uint8Array(nonce.length + encrypted.length + tag.length);
-        full.set(nonce, 0);
-        full.set(encrypted, nonce.length);
-        full.set(tag, nonce.length + encrypted.length);
-        return bytesToPrefixedPayload(FILE_PREFIX, full);
+        const full = new Uint8Array(FILE_MAGIC.length + nonce.length + encrypted.length + tag.length);
+        full.set(FILE_MAGIC, 0);
+        full.set(nonce, FILE_MAGIC.length);
+        full.set(encrypted, FILE_MAGIC.length + nonce.length);
+        full.set(tag, FILE_MAGIC.length + nonce.length + encrypted.length);
+        return full;
     } catch {
         return plain;
     }
@@ -320,9 +314,8 @@ export const encryptFileBytesClientSide = async (plain: Uint8Array, _token: stri
 
 export const decryptFileBytesClientSide = async (raw: Uint8Array, _token: string, chatId: string): Promise<Uint8Array> => {
     if (!raw.length) return raw;
-    const packed = prefixedPayloadToBytes(raw, FILE_PREFIX);
-    if (!packed) return raw;
-
+    if (!hasFileMagic(raw)) return raw;
+    const packed = raw.slice(FILE_MAGIC.length);
     if (packed.length < ENC_NONCE_SIZE + ENC_TAG_SIZE) return raw;
 
     try {
