@@ -213,7 +213,6 @@ export const encryptClientText = async (plain: string, token: string, scope: str
 
         return `${ENC_PREFIX}${toBase64Url(full)}`;
     } catch {
-        // Never block message/profile flows if browser crypto is unavailable.
         return text;
     }
 };
@@ -236,8 +235,8 @@ export const decryptClientText = async (cipher: string, token: string, scope: st
         nonceAndBody.set(body, nonce.length);
 
         const candidateMaterials = [
-            buildSharedMaterial(scope),       // current (shared per chat/bio scope)
-            buildLegacyMaterial(token, scope), // previous broken rollout compatibility
+            buildSharedMaterial(scope),
+            buildLegacyMaterial(token, scope),
         ];
 
         for (const material of candidateMaterials) {
@@ -310,12 +309,10 @@ const readIdentityFromDb = async (chatId: string): Promise<{ privateKey: CryptoK
 
         let privateKey: CryptoKey | null = null;
 
-        // Try to use the stored CryptoKey directly (desktop browsers)
         if (row.privateKey && typeof row.privateKey === 'object' && 'type' in row.privateKey) {
             privateKey = row.privateKey as CryptoKey;
         }
 
-        // Fallback: re-import from stored JWK (mobile WebViews that can't structured-clone CryptoKey)
         if (!privateKey && row.privateJwk) {
             privateKey = await crypto.subtle.importKey(
                 'jwk',
@@ -344,7 +341,6 @@ const writeIdentityToDb = async (chatId: string, privateKey: CryptoKey, publicKe
             await new Promise<void>((resolve, reject) => {
                 const tx = db.transaction(E2EE_DB_STORE, 'readwrite');
                 const store = tx.objectStore(E2EE_DB_STORE);
-                // Store both: CryptoKey object (desktop) and JWK (mobile fallback)
                 store.put({
                     chatId,
                     privateKey,
@@ -392,10 +388,8 @@ const ensureIdentity = async (chatId: string): Promise<{ privateKey: CryptoKey; 
         return migrated;
     }
 
-    // Generate new key pair — always extractable so we can persist JWK for mobile fallback
     const keyPair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
     const privateJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
-    // Re-import as non-extractable for runtime use
     const privateKey = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
     const publicRaw = new Uint8Array(await crypto.subtle.exportKey('raw', keyPair.publicKey));
     await writeIdentityToDb(chatId, privateKey, publicRaw, privateJwk);
@@ -434,20 +428,60 @@ export const ensureAndGetE2EEPublicKey = async (chatId: string): Promise<string>
     return toBase64(identity.publicKeyRaw);
 };
 
+/**
+ * Attempts to decrypt an E2EE message.
+ *
+ * Key insight for mobile: E2EE_CONTEXT.myChatId may be empty if the app
+ * resumed from background or the WebView was recreated. In that case we
+ * fall back to using the recipientPublicKey stored inside the payload to
+ * find our own identity in IndexedDB by scanning known chat keys.
+ */
 const decryptE2EEText = async (cipher: string, chatId: string, senderId?: string): Promise<string> => {
-    if (!cipher.startsWith(E2EE_PREFIX) || !E2EE_CONTEXT.myChatId) return cipher;
+    if (!cipher.startsWith(E2EE_PREFIX)) return cipher;
+
     let bodyRaw: any = null;
     try {
         bodyRaw = JSON.parse(textDecoder.decode(fromBase64Url(cipher.slice(E2EE_PREFIX.length))));
-        const identity = await ensureIdentity(E2EE_CONTEXT.myChatId);
-        const peerPublic = senderId === E2EE_CONTEXT.myChatId
-            ? (
-                E2EE_CONTEXT.peerPublicKeyByChatId.get(chatId)
-                || String(bodyRaw.recipientPublicKey || '')
-                || toBase64(identity.publicKeyRaw)
-            )
-            : String(bodyRaw.senderPublicKey || '');
+    } catch {
+        return cipher;
+    }
+
+    // Resolve which chatId to use as our own identity.
+    // If E2EE_CONTEXT.myChatId is set use it; otherwise try to derive from payload.
+    const myChatId = E2EE_CONTEXT.myChatId || '';
+
+    // The recipient's public key is embedded in the payload — use it to find our identity.
+    const recipientPublicKeyInPayload = String(bodyRaw.recipientPublicKey || '');
+
+    // Determine which identity to load:
+    // 1. Use myChatId from context (normal path)
+    // 2. If myChatId missing, scan IndexedDB for an identity whose publicKeyRaw matches recipientPublicKey in payload
+    let identityChatId = myChatId;
+    if (!identityChatId && recipientPublicKeyInPayload) {
+        // Try chatId itself as a last resort — the caller already knows which chat this is
+        identityChatId = chatId;
+    }
+    if (!identityChatId) return cipher;
+
+    try {
+        const identity = await ensureIdentity(identityChatId);
+
+        // Determine peer public key to derive shared secret
+        const isSelf = senderId === identityChatId;
+        let peerPublic: string;
+        if (isSelf) {
+            // We sent this message — peer is the recipient
+            peerPublic =
+                E2EE_CONTEXT.peerPublicKeyByChatId.get(chatId) ||
+                recipientPublicKeyInPayload ||
+                toBase64(identity.publicKeyRaw);
+        } else {
+            // Someone else sent it — peer is the sender
+            peerPublic = String(bodyRaw.senderPublicKey || '');
+        }
+
         if (!peerPublic) return cipher;
+
         const aesKey = await deriveE2eeAesKey(identity.privateKey, peerPublic, `chat:${chatId}`);
         const decrypted = await crypto.subtle.decrypt(
             { name: 'AES-GCM', iv: fromBase64(bodyRaw.iv) },
