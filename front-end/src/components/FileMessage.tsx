@@ -57,7 +57,8 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     const decodeResponseBlob = async (response: Response, preferredType?: string): Promise<Blob> => {
         const encryptedBytes = new Uint8Array(await response.arrayBuffer());
         const plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, chatId);
-        return new Blob([plainBytes], { type: preferredType || response.headers.get('content-type') || 'application/octet-stream' });
+        const plainBuffer = plainBytes.buffer.slice(plainBytes.byteOffset, plainBytes.byteOffset + plainBytes.byteLength);
+        return new Blob([plainBuffer], { type: preferredType || response.headers.get('content-type') || 'application/octet-stream' });
     };
 
     useEffect(() => {

@@ -203,7 +203,11 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             task.encryptionProgress = 100;
             setUploadProgress(getCombinedProgress(task));
             pushTaskUpdate(task);
-            const encryptedBlob = new Blob([encryptedBytes], { type: 'application/octet-stream' });
+            const encryptedBuffer = encryptedBytes.buffer.slice(
+                encryptedBytes.byteOffset,
+                encryptedBytes.byteOffset + encryptedBytes.byteLength,
+            );
+            const encryptedBlob = new Blob([encryptedBuffer], { type: 'application/octet-stream' });
             const encryptedFile = new window.File([encryptedBlob], file.name, {
                 type: 'application/octet-stream',
                 lastModified: file.lastModified,
