@@ -295,23 +295,28 @@ const openE2EEDb = async (): Promise<IDBDatabase> => {
 const readIdentityFromDb = async (chatId: string): Promise<{ privateKey: CryptoKey; publicKeyRaw: Uint8Array } | null> => {
     const db = await openE2EEDb();
     try {
-        return await new Promise((resolve, reject) => {
+        const row = await new Promise<any>((resolve, reject) => {
             const tx = db.transaction(E2EE_DB_STORE, 'readonly');
             const store = tx.objectStore(E2EE_DB_STORE);
             const req = store.get(chatId);
-            req.onsuccess = () => {
-                const row = req.result;
-                if (!row?.privateKey || !row?.publicKeyRaw) return resolve(null);
-                resolve({ privateKey: row.privateKey as CryptoKey, publicKeyRaw: fromBase64(String(row.publicKeyRaw || '')) });
-            };
+            req.onsuccess = () => resolve(req.result || null);
             req.onerror = () => reject(req.error || new Error('Failed to read E2EE key'));
         });
+        if (!row?.privateJwk || !row?.publicKeyRaw) return null;
+        const privateKey = await crypto.subtle.importKey(
+            'jwk',
+            row.privateJwk as JsonWebKey,
+            { name: 'ECDH', namedCurve: 'P-256' },
+            false,
+            ['deriveBits']
+        );
+        return { privateKey, publicKeyRaw: fromBase64(String(row.publicKeyRaw || '')) };
     } finally {
         db.close();
     }
 };
 
-const writeIdentityToDb = async (chatId: string, privateKey: CryptoKey, publicKeyRaw: Uint8Array): Promise<void> => {
+const writeIdentityToDb = async (chatId: string, privateJwk: JsonWebKey, publicKeyRaw: Uint8Array): Promise<void> => {
     const db = await openE2EEDb();
     try {
         await new Promise<void>((resolve, reject) => {
@@ -319,7 +324,7 @@ const writeIdentityToDb = async (chatId: string, privateKey: CryptoKey, publicKe
             const store = tx.objectStore(E2EE_DB_STORE);
             store.put({
                 chatId,
-                privateKey,
+                privateJwk,
                 publicKeyRaw: toBase64(publicKeyRaw),
             });
             tx.oncomplete = () => resolve();
@@ -348,7 +353,7 @@ const ensureIdentity = async (chatId: string): Promise<{ privateKey: CryptoKey; 
             ['deriveBits']
         );
         const migrated = { privateKey: imported, publicKeyRaw: fromBase64(parsed.publicKeyRaw) };
-        await writeIdentityToDb(chatId, migrated.privateKey, migrated.publicKeyRaw);
+        await writeIdentityToDb(chatId, parsed.privateJwk, migrated.publicKeyRaw);
         localStorage.removeItem(identityStorageKey(chatId));
         return migrated;
     }
@@ -357,7 +362,7 @@ const ensureIdentity = async (chatId: string): Promise<{ privateKey: CryptoKey; 
     const privateJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
     const privateKey = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
     const publicRaw = new Uint8Array(await crypto.subtle.exportKey('raw', keyPair.publicKey));
-    await writeIdentityToDb(chatId, privateKey, publicRaw);
+    await writeIdentityToDb(chatId, privateJwk, publicRaw);
     return { privateKey, publicKeyRaw: publicRaw };
 };
 
