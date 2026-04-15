@@ -257,6 +257,7 @@ const E2EE_PREFIX = 'enc:e2ee:v1:';
 const E2EE_CONTEXT = {
     myChatId: '',
     peerPublicKeyByChatId: new Map<string, string>(),
+    chatTypeByChatId: new Map<string, 'direct' | 'group' | ''>(),
 };
 const E2EE_DB_NAME = 'messenger_e2ee';
 const E2EE_DB_STORE = 'identity_keys';
@@ -474,9 +475,14 @@ const deriveE2eeAesKey = async (privateKey: CryptoKey, peerPublicRawB64: string,
     );
 };
 
-export const configureE2EEContext = (myChatId: string, peerPublicKeyByChatId: Record<string, string>): void => {
+export const configureE2EEContext = (
+    myChatId: string,
+    peerPublicKeyByChatId: Record<string, string>,
+    chatTypeByChatId: Record<string, 'direct' | 'group' | ''> = {},
+): void => {
     E2EE_CONTEXT.myChatId = String(myChatId || '');
     E2EE_CONTEXT.peerPublicKeyByChatId = new Map(Object.entries(peerPublicKeyByChatId || {}).filter(([, v]) => Boolean(v)));
+    E2EE_CONTEXT.chatTypeByChatId = new Map(Object.entries(chatTypeByChatId || {}));
 };
 
 export const registerChatPeerPublicKey = (chatId: string, publicKey: string): void => {
@@ -512,7 +518,7 @@ const decryptE2EEText = async (cipher: string, chatId: string, senderId?: string
     const myChatId = E2EE_CONTEXT.myChatId || '';
 
     // The recipient's public key is embedded in the payload — use it to find our identity.
-    const recipientPublicKeyInPayload = String(bodyRaw.recipientPublicKey || '');
+    const recipientPublicKeyInPayload = String(bodyRaw.recipientPublicKey || bodyRaw.recipient_public_key || '');
 
     // Determine which identity to load:
     // 1. Use myChatId from context (normal path)
@@ -543,7 +549,9 @@ const decryptE2EEText = async (cipher: string, chatId: string, senderId?: string
                     toBase64(identity.publicKeyRaw);
             } else {
                 // Someone else sent it — peer is the sender
-                peerPublic = String(bodyRaw.senderPublicKey || '');
+                peerPublic =
+                    String(bodyRaw.senderPublicKey || bodyRaw.sender_public_key || '') ||
+                    String(E2EE_CONTEXT.peerPublicKeyByChatId.get(chatId) || '');
             }
 
             if (!peerPublic) continue;
@@ -597,8 +605,15 @@ export const encryptChatTextClientSide = async (text: string, _token: string, ch
         return encryptClientText(plain, _token, `chat:${chatId}`, 'shared');
     }
 
-    const identity = await ensureIdentity(E2EE_CONTEXT.myChatId);
     const isSavedMessagesChat = chatId === `saved_messages_${E2EE_CONTEXT.myChatId}`;
+    const chatType = E2EE_CONTEXT.chatTypeByChatId.get(chatId) || '';
+    const isDirectChat = chatType ? chatType === 'direct' : E2EE_CONTEXT.peerPublicKeyByChatId.has(chatId);
+    if (!isDirectChat && !isSavedMessagesChat) {
+        // Group chats use shared room-level encryption for now.
+        return encryptClientText(plain, _token, `chat:${chatId}`, 'shared');
+    }
+
+    const identity = await ensureIdentity(E2EE_CONTEXT.myChatId);
     const peerPublic = E2EE_CONTEXT.peerPublicKeyByChatId.get(chatId) || (isSavedMessagesChat ? toBase64(identity.publicKeyRaw) : '');
     if (!peerPublic) {
         throw new Error('E2EE_PEER_KEY_MISSING');

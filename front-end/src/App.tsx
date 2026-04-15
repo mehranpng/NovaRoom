@@ -931,11 +931,16 @@ export function App() {
     useEffect(() => {
         const myId = String(currentUser?.chatId || '');
         const peerMap: Record<string, string> = {};
+        const chatTypeMap: Record<string, 'direct' | 'group' | ''> = {};
         chats.forEach((chat) => {
             const key = String(chat?.otherUser?.e2eePublicKey || '');
             if (chat?.id && key) peerMap[String(chat.id)] = key;
+            if (chat?.id) {
+                const type = chat?.chatType === 'group' ? 'group' : chat?.chatType === 'direct' ? 'direct' : '';
+                chatTypeMap[String(chat.id)] = type;
+            }
         });
-        configureE2EEContext(myId, peerMap);
+        configureE2EEContext(myId, peerMap, chatTypeMap);
     }, [currentUser?.chatId, chats]);
 
     useEffect(() => {
