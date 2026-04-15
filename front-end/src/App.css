@@ -1648,6 +1648,17 @@ body,
 
 .message-time {
     font-size: 10px;
+    order: 2;
+}
+
+.message-edited-label {
+    font-size: 10px;
+    opacity: 0.75;
+    order: 1;
+}
+
+.message-meta--mine .message-edited-label {
+    opacity: 0.9;
 }
 
 .message-seen {
@@ -1655,6 +1666,7 @@ body,
     font-weight: 800;
     letter-spacing: -0.02em;
     margin-left: 2px;
+    order: 3;
 }
 
 .message-seen--single {
@@ -1673,6 +1685,7 @@ body,
     display: inline-flex;
     align-items: center;
     line-height: 1;
+    order: 3;
 }
 
 .chat-room__input-area {

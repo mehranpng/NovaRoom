@@ -76,6 +76,7 @@ else:
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 30
+SESSION_INACTIVITY_EXPIRE_DAYS = 3
 MAX_ACTIVE_SESSIONS = 10
 
 client = AsyncIOMotorClient(os.getenv("MONGO_DB"))
@@ -477,6 +478,7 @@ def _normalize_session_list(user_doc: dict) -> List[dict]:
     if not isinstance(sessions, list):
         sessions = []
     now = utc_now()
+    inactivity_cutoff = now - timedelta(days=SESSION_INACTIVITY_EXPIRE_DAYS)
     valid_sessions: List[dict] = []
     for item in sessions:
         if not isinstance(item, dict):
@@ -489,11 +491,22 @@ def _normalize_session_list(user_doc: dict) -> List[dict]:
             exp_dt = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
             if exp_dt <= now:
                 continue
+        last_used_at = item.get("lastUsedAt")
+        if isinstance(last_used_at, datetime):
+            last_used_dt = last_used_at if last_used_at.tzinfo else last_used_at.replace(tzinfo=timezone.utc)
+        else:
+            created_at = item.get("createdAt")
+            if isinstance(created_at, datetime):
+                last_used_dt = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+            else:
+                last_used_dt = now
+        if last_used_dt <= inactivity_cutoff:
+            continue
         valid_sessions.append(
             {
                 "tokenHash": token_hash,
                 "createdAt": item.get("createdAt") or now,
-                "lastUsedAt": item.get("lastUsedAt") or now,
+                "lastUsedAt": last_used_dt,
                 "expiresAt": expires_at,
             }
         )

@@ -2321,8 +2321,8 @@ export function ChatRoom({
                                             )}
 
                                             <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
+                                                {m.edited && <span className="message-edited-label">ویرایش شده</span>}
                                                 <span className="message-time">{formatMessageTime(m.timestamp)}</span>
-                                                {m.edited && <span style={{ fontSize: 10, opacity: isMine ? 0.9 : 0.7, marginLeft: 6 }}>ویرایش شده</span>}
                                                 {isMine && (
                                                     m.deliveryStatus === 'sending'
                                                         ? <span className="message-pending-indicator" aria-label="در حال ارسال">◷</span>

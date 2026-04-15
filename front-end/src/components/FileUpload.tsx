@@ -16,7 +16,8 @@ interface FileUploadProps {
 type UploadTask = {
     status: 'uploading' | 'done' | 'error';
     fileName: string;
-    progress: number;
+    uploadProgress: number;
+    encryptionProgress: number;
     result?: FileMetadata;
     delivered?: boolean;
     listeners: Set<(task: UploadTask) => void>;
@@ -62,6 +63,13 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         task.listeners.forEach((listener) => listener(task));
     };
 
+    const getCombinedProgress = (task: Pick<UploadTask, 'status' | 'uploadProgress' | 'encryptionProgress'>) => {
+        if (task.status === 'done') return 100;
+        const safeUpload = Math.max(0, Math.min(100, task.uploadProgress || 0));
+        const safeEncryption = Math.max(0, Math.min(100, task.encryptionProgress || 0));
+        return Math.round((safeEncryption * 0.5) + (safeUpload * 0.5));
+    };
+
     useEffect(() => {
         const existingTask = uploadTasksByChat.get(chatId);
         if (!existingTask) {
@@ -74,7 +82,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         const handleTask = (task: UploadTask) => {
             const waitingForFileBox = task.status === 'done' && !fileAttached;
             setUploading(task.status === 'uploading' || waitingForFileBox);
-            setUploadProgress(task.status === 'done' ? 100 : (task.progress || 0));
+            setUploadProgress(getCombinedProgress(task));
             setSelectedFileName(task.fileName);
             if (task.status === 'done' && task.result && !task.delivered) {
                 task.delivered = true;
@@ -172,14 +180,29 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         const task: UploadTask = {
             status: 'uploading',
             fileName: file.name,
-            progress: 0,
+            uploadProgress: 0,
+            encryptionProgress: 0,
             listeners: new Set(),
         };
         uploadTasksByChat.set(chatId, task);
 
+        let encryptionPulse: number | null = null;
         try {
+            task.encryptionProgress = 10;
+            setUploadProgress(getCombinedProgress(task));
+            pushTaskUpdate(task);
+            encryptionPulse = window.setInterval(() => {
+                task.encryptionProgress = Math.min(95, task.encryptionProgress + 5);
+                setUploadProgress(getCombinedProgress(task));
+                pushTaskUpdate(task);
+            }, 140);
             const plainBytes = new Uint8Array(await file.arrayBuffer());
             const encryptedBytes = await encryptFileBytesClientSide(plainBytes, token, chatId);
+            window.clearInterval(encryptionPulse);
+            encryptionPulse = null;
+            task.encryptionProgress = 100;
+            setUploadProgress(getCombinedProgress(task));
+            pushTaskUpdate(task);
             const encryptedBlob = new Blob([encryptedBytes], { type: 'application/octet-stream' });
             const encryptedFile = new window.File([encryptedBlob], file.name, {
                 type: 'application/octet-stream',
@@ -195,8 +218,8 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             xhr.upload.addEventListener('progress', (e) => {
                 if (e.lengthComputable) {
                     const progress = Math.round((e.loaded / e.total) * 100);
-                    setUploadProgress(progress);
-                    task.progress = progress;
+                    task.uploadProgress = progress;
+                    setUploadProgress(getCombinedProgress(task));
                     pushTaskUpdate(task);
                 }
             });
@@ -213,7 +236,8 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                             mimeType: file.type || response.file.mimeType,
                         };
                         task.status = 'done';
-                        task.progress = 100;
+                        task.uploadProgress = 100;
+                        task.encryptionProgress = 100;
                         setUploadProgress(100);
                         task.result = result;
                         pushTaskUpdate(task);
@@ -260,6 +284,9 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             xhr.send(formData);
 
         } catch (error) {
+            if (encryptionPulse != null) {
+                window.clearInterval(encryptionPulse);
+            }
             console.error('Upload error:', error);
             alert('خطا در آپلود فایل');
             uploadTasksByChat.delete(chatId);
