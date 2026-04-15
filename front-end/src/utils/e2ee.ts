@@ -261,6 +261,7 @@ const E2EE_CONTEXT = {
 };
 const E2EE_DB_NAME = 'messenger_e2ee';
 const E2EE_DB_STORE = 'identity_keys';
+const IDENTITY_MEMORY_CACHE = new Map<string, { privateKey: CryptoKey; publicKeyRaw: Uint8Array }>();
 
 const toBase64 = (bytes: Uint8Array): string => {
     let binary = '';
@@ -293,6 +294,9 @@ const openE2EEDb = async (): Promise<IDBDatabase> => {
 };
 
 const readIdentityFromDb = async (chatId: string): Promise<{ privateKey: CryptoKey; publicKeyRaw: Uint8Array } | null> => {
+    const cached = IDENTITY_MEMORY_CACHE.get(chatId);
+    if (cached) return cached;
+
     const db = await openE2EEDb();
     try {
         const row = await new Promise<any>((resolve, reject) => {
@@ -302,43 +306,49 @@ const readIdentityFromDb = async (chatId: string): Promise<{ privateKey: CryptoK
             req.onsuccess = () => resolve(req.result || null);
             req.onerror = () => reject(req.error || new Error('Failed to read E2EE key'));
         });
-        if (!row?.privateJwk || !row?.publicKeyRaw) return null;
-        const privateKey = await crypto.subtle.importKey(
-            'jwk',
-            row.privateJwk as JsonWebKey,
-            { name: 'ECDH', namedCurve: 'P-256' },
-            false,
-            ['deriveBits']
-        );
-        return { privateKey, publicKeyRaw: fromBase64(String(row.publicKeyRaw || '')) };
+        if (!row?.privateKey || !row?.publicKeyRaw) return null;
+        const identity = { privateKey: row.privateKey as CryptoKey, publicKeyRaw: fromBase64(String(row.publicKeyRaw || '')) };
+        IDENTITY_MEMORY_CACHE.set(chatId, identity);
+        return identity;
     } finally {
         db.close();
     }
 };
 
-const writeIdentityToDb = async (chatId: string, privateJwk: JsonWebKey, publicKeyRaw: Uint8Array): Promise<void> => {
-    const db = await openE2EEDb();
+const writeIdentityToDb = async (chatId: string, privateKey: CryptoKey, publicKeyRaw: Uint8Array): Promise<void> => {
+    IDENTITY_MEMORY_CACHE.set(chatId, { privateKey, publicKeyRaw });
     try {
-        await new Promise<void>((resolve, reject) => {
-            const tx = db.transaction(E2EE_DB_STORE, 'readwrite');
-            const store = tx.objectStore(E2EE_DB_STORE);
-            store.put({
-                chatId,
-                privateJwk,
-                publicKeyRaw: toBase64(publicKeyRaw),
+        const db = await openE2EEDb();
+        try {
+            await new Promise<void>((resolve, reject) => {
+                const tx = db.transaction(E2EE_DB_STORE, 'readwrite');
+                const store = tx.objectStore(E2EE_DB_STORE);
+                store.put({
+                    chatId,
+                    privateKey,
+                    publicKeyRaw: toBase64(publicKeyRaw),
+                });
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error || new Error('Failed to persist E2EE key'));
+                tx.onabort = () => reject(tx.error || new Error('Failed to persist E2EE key'));
             });
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject(tx.error || new Error('Failed to persist E2EE key'));
-            tx.onabort = () => reject(tx.error || new Error('Failed to persist E2EE key'));
-        });
-    } finally {
-        db.close();
+        } finally {
+            db.close();
+        }
+    } catch {
+        // Some mobile browsers/webviews fail structured-clone persistence for CryptoKey.
+        // Keep an in-memory key for the current session so E2EE still works on-device.
     }
 };
 
 const ensureIdentity = async (chatId: string): Promise<{ privateKey: CryptoKey; publicKeyRaw: Uint8Array }> => {
     if (!chatId || !crypto?.subtle) throw new Error('E2EE unavailable');
-    const dbIdentity = await readIdentityFromDb(chatId);
+    let dbIdentity: { privateKey: CryptoKey; publicKeyRaw: Uint8Array } | null = null;
+    try {
+        dbIdentity = await readIdentityFromDb(chatId);
+    } catch {
+        dbIdentity = IDENTITY_MEMORY_CACHE.get(chatId) || null;
+    }
     if (dbIdentity) return dbIdentity;
 
     // One-time migration from old localStorage format (if present), then delete it.
@@ -353,7 +363,7 @@ const ensureIdentity = async (chatId: string): Promise<{ privateKey: CryptoKey; 
             ['deriveBits']
         );
         const migrated = { privateKey: imported, publicKeyRaw: fromBase64(parsed.publicKeyRaw) };
-        await writeIdentityToDb(chatId, parsed.privateJwk, migrated.publicKeyRaw);
+        await writeIdentityToDb(chatId, migrated.privateKey, migrated.publicKeyRaw);
         localStorage.removeItem(identityStorageKey(chatId));
         return migrated;
     }
@@ -362,7 +372,7 @@ const ensureIdentity = async (chatId: string): Promise<{ privateKey: CryptoKey; 
     const privateJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
     const privateKey = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
     const publicRaw = new Uint8Array(await crypto.subtle.exportKey('raw', keyPair.publicKey));
-    await writeIdentityToDb(chatId, privateJwk, publicRaw);
+    await writeIdentityToDb(chatId, privateKey, publicRaw);
     return { privateKey, publicKeyRaw: publicRaw };
 };
 
@@ -476,7 +486,6 @@ export const encryptChatTextClientSide = async (text: string, _token: string, ch
             recipientPublicKey: peerPublic,
             iv: toBase64(iv),
             ct: toBase64(new Uint8Array(ct)),
-            legacy: await encryptClientText(plain, _token, `chat:${chatId}`, 'shared'),
         };
         return `${E2EE_PREFIX}${toBase64Url(toUtf8(JSON.stringify(body)))}`;
     } catch (error) {
