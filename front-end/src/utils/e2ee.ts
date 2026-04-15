@@ -388,8 +388,12 @@ const writeIdentityToDb = async (chatId: string, privateKey: CryptoKey, publicKe
     }
 };
 
-const ensureIdentity = async (chatId: string): Promise<{ privateKey: CryptoKey; publicKeyRaw: Uint8Array }> => {
+const ensureIdentity = async (
+    chatId: string,
+    options: { createIfMissing?: boolean } = {},
+): Promise<{ privateKey: CryptoKey; publicKeyRaw: Uint8Array } | null> => {
     if (!chatId || !crypto?.subtle) throw new Error('E2EE unavailable');
+    const { createIfMissing = true } = options;
     let dbIdentity: { privateKey: CryptoKey; publicKeyRaw: Uint8Array } | null = null;
     try {
         dbIdentity = await readIdentityFromDb(chatId);
@@ -416,6 +420,8 @@ const ensureIdentity = async (chatId: string): Promise<{ privateKey: CryptoKey; 
         localStorage.removeItem(identityStorageKey(chatId));
         return migrated;
     }
+
+    if (!createIfMissing) return null;
 
     const keyPair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
     const privateJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
@@ -454,6 +460,7 @@ export const registerChatPeerPublicKey = (chatId: string, publicKey: string): vo
 
 export const ensureAndGetE2EEPublicKey = async (chatId: string): Promise<string> => {
     const identity = await ensureIdentity(chatId);
+    if (!identity) throw new Error('E2EE identity unavailable');
     return toBase64(identity.publicKeyRaw);
 };
 
@@ -492,11 +499,11 @@ const decryptE2EEText = async (cipher: string, chatId: string, senderId?: string
     if (!identityChatId) return cipher;
 
     try {
-        const identity = await readIdentityFromDb(identityChatId);
+        const identity = await ensureIdentity(identityChatId, { createIfMissing: false });
         if (!identity) return cipher;
 
         // Determine peer public key to derive shared secret
-        const isSelf = senderId === identityChatId;
+        const isSelf = String(senderId || '') === String(identityChatId || '');
         let peerPublic: string;
         if (isSelf) {
             // We sent this message — peer is the recipient
@@ -558,6 +565,7 @@ export const encryptChatTextClientSide = async (text: string, _token: string, ch
     }
 
     const identity = await ensureIdentity(E2EE_CONTEXT.myChatId);
+    if (!identity) throw new Error('E2EE identity unavailable');
     const isSavedMessagesChat = chatId === `saved_messages_${E2EE_CONTEXT.myChatId}`;
     const peerPublic = E2EE_CONTEXT.peerPublicKeyByChatId.get(chatId) || (isSavedMessagesChat ? toBase64(identity.publicKeyRaw) : '');
     if (!peerPublic) {
