@@ -1353,6 +1353,7 @@ export function App() {
 
                 const clientId = makeClientId();
                 pushOptimisticMessage(createdChatId, clientId);
+                await syncPeerKeyForChat(createdChatId);
                 const success = await sendViaWS(createdChatId, text, payload.replyToId, payload.file, clientId);
                 if (!success) {
                     console.warn('WebSocket not connected');
@@ -1375,17 +1376,32 @@ export function App() {
 
         const clientId = makeClientId();
         pushOptimisticMessage(activeChatId, clientId);
+        if (activeChat?.chatType !== 'group') {
+            await syncPeerKeyForChat(activeChatId);
+        }
         const success = await sendViaWS(activeChatId, text, payload.replyToId, payload.file, clientId);
         if (!success) {
             console.warn('WebSocket not connected');
             removeOptimisticMessage(activeChatId, clientId);
         }
-    }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, navigate, chats, isUserBlocked, messages]);
+    }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, navigate, chats, isUserBlocked, messages, syncPeerKeyForChat]);
 
     const handleDeleteMessage = useCallback((messageId: string) => {
         if (!activeChatId) return;
         deleteViaWS(activeChatId, messageId);
     }, [activeChatId, deleteViaWS]);
+
+    const syncPeerKeyForChat = useCallback(async (chatId: string) => {
+        if (!chatId) return;
+        try {
+            const list = await apiFetch('/chats');
+            const chat = Array.isArray(list) ? list.find((c: any) => String(c?.id || '') === String(chatId)) : null;
+            const key = String(chat?.otherUser?.e2eePublicKey || '');
+            if (key) registerChatPeerPublicKey(chatId, key);
+        } catch (err) {
+            console.warn('Failed to sync peer E2EE key', err);
+        }
+    }, []);
 
     const handleForwardMessage = useCallback(async (sourceChatId: string, messageId: string, targetChatId: string) => {
         pendingForwardSendHintsRef.current[targetChatId] = (pendingForwardSendHintsRef.current[targetChatId] || 0) + 1;
