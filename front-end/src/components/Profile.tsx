@@ -167,7 +167,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
             const token = localStorage.getItem('token') || '';
             const plainBytes = new Uint8Array(await file.arrayBuffer());
             const encryptedBytes = await encryptFileBytesClientSide(plainBytes, token, 'profile_avatar_shared');
-            const encryptedFile = new window.File([encryptedBytes], file.name, {
+            const encryptedFile = new window.File([new Uint8Array(encryptedBytes)], file.name, {
                 type: 'application/octet-stream',
                 lastModified: file.lastModified || Date.now(),
             });
@@ -210,7 +210,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
             if (plainBytes === encryptedBytes) {
                 plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
             }
-            const blob = new Blob([plainBytes], { type: response.headers.get('content-type') || 'image/*' });
+            const blob = new Blob([new Uint8Array(plainBytes)], { type: response.headers.get('content-type') || 'image/*' });
             if (!blob || blob.size === 0) return;
             if (openedImageObjectUrlRef.current) URL.revokeObjectURL(openedImageObjectUrlRef.current);
             const objectUrl = URL.createObjectURL(blob);

@@ -558,7 +558,7 @@ export function ChatRoom({
             if (plainBytes === encryptedBytes) {
                 plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
             }
-            const blob = new Blob([plainBytes], { type: response.headers.get('content-type') || 'image/*' });
+            const blob = new Blob([new Uint8Array(plainBytes)], { type: response.headers.get('content-type') || 'image/*' });
             if (openedGroupAvatarObjectUrlRef.current) {
                 URL.revokeObjectURL(openedGroupAvatarObjectUrlRef.current);
             }
