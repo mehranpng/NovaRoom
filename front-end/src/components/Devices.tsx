@@ -1,6 +1,7 @@
 import { ArrowLeft, Laptop, ShieldOff } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '../config/api';
+import { AnimatePresence, motion } from 'framer-motion';
 
 interface DeviceSession {
     tokenHash: string;
@@ -128,7 +129,7 @@ export function Devices({ onBack }: DevicesProps) {
                 <div className="profile__header-spacer" />
             </div>
 
-            <div className="profile__content" style={{ gap: 12, paddingInline: 14 }}>
+            <div className="profile__content" style={{ gap: 8, paddingInline: 14 }}>
                 {loading ? (
                     <div style={{ textAlign: 'center', direction: 'rtl', opacity: 0.8, fontSize: 13, padding: '14px 0' }}>
                         در حال بارگیری نشست‌ها...
@@ -142,8 +143,8 @@ export function Devices({ onBack }: DevicesProps) {
                                 key={currentSession.tokenHash}
                                 className="profile__chat-id-card"
                                 style={{
-                                    border: '1px solid var(--accent-primary)',
-                                    background: 'color-mix(in srgb, var(--accent-primary) 10%, var(--bg-secondary))',
+                                    border: '1px solid color-mix(in srgb, var(--accent-primary) 24%, var(--border-primary))',
+                                    background: 'color-mix(in srgb, var(--accent-primary) 6%, var(--bg-secondary))',
                                 }}
                             >
                                 <div className="profile__chat-id-row" style={{ alignItems: 'center', justifyContent: 'space-between', direction: 'rtl', textAlign: 'right', minHeight: 62 }}>
@@ -164,8 +165,10 @@ export function Devices({ onBack }: DevicesProps) {
                             style={{
                                 width: '100%',
                                 justifyContent: 'center',
-                                minHeight: 44,
-                                background: 'color-mix(in srgb, #ef4444 72%, var(--bg-tertiary))',
+                                minHeight: 48,
+                                marginTop: 4,
+                                marginBottom: 10,
+                                background: 'color-mix(in srgb, #dc2626 82%, var(--bg-tertiary))',
                             }}
                             disabled={!hasOtherSessions || bulkBusy}
                             onClick={() => setConfirmAction({ kind: 'others' })}
@@ -201,24 +204,38 @@ export function Devices({ onBack }: DevicesProps) {
                 )}
             </div>
 
-            {confirmAction && confirmMeta && (
-                <div
-                    ref={confirmOverlayRef}
-                    className="chat-room-confirm-overlay"
-                    style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.28)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-                >
-                    <div className="chat-room-confirm-modal" style={{ width: 'min(420px, calc(100vw - 24px))' }}>
-                        <h3 className="chat-room-confirm-modal__title">{confirmMeta.title}</h3>
-                        <p className="chat-room-confirm-modal__text">{confirmMeta.text}</p>
-                        <div className="chat-room-confirm-modal__actions">
-                            <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmAction(null)} disabled={bulkBusy || Boolean(busyHash)}>لغو</button>
-                            <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={runConfirmAction} disabled={bulkBusy || Boolean(busyHash)}>
-                                {confirmMeta.confirmLabel}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <AnimatePresence>
+                {confirmAction && confirmMeta && (
+                    <motion.div
+                        className="chat-room-modal-overlay"
+                        ref={confirmOverlayRef}
+                        style={{ zIndex: 120, background: 'rgba(0,0,0,.46)' }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.22, ease: 'easeOut' }}
+                    >
+                        <motion.div
+                            className="chat-room-confirm-modal"
+                            style={{ width: 'min(480px, calc(100vw - 24px))' }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                        >
+                            <h3 className="chat-room-confirm-modal__title">{confirmMeta.title}</h3>
+                            <p className="chat-room-confirm-modal__text">{confirmMeta.text}</p>
+                            <div className="chat-room-confirm-modal__actions">
+                                <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmAction(null)} disabled={bulkBusy || Boolean(busyHash)} type="button">لغو</button>
+                                <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={runConfirmAction} disabled={bulkBusy || Boolean(busyHash)} type="button">
+                                    {confirmMeta.confirmLabel}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

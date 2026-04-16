@@ -1,4 +1,4 @@
-import { Search, MessageCirclePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, Laptop, ChevronDown, AlignJustify, Trash2, RefreshCw, Pin, PinOff, MessageSquarePlus } from 'lucide-react';
+import { Search, MessageCirclePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, Laptop, ChevronDown, AlignJustify, Trash2, RefreshCw, Pin, PinOff, MessageSquarePlus, Palette, Monitor } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Chat, User } from '../types';
@@ -783,7 +783,7 @@ export function ChatList({
                                         style={{ justifyContent: 'space-between' }}
                                     >
                                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                                            <Laptop size={16} />
+                                            <Palette size={16} />
                                             حالت نمایش
                                         </span>
                                         <ChevronDown size={14} style={{ transform: themeMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }} />
@@ -800,7 +800,7 @@ export function ChatList({
                                             >
                                                 <div style={{ padding: '4px 0 0' }}>
                                                     <button className="popover__item" onClick={() => { setThemeMode('system'); setMenuOpen(false); }} type="button" style={{ paddingInlineStart: 28 }}>
-                                                        <Laptop size={16} />
+                                                        <Monitor size={16} />
                                                         سیستم{themeMode === 'system' ? ' ✓' : ''}
                                                     </button>
                                                     <button className="popover__item" onClick={() => { setThemeMode('light'); setMenuOpen(false); }} type="button" style={{ paddingInlineStart: 28 }}>

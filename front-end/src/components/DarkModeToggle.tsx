@@ -1,4 +1,4 @@
-import { Laptop, Moon, Sun } from 'lucide-react';
+import { Monitor, Moon, Sun } from 'lucide-react';
 import { type ThemeMode } from '../hooks/useDarkMode';
 
 interface DarkModeToggleProps {
@@ -24,7 +24,7 @@ export function DarkModeToggle({ themeMode, onToggle }: DarkModeToggleProps) {
       title={`تم فعلی: ${labelByMode[themeMode]} | بعدی: ${labelByMode[nextMode]}`}
       type="button"
     >
-      {themeMode === 'system' && <Laptop size={20} />}
+      {themeMode === 'system' && <Monitor size={20} />}
       {themeMode === 'light' && <Sun size={20} />}
       {themeMode === 'dark' && <Moon size={20} />}
     </button>
