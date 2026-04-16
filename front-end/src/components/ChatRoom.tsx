@@ -64,6 +64,14 @@ interface ChatRoomProps {
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000;
+const TEHRAN_TZ = 'Asia/Tehran';
+
+const persianJalaliDateFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+    timeZone: TEHRAN_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+});
 
 function normalizeTs(ts: any): number {
     if (ts == null) return Date.now();
@@ -113,8 +121,7 @@ function formatDayLabel(ts: any) {
     const diffDays = today - thatDay;
     if (diffDays === 0) return 'امروز';
     if (diffDays === 1) return 'دیروز';
-    const d = iranShiftedDate(ts);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    return persianJalaliDateFmt.format(new Date(normalizeTs(ts)));
 }
 
 function bubbleShape(prevSameSender: boolean, nextSameSender: boolean) {

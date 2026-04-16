@@ -69,7 +69,7 @@ function normalizeTs(ts: any): number {
     return Date.now();
 }
 
-const tehranTimeFmt = new Intl.DateTimeFormat('en-GB', {
+const tehranTimeFmt = new Intl.DateTimeFormat('fa-IR', {
     timeZone: TEHRAN_TZ,
     hour: '2-digit',
     minute: '2-digit',
@@ -83,15 +83,16 @@ const tehranYmdFmt = new Intl.DateTimeFormat('en-CA', {
     day: '2-digit',
 });
 
-const tehranWeekdayFmt = new Intl.DateTimeFormat('en-US', {
+const tehranWeekdayFmt = new Intl.DateTimeFormat('fa-IR', {
     timeZone: TEHRAN_TZ,
-    weekday: 'short',
+    weekday: 'long',
 });
 
-const tehranMonthDayFmt = new Intl.DateTimeFormat('en-US', {
+const tehranJalaliFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
     timeZone: TEHRAN_TZ,
-    month: 'short',
-    day: 'numeric',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
 });
 
 function tehranYMD(ts: any): string {
@@ -122,12 +123,19 @@ function formatTime(timestamp: any): string {
     if (diffDays === 1) {
         return 'دیروز';
     }
-    // Within a week
-    if (diffDays > 1 && diffDays < 7) {
+    // Two or three days ago
+    if (diffDays === 2) {
+        return '۲ روز پیش';
+    }
+    if (diffDays === 3) {
+        return '۳ روز پیش';
+    }
+    // More than 3 days ago, up to one week: weekday in Persian
+    if (diffDays > 3 && diffDays <= 7) {
         return tehranWeekdayFmt.format(d);
     }
-    // Older
-    return tehranMonthDayFmt.format(d);
+    // Older than a week: Persian (Jalali) date with Persian digits
+    return tehranJalaliFmt.format(d);
 }
 
 function getFilePreviewLabel(file: any): string {
