@@ -348,3 +348,60 @@ export const decryptFileBytesClientSide = async (raw: Uint8Array, _token: string
         return raw;
     }
 };
+
+export const encryptAvatarBytesClientSide = async (plain: Uint8Array, _token: string, userId: string): Promise<Uint8Array> => {
+    if (!plain.length) return plain;
+    try {
+        const scope = `user-avatar:${userId}`;
+        const key = await deriveKey(buildSharedMaterial(scope));
+        const nonce = randomBytes(ENC_NONCE_SIZE);
+        const encrypted = await xorStream(plain, key, nonce);
+        const nonceAndEncrypted = new Uint8Array(nonce.length + encrypted.length);
+        nonceAndEncrypted.set(nonce, 0);
+        nonceAndEncrypted.set(encrypted, nonce.length);
+        const tag = await hmacTag(key, nonceAndEncrypted);
+        const full = new Uint8Array(FILE_MAGIC.length + nonce.length + encrypted.length + tag.length);
+        full.set(FILE_MAGIC, 0);
+        full.set(nonce, FILE_MAGIC.length);
+        full.set(encrypted, FILE_MAGIC.length + nonce.length);
+        full.set(tag, FILE_MAGIC.length + nonce.length + encrypted.length);
+        return full;
+    } catch {
+        return plain;
+    }
+};
+
+export const decryptAvatarBytesClientSide = async (raw: Uint8Array, _token: string, userId: string): Promise<Uint8Array> => {
+    if (!raw.length) return raw;
+    let packed: Uint8Array | null = null;
+    if (hasFileMagic(raw)) {
+        packed = raw.slice(FILE_MAGIC.length);
+    } else {
+        try {
+            const maybeText = textDecoder.decode(raw);
+            if (maybeText.startsWith(FILE_TEXT_PREFIX)) {
+                packed = fromBase64Url(maybeText.slice(FILE_TEXT_PREFIX.length));
+            }
+        } catch {
+            packed = null;
+        }
+    }
+    if (!packed || packed.length < ENC_NONCE_SIZE + ENC_TAG_SIZE) return raw;
+
+    try {
+        const nonce = packed.slice(0, ENC_NONCE_SIZE);
+        const body = packed.slice(ENC_NONCE_SIZE, packed.length - ENC_TAG_SIZE);
+        const tag = packed.slice(packed.length - ENC_TAG_SIZE);
+        const nonceAndBody = new Uint8Array(nonce.length + body.length);
+        nonceAndBody.set(nonce, 0);
+        nonceAndBody.set(body, nonce.length);
+        const scope = `user-avatar:${userId}`;
+        const key = await deriveKey(buildSharedMaterial(scope));
+        const expectedTag = await hmacTag(key, nonceAndBody);
+        const sameTag = tag.length === expectedTag.length && tag.every((b, i) => b === expectedTag[i]);
+        if (!sameTag) return raw;
+        return xorStream(body, key, nonce);
+    } catch {
+        return raw;
+    }
+};

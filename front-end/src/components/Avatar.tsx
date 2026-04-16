@@ -2,6 +2,7 @@ import { Bookmark } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cx } from '../utils/cx';
 import { API_BASE_URL } from '../config/api';
+import { decryptAvatarBytesClientSide } from '../utils/e2ee';
 
 interface AvatarProps {
   name: string;
@@ -9,6 +10,7 @@ interface AvatarProps {
   online?: boolean;
   savedMessages?: boolean;
   src?: string;
+  decryptScopeId?: string;
 }
 
 function getColorIndex(name: string): number {
@@ -64,8 +66,8 @@ function resolveAvatarUrl(src: string): string {
   return `${API_BASE_URL}/files/${src}`;
 }
 
-async function fetchAvatar(src: string): Promise<string> {
-  const cacheKey = src;
+async function fetchAvatar(src: string, decryptScopeId?: string): Promise<string> {
+  const cacheKey = decryptScopeId ? `${decryptScopeId}::${src}` : src;
 
   if (avatarCache.has(cacheKey)) return avatarCache.get(cacheKey)!;
   if (avatarFetching.has(cacheKey)) return avatarFetching.get(cacheKey)!;
@@ -105,7 +107,13 @@ async function fetchAvatar(src: string): Promise<string> {
       if (!response.ok) return '';
 
       const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
+      let finalBlob = blob;
+      if (decryptScopeId) {
+        const encryptedBytes = new Uint8Array(await blob.arrayBuffer());
+        const decryptedBytes = await decryptAvatarBytesClientSide(encryptedBytes, token, decryptScopeId);
+        finalBlob = new Blob([decryptedBytes], { type: blob.type || 'application/octet-stream' });
+      }
+      const blobUrl = URL.createObjectURL(finalBlob);
       avatarCache.set(cacheKey, blobUrl);
       return blobUrl;
     } catch {
@@ -119,10 +127,11 @@ async function fetchAvatar(src: string): Promise<string> {
   return promise;
 }
 
-export function Avatar({ name, size = 'md', online, savedMessages = false, src = '' }: AvatarProps) {
+export function Avatar({ name, size = 'md', online, savedMessages = false, src = '', decryptScopeId }: AvatarProps) {
   const [resolvedSrc, setResolvedSrc] = useState<string>(() => {
     if (!src) return '';
-    return avatarCache.get(src) || '';
+    const cacheKey = decryptScopeId ? `${decryptScopeId}::${src}` : src;
+    return avatarCache.get(cacheKey) || '';
   });
 
   useEffect(() => {
@@ -131,20 +140,21 @@ export function Avatar({ name, size = 'md', online, savedMessages = false, src =
       return;
     }
 
-    if (avatarCache.has(src)) {
-      setResolvedSrc(avatarCache.get(src)!);
+    const cacheKey = decryptScopeId ? `${decryptScopeId}::${src}` : src;
+    if (avatarCache.has(cacheKey)) {
+      setResolvedSrc(avatarCache.get(cacheKey)!);
       return;
     }
 
     let cancelled = false;
-    fetchAvatar(src).then((url) => {
+    fetchAvatar(src, decryptScopeId).then((url) => {
       if (!cancelled) setResolvedSrc(url);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [src]);
+  }, [src, decryptScopeId]);
 
   const px = sizeMap[size];
 

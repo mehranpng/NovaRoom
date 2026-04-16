@@ -7,6 +7,7 @@ import { VerifiedBadge } from './VerifiedBadge';
 import { cx } from '../utils/cx';
 import { API_BASE_URL, apiFetch } from '../config/api';
 import { ImageMediaViewer } from './ImageMediaViewer';
+import { decryptAvatarBytesClientSide, encryptAvatarBytesClientSide } from '../utils/e2ee';
 
 interface ProfileProps {
     user: User;
@@ -163,8 +164,16 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
 
     const handleAvatarUpload = async (file: File) => {
         try {
+            const token = localStorage.getItem('token') || '';
+            const plainBytes = new Uint8Array(await file.arrayBuffer());
+            const encryptedBytes = await encryptAvatarBytesClientSide(plainBytes, token, user.chatId);
+            const encryptedBlob = new Blob([encryptedBytes], { type: 'application/octet-stream' });
+            const encryptedFile = new window.File([encryptedBlob], file.name, {
+                type: 'application/octet-stream',
+                lastModified: file.lastModified,
+            });
             const formData = new FormData();
-            formData.append('file', file);
+            formData.append('file', encryptedFile);
 
             const upload = await apiFetch('/files/upload', {
                 method: 'POST',
@@ -197,7 +206,10 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (!response.ok) return;
-            const blob = await response.blob();
+            const encryptedBlob = await response.blob();
+            const encryptedBytes = new Uint8Array(await encryptedBlob.arrayBuffer());
+            const decryptedBytes = await decryptAvatarBytesClientSide(encryptedBytes, token, user.chatId);
+            const blob = new Blob([decryptedBytes], { type: encryptedBlob.type || 'application/octet-stream' });
             if (!blob || blob.size === 0) return;
             if (openedImageObjectUrlRef.current) URL.revokeObjectURL(openedImageObjectUrlRef.current);
             const objectUrl = URL.createObjectURL(blob);
@@ -263,7 +275,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                 {/* Avatar & Name Section */}
                 <div className="profile__avatar-section">
                     <button type="button" onClick={openAvatarViewer} style={{ background: 'none', border: 'none', padding: 0, cursor: user.avatar ? 'zoom-in' : 'default' }}>
-                        <Avatar name={user.name} size="xl" src={user.avatar ? `${API_BASE_URL}/files/${user.avatar}` : ''} />
+                        <Avatar name={user.name} size="xl" src={user.avatar ? `${API_BASE_URL}/files/${user.avatar}` : ''} decryptScopeId={user.chatId} />
                     </button>
                     <div className="profile__avatar-actions">
                         <label className="profile__avatar-btn" aria-disabled={updatingAvatar}>

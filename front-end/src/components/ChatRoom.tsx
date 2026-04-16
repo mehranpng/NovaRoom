@@ -399,8 +399,10 @@ export function ChatRoom({
 
     const prevLenRef = useRef(0);
     const pendingOlderAdjustRef = useRef<{ prevHeight: number; prevTop: number } | null>(null);
-    const pendingOlderAnchorRef = useRef<{ messageId: string; top: number } | null>(null);
+    const pendingOlderAnchorRef = useRef<{ messageId: string; offsetFromScrollTop: number } | null>(null);
     const pendingRangeLoadTypeRef = useRef<'older' | 'newer' | null>(null);
+    const hasNewerMessagesRef = useRef(hasNewerMessages);
+    const loadingNewerMessagesRef = useRef(Boolean(loadingNewerMessages || localLoadingNewer));
     const openedAtRef = useRef<number>(Date.now());
     const initialScrollDoneRef = useRef(false);
     const lastChatIdRef = useRef<string | null>(null);
@@ -441,6 +443,14 @@ export function ChatRoom({
     const consumedInitialUnreadRef = useRef(false);
     const typingActiveRef = useRef(false);
     const typingTimeoutRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        hasNewerMessagesRef.current = hasNewerMessages;
+    }, [hasNewerMessages]);
+
+    useEffect(() => {
+        loadingNewerMessagesRef.current = Boolean(loadingNewerMessages || localLoadingNewer);
+    }, [loadingNewerMessages, localLoadingNewer]);
 
     const clearTypingTimeout = () => {
         if (typingTimeoutRef.current) {
@@ -1319,10 +1329,8 @@ export function ChatRoom({
             if (anchor && added > 0) {
                 const anchorEl = messageElsRef.current.get(anchor.messageId);
                 if (anchorEl) {
-                    const nextTop = anchorEl.getBoundingClientRect().top;
-                    const delta = nextTop - anchor.top;
                     markProgrammaticScroll();
-                    container.scrollTop += delta;
+                    container.scrollTop = Math.max(0, anchorEl.offsetTop - anchor.offsetFromScrollTop);
                 }
             } else {
                 const snap = pendingOlderAdjustRef.current;
@@ -1410,13 +1418,13 @@ export function ChatRoom({
             pendingRangeLoadTypeRef.current = 'older';
             pendingOlderAdjustRef.current = { prevHeight: container.scrollHeight, prevTop: container.scrollTop };
             const containerRect = container.getBoundingClientRect();
-            let anchor: { messageId: string; top: number } | null = null;
+            let anchor: { messageId: string; offsetFromScrollTop: number } | null = null;
             for (const msg of messages) {
                 const el = messageElsRef.current.get(msg.id);
                 if (!el) continue;
                 const rect = el.getBoundingClientRect();
                 if (rect.bottom >= containerRect.top + 8) {
-                    anchor = { messageId: msg.id, top: rect.top };
+                    anchor = { messageId: msg.id, offsetFromScrollTop: el.offsetTop - container.scrollTop };
                     break;
                 }
             }
@@ -1478,10 +1486,23 @@ export function ChatRoom({
         + (pendingForwardDraft ? 1 : 0);
     const scrollButtonBottom = 96 + (activeInputStackCount * 56);
 
-    const jumpToLatest = () => {
+    const jumpToLatest = async () => {
         setHideScrollBtnUntilBottom(true);
         setNewMsgCount(0);
         setShowScrollBtn(false);
+        pendingRangeLoadTypeRef.current = 'newer';
+        let loops = 0;
+        while (hasNewerMessagesRef.current && !loadingNewerMessagesRef.current && loops < 24) {
+            loops += 1;
+            setLocalLoadingNewer(true);
+            try {
+                await Promise.resolve(onLoadNewerMessages?.(chatId));
+                await new Promise((resolve) => window.setTimeout(resolve, 80));
+            } finally {
+                setLocalLoadingNewer(false);
+            }
+        }
+        pendingRangeLoadTypeRef.current = null;
         scrollToBottom(true);
         [140, 320, 560].forEach((delay) => {
             window.setTimeout(() => {
