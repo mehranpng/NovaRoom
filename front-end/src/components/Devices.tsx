@@ -1,4 +1,4 @@
-import { ArrowLeft, Laptop, Shield, ShieldOff } from 'lucide-react';
+import { ArrowLeft, Laptop, ShieldOff } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '../config/api';
 
@@ -69,6 +69,8 @@ export function Devices({ onBack }: DevicesProps) {
     }, [confirmAction]);
 
     const hasOtherSessions = useMemo(() => sessions.some((s) => !s.current), [sessions]);
+    const currentSession = useMemo(() => sessions.find((s) => s.current) || null, [sessions]);
+    const otherSessions = useMemo(() => sessions.filter((s) => !s.current), [sessions]);
 
     const runConfirmAction = async () => {
         if (!confirmAction) return;
@@ -127,52 +129,76 @@ export function Devices({ onBack }: DevicesProps) {
             </div>
 
             <div className="profile__content" style={{ gap: 12, paddingInline: 14 }}>
-                <button
-                    className="profile__save-btn"
-                    style={{ width: '100%', justifyContent: 'center' }}
-                    disabled={!hasOtherSessions || bulkBusy}
-                    onClick={() => setConfirmAction({ kind: 'others' })}
-                >
-                    <ShieldOff size={14} /> قطع دسترسی دیگر دستگاه ها
-                </button>
-
                 {loading ? (
-                    <div className="profile__chat-id-card">در حال دریافت دستگاه‌ها...</div>
+                    <div style={{ textAlign: 'center', direction: 'rtl', opacity: 0.8, fontSize: 13, padding: '14px 0' }}>
+                        در حال بارگیری نشست‌ها...
+                    </div>
                 ) : sessions.length === 0 ? (
                     <div className="profile__chat-id-card">نشست فعالی پیدا نشد.</div>
-                ) : sessions.map((session) => (
-                    <div
-                        key={session.tokenHash}
-                        className="profile__chat-id-card"
-                        style={{
-                            border: session.current ? '1px solid var(--accent-primary)' : undefined,
-                            background: session.current ? 'color-mix(in srgb, var(--accent-primary) 10%, var(--bg-secondary))' : undefined,
-                        }}
-                    >
-                        <div className="profile__chat-id-row" style={{ alignItems: 'flex-start', justifyContent: 'space-between', direction: 'rtl', textAlign: 'right' }}>
-                            <div style={{ display: 'grid', gap: 6 }}>
-                                <p className="profile__chat-id-value" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <Laptop size={16} /> {session.deviceName || 'نامشخص'}
-                                    {session.current ? <span style={{ fontSize: 12, opacity: 0.85, fontFamily: 'Vazir, sans-serif' }}>(دستگاه فعلی)</span> : null}
-                                </p>
-                                <p className="profile__field-label">آخرین استفاده: {toPersianDigits(toJalaliTehran(session.lastUsedAt))}</p>
-                                <p className="profile__field-label">ایجاد نشست: {toPersianDigits(toJalaliTehran(session.createdAt))}</p>
+                ) : (
+                    <>
+                        {currentSession && (
+                            <div
+                                key={currentSession.tokenHash}
+                                className="profile__chat-id-card"
+                                style={{
+                                    border: '1px solid var(--accent-primary)',
+                                    background: 'color-mix(in srgb, var(--accent-primary) 10%, var(--bg-secondary))',
+                                }}
+                            >
+                                <div className="profile__chat-id-row" style={{ alignItems: 'center', justifyContent: 'space-between', direction: 'rtl', textAlign: 'right', minHeight: 62 }}>
+                                    <div style={{ display: 'grid', gap: 3 }}>
+                                        <p className="profile__chat-id-value" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <Laptop size={16} /> {currentSession.deviceName || 'نامشخص'}
+                                            <span style={{ fontSize: 12, opacity: 0.85, fontFamily: 'Vazir, sans-serif' }}>(دستگاه فعلی)</span>
+                                        </p>
+                                        <p className="profile__field-label">آخرین استفاده: {toPersianDigits(toJalaliTehran(currentSession.lastUsedAt))}</p>
+                                        <p className="profile__field-label">ایجاد نشست: {toPersianDigits(toJalaliTehran(currentSession.createdAt))}</p>
+                                    </div>
+                                </div>
                             </div>
-                            {session.current ? (
-                                <span className="profile__copy-btn" style={{ cursor: 'default', opacity: 0.9 }}><Shield size={16} /></span>
-                            ) : (
-                                <button
-                                    className="profile__avatar-btn profile__avatar-btn--danger"
-                                    style={{ marginRight: 'auto' }}
-                                    disabled={busyHash === session.tokenHash || bulkBusy}
-                                    onClick={() => setConfirmAction({ kind: 'one', session })}
-                                >
-                                    <ShieldOff size={14} /> قطع دسترسی
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                ))}
+                        )}
+
+                        <button
+                            className="profile__save-btn"
+                            style={{
+                                width: '100%',
+                                justifyContent: 'center',
+                                minHeight: 44,
+                                background: 'color-mix(in srgb, #ef4444 72%, var(--bg-tertiary))',
+                            }}
+                            disabled={!hasOtherSessions || bulkBusy}
+                            onClick={() => setConfirmAction({ kind: 'others' })}
+                        >
+                            <ShieldOff size={15} /> قطع دسترسی دیگر دستگاه ها
+                        </button>
+
+                        {otherSessions.map((session) => (
+                            <div
+                                key={session.tokenHash}
+                                className="profile__chat-id-card"
+                            >
+                                <div className="profile__chat-id-row" style={{ alignItems: 'center', justifyContent: 'space-between', direction: 'rtl', textAlign: 'right', minHeight: 62 }}>
+                                    <div style={{ display: 'grid', gap: 3 }}>
+                                        <p className="profile__chat-id-value" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <Laptop size={16} /> {session.deviceName || 'نامشخص'}
+                                        </p>
+                                        <p className="profile__field-label">آخرین استفاده: {toPersianDigits(toJalaliTehran(session.lastUsedAt))}</p>
+                                        <p className="profile__field-label">ایجاد نشست: {toPersianDigits(toJalaliTehran(session.createdAt))}</p>
+                                    </div>
+                                    <button
+                                        className="profile__avatar-btn profile__avatar-btn--danger"
+                                        style={{ marginRight: 'auto', alignSelf: 'center' }}
+                                        disabled={busyHash === session.tokenHash || bulkBusy}
+                                        onClick={() => setConfirmAction({ kind: 'one', session })}
+                                    >
+                                        <ShieldOff size={14} /> قطع دسترسی
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </>
+                )}
             </div>
 
             {confirmAction && confirmMeta && (
