@@ -44,7 +44,6 @@ const mergeMessages = (base: Message[], incoming: Message[], mode: 'replace' | '
 
 export function App() {
     const MESSAGE_PAGE_SIZE = 50;
-    const MESSAGE_WINDOW_LIMIT = 220;
     const navigate = useNavigate();
     const location = useLocation();
     const [authToken, setAuthToken] = useState<string | null>(() => localStorage.getItem('token'));
@@ -483,7 +482,7 @@ export function App() {
                     replacedOptimisticMine = true;
                     const nextMessages = [...currentMessages];
                     nextMessages[optimisticIdx] = { ...newMsg, deliveryStatus: 'sent' };
-                    return { ...prev, [chatId]: nextMessages.slice(-MESSAGE_WINDOW_LIMIT) };
+                    return { ...prev, [chatId]: nextMessages };
                 }
             }
             if (currentMessages.some(m => m.id === newMsg.id)) {
@@ -492,7 +491,7 @@ export function App() {
             }
             return {
                 ...prev,
-                [chatId]: [...currentMessages, newMsg].slice(-MESSAGE_WINDOW_LIMIT)
+                [chatId]: [...currentMessages, newMsg]
             };
         });
 
@@ -952,11 +951,7 @@ export function App() {
 
         setMessages((prev) => {
             const merged = mergeMessages(prev[chatId] || [], chunk, mode);
-            if (merged.length <= MESSAGE_WINDOW_LIMIT) return { ...prev, [chatId]: merged };
-            if (mode === 'prepend') {
-                return { ...prev, [chatId]: merged.slice(0, MESSAGE_WINDOW_LIMIT) };
-            }
-            return { ...prev, [chatId]: merged.slice(-MESSAGE_WINDOW_LIMIT) };
+            return { ...prev, [chatId]: merged };
         });
 
         setMessageRangeState((prev) => ({
@@ -1177,6 +1172,10 @@ export function App() {
         });
     }, [messageRangeState, fetchPagedMessages]);
 
+    const jumpToLatestMessages = useCallback(async (chatId: string) => {
+        await fetchPagedMessages(chatId, { direction: 'latest', mode: 'replace' });
+    }, [fetchPagedMessages]);
+
 
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -1310,7 +1309,7 @@ export function App() {
             };
             setMessages((prev) => ({
                 ...prev,
-                [targetChatId]: [...(prev[targetChatId] || []), optimistic].slice(-MESSAGE_WINDOW_LIMIT),
+                [targetChatId]: [...(prev[targetChatId] || []), optimistic],
             }));
             setChats((prev) => prev.map((chat) => (
                 chat.id === targetChatId
@@ -1449,7 +1448,7 @@ export function App() {
             };
             setMessages((prev) => ({
                 ...prev,
-                [targetChatId]: [...(prev[targetChatId] || []), optimisticForward].slice(-MESSAGE_WINDOW_LIMIT),
+                [targetChatId]: [...(prev[targetChatId] || []), optimisticForward],
             }));
         }
         const encryptedText = sourceMessage
@@ -2094,6 +2093,7 @@ export function App() {
                                 loadingNewerMessages={Boolean(activeRange?.loadingNewer)}
                                 onLoadOlderMessages={loadOlderMessages}
                                 onLoadNewerMessages={loadNewerMessages}
+                                onJumpToLatestMessages={jumpToLatestMessages}
                             />
                         ) : (
                             <EmptyState />

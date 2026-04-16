@@ -17,6 +17,7 @@ import { FileUpload } from './FileUpload';
 import { FileMessage } from './FileMessage';
 import { ImageMediaViewer } from './ImageMediaViewer';
 import { VideoMediaViewer } from './VideoMediaViewer';
+import { decryptAvatarBytesClientSide, decryptFileBytesClientSide } from '../utils/e2ee';
 import './FileComponents.css';
 
 const pendingUploadedFileByChat: Record<string, FileMetadata | null> = {};
@@ -59,6 +60,7 @@ interface ChatRoomProps {
     loadingNewerMessages?: boolean;
     onLoadOlderMessages?: (chatId: string) => void | Promise<void>;
     onLoadNewerMessages?: (chatId: string) => void | Promise<void>;
+    onJumpToLatestMessages?: (chatId: string) => void | Promise<void>;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000;
@@ -321,6 +323,7 @@ export function ChatRoom({
     loadingNewerMessages = false,
     onLoadOlderMessages,
     onLoadNewerMessages,
+    onJumpToLatestMessages,
 }: ChatRoomProps) {
     const MAX_CHAT_MESSAGE_LENGTH = 6000;
     const currentChat = useMemo(
@@ -550,7 +553,12 @@ export function ChatRoom({
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (!response.ok) throw new Error('Failed to load group avatar');
-            const blob = await response.blob();
+            const encryptedBytes = new Uint8Array(await response.arrayBuffer());
+            let plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, 'profile_avatar_shared');
+            if (plainBytes === encryptedBytes) {
+                plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
+            }
+            const blob = new Blob([plainBytes], { type: response.headers.get('content-type') || 'image/*' });
             if (openedGroupAvatarObjectUrlRef.current) {
                 URL.revokeObjectURL(openedGroupAvatarObjectUrlRef.current);
             }
@@ -1482,7 +1490,9 @@ export function ChatRoom({
         setHideScrollBtnUntilBottom(true);
         setNewMsgCount(0);
         setShowScrollBtn(false);
-        if (hasNewerMessages && onSelectChat) {
+        if (onJumpToLatestMessages) {
+            await Promise.resolve(onJumpToLatestMessages(chatId));
+        } else if (hasNewerMessages && onSelectChat) {
             await Promise.resolve(onSelectChat(chatId));
         } else if (hasNewerMessages && onLoadNewerMessages) {
             await Promise.resolve(onLoadNewerMessages(chatId));

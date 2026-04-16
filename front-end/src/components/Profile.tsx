@@ -7,7 +7,7 @@ import { VerifiedBadge } from './VerifiedBadge';
 import { cx } from '../utils/cx';
 import { API_BASE_URL, apiFetch } from '../config/api';
 import { ImageMediaViewer } from './ImageMediaViewer';
-import { decryptAvatarBytesClientSide, encryptAvatarBytesClientSide } from '../utils/e2ee';
+import { decryptAvatarBytesClientSide, decryptFileBytesClientSide, encryptFileBytesClientSide } from '../utils/e2ee';
 
 interface ProfileProps {
     user: User;
@@ -166,7 +166,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
         try {
             const token = localStorage.getItem('token') || '';
             const plainBytes = new Uint8Array(await file.arrayBuffer());
-            const encryptedBytes = await encryptAvatarBytesClientSide(plainBytes, token);
+            const encryptedBytes = await encryptFileBytesClientSide(plainBytes, token, 'profile_avatar_shared');
             const encryptedFile = new window.File([encryptedBytes], file.name, {
                 type: 'application/octet-stream',
                 lastModified: file.lastModified || Date.now(),
@@ -206,7 +206,10 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
             });
             if (!response.ok) return;
             const encryptedBytes = new Uint8Array(await response.arrayBuffer());
-            const plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
+            let plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, 'profile_avatar_shared');
+            if (plainBytes === encryptedBytes) {
+                plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
+            }
             const blob = new Blob([plainBytes], { type: response.headers.get('content-type') || 'image/*' });
             if (!blob || blob.size === 0) return;
             if (openedImageObjectUrlRef.current) URL.revokeObjectURL(openedImageObjectUrlRef.current);

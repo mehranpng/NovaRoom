@@ -6,6 +6,7 @@ import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { API_BASE_URL, apiFetch } from '../config/api';
 import { ImageMediaViewer } from './ImageMediaViewer';
+import { decryptAvatarBytesClientSide, decryptFileBytesClientSide, encryptFileBytesClientSide } from '../utils/e2ee';
 
 interface ContactInfoProps {
     user: User;
@@ -221,8 +222,15 @@ export function ContactInfo({
         setError(null);
 
         try {
+            const token = localStorage.getItem('token') || '';
+            const plainBytes = new Uint8Array(await file.arrayBuffer());
+            const encryptedBytes = await encryptFileBytesClientSide(plainBytes, token, 'profile_avatar_shared');
+            const encryptedFile = new window.File([encryptedBytes], file.name, {
+                type: 'application/octet-stream',
+                lastModified: file.lastModified || Date.now(),
+            });
             const form = new FormData();
-            form.append('file', file);
+            form.append('file', encryptedFile);
             const res = await apiFetch('/files/upload', { method: 'POST', body: form });
 
             if (res?.success !== true) throw new Error('Upload failed');
@@ -252,7 +260,12 @@ export function ContactInfo({
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (!response.ok) throw new Error('Failed to load avatar');
-            const blob = await response.blob();
+            const encryptedBytes = new Uint8Array(await response.arrayBuffer());
+            let plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, 'profile_avatar_shared');
+            if (plainBytes === encryptedBytes) {
+                plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
+            }
+            const blob = new Blob([plainBytes], { type: response.headers.get('content-type') || 'image/*' });
             if (openedImageObjectUrlRef.current) {
                 URL.revokeObjectURL(openedImageObjectUrlRef.current);
             }

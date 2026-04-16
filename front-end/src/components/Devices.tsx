@@ -78,20 +78,19 @@ export function Devices({ onBack }: DevicesProps) {
     };
 
     return (
-        <div className="profile">
+        <div className="profile" dir="rtl" style={{ fontFamily: 'Vazir, sans-serif' }}>
             <div className="profile__header">
                 <button onClick={onBack} className="profile__header-back"><ArrowLeft size={22} /></button>
                 <h1 className="profile__header-title">دستگاه‌ها</h1>
                 <div className="profile__header-spacer" />
             </div>
 
-            <div className="profile__content" style={{ gap: 12 }}>
-                <div className="profile__chat-id-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <div className="profile__content" style={{ gap: 12, paddingInline: 14 }}>
+                <div className="profile__chat-id-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, direction: 'rtl' }}>
                     <div>
                         <p className="profile__field-label">مدیریت نشست‌های فعال</p>
-                        <p className="profile__chat-id-value" style={{ opacity: 0.85 }}>نشست فعلی همیشه در ابتدای لیست قرار می‌گیرد.</p>
                     </div>
-                    <button className="profile__save-btn" disabled={!hasOtherSessions || bulkBusy} onClick={revokeOthers}>
+                    <button className="profile__save-btn" style={{ marginLeft: 'auto' }} disabled={!hasOtherSessions || bulkBusy} onClick={revokeOthers}>
                         <ShieldOff size={14} /> قطع دسترسی سایرین
                     </button>
                 </div>
@@ -109,7 +108,7 @@ export function Devices({ onBack }: DevicesProps) {
                             background: session.current ? 'color-mix(in srgb, var(--accent-primary) 10%, var(--bg-secondary))' : undefined,
                         }}
                     >
-                        <div className="profile__chat-id-row" style={{ alignItems: 'flex-start' }}>
+                        <div className="profile__chat-id-row" style={{ alignItems: 'flex-start', direction: 'rtl', textAlign: 'right' }}>
                             <div style={{ display: 'grid', gap: 6 }}>
                                 <p className="profile__chat-id-value" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                     <Laptop size={16} /> {session.deviceName || 'نامشخص'}
@@ -121,7 +120,7 @@ export function Devices({ onBack }: DevicesProps) {
                             {session.current ? (
                                 <span className="profile__copy-btn" style={{ cursor: 'default', opacity: 0.9 }}><Shield size={16} /></span>
                             ) : (
-                                <button className="profile__avatar-btn profile__avatar-btn--danger" disabled={busyHash === session.tokenHash || bulkBusy} onClick={() => revokeOne(session)}>
+                                <button className="profile__avatar-btn profile__avatar-btn--danger" style={{ marginLeft: 'auto' }} disabled={busyHash === session.tokenHash || bulkBusy} onClick={() => revokeOne(session)}>
                                     <ShieldOff size={14} /> قطع دسترسی
                                 </button>
                             )}

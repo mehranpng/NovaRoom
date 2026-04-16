@@ -2,7 +2,7 @@ import { Bookmark } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cx } from '../utils/cx';
 import { API_BASE_URL } from '../config/api';
-import { decryptAvatarBytesClientSide } from '../utils/e2ee';
+import { decryptAvatarBytesClientSide, decryptFileBytesClientSide } from '../utils/e2ee';
 
 interface AvatarProps {
   name: string;
@@ -106,7 +106,10 @@ async function fetchAvatar(src: string): Promise<string> {
       if (!response.ok) return '';
 
       const encryptedBytes = new Uint8Array(await response.arrayBuffer());
-      const plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
+      let plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, 'profile_avatar_shared');
+      if (plainBytes === encryptedBytes) {
+        plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
+      }
       const blob = new Blob([plainBytes], { type: response.headers.get('content-type') || 'image/*' });
       const blobUrl = URL.createObjectURL(blob);
       avatarCache.set(cacheKey, blobUrl);
