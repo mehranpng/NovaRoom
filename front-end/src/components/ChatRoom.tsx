@@ -441,6 +441,7 @@ export function ChatRoom({
     const consumedInitialUnreadRef = useRef(false);
     const typingActiveRef = useRef(false);
     const typingTimeoutRef = useRef<number | null>(null);
+    const pendingSendHapticCountRef = useRef(0);
 
     const clearTypingTimeout = () => {
         if (typingTimeoutRef.current) {
@@ -1346,6 +1347,13 @@ export function ChatRoom({
                 prevLenRef.current = messages.length;
                 return;
             }
+            const recentlyAddedMessages = messages.slice(Math.max(0, prevLenRef.current));
+            const confirmedOutgoingCount = recentlyAddedMessages.filter((msg) => msg.senderId === currentUserId).length;
+            if (confirmedOutgoingCount > 0 && pendingSendHapticCountRef.current > 0) {
+                const hapticCount = Math.min(confirmedOutgoingCount, pendingSendHapticCountRef.current, 3);
+                for (let i = 0; i < hapticCount; i += 1) triggerHaptic();
+                pendingSendHapticCountRef.current = Math.max(0, pendingSendHapticCountRef.current - confirmedOutgoingCount);
+            }
             if (nearBottom) {
                 const openedRecently = Date.now() - openedAtRef.current < 1600;
                 const shouldAnimate = !openedRecently && added <= 2;
@@ -1353,7 +1361,6 @@ export function ChatRoom({
                 prevLenRef.current = messages.length;
                 return () => cancelAnimationFrame(raf);
             }
-            const recentlyAddedMessages = messages.slice(Math.max(0, prevLenRef.current));
             const incomingCount = recentlyAddedMessages.filter((msg) => msg.senderId !== currentUserId).length;
             if (incomingCount > 0) {
                 setNewMsgCount((c) => c + incomingCount);
@@ -1483,14 +1490,11 @@ export function ChatRoom({
         setNewMsgCount(0);
         setShowScrollBtn(false);
         scrollToBottom(true);
-        [140, 320, 560].forEach((delay) => {
-            window.setTimeout(() => {
-                scrollToBottom(false);
-                if (computeNearBottom()) {
-                    setHideScrollBtnUntilBottom(false);
-                }
-            }, delay);
-        });
+        window.setTimeout(() => {
+            if (computeNearBottom()) {
+                setHideScrollBtnUntilBottom(false);
+            }
+        }, 420);
     };
 
     const submit = () => {
@@ -1501,8 +1505,8 @@ export function ChatRoom({
             return;
         }
         if (!t && !uploadedFile && (!pendingForwardDraft || Boolean(editingId))) return;
-        triggerHaptic();
         if (t || uploadedFile) {
+            pendingSendHapticCountRef.current += 1;
             onSendMessage({ text: t || '', replyToId: replyTo?.id, editMessageId: editingId ?? undefined, file: uploadedFile ?? undefined });
         }
         if (pendingForwardDraft && !editingId) {
