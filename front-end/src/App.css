@@ -2321,7 +2321,7 @@ body,
 }
 
 .profile__chat-id-card {
-    margin-bottom: 24px;
+    margin-bottom: 10px;
     border-radius: 16px;
     background: var(--bg-secondary);
     padding: 16px;

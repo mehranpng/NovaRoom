@@ -167,7 +167,7 @@ export function Devices({ onBack }: DevicesProps) {
                                 justifyContent: 'center',
                                 minHeight: 48,
                                 marginTop: 4,
-                                marginBottom: 10,
+                                marginBottom: 15,
                                 background: 'color-mix(in srgb, #dc2626 82%, var(--bg-tertiary))',
                             }}
                             disabled={!hasOtherSessions || bulkBusy}
