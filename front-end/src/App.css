@@ -2335,7 +2335,6 @@ body,
 
 .profile__field-label {
     display: block;
-    margin-bottom: 6px;
     font-size: 12px;
     font-weight: 500;
     text-transform: uppercase;
@@ -2344,7 +2343,7 @@ body,
 }
 
 .profile__chat-id-value {
-    margin-top: 4px;
+    margin-bottom: 8px;
     font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
     font-size: 14px;
     font-weight: 600;
@@ -3154,8 +3153,13 @@ body,
 }
 
 @keyframes chatRangeSpin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .results {
