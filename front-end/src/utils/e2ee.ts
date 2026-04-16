@@ -3,6 +3,8 @@ const ENC_NONCE_SIZE = 16;
 const ENC_TAG_SIZE = 16;
 const FILE_MAGIC = new Uint8Array([0x4e, 0x43, 0x46, 0x31]); // NCF1
 const FILE_TEXT_PREFIX = 'ncf:v1:';
+const AVATAR_MAGIC = new Uint8Array([0x4e, 0x43, 0x41, 0x31]); // NCA1
+const AVATAR_TEXT_PREFIX = 'nca:v1:';
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -340,6 +342,62 @@ export const decryptFileBytesClientSide = async (raw: Uint8Array, _token: string
         nonceAndBody.set(body, nonce.length);
         const scope = `chat:${chatId}`;
         const key = await deriveKey(buildSharedMaterial(scope));
+        const expectedTag = await hmacTag(key, nonceAndBody);
+        const sameTag = tag.length === expectedTag.length && tag.every((b, i) => b === expectedTag[i]);
+        if (!sameTag) return raw;
+        return xorStream(body, key, nonce);
+    } catch {
+        return raw;
+    }
+};
+
+export const encryptAvatarBytesClientSide = async (plain: Uint8Array, _token: string): Promise<Uint8Array> => {
+    if (!plain.length) return plain;
+    try {
+        const scope = 'profile-avatar:shared';
+        const key = await deriveKey(buildSharedMaterial(scope));
+        const nonce = randomBytes(ENC_NONCE_SIZE);
+        const encrypted = await xorStream(plain, key, nonce);
+        const nonceAndEncrypted = new Uint8Array(nonce.length + encrypted.length);
+        nonceAndEncrypted.set(nonce, 0);
+        nonceAndEncrypted.set(encrypted, nonce.length);
+        const tag = await hmacTag(key, nonceAndEncrypted);
+        const full = new Uint8Array(AVATAR_MAGIC.length + nonce.length + encrypted.length + tag.length);
+        full.set(AVATAR_MAGIC, 0);
+        full.set(nonce, AVATAR_MAGIC.length);
+        full.set(encrypted, AVATAR_MAGIC.length + nonce.length);
+        full.set(tag, AVATAR_MAGIC.length + nonce.length + encrypted.length);
+        return full;
+    } catch {
+        return plain;
+    }
+};
+
+export const decryptAvatarBytesClientSide = async (raw: Uint8Array, _token: string): Promise<Uint8Array> => {
+    if (!raw.length) return raw;
+    let packed: Uint8Array | null = null;
+    if (raw.length >= AVATAR_MAGIC.length && raw.slice(0, AVATAR_MAGIC.length).every((b, i) => b === AVATAR_MAGIC[i])) {
+        packed = raw.slice(AVATAR_MAGIC.length);
+    } else {
+        try {
+            const maybeText = textDecoder.decode(raw);
+            if (maybeText.startsWith(AVATAR_TEXT_PREFIX)) {
+                packed = fromBase64Url(maybeText.slice(AVATAR_TEXT_PREFIX.length));
+            }
+        } catch {
+            packed = null;
+        }
+    }
+    if (!packed) return raw;
+    if (packed.length < ENC_NONCE_SIZE + ENC_TAG_SIZE) return raw;
+    try {
+        const nonce = packed.slice(0, ENC_NONCE_SIZE);
+        const body = packed.slice(ENC_NONCE_SIZE, packed.length - ENC_TAG_SIZE);
+        const tag = packed.slice(packed.length - ENC_TAG_SIZE);
+        const nonceAndBody = new Uint8Array(nonce.length + body.length);
+        nonceAndBody.set(nonce, 0);
+        nonceAndBody.set(body, nonce.length);
+        const key = await deriveKey(buildSharedMaterial('profile-avatar:shared'));
         const expectedTag = await hmacTag(key, nonceAndBody);
         const sameTag = tag.length === expectedTag.length && tag.every((b, i) => b === expectedTag[i]);
         if (!sameTag) return raw;

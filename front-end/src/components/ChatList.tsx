@@ -22,6 +22,7 @@ interface ChatListProps {
     onLogout: () => void;
     onOpenAIChat: () => void;
     onOpenSavedMessages: () => void;
+    onOpenDevices: () => void;
     onReconnectNow: () => void;
     loading?: boolean;
 }
@@ -317,6 +318,7 @@ export function ChatList({
     onLogout,
     onOpenAIChat,
     onOpenSavedMessages,
+    onOpenDevices,
     onReconnectNow,
     loading = false,
 }: ChatListProps) {
@@ -768,6 +770,10 @@ export function ChatList({
                                 <button className="popover__item" onClick={() => { setMenuOpen(false); onOpenSavedMessages(); }} type="button">
                                     <Bookmark size={16} />
                                     پیام‌های ذخیره شده
+                                </button>
+                                <button className="popover__item" onClick={() => { setMenuOpen(false); onOpenDevices(); }} type="button">
+                                    <Laptop size={16} />
+                                    دستگاه‌ها
                                 </button>
                                 <div style={{ width: '100%' }}>
                                     <button

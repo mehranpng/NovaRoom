@@ -85,4 +85,4 @@ export interface AIChatSummary {
     updatedAt: number;
 }
 
-export type View = 'chatList' | 'chatRoom' | 'profile';
+export type View = 'chatList' | 'chatRoom' | 'profile' | 'devices';

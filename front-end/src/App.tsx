@@ -7,6 +7,7 @@ import { ChatList } from './components/ChatList';
 import { ChatRoom } from './components/ChatRoom';
 import { AIChatRoom } from './components/AIChatRoom';
 import { Profile } from './components/Profile';
+import { Devices } from './components/Devices';
 import { EmptyState } from './components/EmptyState';
 import { Login } from './components/Login';
 import { Register } from './components/Register';
@@ -1195,6 +1196,10 @@ export function App() {
             setView('profile');
             return;
         }
+        if (pathname === '/devices') {
+            setView('devices');
+            return;
+        }
 
         if (pathname === '/ai') {
             setActiveChatId(null);
@@ -1632,6 +1637,10 @@ export function App() {
         setView('profile');
         navigate('/profile');
     };
+    const handleOpenDevices = () => {
+        setView('devices');
+        navigate('/devices');
+    };
     const cleanupTemporaryAIChat = useCallback(async (chatId: string) => {
         try {
             await apiFetch(`/ai/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
@@ -1969,7 +1978,7 @@ export function App() {
             <MiniMusicPlayer />
             <NotificationCenter />
             <div className="app">
-                {view !== 'profile' && (
+                {view !== 'profile' && view !== 'devices' && (
                     <div className={cx('app__sidebar', view === 'chatRoom' && 'app__sidebar--hidden-mobile')}>
                         <ChatList
                             chats={chats}
@@ -1983,6 +1992,7 @@ export function App() {
                             onLogout={handleLogout}
                             onOpenAIChat={handleOpenAIChat}
                             onOpenSavedMessages={handleOpenSavedMessages}
+                            onOpenDevices={handleOpenDevices}
                             onReconnectNow={reconnectNow}
                             loading={isInitialChatsLoad}
                         />
@@ -2006,7 +2016,13 @@ export function App() {
                     </div>
                 )}
 
-                {view !== 'profile' && (
+                {view === 'devices' && (
+                    <div className="app__main">
+                        <Devices onBack={handleBack} />
+                    </div>
+                )}
+
+                {view !== 'profile' && view !== 'devices' && (
                     <div className={cx('app__main', view === 'chatList' && 'app__main--hidden-mobile')}>
                         {view === 'chatRoom' && showAIChat ? (
                             <AIChatRoom

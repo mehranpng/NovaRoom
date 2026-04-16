@@ -1478,18 +1478,20 @@ export function ChatRoom({
         + (pendingForwardDraft ? 1 : 0);
     const scrollButtonBottom = 96 + (activeInputStackCount * 56);
 
-    const jumpToLatest = () => {
+    const jumpToLatest = async () => {
         setHideScrollBtnUntilBottom(true);
         setNewMsgCount(0);
         setShowScrollBtn(false);
-        scrollToBottom(true);
-        [140, 320, 560].forEach((delay) => {
+        if (hasNewerMessages && onSelectChat) {
+            await Promise.resolve(onSelectChat(chatId));
+        } else if (hasNewerMessages && onLoadNewerMessages) {
+            await Promise.resolve(onLoadNewerMessages(chatId));
+        }
+        requestAnimationFrame(() => {
+            scrollToBottom(true);
             window.setTimeout(() => {
-                scrollToBottom(false);
-                if (computeNearBottom()) {
-                    setHideScrollBtnUntilBottom(false);
-                }
-            }, delay);
+                if (computeNearBottom()) setHideScrollBtnUntilBottom(false);
+            }, 450);
         });
     };
 
@@ -1501,7 +1503,6 @@ export function ChatRoom({
             return;
         }
         if (!t && !uploadedFile && (!pendingForwardDraft || Boolean(editingId))) return;
-        triggerHaptic();
         if (t || uploadedFile) {
             onSendMessage({ text: t || '', replyToId: replyTo?.id, editMessageId: editingId ?? undefined, file: uploadedFile ?? undefined });
         }

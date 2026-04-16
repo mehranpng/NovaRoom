@@ -4,6 +4,7 @@ import { type User } from '../types';
 import { LogIn, Mail, Key } from 'lucide-react';
 import { DarkModeToggle } from './DarkModeToggle';
 import { useDarkMode } from '../hooks/useDarkMode';
+import { detectDeviceName } from '../utils/device';
 
 interface LoginProps {
     onLoginSuccess: (user: User, token: string) => void;
@@ -79,7 +80,7 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
         try {
             const data = await apiFetch('/auth/login', {
                 method: 'POST',
-                body: JSON.stringify({ email, password }),
+                body: JSON.stringify({ email, password, deviceName: detectDeviceName() }),
             });
 
             localStorage.setItem('token', data.token);

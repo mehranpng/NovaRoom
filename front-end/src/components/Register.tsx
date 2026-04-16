@@ -5,6 +5,7 @@ import { type User } from '../types';
 import { UserPlus, ArrowLeft, Mail, Key, User as UserIcon, CheckCircle, AlertCircle } from 'lucide-react';
 import { DarkModeToggle } from './DarkModeToggle';
 import { useDarkMode } from '../hooks/useDarkMode';
+import { detectDeviceName } from '../utils/device';
 
 interface RegisterProps {
     onRegisterSuccess: (user: User, token: string) => void;
@@ -264,7 +265,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
         try {
             const data = await apiFetch('/auth/register/complete', {
                 method: 'POST',
-                body: JSON.stringify({ email, name, username: username.trim(), password }),
+                body: JSON.stringify({ email, name, username: username.trim(), password, deviceName: detectDeviceName() }),
             });
 
             // Clear sessionStorage

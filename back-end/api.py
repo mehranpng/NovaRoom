@@ -5,6 +5,7 @@ from fastapi import (
     Depends,
     HTTPException,
     Query,
+    Request,
     UploadFile,
     File as FastAPIFile,
 )
@@ -371,6 +372,7 @@ async def bcrypt_checkpw_async(password: str, stored_hash: str) -> bool:
 class LoginRequest(BaseModel):
     email: str
     password: str
+    deviceName: Optional[str] = None
 
 
 class TokenResponse(BaseModel):
@@ -427,6 +429,7 @@ class CompleteRegistrationRequest(BaseModel):
     name: str
     username: str
     password: str
+    deviceName: Optional[str] = None
 
 
 class PasswordResetRequest(BaseModel):
@@ -471,6 +474,12 @@ async def create_access_token(data: dict) -> str:
 def hash_access_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
+def normalize_device_name(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return text[:120]
+
 
 def _normalize_session_list(user_doc: dict) -> List[dict]:
     login = (user_doc or {}).get("login") or {}
@@ -508,13 +517,14 @@ def _normalize_session_list(user_doc: dict) -> List[dict]:
                 "createdAt": item.get("createdAt") or now,
                 "lastUsedAt": last_used_dt,
                 "expiresAt": expires_at,
+                "deviceName": normalize_device_name(item.get("deviceName")),
             }
         )
     valid_sessions.sort(key=lambda s: dt_to_epoch_ms(s.get("createdAt")), reverse=True)
     return valid_sessions[:MAX_ACTIVE_SESSIONS]
 
 
-async def attach_session_to_user(chat_id: str, token: str):
+async def attach_session_to_user(chat_id: str, token: str, device_name: str = ""):
     user = await cl_users.find_one({"chatId": chat_id}, {"login": 1})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
@@ -532,6 +542,7 @@ async def attach_session_to_user(chat_id: str, token: str):
             "createdAt": utc_now(),
             "lastUsedAt": utc_now(),
             "expiresAt": expires_at,
+            "deviceName": normalize_device_name(device_name),
         },
     )
     deduped: List[dict] = []
@@ -643,6 +654,59 @@ async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
         {"type": "user_status", "userId": user_id, "online": False},
     )
     return {"message": "Logged out"}
+
+
+def serialize_session_for_client(session: Dict[str, Any], current_token_hash: str) -> Dict[str, Any]:
+    token_hash = str(session.get("tokenHash") or "")
+    return {
+        "tokenHash": token_hash,
+        "deviceName": normalize_device_name(session.get("deviceName")) or None,
+        "createdAt": dt_to_epoch_ms(session.get("createdAt")),
+        "lastUsedAt": dt_to_epoch_ms(session.get("lastUsedAt")),
+        "current": bool(current_token_hash and token_hash == current_token_hash),
+    }
+
+
+@app.get("/auth/sessions")
+async def list_sessions(current_user: dict = Depends(get_current_user)):
+    token = str(current_user.get("_session_token") or "")
+    token_hash = hash_access_token(token) if token else ""
+    sessions = _normalize_session_list(current_user)
+    serialized = [serialize_session_for_client(item, token_hash) for item in sessions]
+    serialized.sort(key=lambda item: (0 if item.get("current") else 1, -int(item.get("lastUsedAt") or 0)))
+    return {"sessions": serialized}
+
+
+@app.delete("/auth/sessions/{token_hash}")
+async def revoke_single_session(token_hash: str, current_user: dict = Depends(get_current_user)):
+    my_token = str(current_user.get("_session_token") or "")
+    my_hash = hash_access_token(my_token) if my_token else ""
+    target_hash = str(token_hash or "").strip()
+    if not target_hash:
+        raise HTTPException(status_code=400, detail="Invalid session token hash")
+    if target_hash == my_hash:
+        raise HTTPException(status_code=400, detail="Cannot revoke current session")
+
+    sessions = _normalize_session_list(current_user)
+    next_sessions = [s for s in sessions if str(s.get("tokenHash") or "") != target_hash]
+    await cl_users.update_one(
+        {"chatId": current_user["chatId"]},
+        {"$set": {"login.sessions": next_sessions}, "$unset": {"login.token": ""}},
+    )
+    return {"ok": True}
+
+
+@app.post("/auth/sessions/revoke-others")
+async def revoke_other_sessions(current_user: dict = Depends(get_current_user)):
+    my_token = str(current_user.get("_session_token") or "")
+    my_hash = hash_access_token(my_token) if my_token else ""
+    sessions = _normalize_session_list(current_user)
+    keep = [s for s in sessions if str(s.get("tokenHash") or "") == my_hash]
+    await cl_users.update_one(
+        {"chatId": current_user["chatId"]},
+        {"$set": {"login.sessions": keep}, "$unset": {"login.token": ""}},
+    )
+    return {"ok": True}
 
 
 def get_chat_id_for_two(part1: str, part2: str) -> str:
@@ -1035,7 +1099,7 @@ async def verify_registration_code(req: VerifyCodeRequest):
 
 
 @app.post("/auth/register/complete", response_model=TokenResponse)
-async def complete_registration(req: CompleteRegistrationRequest):
+async def complete_registration(req: CompleteRegistrationRequest, request: Request):
     """Step 3: Complete registration with name, username and password"""
     # Check if email already exists
     existing_user = await cl_users.find_one({"login.email": req.email})
@@ -1098,7 +1162,8 @@ async def complete_registration(req: CompleteRegistrationRequest):
     token = await create_access_token({"chatId": chat_id})
 
     # Save hashed token session in database
-    await attach_session_to_user(chat_id, token)
+    device_name = normalize_device_name(req.deviceName) or normalize_device_name(request.headers.get("x-device-name"))
+    await attach_session_to_user(chat_id, token, device_name)
 
     return {
         "token": token,
@@ -1167,7 +1232,7 @@ async def verify_and_reset_password(req: PasswordResetVerifyRequest):
 
 
 @app.post("/auth/login", response_model=TokenResponse)
-async def login(req: LoginRequest):
+async def login(req: LoginRequest, request: Request):
     user = await cl_users.find_one({"login.email": req.email})
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -1182,7 +1247,8 @@ async def login(req: LoginRequest):
 
     token = await create_access_token({"chatId": user["chatId"]})
 
-    await attach_session_to_user(user["chatId"], token)
+    device_name = normalize_device_name(req.deviceName) or normalize_device_name(request.headers.get("x-device-name"))
+    await attach_session_to_user(user["chatId"], token, device_name)
 
     return {
         "token": token,
