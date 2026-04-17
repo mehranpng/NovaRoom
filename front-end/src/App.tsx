@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import type { Message, View, User, Chat, ChatLastMessage, FileMetadata, AIChatSummary } from './types';
-import { apiFetch } from './config/api';
+import { API_BASE_URL, apiFetch } from './config/api';
 import { useWebSocket } from './hooks/useWebSocket';
 import { ChatList } from './components/ChatList';
 import { ChatRoom } from './components/ChatRoom';
@@ -18,7 +18,7 @@ import { MusicPlayerProvider } from './contexts/MusicPlayerContext';
 import { cx } from './utils/cx';
 import { NotificationCenter } from './components/NotificationCenter';
 import { notify } from './utils/notificationBus';
-import { decryptBioClientSide, decryptMessageClientSide, encryptBioClientSide, encryptChatTextClientSide } from './utils/e2ee';
+import { decryptBioClientSide, decryptFileBytesClientSide, decryptMessageClientSide, encryptBioClientSide, encryptChatTextClientSide, encryptFileBytesClientSide } from './utils/e2ee';
 import './App.css';
 
 const normalizeTimestamp = (ts: unknown): number => {
@@ -140,6 +140,7 @@ export function App() {
     const activeChatIdRef = useRef<string | null>(null);
     const viewRef = useRef<View>('chatList');
     const lastSeenAckMessageIdRef = useRef<Record<string, string>>({});
+    const lastReceiveSoundMessageRef = useRef<Record<string, string>>({});
     const chatLoadRequestRef = useRef(0);
     useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
     useEffect(() => { viewRef.current = view; }, [view]);
@@ -503,6 +504,23 @@ export function App() {
                 isDuplicateMessage = true;
                 return prev;
             }
+            const optimisticMineIdx = currentMessages.findIndex((m) => {
+                if (m.senderId !== newMsg.senderId) return false;
+                if (m.deliveryStatus !== 'sending') return false;
+                if (Math.abs(normalizeTimestamp(newMsg.timestamp) - normalizeTimestamp(m.timestamp)) > 120_000) return false;
+                const sameText = String(m.text || '') === String(newMsg.text || '');
+                const prevFileId = String(m.file?.fileId || '');
+                const nextFileId = String(newMsg.file?.fileId || '');
+                const sameFileType = String(m.file?.mimeType || '') === String(newMsg.file?.mimeType || '');
+                const sameFile = (prevFileId && nextFileId && prevFileId === nextFileId) || (!prevFileId && !nextFileId && sameFileType);
+                return sameText && sameFile;
+            });
+            if (optimisticMineIdx !== -1) {
+                replacedOptimisticMine = true;
+                const nextMessages = [...currentMessages];
+                nextMessages[optimisticMineIdx] = { ...newMsg, deliveryStatus: 'sent' };
+                return { ...prev, [chatId]: nextMessages };
+            }
             return {
                 ...prev,
                 [chatId]: [...currentMessages, newMsg]
@@ -543,7 +561,11 @@ export function App() {
             const shouldIncrementUnread = isIncoming && !isActiveChat;
 
             if (isIncoming && isActiveChat) {
-                playChatSound('receive');
+                const lastPlayedForChat = lastReceiveSoundMessageRef.current[chatId];
+                if (lastPlayedForChat !== newMsg.id) {
+                    lastReceiveSoundMessageRef.current[chatId] = newMsg.id;
+                    playChatSound('receive');
+                }
             }
 
             return prev.map(chat => {
@@ -562,6 +584,36 @@ export function App() {
             });
         });
     }, [currentUser?.chatId, loadChats, playChatSound]);
+
+    const reuploadForwardedFile = useCallback(async (sourceChatId: string, targetChatId: string, file: FileMetadata): Promise<FileMetadata> => {
+        if (!authToken) throw new Error('NO_AUTH_TOKEN');
+        const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(file.fileId)}`, {
+            headers: {
+                Authorization: `Bearer ${authToken}`,
+                'ngrok-skip-browser-warning': 'true',
+            },
+        });
+        if (!response.ok) throw new Error('FORWARD_FILE_FETCH_FAILED');
+        const encryptedBytes = new Uint8Array(await response.arrayBuffer());
+        const plainBytes = await decryptFileBytesClientSide(encryptedBytes, authToken, sourceChatId);
+        const targetEncryptedBytes = await encryptFileBytesClientSide(plainBytes, authToken, targetChatId);
+        const blob = new Blob([targetEncryptedBytes], { type: 'application/octet-stream' });
+        const wrappedFile = new window.File([blob], file.fileName || 'forwarded-file', { type: 'application/octet-stream' });
+        const formData = new FormData();
+        formData.append('file', wrappedFile);
+        const upload = await apiFetch('/files/upload', {
+            method: 'POST',
+            body: formData,
+            headers: {},
+        });
+        if (!upload?.success || !upload?.file) throw new Error('FORWARD_FILE_UPLOAD_FAILED');
+        return {
+            ...upload.file,
+            fileName: file.fileName || upload.file.fileName || 'forwarded-file',
+            fileSize: Number(file.fileSize || upload.file.fileSize || 0),
+            mimeType: file.mimeType || upload.file.mimeType || 'application/octet-stream',
+        } as FileMetadata;
+    }, [authToken]);
 
     const handleMessageEdited = useCallback((chatId: string, updated: Message) => {
         setMessages(prev => {
@@ -1435,7 +1487,6 @@ export function App() {
     }, [activeChatId, deleteViaWS]);
 
     const handleForwardMessage = useCallback(async (sourceChatId: string, messageId: string, targetChatId: string) => {
-        pendingForwardSendHintsRef.current[targetChatId] = (pendingForwardSendHintsRef.current[targetChatId] || 0) + 1;
         const sourceChatMessage = (messages[sourceChatId] || []).find((m) => m.id === messageId);
         const sourceAIMessageExact = (aiMessagesByChat[sourceChatId] || []).find((m) => m.id === messageId);
         const sourceAIMessageFallback = sourceAIMessageExact
@@ -1465,24 +1516,30 @@ export function App() {
                 [targetChatId]: [...(prev[targetChatId] || []), optimisticForward],
             }));
         }
-        const encryptedText = sourceMessage
-            ? await encryptChatTextClientSide(String(sourceMessage.text || ''), authToken || '', targetChatId)
-            : undefined;
-        const encryptedReasoning = sourceMessage?.reasoningContent
-            ? await encryptChatTextClientSide(String(sourceMessage.reasoningContent || ''), authToken || '', targetChatId)
-            : undefined;
+        if (!sourceMessage) return;
         try {
-            await apiFetch('/messages/forward', {
-                method: 'POST',
-                body: JSON.stringify({
-                    sourceChatId,
-                    messageId,
-                    targetChatId,
-                    encryptedText,
-                    encryptedReasoningContent: encryptedReasoning,
-                    clientId: forwardClientId,
-                }),
-            });
+            if (sourceMessage.file) {
+                const rebuiltFile = await reuploadForwardedFile(sourceChatId, targetChatId, sourceMessage.file);
+                const success = await sendViaWS(targetChatId, String(sourceMessage.text || ''), undefined, rebuiltFile, forwardClientId);
+                if (!success) throw new Error('FORWARD_FILE_SEND_FAILED');
+            } else {
+                pendingForwardSendHintsRef.current[targetChatId] = (pendingForwardSendHintsRef.current[targetChatId] || 0) + 1;
+                const encryptedText = await encryptChatTextClientSide(String(sourceMessage.text || ''), authToken || '', targetChatId);
+                const encryptedReasoning = sourceMessage?.reasoningContent
+                    ? await encryptChatTextClientSide(String(sourceMessage.reasoningContent || ''), authToken || '', targetChatId)
+                    : undefined;
+                await apiFetch('/messages/forward', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        sourceChatId,
+                        messageId,
+                        targetChatId,
+                        encryptedText,
+                        encryptedReasoningContent: encryptedReasoning,
+                        clientId: forwardClientId,
+                    }),
+                });
+            }
             playChatSound('send');
             // Do not force a full replace right away; eventual consistency can briefly
             // hide optimistic forwarded messages. We keep optimistic row visible until
@@ -1495,7 +1552,7 @@ export function App() {
             }));
         }
         loadChats(false);
-    }, [playChatSound, loadChats, messages, aiMessagesByChat, authToken, currentUser?.chatId]);
+    }, [playChatSound, loadChats, messages, aiMessagesByChat, authToken, currentUser?.chatId, reuploadForwardedFile, sendViaWS]);
 
     const handleSetPendingForwardDraft = useCallback((targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => {
         if (!targetChatId || !draft?.sourceChatId || !draft?.messageId) return;

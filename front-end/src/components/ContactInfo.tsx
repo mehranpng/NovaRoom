@@ -32,6 +32,9 @@ function resolveVerified(val: any): boolean {
     if (val === false || val === 0 || val === 'false' || val === '0') return false;
     return true;
 }
+function toPersianDigits(value: string | number): string {
+    return String(value).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)] ?? d);
+}
 
 function resolveAvatarUrl(rawAvatar: string): string {
     const avatar = String(rawAvatar || '').trim();
@@ -671,7 +674,7 @@ export function ContactInfo({
                             <Calendar size={16} style={{ opacity: 0.7 }} />
                             {registrationLoading ? (
                                 <span className="skeleton" style={{ display: 'inline-block', width: 110, height: 16, borderRadius: 8 }} />
-                            ) : (resolvedRegistrationDate || 'نامشخص')}
+                            ) : (resolvedRegistrationDate ? toPersianDigits(resolvedRegistrationDate) : 'نامشخص')}
                         </div>
                     </div>
                 )}

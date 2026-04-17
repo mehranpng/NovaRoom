@@ -2005,6 +2005,16 @@ export function ChatRoom({
                 const file = e.dataTransfer?.files?.[0];
                 if (file) externalFileUploadHandler(file);
             }}
+            onPasteCapture={(e) => {
+                if (isContactBlocked || !externalFileUploadHandler) return;
+                const items = Array.from(e.clipboardData?.items || []);
+                const imageItem = items.find((item) => item.kind === 'file' && item.type.startsWith('image/'));
+                const pastedFile = imageItem?.getAsFile();
+                if (pastedFile) {
+                    e.preventDefault();
+                    externalFileUploadHandler(pastedFile);
+                }
+            }}
         >
             <div className="chat-room__header">
                 <button className="chat-room__back-btn" onClick={() => { maybeSaveScroll(chatId); onBack(); }} aria-label="Back" type="button"><ArrowLeft size={20} /></button>
@@ -2043,10 +2053,14 @@ export function ChatRoom({
                             {!isSavedMessages && resolveVerified(contact.verified) ? <VerifiedBadge size={14} /> : null}
                         </div>
                         {!isSavedMessages && (
-                            <div className={isGroupChat || (!isContactBlocked && contact.online) ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
-                                {typingStatusLabel || (isGroupChat
-                                    ? `${toPersianDigits(chatStats?.onlineMembers ?? 0)} آنلاین • ${toPersianDigits(chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0)} عضو`
-                                    : isContactBlocked ? 'آخرین بازدید مدت‌ها پیش' : contact.online ? 'آنلاین' : 'آفلاین')}
+                            <div className={(!isGroupChat && !isContactBlocked && contact.online) ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
+                                {typingStatusLabel || (isGroupChat ? (
+                                    <span style={{ direction: 'rtl', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                        <span style={{ color: '#16a34a' }}>{toPersianDigits(chatStats?.onlineMembers ?? 0)} آنلاین</span>
+                                        <span style={{ color: 'var(--text-muted)' }}>•</span>
+                                        <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0)} عضو</span>
+                                    </span>
+                                ) : isContactBlocked ? 'آخرین بازدید مدت‌ها پیش' : contact.online ? 'آنلاین' : 'آفلاین')}
                             </div>
                         )}
                     </div>
@@ -2387,7 +2401,7 @@ export function ChatRoom({
                                                                 type="button"
                                                             >
                                                                 <span className="message-reaction__emoji">{reaction.emoji}</span>
-                                                                {reaction.count > 1 && <span className="message-reaction__count">{toPersianDigits(reaction.count)}</span>}
+                                                                {reaction.count > 1 && <span className="message-reaction__count" style={{ fontFamily: 'Vazir, sans-serif' }}>{toPersianDigits(reaction.count)}</span>}
                                                             </button>
                                                         );
                                                     })}
@@ -2662,7 +2676,9 @@ export function ChatRoom({
                                 chatId={chatId}
                                 onFileUploaded={handleFileUploaded}
                                 fileAttached={Boolean(uploadedFile)}
-                                onRegisterUploadFile={setExternalFileUploadHandler}
+                                onRegisterUploadFile={(handler) => {
+                                    setExternalFileUploadHandler(() => handler);
+                                }}
                             />
                             <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
                                 value={text}

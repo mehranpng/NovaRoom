@@ -23,6 +23,7 @@ interface OwnedGroup {
 }
 
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
+const toPersianDigits = (value: string | number): string => String(value).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)] ?? d);
 
 export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
     const [isEditing, setIsEditing] = useState(false);
@@ -322,7 +323,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                         <div className="profile__chat-id-row">
                             <div>
                                 <p className="profile__field-label">شناسه چت</p>
-                                <p className="profile__chat-id-value">{user.chatId}</p>
+                                <p className="profile__chat-id-value" style={{ direction: 'ltr', unicodeBidi: 'plaintext', fontFamily: "'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace" }}>{user.chatId}</p>
                             </div>
                             <button
                                 onClick={() => handleCopy(user.chatId, 'chatId')}
@@ -344,7 +345,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                                     <p className="profile__field-label">تاریخ عضویت</p>
                                     <p className="profile__chat-id-value" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                         <Calendar size={16} style={{ opacity: 0.7 }} />
-                                        {user.registrationDate}
+                                        {toPersianDigits(user.registrationDate)}
                                     </p>
                                 </div>
                             </div>

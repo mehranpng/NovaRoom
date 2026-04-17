@@ -2329,8 +2329,14 @@ body,
 
 .profile__chat-id-row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
+    gap: 12px;
+}
+
+.profile__chat-id-row > div {
+    flex: 1;
+    min-width: 0;
 }
 
 .profile__field-label {
@@ -2343,17 +2349,19 @@ body,
 }
 
 .profile__chat-id-value {
-    margin-bottom: 8px;
-    font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
+    margin: 6px 0 0;
+    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 14px;
     font-weight: 600;
     color: var(--text-primary);
+    word-break: break-word;
 }
 
 .profile__copy-btn {
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
     border-radius: 12px;
     padding: 8px;
     background: none;
