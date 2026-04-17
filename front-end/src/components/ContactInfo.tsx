@@ -670,7 +670,7 @@ export function ContactInfo({
                 {!isGroup && (
                     <div className="contact-info__card">
                         <div className="contact-info__label">تاریخ عضویت</div>
-                        <div className="contact-info__mono" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div className="contact-info__registration-date" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Calendar size={16} style={{ opacity: 0.7 }} />
                             {registrationLoading ? (
                                 <span className="skeleton" style={{ display: 'inline-block', width: 110, height: 16, borderRadius: 8 }} />

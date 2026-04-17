@@ -760,6 +760,7 @@ export function ChatList({
         ? localChats.find((chat) => chat.id === chatActionMenu.chatId) || null
         : null;
     const actionMenuPinned = actionMenuChat ? isPinned(actionMenuChat.id) : false;
+    const actionMenuSaved = actionMenuChat ? actionMenuChat.id === savedMessagesId : false;
     const actionMenuGroup = actionMenuChat ? isGroupChat(actionMenuChat) : false;
 
     return (
@@ -951,11 +952,26 @@ export function ChatList({
                                             <span className="chat-list__item-name">
                                                 پیام‌های ذخیره شده
                                             </span>
-                                            {chat.lastMessage && (
-                                                <span className="chat-list__item-time">
-                                                    {toPersianDigits(formatTime(chat.lastMessage.timestamp))}
-                                                </span>
-                                            )}
+                                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                                                {chat.lastMessage && (
+                                                    <span className="chat-list__item-time">
+                                                        {toPersianDigits(formatTime(chat.lastMessage.timestamp))}
+                                                    </span>
+                                                )}
+                                                <button
+                                                    className="icon-btn icon-btn--xs"
+                                                    type="button"
+                                                    aria-label="Saved messages actions"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        chatActionBtnRef.current = e.currentTarget;
+                                                        openActionMenu(chat.id, e.currentTarget, 1);
+                                                    }}
+                                                >
+                                                    <AlignJustify size={16} />
+                                                </button>
+                                            </div>
                                         </div>
                                         <div className="chat-list__item-preview">
                                             <p className="chat-list__item-text">
@@ -1095,7 +1111,7 @@ export function ChatList({
                         {actionMenuPinned ? 'برداشتن سنجاق' : 'سنجاق'}
                     </button>
 
-                    {actionMenuGroup ? (
+                    {actionMenuSaved ? null : actionMenuGroup ? (
                         <>
                             <button
                                 className="popover__item popover__item--danger"

@@ -18,7 +18,7 @@ import { MusicPlayerProvider } from './contexts/MusicPlayerContext';
 import { cx } from './utils/cx';
 import { NotificationCenter } from './components/NotificationCenter';
 import { notify } from './utils/notificationBus';
-import { decryptBioClientSide, decryptFileBytesClientSide, decryptMessageClientSide, encryptBioClientSide, encryptChatTextClientSide, encryptFileBytesClientSide } from './utils/e2ee';
+import { decryptBioClientSide, decryptMessageClientSide, encryptBioClientSide, encryptChatTextClientSide } from './utils/e2ee';
 import './App.css';
 
 const normalizeTimestamp = (ts: unknown): number => {
@@ -584,36 +584,6 @@ export function App() {
             });
         });
     }, [currentUser?.chatId, loadChats, playChatSound]);
-
-    const reuploadForwardedFile = useCallback(async (sourceChatId: string, targetChatId: string, file: FileMetadata): Promise<FileMetadata> => {
-        if (!authToken) throw new Error('NO_AUTH_TOKEN');
-        const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(file.fileId)}`, {
-            headers: {
-                Authorization: `Bearer ${authToken}`,
-                'ngrok-skip-browser-warning': 'true',
-            },
-        });
-        if (!response.ok) throw new Error('FORWARD_FILE_FETCH_FAILED');
-        const encryptedBytes = new Uint8Array(await response.arrayBuffer());
-        const plainBytes = await decryptFileBytesClientSide(encryptedBytes, authToken, sourceChatId);
-        const targetEncryptedBytes = await encryptFileBytesClientSide(plainBytes, authToken, targetChatId);
-        const blob = new Blob([targetEncryptedBytes], { type: 'application/octet-stream' });
-        const wrappedFile = new window.File([blob], file.fileName || 'forwarded-file', { type: 'application/octet-stream' });
-        const formData = new FormData();
-        formData.append('file', wrappedFile);
-        const upload = await apiFetch('/files/upload', {
-            method: 'POST',
-            body: formData,
-            headers: {},
-        });
-        if (!upload?.success || !upload?.file) throw new Error('FORWARD_FILE_UPLOAD_FAILED');
-        return {
-            ...upload.file,
-            fileName: file.fileName || upload.file.fileName || 'forwarded-file',
-            fileSize: Number(file.fileSize || upload.file.fileSize || 0),
-            mimeType: file.mimeType || upload.file.mimeType || 'application/octet-stream',
-        } as FileMetadata;
-    }, [authToken]);
 
     const handleMessageEdited = useCallback((chatId: string, updated: Message) => {
         setMessages(prev => {
@@ -1493,6 +1463,16 @@ export function App() {
             ? null
             : Object.values(aiMessagesByChat).flat().find((m) => m.id === messageId);
         const sourceMessage = sourceChatMessage || sourceAIMessageExact || sourceAIMessageFallback || null;
+        const sourceChat = chats.find((c) => c.id === sourceChatId);
+        const sourceSenderId = String(sourceMessage?.senderId || '');
+        const sourceSenderProfile = sourceSenderId === currentUser?.chatId
+            ? currentUser
+            : (sourceChat as any)?.otherUser;
+        const fallbackForwardedFrom = sourceMessage ? {
+            originalSenderId: sourceSenderId || String((sourceChat as any)?.otherUser?.chatId || ''),
+            name: String((sourceSenderProfile as any)?.name || (sourceSenderProfile as any)?.username || sourceSenderId || 'ناشناس'),
+            username: String((sourceSenderProfile as any)?.username || ''),
+        } : undefined;
         const forwardClientId = `fwd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const now = Date.now();
         if (sourceMessage) {
@@ -1506,7 +1486,7 @@ export function App() {
                 seen: false,
                 deliveryStatus: 'sending',
                 file: sourceMessage.file,
-                forwardedFrom: sourceMessage.forwardedFrom,
+                forwardedFrom: sourceMessage.forwardedFrom || fallbackForwardedFrom,
                 reasoningContent: sourceMessage.reasoningContent,
                 reasoningEnabled: sourceMessage.reasoningEnabled,
                 reasoningDurationSec: sourceMessage.reasoningDurationSec,
@@ -1518,28 +1498,22 @@ export function App() {
         }
         if (!sourceMessage) return;
         try {
-            if (sourceMessage.file) {
-                const rebuiltFile = await reuploadForwardedFile(sourceChatId, targetChatId, sourceMessage.file);
-                const success = await sendViaWS(targetChatId, String(sourceMessage.text || ''), undefined, rebuiltFile, forwardClientId);
-                if (!success) throw new Error('FORWARD_FILE_SEND_FAILED');
-            } else {
-                pendingForwardSendHintsRef.current[targetChatId] = (pendingForwardSendHintsRef.current[targetChatId] || 0) + 1;
-                const encryptedText = await encryptChatTextClientSide(String(sourceMessage.text || ''), authToken || '', targetChatId);
-                const encryptedReasoning = sourceMessage?.reasoningContent
-                    ? await encryptChatTextClientSide(String(sourceMessage.reasoningContent || ''), authToken || '', targetChatId)
-                    : undefined;
-                await apiFetch('/messages/forward', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        sourceChatId,
-                        messageId,
-                        targetChatId,
-                        encryptedText,
-                        encryptedReasoningContent: encryptedReasoning,
-                        clientId: forwardClientId,
-                    }),
-                });
-            }
+            pendingForwardSendHintsRef.current[targetChatId] = (pendingForwardSendHintsRef.current[targetChatId] || 0) + 1;
+            const encryptedText = await encryptChatTextClientSide(String(sourceMessage.text || ''), authToken || '', targetChatId);
+            const encryptedReasoning = sourceMessage?.reasoningContent
+                ? await encryptChatTextClientSide(String(sourceMessage.reasoningContent || ''), authToken || '', targetChatId)
+                : undefined;
+            await apiFetch('/messages/forward', {
+                method: 'POST',
+                body: JSON.stringify({
+                    sourceChatId,
+                    messageId,
+                    targetChatId,
+                    encryptedText,
+                    encryptedReasoningContent: encryptedReasoning,
+                    clientId: forwardClientId,
+                }),
+            });
             playChatSound('send');
             // Do not force a full replace right away; eventual consistency can briefly
             // hide optimistic forwarded messages. We keep optimistic row visible until
@@ -1552,7 +1526,7 @@ export function App() {
             }));
         }
         loadChats(false);
-    }, [playChatSound, loadChats, messages, aiMessagesByChat, authToken, currentUser?.chatId, reuploadForwardedFile, sendViaWS]);
+    }, [playChatSound, loadChats, messages, aiMessagesByChat, authToken, currentUser, chats]);
 
     const handleSetPendingForwardDraft = useCallback((targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => {
         if (!targetChatId || !draft?.sourceChatId || !draft?.messageId) return;

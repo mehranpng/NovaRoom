@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Eye, AlignJustify, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Eye, AlignJustify, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload } from 'lucide-react';
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -448,6 +448,7 @@ export function ChatRoom({
     const unreadConsumedInSessionRef = useRef(false);
     const restoringFromInfoRef = useRef(false);
     const restoreTopAfterInfoRef = useRef<number | null>(null);
+    const restoreBottomAfterInfoRef = useRef(false);
     const lastScrollTopRef = useRef(0);
 
     // Scroll memory: keep per-chat scroll position in memory until refresh.
@@ -549,6 +550,11 @@ export function ChatRoom({
                 markProgrammaticScroll();
                 container.scrollTop = restoreTopAfterInfoRef.current;
             }
+        }
+        if (restoringFromInfoRef.current && restoreBottomAfterInfoRef.current) {
+            scrollToBottom(true);
+            restoreBottomAfterInfoRef.current = false;
+            restoringFromInfoRef.current = false;
         }
         if (initialMediaFollowupDoneRef.current) return;
         if (!initialMediaPendingIdsRef.current.has(messageId)) return;
@@ -1220,6 +1226,7 @@ export function ChatRoom({
         unreadConsumedInSessionRef.current = false;
         restoringFromInfoRef.current = false;
         restoreTopAfterInfoRef.current = null;
+        restoreBottomAfterInfoRef.current = false;
         const hasSavedPosition = Boolean(mem);
         if (hasSavedPosition) {
             initialMediaFollowupDoneRef.current = true;
@@ -1288,28 +1295,49 @@ export function ChatRoom({
         if (showContactInfo || forwardSourceUser || viewingMemberId || showMembersList) return;
         const mem = scrollMemoryRef.current[chatId];
         if (!mem) return;
-        restoringFromInfoRef.current = false;
-        restoreTopAfterInfoRef.current = mem.atBottom ? null : mem.top;
+        const shouldRestoreExact = Boolean(mem.userInteracted && !mem.atBottom);
+        restoreTopAfterInfoRef.current = shouldRestoreExact ? mem.top : null;
+        restoreBottomAfterInfoRef.current = !shouldRestoreExact;
         const raf = requestAnimationFrame(() => restoreScroll(chatId));
 
-        const timers = mem.atBottom
+        const timers = shouldRestoreExact
             ? [60, 160, 320, 520, 820].map((delay) => window.setTimeout(() => {
-                if (shouldPreserveExactScroll()) return;
-                scrollToBottom(false);
-            }, delay))
-            : [60, 160, 320, 520, 820].map((delay) => window.setTimeout(() => {
                 const c = messagesContainerRef.current;
                 if (!c || restoreTopAfterInfoRef.current === null) return;
                 markProgrammaticScroll();
                 c.scrollTop = restoreTopAfterInfoRef.current;
+            }, delay))
+            : [60, 160, 320, 520, 820].map((delay) => window.setTimeout(() => {
+                if (shouldPreserveExactScroll()) return;
+                scrollToBottom(false);
             }, delay));
+
+        const finalizeRestore = window.setTimeout(() => {
+            if (restoreBottomAfterInfoRef.current) {
+                scrollToBottom(true);
+                restoreBottomAfterInfoRef.current = false;
+            }
+            restoringFromInfoRef.current = false;
+        }, 920);
 
         return () => {
             cancelAnimationFrame(raf);
+            window.clearTimeout(finalizeRestore);
             timers.forEach((t) => window.clearTimeout(t));
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [showContactInfo, forwardSourceUser, viewingMemberId, showMembersList, chatId]);
+
+    useEffect(() => {
+        if (showContactInfo || forwardSourceUser || viewingMemberId || showMembersList) return;
+        if (!restoreBottomAfterInfoRef.current) return;
+        const timers = [60, 160, 320].map((delay) => window.setTimeout(() => {
+            scrollToBottom(true);
+        }, delay));
+        return () => {
+            timers.forEach((t) => window.clearTimeout(t));
+        };
+    }, [messages.length, showContactInfo, forwardSourceUser, viewingMemberId, showMembersList]);
 
     useLayoutEffect(() => {
         const container = messagesContainerRef.current;
@@ -2615,7 +2643,7 @@ export function ChatRoom({
                         <ArrowDown size={16} color="currentColor" />
                         {newMsgCount > 0 && (
                             <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{toPersianDigits(newMsgCount)}</span>
+                                <span style={{ fontVariantNumeric: 'tabular-nums', fontFamily: 'Vazir, sans-serif' }}>{toPersianDigits(newMsgCount)}</span>
                                 <span style={{ width: 6, height: 6, borderRadius: 999, background: '#2F80ED', marginTop: 4 }} />
                             </span>
                         )}
@@ -2720,24 +2748,11 @@ export function ChatRoom({
                 onClose={() => setForwardModalOpen(false)} onSelectTargetChat={handleForwardFromModal} onSelectChat={onSelectChat} />
 
             {dragUploadActive && (
-                <div
-                    style={{
-                        position: 'absolute',
-                        inset: 0,
-                        zIndex: 80,
-                        border: '2px dashed var(--accent-primary)',
-                        background: 'color-mix(in srgb, var(--accent-primary) 14%, transparent)',
-                        borderRadius: 14,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        pointerEvents: 'none',
-                        color: 'var(--text-primary)',
-                        fontSize: 14,
-                        fontWeight: 600,
-                    }}
-                >
-                    فایل را برای آپلود رها کنید
+                <div className="chat-room__drag-upload-overlay">
+                    <div className="chat-room__drag-upload-overlay-content">
+                        <Upload size={30} />
+                        <span>فایل را برای آپلود رها کنید</span>
+                    </div>
                 </div>
             )}
 
