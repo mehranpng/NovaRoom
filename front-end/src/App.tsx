@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import type { Message, View, User, Chat, ChatLastMessage, FileMetadata, AIChatSummary } from './types';
-import { API_BASE_URL, apiFetch } from './config/api';
+import { apiFetch } from './config/api';
 import { useWebSocket } from './hooks/useWebSocket';
 import { ChatList } from './components/ChatList';
 import { ChatRoom } from './components/ChatRoom';
