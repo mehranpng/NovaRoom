@@ -224,10 +224,24 @@ export function App() {
         const audio = kind === 'send' ? sendSoundRef.current : receiveSoundRef.current;
         if (!audio) return;
 
-        audio.currentTime = 0;
-        audio.play().catch(() => {
+        try {
+            audio.pause();
+            audio.currentTime = 0;
+            const playPromise = audio.play();
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch(() => {
+                    try {
+                        const fallback = audio.cloneNode(true) as HTMLAudioElement;
+                        fallback.volume = audio.volume;
+                        void fallback.play().catch(() => { /* ignore */ });
+                    } catch {
+                        // Ignore blocked autoplay errors.
+                    }
+                });
+            }
+        } catch {
             // Ignore blocked autoplay errors.
-        });
+        }
     }, []);
 
     // Track which group chats were freshly created this session so we can

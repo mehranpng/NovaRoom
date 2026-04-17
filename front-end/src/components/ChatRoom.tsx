@@ -66,11 +66,30 @@ interface ChatRoomProps {
 const IRAN_OFFSET_MS = 210 * 60 * 1000;
 const TEHRAN_TZ = 'Asia/Tehran';
 
-const persianJalaliDateFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+const persianJalaliDayMonthFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+    timeZone: TEHRAN_TZ,
+    month: 'long',
+    day: 'numeric',
+});
+const persianJalaliFullSlashFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
     timeZone: TEHRAN_TZ,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
+});
+const persianJalaliYearFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+    timeZone: TEHRAN_TZ,
+    year: 'numeric',
+});
+const persianWeekdayFmt = new Intl.DateTimeFormat('fa-IR', {
+    timeZone: TEHRAN_TZ,
+    weekday: 'long',
+});
+const persianTimeFmt = new Intl.DateTimeFormat('fa-IR', {
+    timeZone: TEHRAN_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
 });
 
 function normalizeTs(ts: any): number {
@@ -103,10 +122,6 @@ function iranDayNumber(ts: any): number {
     return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 86400000);
 }
 
-function formatMessageTime(ts: any) {
-    const d = iranShiftedDate(ts);
-    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
-}
 function toPersianDigits(value: string | number): string {
     return String(value).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)] ?? d);
 }
@@ -121,7 +136,19 @@ function formatDayLabel(ts: any) {
     const diffDays = today - thatDay;
     if (diffDays === 0) return 'امروز';
     if (diffDays === 1) return 'دیروز';
-    return persianJalaliDateFmt.format(new Date(normalizeTs(ts)));
+    if (diffDays <= 7) {
+        return persianWeekdayFmt.format(new Date(normalizeTs(ts)));
+    }
+    const currentJalaliYear = persianJalaliYearFmt.format(new Date());
+    const targetJalaliYear = persianJalaliYearFmt.format(new Date(normalizeTs(ts)));
+    if (currentJalaliYear === targetJalaliYear) {
+        return persianJalaliDayMonthFmt.format(new Date(normalizeTs(ts)));
+    }
+    return persianJalaliFullSlashFmt.format(new Date(normalizeTs(ts))).replaceAll('/', '/');
+}
+
+function formatMessageTime(ts: any) {
+    return persianTimeFmt.format(new Date(normalizeTs(ts)));
 }
 
 function bubbleShape(prevSameSender: boolean, nextSameSender: boolean) {
@@ -405,6 +432,8 @@ export function ChatRoom({
     const [showMembersList, setShowMembersList] = useState(false);
     const [openGroupEditorFromMembers, setOpenGroupEditorFromMembers] = useState(false);
     const [memberSearch, setMemberSearch] = useState('');
+    const [externalFileUploadHandler, setExternalFileUploadHandler] = useState<((file: File) => void) | null>(null);
+    const [dragUploadActive, setDragUploadActive] = useState(false);
     const isAtBottomRef = useRef(true);
 
     const prevLenRef = useRef(0);
@@ -1791,6 +1820,8 @@ export function ChatRoom({
             : membersList;
         // آنلاین‌ها اول نمایش داده شون
         const sortedFiltered = [...filtered].sort((a, b) => {
+            if (a.chatId === currentUserId && b.chatId !== currentUserId) return -1;
+            if (a.chatId !== currentUserId && b.chatId === currentUserId) return 1;
             if (a.online && !b.online) return -1;
             if (!a.online && b.online) return 1;
             return 0;
@@ -1840,8 +1871,10 @@ export function ChatRoom({
                                 <Avatar name={contact.name} size="xl" src={contact.avatar} />
                             </button>
                             <div className="contact-info__name" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{contact.name}</div>
-                            <div className="contact-info__status chat-room__contact-status--online" style={{ color: '#22c55e' }}>
-                                {membersList.length} عضو • {Math.max(onlineCount, Number(chatStats?.onlineMembers || 0))} آنلاین
+                            <div className="contact-info__status" style={{ direction: 'rtl' }}>
+                                <span style={{ color: '#22c55e' }}>{toPersianDigits(Math.max(onlineCount, Number(chatStats?.onlineMembers || 0)))} آنلاین</span>
+                                <span style={{ color: 'var(--text-muted)' }}> • </span>
+                                <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(membersList.length)} عضو</span>
                             </div>
                         </div>
 
@@ -1867,7 +1900,7 @@ export function ChatRoom({
                                     style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, fontSize: 14, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', direction: 'rtl' }} />
                             </div>
                         </div>
-                        <div style={{ padding: '8px 4px 4px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'Vazir, sans-serif' }}>اعضا ({membersList.length})</div>
+                        <div style={{ padding: '8px 4px 4px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'Vazir, sans-serif' }}>اعضا ({toPersianDigits(membersList.length)})</div>
                         <div className="contact-info__card" style={{ padding: 0, overflow: 'hidden' }}>
                             {membersLoading && membersList.length === 0 ? (
                                 Array.from({ length: 6 }).map((_, idx) => (
@@ -1949,6 +1982,29 @@ export function ChatRoom({
             initial="hidden"
             animate="visible"
             exit="exit"
+            onDragOver={(e) => {
+                if (isContactBlocked || !externalFileUploadHandler) return;
+                e.preventDefault();
+                setDragUploadActive(true);
+            }}
+            onDragEnter={(e) => {
+                if (isContactBlocked || !externalFileUploadHandler) return;
+                e.preventDefault();
+                setDragUploadActive(true);
+            }}
+            onDragLeave={(e) => {
+                if (!dragUploadActive) return;
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setDragUploadActive(false);
+                }
+            }}
+            onDrop={(e) => {
+                if (isContactBlocked || !externalFileUploadHandler) return;
+                e.preventDefault();
+                setDragUploadActive(false);
+                const file = e.dataTransfer?.files?.[0];
+                if (file) externalFileUploadHandler(file);
+            }}
         >
             <div className="chat-room__header">
                 <button className="chat-room__back-btn" onClick={() => { maybeSaveScroll(chatId); onBack(); }} aria-label="Back" type="button"><ArrowLeft size={20} /></button>
@@ -1989,7 +2045,7 @@ export function ChatRoom({
                         {!isSavedMessages && (
                             <div className={isGroupChat || (!isContactBlocked && contact.online) ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
                                 {typingStatusLabel || (isGroupChat
-                                    ? `${chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0} عضو • ${chatStats?.onlineMembers ?? 0} آنلاین`
+                                    ? `${toPersianDigits(chatStats?.onlineMembers ?? 0)} آنلاین • ${toPersianDigits(chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0)} عضو`
                                     : isContactBlocked ? 'آخرین بازدید مدت‌ها پیش' : contact.online ? 'آنلاین' : 'آفلاین')}
                             </div>
                         )}
@@ -2103,7 +2159,7 @@ export function ChatRoom({
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', justifyContent: 'center' }}>
                                             <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
                                             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 999, padding: '6px 10px', fontFamily: 'Vazir, sans-serif' }}>
-                                                پیام‌های خوانده نشده{displayUnreadCount > 0 ? ` (${displayUnreadCount})` : ''}
+                                                پیام‌های خوانده نشده{displayUnreadCount > 0 ? ` (${toPersianDigits(displayUnreadCount)})` : ''}
                                             </div>
                                             <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
                                         </div>
@@ -2331,7 +2387,7 @@ export function ChatRoom({
                                                                 type="button"
                                                             >
                                                                 <span className="message-reaction__emoji">{reaction.emoji}</span>
-                                                                {reaction.count > 1 && <span className="message-reaction__count">{reaction.count}</span>}
+                                                                {reaction.count > 1 && <span className="message-reaction__count">{toPersianDigits(reaction.count)}</span>}
                                                             </button>
                                                         );
                                                     })}
@@ -2412,7 +2468,7 @@ export function ChatRoom({
                         style={{ top: seenByMenu.top, left: seenByMenu.left, right: 'auto', position: 'absolute', zIndex: 52 }}
                         onClick={(e) => e.stopPropagation()}>
                         <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)' }}>
-                            دیده شده توسط ({rows.length})
+                            دیده شده توسط ({toPersianDigits(rows.length)})
                         </div>
                         <div style={{ maxHeight: 260, overflowY: 'auto' }}>
                             {rows.length === 0 ? (
@@ -2498,7 +2554,7 @@ export function ChatRoom({
                             <div style={{ marginTop: 6, background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 12, overflow: 'hidden', minWidth: 220, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
                                 <div style={{ padding: '7px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)', fontFamily: 'Vazir, sans-serif' }}>
                                     واکنش‌ها
-                                    ({reactionUsersList.length})
+                                    ({toPersianDigits(reactionUsersList.length)})
                                 </div>
                                 <div style={{ maxHeight: 260, overflowY: 'auto' }}>
                                     {reactionUsersList.map((ru, i) => (
@@ -2545,7 +2601,7 @@ export function ChatRoom({
                         <ArrowDown size={16} color="currentColor" />
                         {newMsgCount > 0 && (
                             <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{newMsgCount}</span>
+                                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{toPersianDigits(newMsgCount)}</span>
                                 <span style={{ width: 6, height: 6, borderRadius: 999, background: '#2F80ED', marginTop: 4 }} />
                             </span>
                         )}
@@ -2601,7 +2657,13 @@ export function ChatRoom({
                         </div>
                     ) : (
                         <>
-                            <FileUpload token={token} chatId={chatId} onFileUploaded={handleFileUploaded} fileAttached={Boolean(uploadedFile)} />
+                            <FileUpload
+                                token={token}
+                                chatId={chatId}
+                                onFileUploaded={handleFileUploaded}
+                                fileAttached={Boolean(uploadedFile)}
+                                onRegisterUploadFile={setExternalFileUploadHandler}
+                            />
                             <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
                                 value={text}
                                 onChange={(e) => {
@@ -2614,6 +2676,16 @@ export function ChatRoom({
                                     if (e.key === 'Enter' && !e.shiftKey && !isMobileKeyboardInput()) {
                                         e.preventDefault();
                                         submit();
+                                    }
+                                }}
+                                onPaste={(e) => {
+                                    if (isContactBlocked) return;
+                                    const items = Array.from(e.clipboardData?.items || []);
+                                    const imageItem = items.find((item) => item.kind === 'file' && item.type.startsWith('image/'));
+                                    const pastedFile = imageItem?.getAsFile();
+                                    if (pastedFile && externalFileUploadHandler) {
+                                        e.preventDefault();
+                                        externalFileUploadHandler(pastedFile);
                                     }
                                 }}
                                 rows={1}
@@ -2630,6 +2702,28 @@ export function ChatRoom({
 
             <ForwardModal isOpen={forwardModalOpen} chats={chats} currentUserId={currentUserId}
                 onClose={() => setForwardModalOpen(false)} onSelectTargetChat={handleForwardFromModal} onSelectChat={onSelectChat} />
+
+            {dragUploadActive && (
+                <div
+                    style={{
+                        position: 'absolute',
+                        inset: 0,
+                        zIndex: 80,
+                        border: '2px dashed var(--accent-primary)',
+                        background: 'color-mix(in srgb, var(--accent-primary) 14%, transparent)',
+                        borderRadius: 14,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        pointerEvents: 'none',
+                        color: 'var(--text-primary)',
+                        fontSize: 14,
+                        fontWeight: 600,
+                    }}
+                >
+                    فایل را برای آپلود رها کنید
+                </div>
+            )}
 
             <AnimatePresence>
                 {confirmDeleteChat && (

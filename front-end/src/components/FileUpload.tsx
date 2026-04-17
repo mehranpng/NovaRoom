@@ -11,6 +11,7 @@ interface FileUploadProps {
     chatId: string;
     onFileUploaded: (file: FileMetadata) => void;
     fileAttached?: boolean;
+    onRegisterUploadFile?: (handler: ((file: File) => void) | null) => void;
 }
 
 type UploadTask = {
@@ -25,7 +26,7 @@ type UploadTask = {
 
 const uploadTasksByChat = new Map<string, UploadTask>();
 
-export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false }: FileUploadProps) {
+export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false, onRegisterUploadFile }: FileUploadProps) {
     const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
@@ -107,15 +108,12 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         };
     }, [chatId, onFileUploaded, fileAttached]);
 
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setPickerSession(false);
-        const file = e.target.files?.[0];
+    const startUploadFromFile = (file: File | null | undefined) => {
         if (!file) return;
 
         // Validate file size
         if (!validateFileSize(file.size)) {
             alert('حجم فایل نباید بیشتر از ۲۰ مگابایت باشد');
-            e.currentTarget.value = '';
             setSelectedFileName(null);
             return;
         }
@@ -124,6 +122,23 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         setSelectedFileName(file.name);
         uploadFile(file);
     };
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setPickerSession(false);
+        const file = e.target.files?.[0];
+        startUploadFromFile(file);
+        e.currentTarget.value = '';
+    };
+
+    useEffect(() => {
+        if (!onRegisterUploadFile) return;
+        onRegisterUploadFile((file: File) => {
+            startUploadFromFile(file);
+        });
+        return () => {
+            onRegisterUploadFile(null);
+        };
+    }, [onRegisterUploadFile]);
 
     useEffect(() => {
         if (!pickerMenuOpen) return;

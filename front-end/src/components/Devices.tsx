@@ -135,7 +135,9 @@ export function Devices({ onBack }: DevicesProps) {
                         در حال بارگیری نشست‌ها...
                     </div>
                 ) : sessions.length === 0 ? (
-                    <div className="profile__chat-id-card">نشست فعالی پیدا نشد.</div>
+                    <div style={{ textAlign: 'center', direction: 'rtl', opacity: 0.8, fontSize: 13, padding: '14px 0' }}>
+                        نشست فعالی پیدا نشد.
+                    </div>
                 ) : (
                     <>
                         {currentSession && (
@@ -149,7 +151,7 @@ export function Devices({ onBack }: DevicesProps) {
                             >
                                 <div className="profile__chat-id-row" style={{ alignItems: 'center', justifyContent: 'space-between', direction: 'rtl', textAlign: 'right', minHeight: 62 }}>
                                     <div style={{ display: 'grid', gap: 3 }}>
-                                        <p className="profile__chat-id-value" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <p className="profile__chat-id-value" style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'Vazir, sans-serif' }}>
                                             <Laptop size={16} /> {currentSession.deviceName || 'نامشخص'}
                                             <span style={{ fontSize: 12, opacity: 0.85, fontFamily: 'Vazir, sans-serif' }}>(دستگاه فعلی)</span>
                                         </p>
@@ -160,21 +162,23 @@ export function Devices({ onBack }: DevicesProps) {
                             </div>
                         )}
 
-                        <button
-                            className="profile__save-btn"
-                            style={{
-                                width: '100%',
-                                justifyContent: 'center',
-                                minHeight: 48,
-                                marginTop: 4,
-                                marginBottom: 15,
-                                background: 'color-mix(in srgb, #dc2626 82%, var(--bg-tertiary))',
-                            }}
-                            disabled={!hasOtherSessions || bulkBusy}
-                            onClick={() => setConfirmAction({ kind: 'others' })}
-                        >
-                            <ShieldOff size={15} /> قطع دسترسی دیگر دستگاه ها
-                        </button>
+                        {hasOtherSessions && (
+                            <button
+                                className="profile__save-btn"
+                                style={{
+                                    width: '100%',
+                                    justifyContent: 'center',
+                                    minHeight: 48,
+                                    marginTop: 4,
+                                    marginBottom: 15,
+                                    background: 'color-mix(in srgb, #dc2626 82%, var(--bg-tertiary))',
+                                }}
+                                disabled={bulkBusy}
+                                onClick={() => setConfirmAction({ kind: 'others' })}
+                            >
+                                <ShieldOff size={15} /> قطع دسترسی دیگر دستگاه ها
+                            </button>
+                        )}
 
                         {otherSessions.map((session) => (
                             <div
@@ -183,7 +187,7 @@ export function Devices({ onBack }: DevicesProps) {
                             >
                                 <div className="profile__chat-id-row" style={{ alignItems: 'center', justifyContent: 'space-between', direction: 'rtl', textAlign: 'right', minHeight: 62 }}>
                                     <div style={{ display: 'grid', gap: 3 }}>
-                                        <p className="profile__chat-id-value" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <p className="profile__chat-id-value" style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'Vazir, sans-serif' }}>
                                             <Laptop size={16} /> {session.deviceName || 'نامشخص'}
                                         </p>
                                         <p className="profile__field-label">آخرین استفاده: {toPersianDigits(toJalaliTehran(session.lastUsedAt))}</p>

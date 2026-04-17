@@ -42,6 +42,14 @@ const WS_RECONNECT_DELAY_MS = 1500;
 const WS_PONG_TIMEOUT_MS = 45000;
 const WS_MAX_RECONNECT_ATTEMPTS = 8;
 const MAX_CHAT_MESSAGE_LENGTH = 6000;
+const eventTypeAliases: Record<string, string> = {
+    newMessage: 'new_message',
+    messageEdited: 'message_edited',
+    messageDeleted: 'message_deleted',
+    messagesSeen: 'messages_seen',
+    reactionUpdate: 'reaction_updated',
+    reactionChanged: 'reaction_updated',
+};
 
 export function useWebSocket({
     token,
@@ -182,44 +190,55 @@ export function useWebSocket({
         ws.onmessage = (event) => {
             const processMessage = async () => {
                 const data = JSON.parse(event.data);
-                const dataType = String(data?.type || '').trim();
-                if (data.type === 'new_message') {
-                    const resolvedChatId = String(data?.chatId || data?.message?.chatId || '').trim();
+                const dataTypeRaw = String(data?.type || '').trim();
+                const dataType = eventTypeAliases[dataTypeRaw] || dataTypeRaw;
+                const resolvedChatIdFromPayload = String(
+                    data?.chatId
+                    || data?.chat_id
+                    || data?.payload?.chatId
+                    || data?.payload?.chat_id
+                    || data?.message?.chatId
+                    || data?.message?.chat_id
+                    || ''
+                ).trim();
+                if (dataType === 'new_message') {
+                    const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
                     if (!resolvedChatId) return;
                     const message = await decryptMessageClientSide(data.message, token, resolvedChatId);
                     onNewMessageRef.current(resolvedChatId, message);
-                } else if (data.type === 'message_edited') {
-                    const resolvedChatId = String(data?.chatId || data?.message?.chatId || '').trim();
+                } else if (dataType === 'message_edited') {
+                    const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
                     if (!resolvedChatId) return;
                     const message = await decryptMessageClientSide(data.message, token, resolvedChatId);
                     onMessageEditedRef.current?.(resolvedChatId, message);
-                } else if (data.type === 'message_deleted') {
-                    const resolvedChatId = String(data?.chatId || '').trim();
+                } else if (dataType === 'message_deleted') {
+                    const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
                     if (!resolvedChatId) return;
                     const lastMessage = data.lastMessage
                         ? await decryptMessageClientSide(data.lastMessage, token, resolvedChatId)
                         : data.lastMessage;
-                    onMessageDeletedRef.current?.(resolvedChatId, String(data.messageId || ''), lastMessage);
+                    onMessageDeletedRef.current?.(resolvedChatId, String(data.messageId || data.message_id || data?.message?.id || ''), lastMessage);
                 } else if (dataType === 'user_status' || dataType === 'presence' || dataType === 'status_update') {
                     const resolvedUserId = String(data.userId || data.chatId || data.username || data.memberId || '').trim();
                     const resolvedOnline = Boolean(data.online ?? data.isOnline ?? data.status === 'online');
                     if (resolvedUserId) {
                         onUserStatusChangeRef.current?.(resolvedUserId, resolvedOnline);
                     }
-                } else if (data.type === 'messages_seen') {
-                    const resolvedChatId = String(data?.chatId || '').trim();
+                } else if (dataType === 'messages_seen') {
+                    const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
                     if (resolvedChatId) onMessagesSeenRef.current?.(resolvedChatId);
-                } else if (data.type === 'reaction_updated') {
-                    const resolvedChatId = String(data?.chatId || '').trim();
-                    const resolvedMessageId = String(data?.messageId || data?.message?.id || '').trim();
+                } else if (dataType === 'reaction_updated') {
+                    const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
+                    const resolvedMessageId = String(data?.messageId || data?.message_id || data?.payload?.messageId || data?.payload?.message_id || data?.message?.id || '').trim();
                     if (resolvedChatId && resolvedMessageId) {
                         onReactionUpdatedRef.current?.(resolvedChatId, resolvedMessageId, Array.isArray(data.reactions) ? data.reactions : []);
                     }
-                } else if (data.type === 'typing') {
-                    const resolvedChatId = String(data?.chatId || '').trim();
+                } else if (dataType === 'typing' || dataType === 'typing_status' || dataType === 'user_typing') {
+                    const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
                     const resolvedUserId = String(data?.userId || data?.chatUserId || data?.username || '').trim();
+                    const typingFlag = Boolean(data?.isTyping ?? data?.is_typing ?? data?.typing);
                     if (resolvedChatId && resolvedUserId) {
-                        onTypingStatusRef.current?.(resolvedChatId, resolvedUserId, Boolean(data.isTyping));
+                        onTypingStatusRef.current?.(resolvedChatId, resolvedUserId, typingFlag);
                     }
                 } else if (data.type === 'ai_response') {
                     onAINewMessageRef.current?.(data.message);

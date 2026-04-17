@@ -55,6 +55,9 @@ function FilledGroupIcon({ size = 16, className, style, title }: IconProps) {
 }
 
 const TEHRAN_TZ = 'Asia/Tehran';
+const PERSIAN_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
+
+const toPersianDigits = (value: string | number): string => String(value).replace(/\d/g, (d) => PERSIAN_DIGITS[Number(d)] ?? d);
 
 function normalizeTs(ts: any): number {
     if (ts == null) return Date.now();
@@ -94,6 +97,15 @@ const tehranJalaliFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
     month: '2-digit',
     day: '2-digit',
 });
+const tehranJalaliDayMonthFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+    timeZone: TEHRAN_TZ,
+    day: 'numeric',
+    month: 'long',
+});
+const tehranJalaliYearFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+    timeZone: TEHRAN_TZ,
+    year: 'numeric',
+});
 
 function tehranYMD(ts: any): string {
     return tehranYmdFmt.format(new Date(normalizeTs(ts)));
@@ -123,18 +135,15 @@ function formatTime(timestamp: any): string {
     if (diffDays === 1) {
         return 'دیروز';
     }
-    // Two or three days ago
-    if (diffDays === 2) {
-        return '۲ روز پیش';
-    }
-    if (diffDays === 3) {
-        return '۳ روز پیش';
-    }
-    // More than 3 days ago, up to one week: weekday in Persian
-    if (diffDays > 3 && diffDays <= 7) {
+    // Two days ago up to one week: weekday in Persian
+    if (diffDays >= 2 && diffDays <= 7) {
         return tehranWeekdayFmt.format(d);
     }
-    // Older than a week: Persian (Jalali) date with Persian digits
+    const currentYear = tehranJalaliYearFmt.format(new Date(now));
+    const messageYear = tehranJalaliYearFmt.format(d);
+    if (currentYear === messageYear) {
+        return tehranJalaliDayMonthFmt.format(d);
+    }
     return tehranJalaliFmt.format(d);
 }
 
@@ -236,6 +245,30 @@ function getLastMessagePreview(lastMessage: any, fallback: string): string {
     if (['[video]', 'video'].includes(normalizedText)) return '🎥 ویدیو';
     if (['[audio]', 'audio', 'voice'].includes(normalizedText)) return '🎵 صوت';
     return text || fallback;
+}
+
+function getGroupStats(chat: Chat): { totalMembers: number; onlineMembers: number } | null {
+    const anyChat = chat as any;
+    const totalMembers = Number(
+        anyChat?.totalMembers
+        ?? anyChat?.membersCount
+        ?? anyChat?.memberCount
+        ?? anyChat?.group?.totalMembers
+        ?? anyChat?.group?.membersCount
+        ?? 0
+    );
+    const onlineMembers = Number(
+        anyChat?.onlineMembers
+        ?? anyChat?.onlineCount
+        ?? anyChat?.group?.onlineMembers
+        ?? anyChat?.group?.onlineCount
+        ?? 0
+    );
+    if (!Number.isFinite(totalMembers) || totalMembers <= 0) return null;
+    return {
+        totalMembers,
+        onlineMembers: Number.isFinite(onlineMembers) ? Math.max(0, onlineMembers) : 0,
+    };
 }
 
 function useIsMobile(breakpointPx = 768) {
@@ -920,7 +953,7 @@ export function ChatList({
                                             </span>
                                             {chat.lastMessage && (
                                                 <span className="chat-list__item-time">
-                                                    {formatTime(chat.lastMessage.timestamp)}
+                                                    {toPersianDigits(formatTime(chat.lastMessage.timestamp))}
                                                 </span>
                                             )}
                                         </div>
@@ -929,7 +962,7 @@ export function ChatList({
                                                 {getLastMessagePreview(chat.lastMessage, 'پیام‌های ذخیره شده شما')}
                                             </p>
                                             {chat.unreadCount > 0 && (
-                                                <span className="chat-list__unread-badge">{chat.unreadCount}</span>
+                                                <span className="chat-list__unread-badge">{toPersianDigits(chat.unreadCount)}</span>
                                             )}
                                         </div>
                                     </div>
@@ -941,6 +974,7 @@ export function ChatList({
                         const contact = getContact(chat);
                         const blockedRelation = Boolean((chat.otherUser as any)?.blockedByMe || (chat.otherUser as any)?.blockedByOther);
                         const unreadCount = typeof chat.unreadCount === 'number' && chat.unreadCount > 0 ? chat.unreadCount : 0;
+                        const groupStats = group ? getGroupStats(chat) : null;
 
                         return (
                             <button
@@ -987,7 +1021,7 @@ export function ChatList({
                                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                                             {chat.lastMessage && (
                                                 <span className="chat-list__item-time">
-                                                    {formatTime(chat.lastMessage.timestamp)}
+                                                    {toPersianDigits(formatTime(chat.lastMessage.timestamp))}
                                                 </span>
                                             )}
 
@@ -1012,11 +1046,19 @@ export function ChatList({
 
                                     <div className="chat-list__item-preview">
                                         <p className="chat-list__item-text">
+                                            {group && groupStats ? (
+                                                <span style={{ direction: 'rtl', display: 'inline-flex', alignItems: 'center', gap: 4, marginInlineEnd: 6 }}>
+                                                    <span style={{ color: '#16a34a' }}>{toPersianDigits(groupStats.onlineMembers)} آنلاین</span>
+                                                    <span style={{ color: 'var(--text-muted)' }}>•</span>
+                                                    <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(groupStats.totalMembers)} عضو</span>
+                                                    <span style={{ color: 'var(--text-muted)' }}>|</span>
+                                                </span>
+                                            ) : null}
                                             {isMine && <span className="chat-list__item-text-prefix">شما: </span>}
                                             {getLastMessagePreview(chat.lastMessage, 'هنوز پیامی ارسال نشده')}
                                         </p>
                                         {unreadCount > 0 && (
-                                            <span className="chat-list__unread-badge">{unreadCount}</span>
+                                            <span className="chat-list__unread-badge">{toPersianDigits(unreadCount)}</span>
                                         )}
                                     </div>
                                 </div>
