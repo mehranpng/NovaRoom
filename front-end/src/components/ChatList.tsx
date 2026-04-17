@@ -949,8 +949,19 @@ export function ChatList({
                                     <Avatar name="" size="md" savedMessages={true} />
                                     <div className="chat-list__item-content">
                                         <div className="chat-list__item-row">
-                                            <span className="chat-list__item-name">
+                                            <span
+                                                className="chat-list__item-name"
+                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                                            >
                                                 پیام‌های ذخیره شده
+                                                {pinned ? (
+                                                    <Pin
+                                                        size={14}
+                                                        className="chat-list__pin-icon"
+                                                        aria-label="سنجاق شده"
+                                                        style={{ opacity: 0.95, fill: 'currentColor' }}
+                                                    />
+                                                ) : null}
                                             </span>
                                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                                                 {chat.lastMessage && (

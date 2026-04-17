@@ -1554,15 +1554,15 @@ export function ChatRoom({
         setHideScrollBtnUntilBottom(true);
         setNewMsgCount(0);
         setShowScrollBtn(false);
+        scrollToBottom(true);
         if (onJumpToLatestMessages) {
-            await Promise.resolve(onJumpToLatestMessages(chatId));
+            void Promise.resolve(onJumpToLatestMessages(chatId));
         } else if (hasNewerMessages && onSelectChat) {
-            await Promise.resolve(onSelectChat(chatId));
+            void Promise.resolve(onSelectChat(chatId));
         } else if (hasNewerMessages && onLoadNewerMessages) {
-            await Promise.resolve(onLoadNewerMessages(chatId));
+            void Promise.resolve(onLoadNewerMessages(chatId));
         }
         requestAnimationFrame(() => {
-            scrollToBottom(true);
             window.setTimeout(() => {
                 if (computeNearBottom()) setHideScrollBtnUntilBottom(false);
             }, 450);
