@@ -2082,7 +2082,9 @@ export function ChatRoom({
                         </div>
                         {!isSavedMessages && (
                             <div className={(!isGroupChat && !isContactBlocked && contact.online) ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
-                                {typingStatusLabel || (isGroupChat ? (
+                                {typingStatusLabel ? (
+                                    <span style={isGroupChat ? { color: '#16a34a' } : undefined}>{typingStatusLabel}</span>
+                                ) : (isGroupChat ? (
                                     <span style={{ direction: 'rtl', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                         <span style={{ color: '#16a34a' }}>{toPersianDigits(chatStats?.onlineMembers ?? 0)} آنلاین</span>
                                         <span style={{ color: 'var(--text-muted)' }}>•</span>

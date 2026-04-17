@@ -121,6 +121,8 @@ MAX_AI_MESSAGES_PER_CHAT = 30
 ENC_PREFIX = "enc:v1:"
 ENC_NONCE_SIZE = 16
 ENC_TAG_SIZE = 16
+FILE_MAGIC = b"NCF1"
+FILE_TEXT_PREFIX = "ncf:v1:"
 LEGACY_BOOTSTRAP_TOKEN = "__bootstrap_migration__"
 
 
@@ -247,6 +249,112 @@ def decrypt_with_fallback(cipher: Any, token: str, scope: str) -> str:
         return legacy_plain
     # Prevent empty UI bubbles when decrypt fails for unknown legacy formats.
     return "🔐"
+
+
+def _derive_client_shared_key(scope: str) -> bytes:
+    material = f"novaroom-client-shared|{scope}".encode("utf-8")
+    return hashlib.sha256(material).digest()
+
+
+def _base64url_decode_bytes(value: str) -> bytes:
+    normalized = value.replace("-", "+").replace("_", "/")
+    padding = "=" * ((4 - (len(normalized) % 4)) % 4)
+    return base64.b64decode((normalized + padding).encode("ascii"))
+
+
+def _try_unpack_client_file_packet(raw: bytes) -> Optional[bytes]:
+    if not raw:
+        return None
+    if raw.startswith(FILE_MAGIC):
+        return raw[len(FILE_MAGIC) :]
+    try:
+        text = raw.decode("utf-8")
+    except Exception:
+        return None
+    if not text.startswith(FILE_TEXT_PREFIX):
+        return None
+    try:
+        return _base64url_decode_bytes(text[len(FILE_TEXT_PREFIX) :])
+    except Exception:
+        return None
+
+
+def decrypt_client_file_bytes(raw: bytes, chat_scope: str) -> Optional[bytes]:
+    packed = _try_unpack_client_file_packet(raw)
+    if not packed:
+        return None
+    if len(packed) < ENC_NONCE_SIZE + ENC_TAG_SIZE:
+        return None
+    nonce = packed[:ENC_NONCE_SIZE]
+    body = packed[ENC_NONCE_SIZE:-ENC_TAG_SIZE]
+    tag = packed[-ENC_TAG_SIZE:]
+    key = _derive_client_shared_key(chat_scope)
+    expected = hmac.new(key, nonce + body, hashlib.sha256).digest()[:ENC_TAG_SIZE]
+    if not hmac.compare_digest(tag, expected):
+        return None
+    return _xor_stream(body, key, nonce)
+
+
+def encrypt_client_file_bytes(plain: bytes, chat_scope: str) -> bytes:
+    if not plain:
+        return plain
+    key = _derive_client_shared_key(chat_scope)
+    nonce = secrets.token_bytes(ENC_NONCE_SIZE)
+    encrypted = _xor_stream(plain, key, nonce)
+    tag = hmac.new(key, nonce + encrypted, hashlib.sha256).digest()[:ENC_TAG_SIZE]
+    return FILE_MAGIC + nonce + encrypted + tag
+
+
+async def _remap_forward_file_to_target_chat(
+    file_meta: Dict[str, Any],
+    source_chat_id: str,
+    target_chat_id: str,
+    uploaded_by: str,
+) -> Dict[str, Any]:
+    file_id = str((file_meta or {}).get("fileId") or "").strip()
+    if not file_id:
+        return dict(file_meta or {})
+    source_raw = await read_file_content(file_id)
+    if source_raw is None:
+        raise HTTPException(status_code=404, detail="Forward source file not found")
+
+    source_scope = f"chat:{source_chat_id}"
+    target_scope = f"chat:{target_chat_id}"
+    plain = decrypt_client_file_bytes(source_raw, source_scope)
+    if plain is None:
+        # Unknown/legacy format; keep original bytes instead of corrupting payload.
+        plain = source_raw
+    remapped_raw = encrypt_client_file_bytes(plain, target_scope)
+
+    remapped_meta = await save_uploaded_file(
+        remapped_raw,
+        str(file_meta.get("fileName") or "forwarded-file"),
+    )
+    remapped_meta["uploadedBy"] = uploaded_by
+    remapped_meta["mimeType"] = str(file_meta.get("mimeType") or remapped_meta.get("mimeType") or "application/octet-stream")
+    remapped_meta["fileName"] = str(file_meta.get("fileName") or remapped_meta.get("fileName") or "forwarded-file")
+    remapped_meta["fileSize"] = int(file_meta.get("fileSize") or remapped_meta.get("fileSize") or 0)
+
+    cover_art_id = str(file_meta.get("coverArtFileId") or "").strip()
+    if cover_art_id:
+        cover_raw = await read_file_content(cover_art_id)
+        if cover_raw is not None:
+            cover_plain = decrypt_client_file_bytes(cover_raw, source_scope)
+            if cover_plain is None:
+                cover_plain = cover_raw
+            remapped_cover_raw = encrypt_client_file_bytes(cover_plain, target_scope)
+            remapped_cover_meta = await save_uploaded_file(remapped_cover_raw, "cover-art")
+            remapped_cover_meta["uploadedBy"] = uploaded_by
+            remapped_meta["coverArtFileId"] = remapped_cover_meta.get("fileId")
+            remapped_meta["coverArtUrl"] = (
+                f"/files/{remapped_cover_meta.get('fileId')}" if remapped_cover_meta.get("fileId") else remapped_meta.get("coverArtUrl")
+            )
+
+    for key in ("title", "artist"):
+        if key in file_meta:
+            remapped_meta[key] = file_meta.get(key)
+
+    return remapped_meta
 
 
 def user_bio_scope(chat_id: str) -> str:
@@ -2488,6 +2596,7 @@ async def forward_message(
 
     # Get original sender info and file data
     file_data = None
+    source_chat_for_file = ""
     if is_ai_message:
         ai_role = str(original_msg.get("role") or "").strip().lower()
         if ai_role == "assistant":
@@ -2563,7 +2672,8 @@ async def forward_message(
                     original_sender["profile"]["username"] if original_sender else ""
                 ),
             }
-        source_chat_scope = f"chat:{original_msg.get('chatId', '')}"
+        source_chat_for_file = str(original_msg.get("chatId") or "")
+        source_chat_scope = f"chat:{source_chat_for_file}"
         message_text = decrypt_with_fallback(
             original_msg.get("text", ""), session_token, source_chat_scope
         )
@@ -2601,9 +2711,16 @@ async def forward_message(
         "reasoningDurationSec": reasoning_duration_sec,
     }
 
-    # Add file data if present
+    # Add file data if present (remap encrypted bytes to target chat scope)
     if file_data:
-        forwarded_msg["file"] = file_data
+        remapped_file = await _remap_forward_file_to_target_chat(
+            dict(file_data),
+            source_chat_for_file,
+            target_chat_id,
+            user_id,
+        )
+        forwarded_msg["file"] = remapped_file
+        file_data = remapped_file
 
     result = await cl_messages.insert_one(forwarded_msg)
     msg_id = str(result.inserted_id)
