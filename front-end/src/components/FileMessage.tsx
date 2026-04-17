@@ -5,6 +5,7 @@ import { API_BASE_URL } from '../config/api';
 import { useState, useEffect, useRef } from 'react';
 import { useMusicPlayer } from '../contexts/MusicPlayerContext';
 import { decryptFileBytesClientSide } from '../utils/e2ee';
+import { getOrCacheBlob } from '../utils/mediaCache';
 
 interface FileMessageProps {
     file: FileMetadata;
@@ -66,6 +67,14 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
         return new Blob([plainBuffer], { type: preferredType || response.headers.get('content-type') || 'application/octet-stream' });
     };
 
+    const fetchAndDecryptBlob = async (fileId: string, preferredType?: string): Promise<Blob> => {
+        const response = await fetch(`${API_BASE_URL}/files/${fileId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to load media file');
+        return decodeResponseBlob(response, preferredType);
+    };
+
     useEffect(() => {
         if (!isImage) return;
         let objectUrl: string | null = null;
@@ -74,11 +83,10 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
             try {
                 setImageLoading(true);
                 setImageError(false);
-                const response = await fetch(`${API_BASE_URL}/files/${file.fileId}`, {
-                    headers: { 'Authorization': `Bearer ${token}` },
+                const blob = await getOrCacheBlob({
+                    cacheKey: `chat:${chatId}:file:${file.fileId}`,
+                    loadBlob: async () => fetchAndDecryptBlob(file.fileId, file.mimeType),
                 });
-                if (!response.ok) throw new Error('Failed to load image');
-                const blob = await decodeResponseBlob(response, file.mimeType);
                 if (!cancelled) {
                     objectUrl = window.URL.createObjectURL(blob);
                     setImageUrl(objectUrl);
@@ -98,7 +106,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
             cancelled = true;
             if (objectUrl) window.URL.revokeObjectURL(objectUrl);
         };
-    }, [file.fileId, token, isImage]);
+    }, [chatId, file.fileId, file.mimeType, token, isImage]);
 
     useEffect(() => {
         if (!isAudio) return;
@@ -108,11 +116,10 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
             try {
                 setAudioLoading(true);
                 setAudioError(false);
-                const response = await fetch(`${API_BASE_URL}/files/${file.fileId}`, {
-                    headers: { Authorization: `Bearer ${token}` },
+                const blob = await getOrCacheBlob({
+                    cacheKey: `chat:${chatId}:file:${file.fileId}`,
+                    loadBlob: async () => fetchAndDecryptBlob(file.fileId, file.mimeType),
                 });
-                if (!response.ok) throw new Error('Failed to load audio');
-                const blob = await decodeResponseBlob(response, file.mimeType);
                 if (!cancelled) {
                     objectUrl = window.URL.createObjectURL(blob);
                     setAudioUrl(objectUrl);
@@ -129,7 +136,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
             cancelled = true;
             if (objectUrl) window.URL.revokeObjectURL(objectUrl);
         };
-    }, [file.fileId, isAudio, token]);
+    }, [chatId, file.fileId, file.mimeType, isAudio, token]);
 
     useEffect(() => {
         if (!isAudio) return;
@@ -145,11 +152,10 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
         let cancelled = false;
         const loadCover = async () => {
             try {
-                const response = await fetch(`${API_BASE_URL}/files/${rawCoverFileId}`, {
-                    headers: { Authorization: `Bearer ${token}` },
+                const blob = await getOrCacheBlob({
+                    cacheKey: `chat:${chatId}:file:${rawCoverFileId}`,
+                    loadBlob: async () => fetchAndDecryptBlob(rawCoverFileId),
                 });
-                if (!response.ok) throw new Error('Failed to load cover');
-                const blob = await decodeResponseBlob(response);
                 if (!cancelled) {
                     objectUrl = window.URL.createObjectURL(blob);
                     setCoverUrl(objectUrl);
@@ -163,7 +169,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
             cancelled = true;
             if (objectUrl) window.URL.revokeObjectURL(objectUrl);
         };
-    }, [isAudio, rawCoverFileId, rawCoverUrl, token]);
+    }, [chatId, isAudio, rawCoverFileId, rawCoverUrl, token]);
 
     // Load video with auth header
     useEffect(() => {
@@ -174,11 +180,10 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
             try {
                 setVideoLoading(true);
                 setVideoError(false);
-                const response = await fetch(`${API_BASE_URL}/files/${file.fileId}`, {
-                    headers: { Authorization: `Bearer ${token}` },
+                const blob = await getOrCacheBlob({
+                    cacheKey: `chat:${chatId}:file:${file.fileId}`,
+                    loadBlob: async () => fetchAndDecryptBlob(file.fileId, file.mimeType),
                 });
-                if (!response.ok) throw new Error('Failed to load video');
-                const blob = await decodeResponseBlob(response, file.mimeType);
                 if (!cancelled) {
                     objectUrl = window.URL.createObjectURL(blob);
                     setVideoUrl(objectUrl);
@@ -199,15 +204,14 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
             cancelled = true;
             if (objectUrl) window.URL.revokeObjectURL(objectUrl);
         };
-    }, [file.fileId, isVideo, token]);
+    }, [chatId, file.fileId, file.mimeType, isVideo, token]);
 
     const handleDownload = async () => {
         try {
-            const response = await fetch(`${API_BASE_URL}/files/${file.fileId}`, {
-                headers: { 'Authorization': `Bearer ${token}` },
+            const blob = await getOrCacheBlob({
+                cacheKey: `chat:${chatId}:file:${file.fileId}`,
+                loadBlob: async () => fetchAndDecryptBlob(file.fileId, file.mimeType),
             });
-            if (!response.ok) throw new Error('Download failed');
-            const blob = await decodeResponseBlob(response, file.mimeType);
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;

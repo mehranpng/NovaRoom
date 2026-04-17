@@ -50,6 +50,7 @@ from file_service import (
     delete_file,
     validate_file_access,
     read_file_content,
+    get_file_path,
     encrypt_existing_uploads,
     MAX_FILE_SIZE,
 )
@@ -2300,6 +2301,7 @@ async def upload_file(
 @app.get("/files/{file_id}")
 async def download_file(
     file_id: str,
+    request: Request,
     current_user: dict = Depends(get_current_user),
 ):
     # Validate file exists
@@ -2309,7 +2311,41 @@ async def download_file(
     decrypted = await read_file_content(file_id)
     if decrypted is None:
         raise HTTPException(status_code=404, detail="File not found")
-    return Response(content=decrypted, media_type="application/octet-stream")
+    etag = hashlib.sha256(decrypted).hexdigest()
+    incoming_etag = request.headers.get("if-none-match", "").strip('"')
+    if incoming_etag and incoming_etag == etag:
+        return Response(
+            status_code=304,
+            headers={
+                "Cache-Control": "private, max-age=31536000, immutable",
+                "ETag": f'"{etag}"',
+                "Vary": "Authorization",
+            },
+        )
+
+    file_path = get_file_path(file_id)
+    last_modified = None
+    try:
+        if file_path.exists():
+            last_modified = datetime.fromtimestamp(
+                file_path.stat().st_mtime, tz=timezone.utc
+            ).strftime("%a, %d %b %Y %H:%M:%S GMT")
+    except Exception:
+        last_modified = None
+
+    headers = {
+        "Cache-Control": "private, max-age=31536000, immutable",
+        "ETag": f'"{etag}"',
+        "Vary": "Authorization",
+    }
+    if last_modified:
+        headers["Last-Modified"] = last_modified
+
+    return Response(
+        content=decrypted,
+        media_type="application/octet-stream",
+        headers=headers,
+    )
 
 
 @app.delete("/files/{file_id}")

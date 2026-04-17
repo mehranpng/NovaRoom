@@ -18,6 +18,7 @@ import { FileMessage } from './FileMessage';
 import { ImageMediaViewer } from './ImageMediaViewer';
 import { VideoMediaViewer } from './VideoMediaViewer';
 import { decryptAvatarBytesClientSide, decryptFileBytesClientSide } from '../utils/e2ee';
+import { getOrCacheBlob } from '../utils/mediaCache';
 import './FileComponents.css';
 
 const pendingUploadedFileByChat: Record<string, FileMetadata | null> = {};
@@ -591,16 +592,21 @@ export function ChatRoom({
         if (!avatarUrl || !token) return;
 
         try {
-            const response = await fetch(avatarUrl, {
-                headers: { Authorization: `Bearer ${token}` },
+            const blob = await getOrCacheBlob({
+                cacheKey: `avatar:viewer:${rawAvatar}`,
+                loadBlob: async () => {
+                    const response = await fetch(avatarUrl, {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (!response.ok) throw new Error('Failed to load group avatar');
+                    const encryptedBytes = new Uint8Array(await response.arrayBuffer());
+                    let plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, 'profile_avatar_shared');
+                    if (plainBytes === encryptedBytes) {
+                        plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
+                    }
+                    return new Blob([new Uint8Array(plainBytes)], { type: response.headers.get('content-type') || 'image/*' });
+                },
             });
-            if (!response.ok) throw new Error('Failed to load group avatar');
-            const encryptedBytes = new Uint8Array(await response.arrayBuffer());
-            let plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, 'profile_avatar_shared');
-            if (plainBytes === encryptedBytes) {
-                plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
-            }
-            const blob = new Blob([new Uint8Array(plainBytes)], { type: response.headers.get('content-type') || 'image/*' });
             if (openedGroupAvatarObjectUrlRef.current) {
                 URL.revokeObjectURL(openedGroupAvatarObjectUrlRef.current);
             }

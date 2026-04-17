@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { cx } from '../utils/cx';
 import { API_BASE_URL } from '../config/api';
 import { decryptAvatarBytesClientSide, decryptFileBytesClientSide } from '../utils/e2ee';
+import { getOrCacheBlob } from '../utils/mediaCache';
 
 interface AvatarProps {
   name: string;
@@ -96,21 +97,24 @@ async function fetchAvatar(src: string): Promise<string> {
     if (!token) return '';
 
     try {
-      const response = await fetch(fullUrl, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'ngrok-skip-browser-warning': 'true',
+      const blob = await getOrCacheBlob({
+        cacheKey: `avatar:${cacheKey}`,
+        loadBlob: async () => {
+          const response = await fetch(fullUrl, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'ngrok-skip-browser-warning': 'true',
+            },
+          });
+          if (!response.ok) throw new Error('Failed to load avatar');
+          const encryptedBytes = new Uint8Array(await response.arrayBuffer());
+          let plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, 'profile_avatar_shared');
+          if (plainBytes === encryptedBytes) {
+            plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
+          }
+          return new Blob([new Uint8Array(plainBytes)], { type: response.headers.get('content-type') || 'image/*' });
         },
       });
-
-      if (!response.ok) return '';
-
-      const encryptedBytes = new Uint8Array(await response.arrayBuffer());
-      let plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, 'profile_avatar_shared');
-      if (plainBytes === encryptedBytes) {
-        plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
-      }
-      const blob = new Blob([new Uint8Array(plainBytes)], { type: response.headers.get('content-type') || 'image/*' });
       const blobUrl = URL.createObjectURL(blob);
       avatarCache.set(cacheKey, blobUrl);
       return blobUrl;
