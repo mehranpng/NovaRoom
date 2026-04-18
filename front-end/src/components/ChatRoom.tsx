@@ -22,6 +22,7 @@ import { getOrCacheBlob } from '../utils/mediaCache';
 import './FileComponents.css';
 
 const pendingUploadedFileByChat: Record<string, FileMetadata | null> = {};
+const pendingInputTextByChat: Record<string, string> = {};
 
 interface ChatRoomProps {
     chatId: string;
@@ -52,7 +53,9 @@ interface ChatRoomProps {
     onSetPendingForwardDraft?: (targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => void;
     onClearPendingForwardDraft?: (targetChatId: string) => void;
     typingUserIds?: string[];
+    uploadingUserIds?: string[];
     onTypingChange?: (chatId: string, isTyping: boolean) => void;
+    onUploadingChange?: (chatId: string, isUploading: boolean) => void;
     isUserBlocked?: (user: User) => boolean;
     onToggleBlockUser?: (user: User) => void | Promise<void>;
     hasOlderMessages?: boolean;
@@ -357,7 +360,9 @@ export function ChatRoom({
     onSetPendingForwardDraft,
     onClearPendingForwardDraft,
     typingUserIds = [],
+    uploadingUserIds = [],
     onTypingChange,
+    onUploadingChange,
     isUserBlocked,
     onToggleBlockUser,
     hasOlderMessages = false,
@@ -559,6 +564,7 @@ export function ChatRoom({
         if (!isContactBlocked) return;
         stopTyping();
         pendingUploadedFileByChat[chatId] = null;
+        pendingInputTextByChat[chatId] = '';
         setText('');
         setUploadedFile(null);
         setReplyTo(null);
@@ -1266,7 +1272,11 @@ export function ChatRoom({
         setForwardSourceUser(null);
         setReplyTo(null); setEditingId(null);
         setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
-        setText('');
+        if (textDebounceTimerRef.current) {
+            window.clearTimeout(textDebounceTimerRef.current);
+            textDebounceTimerRef.current = null;
+        }
+        setText(pendingInputTextByChat[chatId] || '');
         stopTyping();
         setUploadedFile(pendingUploadedFileByChat[chatId] || null);
         setUnreadAnchorId(null);
@@ -1602,6 +1612,23 @@ export function ChatRoom({
         return `${toPersianDigits(otherTypingUserIds.length)} کاربر درحال تایپ هستند`;
     }, [otherTypingUserIds, isGroupChat, groupMembers, isContactBlocked]);
 
+    const otherUploadingUserIds = useMemo(
+        () => (uploadingUserIds || []).filter((uid) => uid && uid !== currentUserId),
+        [uploadingUserIds, currentUserId]
+    );
+
+    const uploadingStatusLabel = useMemo(() => {
+        if (isContactBlocked) return '';
+        if (otherUploadingUserIds.length === 0) return '';
+        if (!isGroupChat) return 'درحال آپلود فایل...';
+        if (otherUploadingUserIds.length === 1) {
+            const uid = otherUploadingUserIds[0];
+            const name = groupMembers[uid]?.name || 'یک کاربر';
+            return `${name} درحال آپلود فایل...`;
+        }
+        return `${toPersianDigits(otherUploadingUserIds.length)} کاربر درحال آپلود فایل هستند`;
+    }, [otherUploadingUserIds, isGroupChat, groupMembers, isContactBlocked]);
+
     const activeInputStackCount = (replyTo || editingId ? 1 : 0)
         + (uploadedFile ? 1 : 0)
         + (pendingForwardDraft ? 1 : 0);
@@ -1642,6 +1669,7 @@ export function ChatRoom({
         }
         stopTyping();
         pendingUploadedFileByChat[chatId] = null;
+        pendingInputTextByChat[chatId] = '';
         setText(''); setUploadedFile(null); setReplyTo(null); setEditingId(null);
         requestAnimationFrame(() => scrollToBottom(true));
     };
@@ -1799,8 +1827,19 @@ export function ChatRoom({
 
     const beginEdit = (m: Message) => {
         setEditingId(m.id); setReplyTo(null); setText(m.text);
+        pendingInputTextByChat[chatId] = m.text;
         setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
-        setTimeout(() => textareaRef.current?.focus(), 0);
+        setTimeout(() => {
+            const ta = textareaRef.current;
+            if (!ta) return;
+            ta.focus();
+            const end = ta.value.length;
+            try {
+                ta.setSelectionRange(end, end);
+            } catch {
+                // ignore setSelectionRange issues on some mobile keyboards
+            }
+        }, 0);
     };
 
     const doDeleteMessage = (messageId: string) => {
@@ -2142,6 +2181,8 @@ export function ChatRoom({
                             <div className={(!isGroupChat && !isContactBlocked && contact.online) ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
                                 {typingStatusLabel ? (
                                     <span style={isGroupChat ? { color: '#16a34a' } : undefined}>{typingStatusLabel}</span>
+                                ) : uploadingStatusLabel ? (
+                                    <span style={isGroupChat ? { color: '#16a34a' } : undefined}>{uploadingStatusLabel}</span>
                                 ) : (isGroupChat ? (
                                     <span style={{ direction: 'rtl', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                         <span style={{ color: '#16a34a' }}>{toPersianDigits(chatStats?.onlineMembers ?? 0)} آنلاین</span>
@@ -2720,7 +2761,7 @@ export function ChatRoom({
                             <div className="chat-room__reply-edit-box__title">{editingId ? 'در حال ویرایش' : 'در حال پاسخ'}</div>
                             {!editingId && replyTo && <div className="chat-room__reply-edit-box__text">{getReplyPreviewText(replyTo)}</div>}
                         </div>
-                        <button type="button" className="icon-btn" aria-label="Cancel" onClick={() => { setReplyTo(null); setEditingId(null); setText(''); stopTyping(); }}>
+                        <button type="button" className="icon-btn" aria-label="Cancel" onClick={() => { setReplyTo(null); setEditingId(null); stopTyping(); }}>
                             <X size={18} />
                         </button>
                     </div>
@@ -2765,6 +2806,7 @@ export function ChatRoom({
                                 token={token}
                                 chatId={chatId}
                                 onFileUploaded={handleFileUploaded}
+                                onUploadStatusChange={(targetChatId, isUploading) => onUploadingChange?.(targetChatId, isUploading)}
                                 fileAttached={Boolean(uploadedFile)}
                                 onRegisterUploadFile={(handler) => {
                                     setExternalFileUploadHandler(() => handler);
@@ -2774,6 +2816,7 @@ export function ChatRoom({
                                 value={text}
                                 onChange={(e) => {
                                     const nextValue = e.target.value;
+                                    pendingInputTextByChat[chatId] = nextValue;
                                     if (textDebounceTimerRef.current) {
                                         window.clearTimeout(textDebounceTimerRef.current);
                                     }

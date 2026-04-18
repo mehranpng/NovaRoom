@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { File as FileIcon, Image, Music2, Paperclip, Video } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { FileMetadata } from '../types';
@@ -10,6 +10,7 @@ interface FileUploadProps {
     token: string;
     chatId: string;
     onFileUploaded: (file: FileMetadata) => void;
+    onUploadStatusChange?: (chatId: string, isUploading: boolean) => void;
     fileAttached?: boolean;
     onRegisterUploadFile?: (handler: ((file: File) => void) | null) => void;
 }
@@ -26,7 +27,7 @@ type UploadTask = {
 
 const uploadTasksByChat = new Map<string, UploadTask>();
 
-export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false, onRegisterUploadFile }: FileUploadProps) {
+export function FileUpload({ token, chatId, onFileUploaded, onUploadStatusChange, fileAttached = false, onRegisterUploadFile }: FileUploadProps) {
     const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
@@ -69,6 +70,13 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         task.listeners.forEach((listener) => listener(task));
     };
 
+    const lastUploadSignalRef = useRef<boolean>(false);
+    const emitUploadStatus = useCallback((isUploading: boolean) => {
+        if (lastUploadSignalRef.current === isUploading) return;
+        lastUploadSignalRef.current = isUploading;
+        onUploadStatusChange?.(chatId, isUploading);
+    }, [chatId, onUploadStatusChange]);
+
     const getCombinedProgress = (task: Pick<UploadTask, 'status' | 'uploadProgress' | 'encryptionProgress'>) => {
         if (task.status === 'done') return 100;
         const safeUpload = Math.max(0, Math.min(100, task.uploadProgress || 0));
@@ -82,12 +90,14 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             setUploading(false);
             setUploadProgress(0);
             setSelectedFileName(null);
+            emitUploadStatus(false);
             return;
         }
 
         const handleTask = (task: UploadTask) => {
             const waitingForFileBox = task.status === 'done' && !fileAttached;
             setUploading(task.status === 'uploading' || waitingForFileBox);
+            emitUploadStatus(task.status === 'uploading');
             setUploadProgress(getCombinedProgress(task));
             setSelectedFileName(task.fileName);
             if (task.status === 'done' && task.result && !task.delivered) {
@@ -105,8 +115,9 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
 
         return () => {
             existingTask.listeners.delete(handleTask);
+            emitUploadStatus(false);
         };
-    }, [chatId, onFileUploaded, fileAttached]);
+    }, [chatId, onFileUploaded, fileAttached, emitUploadStatus]);
 
     const startUploadFromFile = (file: File | null | undefined) => {
         if (!file) return;
@@ -196,6 +207,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
 
     const uploadFile = async (file: File) => {
         setUploading(true);
+        emitUploadStatus(true);
         setUploadProgress(0);
         const task: UploadTask = {
             status: 'uploading',
@@ -266,6 +278,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                         console.error('Invalid upload response:', response);
                         alert('خطا در آپلود فایل');
                         task.status = 'error';
+                        emitUploadStatus(false);
                         pushTaskUpdate(task);
                         uploadTasksByChat.delete(chatId);
                         resetUpload();
@@ -274,6 +287,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                     console.error(`Upload failed: ${xhr.status}`, xhr.responseText);
                     alert('خطا در آپلود فایل');
                     task.status = 'error';
+                    emitUploadStatus(false);
                     pushTaskUpdate(task);
                     uploadTasksByChat.delete(chatId);
                     resetUpload();
@@ -285,6 +299,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                 console.error('Upload error');
                 alert('خطا در آپلود فایل');
                 task.status = 'error';
+                emitUploadStatus(false);
                 pushTaskUpdate(task);
                 uploadTasksByChat.delete(chatId);
                 resetUpload();
@@ -294,6 +309,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             xhr.addEventListener('abort', () => {
                 console.log('Upload cancelled');
                 task.status = 'error';
+                emitUploadStatus(false);
                 pushTaskUpdate(task);
                 uploadTasksByChat.delete(chatId);
                 resetUpload();
@@ -310,12 +326,14 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             }
             console.error('Upload error:', error);
             alert('خطا در آپلود فایل');
+            emitUploadStatus(false);
             uploadTasksByChat.delete(chatId);
             resetUpload();
         }
     };
 
     const resetUpload = () => {
+        emitUploadStatus(false);
         setSelectedFileName(null);
         setUploading(false);
         setUploadProgress(0);

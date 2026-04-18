@@ -3457,6 +3457,37 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     },
                 )
 
+            elif data.get("type") == "uploading":
+                chat_id_target = data.get("chatId")
+                is_uploading = bool(data.get("isUploading"))
+                if not chat_id_target:
+                    continue
+
+                saved_chat_id = get_saved_messages_id(chat_id)
+                if chat_id_target == saved_chat_id:
+                    continue
+
+                chat_doc = await cl_chats.find_one(
+                    {"_id": chat_id_target}, {"participants": 1, "chatType": 1}
+                )
+                participants = chat_doc.get("participants", []) if chat_doc else []
+                if chat_id not in participants:
+                    continue
+                if chat_doc and chat_doc.get("chatType") != "group":
+                    other_id = next((p for p in participants if p != chat_id), "")
+                    if other_id and await _is_direct_blocked_between(chat_id, other_id):
+                        continue
+
+                await broadcast(
+                    [p for p in participants if p != chat_id],
+                    {
+                        "type": "uploading",
+                        "chatId": chat_id_target,
+                        "userId": chat_id,
+                        "isUploading": is_uploading,
+                    },
+                )
+
             elif data.get("type") == "get_chats":
                 request_id = data.get("requestId")
                 try:
