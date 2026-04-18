@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronsLeft, ChevronsRight, Download, Maximize, Minimize, Pause, Play, X } from 'lucide-react';
 import { API_BASE_URL } from '../config/api';
 import type { FileMetadata } from '../types';
+import { decryptAvatarBytesClientSide, decryptFileBytesClientSide } from '../utils/e2ee';
 
 interface VideoMediaViewerProps {
     videoUrl: string;
     onClose: () => void;
     downloadFile?: Pick<FileMetadata, 'fileId' | 'fileName'> | null;
     token?: string;
+    decryptScope?: string;
 }
 
 function formatDuration(seconds: number): string {
@@ -20,7 +22,7 @@ function formatDuration(seconds: number): string {
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }: VideoMediaViewerProps) {
+export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '', decryptScope = '' }: VideoMediaViewerProps) {
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const clickTimeoutRef = useRef<number | null>(null);
@@ -133,7 +135,17 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
                 })
                 : await fetch(videoUrl);
             if (!response.ok) throw new Error('Download failed');
-            const blob = await response.blob();
+            let blob: Blob;
+            if (downloadFile?.fileId && token && decryptScope) {
+                const encryptedBytes = new Uint8Array(await response.arrayBuffer());
+                let plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, decryptScope);
+                if (plainBytes === encryptedBytes) {
+                    plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
+                }
+                blob = new Blob([new Uint8Array(plainBytes)], { type: response.headers.get('content-type') || 'application/octet-stream' });
+            } else {
+                blob = await response.blob();
+            }
             const extension = blob.type.split('/')[1] || 'mp4';
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');

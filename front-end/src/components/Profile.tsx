@@ -493,6 +493,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                 <ImageMediaViewer
                     imageUrl={openedProfileImage.url}
                     token={localStorage.getItem('token') || ''}
+                    decryptScope="profile_avatar_shared"
                     downloadFile={{ fileId: openedProfileImage.fileId, fileName: `${user.name || 'profile'}.jpg` }}
                     onClose={() => {
                         setOpenedProfileImage(null);

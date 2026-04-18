@@ -490,6 +490,7 @@ export function ChatRoom({
     const consumedInitialUnreadRef = useRef(false);
     const typingActiveRef = useRef(false);
     const typingTimeoutRef = useRef<number | null>(null);
+    const textDebounceTimerRef = useRef<number | null>(null);
 
     const clearTypingTimeout = () => {
         if (typingTimeoutRef.current) {
@@ -519,8 +520,10 @@ export function ChatRoom({
             return;
         }
 
-        typingActiveRef.current = true;
-        emitTyping(true);
+        if (!typingActiveRef.current) {
+            typingActiveRef.current = true;
+            emitTyping(true);
+        }
         clearTypingTimeout();
         typingTimeoutRef.current = window.setTimeout(() => {
             typingActiveRef.current = false;
@@ -528,6 +531,15 @@ export function ChatRoom({
             typingTimeoutRef.current = null;
         }, 1000);
     };
+
+    useEffect(() => {
+        return () => {
+            if (textDebounceTimerRef.current) {
+                window.clearTimeout(textDebounceTimerRef.current);
+                textDebounceTimerRef.current = null;
+            }
+        };
+    }, []);
 
     useEffect(() => {
         if (!isContactBlocked) return;
@@ -604,6 +616,7 @@ export function ChatRoom({
                 cacheKey: `avatar:viewer:${rawAvatar}`,
                 loadBlob: async () => {
                     const response = await fetch(avatarUrl, {
+                        credentials: 'omit',
                         headers: { Authorization: `Bearer ${token}` },
                     });
                     if (!response.ok) throw new Error('Failed to load group avatar');
@@ -1998,6 +2011,7 @@ export function ChatRoom({
                     <ImageMediaViewer
                         imageUrl={openedGroupAvatar.url}
                         token={token}
+                        decryptScope="profile_avatar_shared"
                         downloadFile={{ fileId: openedGroupAvatar.fileId, fileName: openedGroupAvatar.fileName }}
                         onClose={() => {
                             setOpenedGroupAvatar(null);
@@ -2558,6 +2572,7 @@ export function ChatRoom({
                     imageUrl={openedImage.url}
                     downloadFile={openedImage.file}
                     token={token}
+                    decryptScope={`chat:${chatId}`}
                     onClose={() => setOpenedImage(null)}
                 />
             )}
@@ -2566,6 +2581,7 @@ export function ChatRoom({
                     videoUrl={openedVideo.url}
                     downloadFile={openedVideo.file}
                     token={token}
+                    decryptScope={`chat:${chatId}`}
                     onClose={() => setOpenedVideo(null)}
                 />
             )}
@@ -2728,7 +2744,13 @@ export function ChatRoom({
                                 value={text}
                                 onChange={(e) => {
                                     const nextValue = e.target.value;
-                                    setText(nextValue);
+                                    if (textDebounceTimerRef.current) {
+                                        window.clearTimeout(textDebounceTimerRef.current);
+                                    }
+                                    textDebounceTimerRef.current = window.setTimeout(() => {
+                                        setText(nextValue);
+                                        textDebounceTimerRef.current = null;
+                                    }, 16);
                                     refreshTyping(nextValue);
                                 }}
                                 onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}

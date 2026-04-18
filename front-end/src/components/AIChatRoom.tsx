@@ -487,16 +487,16 @@ export function AIChatRoom({
     useEffect(() => {
         const streamMessageId = streamingReasoningMessage?.id;
         if (!streamMessageId) return;
-        const timerCookieKey = `ai_reasoning_start_${streamMessageId}`;
+        const timerStorageKey = `ai_reasoning_start_${streamMessageId}`;
 
         if (reasoningPanelByMessage[streamMessageId] === undefined) {
             setReasoningPanelByMessage((prev) => ({ ...prev, [streamMessageId]: true }));
         }
 
         if (!reasoningStartAtRef.current[streamMessageId]) {
-            const saved = Number(getTempSessionValue(timerCookieKey) || 0);
+            const saved = Number(getTempSessionValue(timerStorageKey) || 0);
             reasoningStartAtRef.current[streamMessageId] = saved > 0 ? saved : Number(streamingReasoningMessage?.timestamp || Date.now());
-            setTempSessionValue(timerCookieKey, String(reasoningStartAtRef.current[streamMessageId]));
+            setTempSessionValue(timerStorageKey, String(reasoningStartAtRef.current[streamMessageId]));
         }
 
         const hasMainResponseStarted = Boolean((streamingReasoningMessage.text || '').trim());
@@ -516,7 +516,7 @@ export function AIChatRoom({
             setReasoningElapsedByMessage((prev) => ({ ...prev, [streamMessageId]: elapsed }));
         }, 1000);
         if (!streamingReasoningMessage?.isStreaming) {
-            deleteTempSessionValue(timerCookieKey);
+            deleteTempSessionValue(timerStorageKey);
         }
         return () => clearInterval(interval);
     }, [streamingReasoningMessage?.id, streamingReasoningMessage?.text, reasoningPanelByMessage]);

@@ -33,6 +33,7 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
+        credentials: 'omit',
         headers: { ...baseHeaders, ...options.headers },
     });
 

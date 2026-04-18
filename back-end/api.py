@@ -109,6 +109,7 @@ VALID_REACTIONS = [
     "🤔",
     "✅️",
     "❌️",
+    "🔥",
     "💩",
     "😡",
     "😰",
@@ -937,33 +938,6 @@ async def startup_db():
 
 
 async def migrate_unencrypted_messages():
-    async for u in cl_users.find(
-        {
-            "$or": [
-                {"profile.bioEncrypted": {"$ne": True}},
-                {"profile.bio": {"$not": {"$regex": f"^{ENC_PREFIX}"}}},
-            ]
-        }
-    ):
-        chat_id = str(u.get("chatId") or "")
-        if not chat_id:
-            continue
-        bio = str(((u.get("profile") or {}).get("bio")) or "")
-        encrypted_bio = (
-            encrypt_scoped_text(bio, LEGACY_BOOTSTRAP_TOKEN, user_bio_scope(chat_id))
-            if bio and not is_ciphertext(bio)
-            else bio
-        )
-        await cl_users.update_one(
-            {"_id": u["_id"]},
-            {
-                "$set": {
-                    "profile.bio": encrypted_bio,
-                    "profile.bioEncrypted": True,
-                }
-            },
-        )
-
     async for m in cl_messages.find(
         {"$or": [{"textEncrypted": {"$ne": True}}, {"text": {"$not": {"$regex": f"^{ENC_PREFIX}"}}}]}
     ):
@@ -1252,8 +1226,8 @@ async def complete_registration(req: CompleteRegistrationRequest, request: Reque
         "profile": {
             "name": req.name,
             "username": desired_username,
-            "bio": encrypt_scoped_text("", "", user_bio_scope(chat_id)),
-            "bioEncrypted": True,
+            "bio": "",
+            "bioEncrypted": False,
             "avatar": "",
         },
         "online": False,
@@ -1419,10 +1393,8 @@ async def update_profile(
         update_data["profile.username"] = desired
 
     if updates.bio is not None:
-        update_data["profile.bio"] = encrypt_scoped_text(
-            updates.bio, "", user_bio_scope(current_user["chatId"])
-        )
-        update_data["profile.bioEncrypted"] = True
+        update_data["profile.bio"] = str(updates.bio)
+        update_data["profile.bioEncrypted"] = False
 
     if updates.avatar is not None:
         avatar_value = str(updates.avatar).strip()
@@ -3104,15 +3076,20 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 {"type": "user_status", "userId": chat_id, "online": True},
             )
 
+        missed_heartbeat_count = 0
         while True:
             try:
-                data = await asyncio.wait_for(websocket.receive_json(), timeout=70)
+                data = await asyncio.wait_for(websocket.receive_json(), timeout=25)
+                missed_heartbeat_count = 0
             except asyncio.TimeoutError:
                 # Proactively probe silent/stale connections so online status
-                # doesn't stay "stuck" for a long time on abrupt network drops.
+                # doesn't stay stuck after abrupt browser/app shutdowns.
                 try:
                     await websocket.send_json({"type": "ping"})
                 except Exception:
+                    break
+                missed_heartbeat_count += 1
+                if missed_heartbeat_count >= 2:
                     break
                 continue
             except ValueError:

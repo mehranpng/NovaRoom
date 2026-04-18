@@ -2,19 +2,21 @@ import { useEffect, useRef, useState } from 'react';
 import { Download, Minus, Plus, X } from 'lucide-react';
 import { API_BASE_URL } from '../config/api';
 import type { FileMetadata } from '../types';
+import { decryptAvatarBytesClientSide, decryptFileBytesClientSide } from '../utils/e2ee';
 
 interface ImageMediaViewerProps {
     imageUrl: string;
     onClose: () => void;
     downloadFile?: Pick<FileMetadata, 'fileId' | 'fileName'> | null;
     token?: string;
+    decryptScope?: string;
 }
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
 const TOGGLE_ZOOM_SCALE = 2;
 
-export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token = '' }: ImageMediaViewerProps) {
+export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token = '', decryptScope = '' }: ImageMediaViewerProps) {
     const [scale, setScale] = useState(1);
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const pinchDistanceRef = useRef<number | null>(null);
@@ -85,7 +87,17 @@ export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token = '' }
                 })
                 : await fetch(imageUrl);
             if (!response.ok) throw new Error('Download failed');
-            const blob = await response.blob();
+            let blob: Blob;
+            if (downloadFile?.fileId && token && decryptScope) {
+                const encryptedBytes = new Uint8Array(await response.arrayBuffer());
+                let plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, decryptScope);
+                if (plainBytes === encryptedBytes) {
+                    plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
+                }
+                blob = new Blob([new Uint8Array(plainBytes)], { type: response.headers.get('content-type') || 'application/octet-stream' });
+            } else {
+                blob = await response.blob();
+            }
             const extension = blob.type.split('/')[1] || 'jpg';
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
