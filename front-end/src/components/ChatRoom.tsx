@@ -704,7 +704,7 @@ export function ChatRoom({
         if (!container || !mem) return false;
         isAtBottomRef.current = Boolean(mem.atBottom);
         if (mem.atBottom) {
-            scrollToBottom(false);
+            scrollToBottom(true);
         } else {
             markProgrammaticScroll();
             container.scrollTop = mem.top;

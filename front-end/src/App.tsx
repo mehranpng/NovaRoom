@@ -85,7 +85,6 @@ export function App() {
     const [uploadingUserIdsByChat, setUploadingUserIdsByChat] = useState<Record<string, string[]>>({});
     const [blockedChatIds, setBlockedChatIds] = useState<string[]>([]);
     const typingTimeoutsRef = useRef<Record<string, number>>({});
-    const uploadingTimeoutsRef = useRef<Record<string, number>>({});
     const userPresenceRef = useRef<Record<string, { online: boolean; updatedAt: number }>>({});
     const presenceOfflineGraceTimersRef = useRef<Record<string, number>>({});
     const realtimeRecoveryInFlightRef = useRef(false);
@@ -463,8 +462,6 @@ export function App() {
             setOpenChatUnread(null);
             Object.values(typingTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
             typingTimeoutsRef.current = {};
-            Object.values(uploadingTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
-            uploadingTimeoutsRef.current = {};
             Object.values(presenceOfflineGraceTimersRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
             presenceOfflineGraceTimersRef.current = {};
             userPresenceRef.current = {};
@@ -528,13 +525,7 @@ export function App() {
         if (!chatId || !userId) return;
         if (currentUser?.chatId && userId === currentUser.chatId) return;
 
-        const key = `${chatId}:${userId}`;
         const clearEntry = () => {
-            const timeoutId = uploadingTimeoutsRef.current[key];
-            if (timeoutId) {
-                window.clearTimeout(timeoutId);
-                delete uploadingTimeoutsRef.current[key];
-            }
             setUploadingUserIdsByChat((prev) => {
                 const chatUsers = prev[chatId] || [];
                 if (!chatUsers.includes(userId)) return prev;
@@ -559,13 +550,6 @@ export function App() {
             if (chatUsers.includes(userId)) return prev;
             return { ...prev, [chatId]: [...chatUsers, userId] };
         });
-
-        if (uploadingTimeoutsRef.current[key]) {
-            window.clearTimeout(uploadingTimeoutsRef.current[key]);
-        }
-        uploadingTimeoutsRef.current[key] = window.setTimeout(() => {
-            clearEntry();
-        }, 15000);
     }, [currentUser?.chatId]);
 
     // WebSocket handlers wrapped in useCallback to prevent infinite reconnection loops
@@ -1164,8 +1148,6 @@ export function App() {
         return () => {
             Object.values(typingTimeoutsRef.current).forEach((id) => window.clearTimeout(id));
             typingTimeoutsRef.current = {};
-            Object.values(uploadingTimeoutsRef.current).forEach((id) => window.clearTimeout(id));
-            uploadingTimeoutsRef.current = {};
             Object.values(presenceOfflineGraceTimersRef.current).forEach((id) => window.clearTimeout(id));
             presenceOfflineGraceTimersRef.current = {};
         };

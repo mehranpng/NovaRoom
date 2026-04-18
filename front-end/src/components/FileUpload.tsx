@@ -39,6 +39,7 @@ export function FileUpload({ token, chatId, onFileUploaded, onUploadStatusChange
     const menuRef = useRef<HTMLDivElement>(null);
     const pickerSessionRef = useRef(false);
     const pickerCloseTimerRef = useRef<number | null>(null);
+    const activeXhrRef = useRef<XMLHttpRequest | null>(null);
     const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
         const copy = new Uint8Array(bytes.byteLength);
         copy.set(bytes);
@@ -115,7 +116,6 @@ export function FileUpload({ token, chatId, onFileUploaded, onUploadStatusChange
 
         return () => {
             existingTask.listeners.delete(handleTask);
-            emitUploadStatus(false);
         };
     }, [chatId, onFileUploaded, fileAttached, emitUploadStatus]);
 
@@ -246,6 +246,7 @@ export function FileUpload({ token, chatId, onFileUploaded, onUploadStatusChange
             formData.append('file', encryptedFile);
 
             const xhr = new XMLHttpRequest();
+            activeXhrRef.current = xhr;
 
             // Track upload progress
             xhr.upload.addEventListener('progress', (e) => {
@@ -259,6 +260,7 @@ export function FileUpload({ token, chatId, onFileUploaded, onUploadStatusChange
 
             // Handle completion
             xhr.addEventListener('load', () => {
+                activeXhrRef.current = null;
                 if (xhr.status === 200) {
                     const response = JSON.parse(xhr.responseText);
                     if (response.success && response.file) {
@@ -296,6 +298,7 @@ export function FileUpload({ token, chatId, onFileUploaded, onUploadStatusChange
 
             // Handle errors
             xhr.addEventListener('error', () => {
+                activeXhrRef.current = null;
                 console.error('Upload error');
                 alert('خطا در آپلود فایل');
                 task.status = 'error';
@@ -307,6 +310,7 @@ export function FileUpload({ token, chatId, onFileUploaded, onUploadStatusChange
 
             // Handle abort
             xhr.addEventListener('abort', () => {
+                activeXhrRef.current = null;
                 console.log('Upload cancelled');
                 task.status = 'error';
                 emitUploadStatus(false);
@@ -333,6 +337,7 @@ export function FileUpload({ token, chatId, onFileUploaded, onUploadStatusChange
     };
 
     const resetUpload = () => {
+        activeXhrRef.current = null;
         emitUploadStatus(false);
         setSelectedFileName(null);
         setUploading(false);
@@ -351,6 +356,16 @@ export function FileUpload({ token, chatId, onFileUploaded, onUploadStatusChange
         }
     };
 
+    const cancelUpload = () => {
+        if (activeXhrRef.current) {
+            activeXhrRef.current.abort();
+            return;
+        }
+        emitUploadStatus(false);
+        uploadTasksByChat.delete(chatId);
+        resetUpload();
+    };
+
     return (
         <>
             {uploading && selectedFileName && (
@@ -366,6 +381,15 @@ export function FileUpload({ token, chatId, onFileUploaded, onUploadStatusChange
                         className="file-upload-progress-inline__fill"
                         style={{ width: `${uploadProgress}%` }}
                     />
+                    <button
+                        type="button"
+                        className="file-upload-progress-inline__cancel"
+                        onClick={cancelUpload}
+                        aria-label="Cancel upload"
+                        title="لغو آپلود"
+                    >
+                        ×
+                    </button>
                 </div>
             )}
             <div className="file-upload-container">
