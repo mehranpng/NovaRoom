@@ -67,10 +67,10 @@ interface ChatRoomProps {
 const IRAN_OFFSET_MS = 210 * 60 * 1000;
 const TEHRAN_TZ = 'Asia/Tehran';
 
-const persianJalaliDayMonthFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+const persianJalaliDayMonthPartsFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
     timeZone: TEHRAN_TZ,
-    month: 'long',
     day: 'numeric',
+    month: 'long',
 });
 const persianJalaliFullSlashFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
     timeZone: TEHRAN_TZ,
@@ -127,6 +127,14 @@ function toPersianDigits(value: string | number): string {
     return String(value).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)] ?? d);
 }
 
+function formatJalaliDayMonth(ts: any): string {
+    const parts = persianJalaliDayMonthPartsFmt.formatToParts(new Date(normalizeTs(ts)));
+    const day = parts.find((part) => part.type === 'day')?.value ?? '';
+    const month = parts.find((part) => part.type === 'month')?.value ?? '';
+    if (day && month) return `${day} ${month}`;
+    return persianJalaliDayMonthPartsFmt.format(new Date(normalizeTs(ts)));
+}
+
 function sameDay(a: any, b: any) {
     return iranYMD(a) === iranYMD(b);
 }
@@ -143,7 +151,7 @@ function formatDayLabel(ts: any) {
     const currentJalaliYear = persianJalaliYearFmt.format(new Date());
     const targetJalaliYear = persianJalaliYearFmt.format(new Date(normalizeTs(ts)));
     if (currentJalaliYear === targetJalaliYear) {
-        return persianJalaliDayMonthFmt.format(new Date(normalizeTs(ts)));
+        return formatJalaliDayMonth(ts);
     }
     return persianJalaliFullSlashFmt.format(new Date(normalizeTs(ts))).replaceAll('/', '/');
 }

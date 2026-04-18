@@ -69,6 +69,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
 
     const fetchAndDecryptBlob = async (fileId: string, preferredType?: string): Promise<Blob> => {
         const response = await fetch(`${API_BASE_URL}/files/${fileId}`, {
+            credentials: 'omit',
             headers: { Authorization: `Bearer ${token}` },
         });
         if (!response.ok) throw new Error('Failed to load media file');

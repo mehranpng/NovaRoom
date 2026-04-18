@@ -128,6 +128,7 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
         try {
             const response = downloadFile?.fileId
                 ? await fetch(`${API_BASE_URL}/files/${downloadFile.fileId}`, {
+                    credentials: 'omit',
                     headers: { Authorization: `Bearer ${token}` },
                 })
                 : await fetch(videoUrl);

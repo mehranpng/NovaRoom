@@ -97,7 +97,7 @@ const tehranJalaliFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
     month: '2-digit',
     day: '2-digit',
 });
-const tehranJalaliDayMonthFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+const tehranJalaliDayMonthPartsFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
     timeZone: TEHRAN_TZ,
     day: 'numeric',
     month: 'long',
@@ -109,6 +109,14 @@ const tehranJalaliYearFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
 
 function tehranYMD(ts: any): string {
     return tehranYmdFmt.format(new Date(normalizeTs(ts)));
+}
+
+function formatJalaliDayMonth(ts: any): string {
+    const parts = tehranJalaliDayMonthPartsFmt.formatToParts(new Date(normalizeTs(ts)));
+    const day = parts.find((part) => part.type === 'day')?.value ?? '';
+    const month = parts.find((part) => part.type === 'month')?.value ?? '';
+    if (day && month) return `${day} ${month}`;
+    return tehranJalaliDayMonthPartsFmt.format(new Date(normalizeTs(ts)));
 }
 
 function tehranMidnightEpoch(ts: any): number {
@@ -142,7 +150,7 @@ function formatTime(timestamp: any): string {
     const currentYear = tehranJalaliYearFmt.format(new Date(now));
     const messageYear = tehranJalaliYearFmt.format(d);
     if (currentYear === messageYear) {
-        return tehranJalaliDayMonthFmt.format(d);
+        return formatJalaliDayMonth(d);
     }
     return tehranJalaliFmt.format(d);
 }

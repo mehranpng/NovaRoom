@@ -2620,14 +2620,6 @@ async def forward_message(
                     status_code=403, detail="Direct chat is blocked between users"
                 )
 
-    provided_encrypted_text = (
-        str(req.encryptedText).strip() if isinstance(req.encryptedText, str) else ""
-    )
-    provided_encrypted_reasoning = (
-        str(req.encryptedReasoningContent).strip()
-        if isinstance(req.encryptedReasoningContent, str)
-        else ""
-    )
     client_id = str(req.clientId or "").strip()
 
     # Get original sender info and file data
@@ -2722,16 +2714,8 @@ async def forward_message(
 
     # Create forwarded message
     target_scope = f"chat:{target_chat_id}"
-    encrypted_forward_text = (
-        provided_encrypted_text
-        if provided_encrypted_text
-        else encrypt_scoped_text(message_text, session_token, target_scope)
-    )
-    encrypted_forward_reasoning = (
-        provided_encrypted_reasoning
-        if provided_encrypted_reasoning
-        else encrypt_scoped_text(reasoning_content, session_token, target_scope)
-    )
+    encrypted_forward_text = encrypt_scoped_text(message_text, session_token, target_scope)
+    encrypted_forward_reasoning = encrypt_scoped_text(reasoning_content, session_token, target_scope)
     forwarded_msg = {
         "chatId": target_chat_id,
         "senderId": user_id,

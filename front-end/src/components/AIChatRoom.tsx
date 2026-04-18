@@ -64,22 +64,31 @@ function toPersianDigits(value: string | number): string {
     return String(value).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)] ?? d);
 }
 
-function setCookie(name: string, value: string, maxAgeSec = 60 * 60 * 4) {
-    if (typeof document === 'undefined') return;
-    document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSec}; samesite=lax`;
+function setTempSessionValue(name: string, value: string) {
+    if (typeof window === 'undefined') return;
+    try {
+        window.sessionStorage.setItem(name, value);
+    } catch {
+        // ignore storage quota/security errors
+    }
 }
 
-function getCookie(name: string): string | null {
-    if (typeof document === 'undefined') return null;
-    const key = `${encodeURIComponent(name)}=`;
-    const row = document.cookie.split('; ').find((item) => item.startsWith(key));
-    if (!row) return null;
-    return decodeURIComponent(row.slice(key.length));
+function getTempSessionValue(name: string): string | null {
+    if (typeof window === 'undefined') return null;
+    try {
+        return window.sessionStorage.getItem(name);
+    } catch {
+        return null;
+    }
 }
 
-function deleteCookie(name: string) {
-    if (typeof document === 'undefined') return;
-    document.cookie = `${encodeURIComponent(name)}=; path=/; max-age=0; samesite=lax`;
+function deleteTempSessionValue(name: string) {
+    if (typeof window === 'undefined') return;
+    try {
+        window.sessionStorage.removeItem(name);
+    } catch {
+        // ignore storage quota/security errors
+    }
 }
 
 // ─── CodeBlock with copy button ───────────────────────────────────────────────
@@ -485,9 +494,9 @@ export function AIChatRoom({
         }
 
         if (!reasoningStartAtRef.current[streamMessageId]) {
-            const saved = Number(getCookie(timerCookieKey) || 0);
+            const saved = Number(getTempSessionValue(timerCookieKey) || 0);
             reasoningStartAtRef.current[streamMessageId] = saved > 0 ? saved : Number(streamingReasoningMessage?.timestamp || Date.now());
-            setCookie(timerCookieKey, String(reasoningStartAtRef.current[streamMessageId]));
+            setTempSessionValue(timerCookieKey, String(reasoningStartAtRef.current[streamMessageId]));
         }
 
         const hasMainResponseStarted = Boolean((streamingReasoningMessage.text || '').trim());
@@ -507,7 +516,7 @@ export function AIChatRoom({
             setReasoningElapsedByMessage((prev) => ({ ...prev, [streamMessageId]: elapsed }));
         }, 1000);
         if (!streamingReasoningMessage?.isStreaming) {
-            deleteCookie(timerCookieKey);
+            deleteTempSessionValue(timerCookieKey);
         }
         return () => clearInterval(interval);
     }, [streamingReasoningMessage?.id, streamingReasoningMessage?.text, reasoningPanelByMessage]);

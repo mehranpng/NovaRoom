@@ -101,6 +101,7 @@ async function fetchAvatar(src: string): Promise<string> {
         cacheKey: `avatar:${cacheKey}`,
         loadBlob: async () => {
           const response = await fetch(fullUrl, {
+            credentials: 'omit',
             headers: {
               Authorization: `Bearer ${token}`,
               'ngrok-skip-browser-warning': 'true',

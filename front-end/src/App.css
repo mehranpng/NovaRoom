@@ -2030,7 +2030,7 @@ body,
     inset: 0;
     z-index: 80;
     border: 2px dashed var(--accent-primary);
-    background: rgba(47, 128, 237, 0.22);
+    background: rgba(47, 128, 237, 0.14);
     border-radius: 14px;
     display: flex;
     align-items: center;

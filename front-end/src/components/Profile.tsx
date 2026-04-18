@@ -203,6 +203,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
         if (!token) return;
         try {
             const response = await fetch(`${API_BASE_URL}/files/${fileId}`, {
+                credentials: 'omit',
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (!response.ok) return;

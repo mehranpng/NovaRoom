@@ -260,6 +260,7 @@ export function ContactInfo({
 
         try {
             const response = await fetch(avatarUrl, {
+                credentials: 'omit',
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (!response.ok) throw new Error('Failed to load avatar');
