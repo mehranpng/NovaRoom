@@ -1699,6 +1699,7 @@ body,
     max-width: 672px;
     margin: 0 auto;
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-end;
     gap: 10px;
     animation: screen-soft-in var(--motion-base) var(--motion-ease-standard);

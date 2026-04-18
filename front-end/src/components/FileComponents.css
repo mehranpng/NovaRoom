@@ -83,16 +83,16 @@
 }
 
 .file-upload-progress-inline {
-    position: absolute;
-    left: 8px;
-    right: 8px;
-    top: -12px;
-    height: 30px;
+    position: relative;
+    flex: 0 0 100%;
+    margin: 0 0 8px;
+    padding: 8px 10px;
+    border-radius: 14px;
+    background: var(--reply-box-bg);
+    border: 1px solid var(--reply-box-border);
     display: flex;
     align-items: center;
     gap: 8px;
-    z-index: 6;
-    pointer-events: auto;
 }
 
 .file-upload-progress-inline__track {
@@ -131,10 +131,7 @@
 
 @media (max-width: 640px) {
     .file-upload-progress-inline {
-        left: 6px;
-        right: 6px;
-        top: -12px;
-        height: 28px;
+        padding: 7px 9px;
     }
 }
 
