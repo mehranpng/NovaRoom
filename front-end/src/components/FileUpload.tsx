@@ -377,10 +377,12 @@ export function FileUpload({ token, chatId, onFileUploaded, onUploadStatusChange
                     aria-valuemax={100}
                     aria-valuenow={uploadProgress}
                 >
-                    <div
-                        className="file-upload-progress-inline__fill"
-                        style={{ width: `${uploadProgress}%` }}
-                    />
+                    <div className="file-upload-progress-inline__track">
+                        <div
+                            className="file-upload-progress-inline__fill"
+                            style={{ width: `${uploadProgress}%` }}
+                        />
+                    </div>
                     <button
                         type="button"
                         className="file-upload-progress-inline__cancel"

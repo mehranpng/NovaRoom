@@ -273,8 +273,16 @@ export function App() {
         let pendingTimer: number | null = null;
         const applyNow = () => {
             const vv = window.visualViewport;
-            const height = Math.round(vv?.height ?? window.innerHeight);
-            const kb = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
+            const ua = navigator.userAgent || '';
+            const isIOSWebKit = /iP(ad|hone|od)/i.test(ua) || (/Macintosh/i.test(ua) && 'ontouchend' in document);
+            const isChromeLikeOnIOS = /CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
+            const shouldUseViewportMetrics = isIOSWebKit && !isChromeLikeOnIOS;
+            const height = shouldUseViewportMetrics
+                ? Math.round(vv?.height ?? window.innerHeight)
+                : Math.round(window.innerHeight);
+            const kb = shouldUseViewportMetrics && vv
+                ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop))
+                : 0;
 
             document.documentElement.style.setProperty('--app-height', `${height}px`);
             document.documentElement.style.setProperty('--keyboard-offset', `${kb}px`);
