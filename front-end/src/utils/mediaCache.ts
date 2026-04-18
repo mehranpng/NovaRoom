@@ -54,6 +54,10 @@ const readFromCache = async (cacheKey: string): Promise<Blob | null> => {
     });
 };
 
+export const getCachedBlob = async (cacheKey: string): Promise<Blob | null> => {
+    return readFromCache(cacheKey);
+};
+
 const saveToCache = async (cacheKey: string, blob: Blob): Promise<void> => {
     const db = await openDb();
     if (!db) return;

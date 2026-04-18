@@ -5,7 +5,7 @@ import { API_BASE_URL } from '../config/api';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useMusicPlayer } from '../contexts/MusicPlayerContext';
 import { decryptFileBytesClientSide } from '../utils/e2ee';
-import { getOrCacheBlob } from '../utils/mediaCache';
+import { getCachedBlob, getOrCacheBlob } from '../utils/mediaCache';
 
 interface FileMessageProps {
     file: FileMetadata;
@@ -31,7 +31,6 @@ function formatDuration(seconds: number): string {
 export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, onVideoClick, onMediaOpened, onRegisterDownloadHandler }: FileMessageProps) {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [previewLoading, setPreviewLoading] = useState(false);
-    const [previewError, setPreviewError] = useState(false);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [audioLoading, setAudioLoading] = useState(false);
     const [audioError, setAudioError] = useState(false);
@@ -46,6 +45,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     const isAudio = (file.mimeType || '').startsWith('audio/');
     const isVideo = (file.mimeType || '').startsWith('video/');
     const hasPreview = Boolean((file.previewFileId || '').trim());
+    const mediaCacheKey = `chat:${chatId}:file:${file.fileId}`;
 
     const isCurrentTrack = musicPlayer.track?.fileId === file.fileId;
     const isThisPlaying = isCurrentTrack && musicPlayer.isPlaying;
@@ -84,18 +84,41 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
 
     useEffect(() => {
         if (!isImage && !isVideo) return;
-        if (!hasPreview) {
-            setPreviewError(true);
-            onMediaLoad?.();
-            return;
-        }
-        let objectUrl: string | null = null;
+        let previewObjectUrl: string | null = null;
+        let fullObjectUrl: string | null = null;
         let cancelled = false;
-        const loadPreview = async () => {
+
+        const setFullFromBlob = (blob: Blob) => {
+            fullObjectUrl = URL.createObjectURL(blob);
+            setFullMediaUrl((prev) => {
+                if (prev) URL.revokeObjectURL(prev);
+                return fullObjectUrl;
+            });
+            setPreviewUrl(null);
+            onMediaLoad?.();
+        };
+
+        const loadMedia = async () => {
             try {
+                const cachedOriginal = await getCachedBlob(mediaCacheKey);
+                if (cachedOriginal) {
+                    if (cancelled) return;
+                    setFullFromBlob(cachedOriginal);
+                    return;
+                }
+
+                if (!hasPreview) {
+                    const legacyBlob = await getOrCacheBlob({
+                        cacheKey: mediaCacheKey,
+                        loadBlob: async () => fetchAndDecryptBlob(file.fileId, file.mimeType),
+                    });
+                    if (cancelled) return;
+                    setFullFromBlob(legacyBlob);
+                    return;
+                }
+
                 setPreviewLoading(true);
-                setPreviewError(false);
-                const blob = await getOrCacheBlob({
+                const previewBlob = await getOrCacheBlob({
                     cacheKey: `chat:${chatId}:preview:${file.previewFileId}`,
                     loadBlob: async () => {
                         const response = await fetch(`${API_BASE_URL}/files/${file.previewFileId}/preview`, {
@@ -106,26 +129,36 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
                         return response.blob();
                     },
                 });
-                if (!cancelled) {
-                    objectUrl = URL.createObjectURL(blob);
-                    setPreviewUrl(objectUrl);
-                    onMediaLoad?.();
-                }
+                if (cancelled) return;
+                previewObjectUrl = URL.createObjectURL(previewBlob);
+                setPreviewUrl(previewObjectUrl);
+                onMediaLoad?.();
             } catch {
-                if (!cancelled) {
-                    setPreviewError(true);
+                if (cancelled) return;
+                // If preview failed, keep compatibility by showing full file.
+                try {
+                    const fallbackBlob = await getOrCacheBlob({
+                        cacheKey: mediaCacheKey,
+                        loadBlob: async () => fetchAndDecryptBlob(file.fileId, file.mimeType),
+                    });
+                    if (!cancelled) {
+                        setFullFromBlob(fallbackBlob);
+                    }
+                } catch {
                     onMediaLoad?.();
                 }
             } finally {
                 if (!cancelled) setPreviewLoading(false);
             }
         };
-        loadPreview();
+
+        void loadMedia();
         return () => {
             cancelled = true;
-            if (objectUrl) URL.revokeObjectURL(objectUrl);
+            if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+            if (fullObjectUrl) URL.revokeObjectURL(fullObjectUrl);
         };
-    }, [chatId, file.previewFileId, hasPreview, isImage, isVideo, onMediaLoad, token]);
+    }, [chatId, file.fileId, file.mimeType, file.previewFileId, hasPreview, isImage, isVideo, mediaCacheKey, onMediaLoad, token]);
 
     useEffect(() => {
         if (!isAudio) return;
@@ -136,7 +169,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
                 setAudioLoading(true);
                 setAudioError(false);
                 const blob = await getOrCacheBlob({
-                    cacheKey: `chat:${chatId}:file:${file.fileId}`,
+                    cacheKey: mediaCacheKey,
                     loadBlob: async () => fetchAndDecryptBlob(file.fileId, file.mimeType),
                 });
                 if (!cancelled) {
@@ -205,6 +238,19 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
         downloadAbortRef.current = controller;
 
         try {
+            const cachedOriginal = await getCachedBlob(mediaCacheKey);
+            if (cachedOriginal) {
+                const nextUrl = URL.createObjectURL(cachedOriginal);
+                setFullMediaUrl((prev) => {
+                    if (prev) URL.revokeObjectURL(prev);
+                    return nextUrl;
+                });
+                setDownloadProgress(100);
+                setDownloadState('done');
+                onMediaOpened?.();
+                return;
+            }
+
             const response = await fetch(`${API_BASE_URL}/files/${file.fileId}`, {
                 credentials: 'omit',
                 headers: { Authorization: `Bearer ${token}` },
@@ -232,7 +278,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
             }
             const plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, chatId);
             const blob = new Blob([toArrayBuffer(plainBytes)], { type: file.mimeType || 'application/octet-stream' });
-            await getOrCacheBlob({ cacheKey: `chat:${chatId}:file:${file.fileId}`, loadBlob: async () => blob });
+            await getOrCacheBlob({ cacheKey: mediaCacheKey, loadBlob: async () => blob });
             const nextUrl = URL.createObjectURL(blob);
             setFullMediaUrl((prev) => {
                 if (prev) URL.revokeObjectURL(prev);
@@ -257,7 +303,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
                 await startManualDownload();
             }
             const blob = await getOrCacheBlob({
-                cacheKey: `chat:${chatId}:file:${file.fileId}`,
+                cacheKey: mediaCacheKey,
                 loadBlob: async () => fetchAndDecryptBlob(file.fileId, file.mimeType),
             });
             const url = URL.createObjectURL(blob);
@@ -294,7 +340,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
             {isImage ? (
                 <div className="file-image-preview" style={{ width: file.previewWidth || undefined, aspectRatio: file.previewWidth && file.previewHeight ? `${file.previewWidth}/${file.previewHeight}` : undefined }}>
                     {previewLoading ? <div className="file-loading file-loading--skeleton" /> : null}
-                    {(previewUrl || previewError) && (
+                    {(previewUrl || fullMediaUrl) && (
                         <img
                             src={fullMediaUrl || previewUrl || ''}
                             alt={file.fileName}
@@ -314,7 +360,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
             ) : isVideo ? (
                 <div className="file-video-card" style={{ aspectRatio: file.previewWidth && file.previewHeight ? `${file.previewWidth}/${file.previewHeight}` : undefined }}>
                     {previewLoading ? <div className="file-loading file-loading--skeleton" /> : null}
-                    {(previewUrl || previewError) && (
+                    {(previewUrl || fullMediaUrl) && (
                         <button
                             type="button"
                             className="file-video-thumb"
