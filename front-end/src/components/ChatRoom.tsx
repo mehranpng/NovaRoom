@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Eye, AlignJustify, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Eye, AlignJustify, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload, Download } from 'lucide-react';
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -497,6 +497,8 @@ export function ChatRoom({
     const typingTimeoutRef = useRef<number | null>(null);
     const typingStartDebounceRef = useRef<number | null>(null);
     const textDebounceTimerRef = useRef<number | null>(null);
+    const viewedMediaMessageIdsRef = useRef<Set<string>>(new Set());
+    const downloadHandlersRef = useRef<Map<string, (() => Promise<void>)>>(new Map());
 
     const clearTypingTimeout = () => {
         if (typingTimeoutRef.current) {
@@ -1057,6 +1059,20 @@ export function ChatRoom({
             }
         } catch { /* ignore */ }
         setMsgMenu(null);
+    };
+
+    const markMediaOpened = (messageId: string) => {
+        viewedMediaMessageIdsRef.current.add(messageId);
+    };
+
+    const doDownloadFromMenu = async (messageId: string) => {
+        const handler = downloadHandlersRef.current.get(messageId);
+        if (!handler) return;
+        try {
+            await handler();
+        } finally {
+            setMsgMenu(null);
+        }
     };
 
     // ── FIX: Optimistic reaction update ──────────────────────────────────────
@@ -2453,8 +2469,22 @@ export function ChatRoom({
                                                     token={token}
                                                     chatId={chatId}
                                                     onMediaLoad={() => handleInitialMediaReady(m.id)}
-                                                    onImageClick={(imageUrl, file) => setOpenedImage({ url: imageUrl, file })}
-                                                    onVideoClick={(videoUrl, file) => setOpenedVideo({ url: videoUrl, file })}
+                                                    onMediaOpened={() => markMediaOpened(m.id)}
+                                                    onRegisterDownloadHandler={(handler) => {
+                                                        if (!handler) {
+                                                            downloadHandlersRef.current.delete(m.id);
+                                                            return;
+                                                        }
+                                                        downloadHandlersRef.current.set(m.id, handler);
+                                                    }}
+                                                    onImageClick={(imageUrl, file) => {
+                                                        markMediaOpened(m.id);
+                                                        setOpenedImage({ url: imageUrl, file });
+                                                    }}
+                                                    onVideoClick={(videoUrl, file) => {
+                                                        markMediaOpened(m.id);
+                                                        setOpenedVideo({ url: videoUrl, file });
+                                                    }}
                                                 />
                                             )}
                                             {Boolean(m.reasoningEnabled && m.reasoningContent) && (
@@ -2572,6 +2602,9 @@ export function ChatRoom({
                 const activeMsgIsMine = activeMsg.senderId === currentUserId;
                 const canDeleteActiveMsg = activeMsgIsMine || (isGroupChat && isVerifiedUser);
                 const showSeenByAction = isGroupChat && activeMsgIsMine;
+                const hasDownloadableFile = Boolean(activeMsg.file?.fileId);
+                const isMediaFile = Boolean((activeMsg.file?.mimeType || '').startsWith('image/') || (activeMsg.file?.mimeType || '').startsWith('video/'));
+                const showDownloadAction = hasDownloadableFile && (!isMediaFile || viewedMediaMessageIdsRef.current.has(activeMsg.id));
 
                 return (
                     <div ref={msgMenuRef} className="popover popover--mini"
@@ -2594,6 +2627,9 @@ export function ChatRoom({
                             <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
                         )}
                         <button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><Copy size={16} />کپی</button>
+                        {showDownloadAction && (
+                            <button className="popover__item" onClick={() => { void doDownloadFromMenu(activeMsg.id); }} type="button"><Download size={16} />دانلود</button>
+                        )}
                         {canDeleteActiveMsg && (
                             <button className="popover__item popover__item--danger" onClick={() => doDeleteMessage(activeMsg.id)} type="button">
                                 <Trash2 size={16} />حذف

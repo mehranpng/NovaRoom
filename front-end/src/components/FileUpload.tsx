@@ -27,6 +27,93 @@ type UploadTask = {
 
 const uploadTasksByChat = new Map<string, UploadTask>();
 
+type PreviewPayload = {
+    blob: Blob;
+    width: number;
+    height: number;
+    durationSec?: number;
+};
+
+const createImagePreviewPayload = async (file: File): Promise<PreviewPayload | null> => {
+    const imageUrl = URL.createObjectURL(file);
+    try {
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const el = new Image();
+            el.onload = () => resolve(el);
+            el.onerror = () => reject(new Error('failed to load image'));
+            el.src = imageUrl;
+        });
+        const width = Math.max(1, img.naturalWidth || img.width || 1);
+        const height = Math.max(1, img.naturalHeight || img.height || 1);
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        ctx.filter = 'blur(28px)';
+        ctx.drawImage(img, 0, 0, width, height);
+        const blob = await new Promise<Blob | null>((resolve) => {
+            canvas.toBlob((b) => resolve(b), 'image/webp', 0.04);
+        });
+        if (!blob) return null;
+        return { blob, width, height };
+    } finally {
+        URL.revokeObjectURL(imageUrl);
+    }
+};
+
+const createVideoPreviewPayload = async (file: File): Promise<PreviewPayload | null> => {
+    const videoUrl = URL.createObjectURL(file);
+    try {
+        const video = document.createElement('video');
+        video.src = videoUrl;
+        video.preload = 'metadata';
+        video.muted = true;
+        video.playsInline = true;
+        await new Promise<void>((resolve, reject) => {
+            const onLoadedMeta = () => {
+                cleanup();
+                resolve();
+            };
+            const onError = () => {
+                cleanup();
+                reject(new Error('failed to load video metadata'));
+            };
+            const cleanup = () => {
+                video.removeEventListener('loadedmetadata', onLoadedMeta);
+                video.removeEventListener('error', onError);
+            };
+            video.addEventListener('loadedmetadata', onLoadedMeta);
+            video.addEventListener('error', onError);
+        });
+        const durationSec = Number.isFinite(video.duration) ? video.duration : undefined;
+        video.currentTime = 0.05;
+        await new Promise<void>((resolve) => {
+            const onSeeked = () => {
+                video.removeEventListener('seeked', onSeeked);
+                resolve();
+            };
+            video.addEventListener('seeked', onSeeked);
+        });
+        const width = Math.max(1, video.videoWidth || 1);
+        const height = Math.max(1, video.videoHeight || 1);
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        ctx.filter = 'blur(28px)';
+        ctx.drawImage(video, 0, 0, width, height);
+        const blob = await new Promise<Blob | null>((resolve) => {
+            canvas.toBlob((b) => resolve(b), 'image/webp', 0.04);
+        });
+        if (!blob) return null;
+        return { blob, width, height, durationSec };
+    } finally {
+        URL.revokeObjectURL(videoUrl);
+    }
+};
+
 export function FileUpload({ token, chatId, onFileUploaded, onUploadStatusChange, fileAttached = false, onRegisterUploadFile }: FileUploadProps) {
     const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
@@ -220,6 +307,10 @@ export function FileUpload({ token, chatId, onFileUploaded, onUploadStatusChange
 
         let encryptionPulse: number | null = null;
         try {
+            const previewPayload =
+                file.type.startsWith('image/')
+                    ? await createImagePreviewPayload(file)
+                    : (file.type.startsWith('video/') ? await createVideoPreviewPayload(file) : null);
             task.encryptionProgress = 10;
             setUploadProgress(getCombinedProgress(task));
             pushTaskUpdate(task);
@@ -244,6 +335,21 @@ export function FileUpload({ token, chatId, onFileUploaded, onUploadStatusChange
 
             const formData = new FormData();
             formData.append('file', encryptedFile);
+            formData.append('original_size', String(file.size));
+            if (previewPayload?.durationSec && Number.isFinite(previewPayload.durationSec)) {
+                formData.append('duration_sec', String(previewPayload.durationSec));
+            }
+            if (previewPayload) {
+                formData.append('preview_width', String(previewPayload.width));
+                formData.append('preview_height', String(previewPayload.height));
+                formData.append(
+                    'preview_file',
+                    new window.File([previewPayload.blob], `${file.name}.preview.webp`, {
+                        type: 'image/webp',
+                        lastModified: Date.now(),
+                    }),
+                );
+            }
 
             const xhr = new XMLHttpRequest();
             activeXhrRef.current = xhr;

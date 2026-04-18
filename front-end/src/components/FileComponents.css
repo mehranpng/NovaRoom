@@ -348,26 +348,53 @@
     object-fit: cover;
 }
 
-.file-image-overlay {
+.file-image--blur {
+    filter: blur(0);
+}
+
+.file-image--ready {
+    filter: none;
+}
+
+.file-loading--skeleton {
+    width: 100%;
+    aspect-ratio: 16/10;
+    background: linear-gradient(90deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0.08));
+    animation: skeletonPulse 1.2s infinite ease-in-out;
+}
+
+.file-manual-download {
+    --p: 0;
     position: absolute;
-    top: 8px;
-    right: 8px;
-    opacity: 0;
-    transition: opacity 0.15s;
+    inset: 0;
+    margin: auto;
+    width: 54px;
+    height: 54px;
+    border-radius: 999px;
+    border: none;
+    color: #fff;
+    background:
+        radial-gradient(circle at center, rgba(0, 0, 0, 0.58) 58%, transparent 59%),
+        conic-gradient(#5ea7ff calc(var(--p) * 1%), rgba(255, 255, 255, 0.26) 0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 4;
 }
 
-.file-image-preview:hover .file-image-overlay {
-    opacity: 1;
-}
-
-.file-image-overlay .file-download-btn {
-    background: rgba(0, 0, 0, 0.6);
-    color: #ffffff;
-    backdrop-filter: blur(4px);
-}
-
-.file-image-overlay .file-download-btn:hover {
-    background: rgba(0, 0, 0, 0.8);
+.file-manual-size {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: calc(50% + 36px);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(0, 0, 0, 0.46);
+    border-radius: 999px;
+    padding: 3px 8px;
+    z-index: 4;
 }
 
 .file-audio-card {
@@ -473,6 +500,13 @@
     aspect-ratio: 16/9;
 }
 
+.file-video-thumb img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+}
+
 .file-video-duration {
     position: absolute;
     top: 8px;
@@ -501,6 +535,12 @@
     border: 1px solid rgba(255, 255, 255, 0.3);
     z-index: 2;
     pointer-events: none;
+}
+
+@keyframes skeletonPulse {
+    0% { opacity: 0.65; }
+    50% { opacity: 1; }
+    100% { opacity: 0.65; }
 }
 
 /* Fullscreen Image Viewer */

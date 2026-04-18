@@ -8,6 +8,7 @@ from fastapi import (
     Request,
     UploadFile,
     File as FastAPIFile,
+    Form,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -28,6 +29,7 @@ import hashlib
 import secrets
 import base64
 import hmac
+import mimetypes
 from bson import ObjectId
 import re
 import uuid
@@ -50,6 +52,7 @@ from file_service import (
     delete_file,
     validate_file_access,
     read_file_content,
+    read_file_raw_content,
     get_file_path,
     encrypt_existing_uploads,
     MAX_FILE_SIZE,
@@ -336,6 +339,7 @@ async def _remap_forward_file_to_target_chat(
     remapped_meta["mimeType"] = str(file_meta.get("mimeType") or remapped_meta.get("mimeType") or "application/octet-stream")
     remapped_meta["fileName"] = str(file_meta.get("fileName") or remapped_meta.get("fileName") or "forwarded-file")
     remapped_meta["fileSize"] = int(file_meta.get("fileSize") or remapped_meta.get("fileSize") or 0)
+    remapped_meta["durationSec"] = float(file_meta.get("durationSec") or 0) if file_meta.get("durationSec") else remapped_meta.get("durationSec")
 
     cover_art_id = str(file_meta.get("coverArtFileId") or "").strip()
     if cover_art_id:
@@ -351,6 +355,19 @@ async def _remap_forward_file_to_target_chat(
             remapped_meta["coverArtUrl"] = (
                 f"/files/{remapped_cover_meta.get('fileId')}" if remapped_cover_meta.get("fileId") else remapped_meta.get("coverArtUrl")
             )
+
+    preview_file_id = str(file_meta.get("previewFileId") or "").strip()
+    if preview_file_id:
+        preview_raw = await read_file_raw_content(preview_file_id)
+        if preview_raw is not None:
+            remapped_preview_meta = await save_uploaded_file(preview_raw, "preview.webp")
+            remapped_meta["previewFileId"] = remapped_preview_meta.get("fileId")
+            remapped_meta["previewMimeType"] = file_meta.get("previewMimeType") or remapped_preview_meta.get("mimeType") or "image/webp"
+            remapped_meta["previewSize"] = int(remapped_preview_meta.get("fileSize") or file_meta.get("previewSize") or 0)
+            if file_meta.get("previewWidth"):
+                remapped_meta["previewWidth"] = int(file_meta.get("previewWidth"))
+            if file_meta.get("previewHeight"):
+                remapped_meta["previewHeight"] = int(file_meta.get("previewHeight"))
 
     for key in ("title", "artist"):
         if key in file_meta:
@@ -458,6 +475,20 @@ def should_delete_file_with_message(message_doc: Dict[str, Any]) -> bool:
         return False
     # Forwarded messages share source fileId and must not remove file from server.
     return not bool(message_doc.get("forwardedFrom"))
+
+
+async def delete_message_file_bundle(file_data: Dict[str, Any]) -> None:
+    file_id = str((file_data or {}).get("fileId") or "").strip()
+    if file_id:
+        await delete_file(file_id)
+
+    preview_file_id = str((file_data or {}).get("previewFileId") or "").strip()
+    if preview_file_id:
+        await delete_file(preview_file_id)
+
+    cover_art_id = str((file_data or {}).get("coverArtFileId") or "").strip()
+    if cover_art_id:
+        await delete_file(cover_art_id)
 
 
 async def jwt_encode_async(payload: dict) -> str:
@@ -1632,7 +1663,7 @@ async def leave_group(chat_id: str, current_user: dict = Depends(get_current_use
         for msg in messages:
             if should_delete_file_with_message(msg):
                 file_data = msg.get("file") or {}
-                await delete_file(file_data["fileId"])
+                await delete_message_file_bundle(file_data)
 
         await cl_messages.delete_many({"chatId": chat_id})
         await cl_chats.delete_one({"_id": chat_id})
@@ -1979,7 +2010,7 @@ async def delete_chat(chat_id: str, current_user: dict = Depends(get_current_use
     for msg in messages:
         if should_delete_file_with_message(msg):
             file_data = msg.get("file") or {}
-            await delete_file(file_data["fileId"])
+            await delete_message_file_bundle(file_data)
 
     await cl_messages.delete_many({"chatId": chat_id})
     await cl_chats.delete_one({"_id": chat_id})
@@ -2243,6 +2274,11 @@ async def get_messages(
 @app.post("/files/upload")
 async def upload_file(
     file: UploadFile = FastAPIFile(...),
+    preview_file: Optional[UploadFile] = FastAPIFile(None),
+    original_size: Optional[int] = Form(None),
+    duration_sec: Optional[float] = Form(None),
+    preview_width: Optional[int] = Form(None),
+    preview_height: Optional[int] = Form(None),
     current_user: dict = Depends(get_current_user),
 ):
     file_content = await file.read()
@@ -2259,6 +2295,24 @@ async def upload_file(
         file_metadata = await save_uploaded_file(
             file_content, file.filename or "unnamed"
         )
+        if isinstance(original_size, int) and original_size > 0:
+            file_metadata["fileSize"] = int(original_size)
+        if isinstance(duration_sec, (float, int)) and duration_sec > 0:
+            file_metadata["durationSec"] = float(duration_sec)
+
+        if preview_file:
+            preview_content = await preview_file.read()
+            if preview_content:
+                preview_metadata = await save_uploaded_file(
+                    preview_content, preview_file.filename or "preview.webp"
+                )
+                file_metadata["previewFileId"] = preview_metadata.get("fileId")
+                file_metadata["previewMimeType"] = preview_metadata.get("mimeType", "image/webp")
+                file_metadata["previewSize"] = int(preview_metadata.get("fileSize") or 0)
+                if isinstance(preview_width, int) and preview_width > 0:
+                    file_metadata["previewWidth"] = int(preview_width)
+                if isinstance(preview_height, int) and preview_height > 0:
+                    file_metadata["previewHeight"] = int(preview_height)
         file_metadata["uploadedBy"] = current_user["chatId"]
 
         return {"success": True, "file": file_metadata}
@@ -2267,6 +2321,46 @@ async def upload_file(
     except Exception as e:
         print(f"File upload error: {e}")
         raise HTTPException(status_code=500, detail="Failed to upload file")
+
+
+@app.get("/files/{file_id}/preview")
+async def download_file_preview(
+    file_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    if not validate_file_access(file_id):
+        raise HTTPException(status_code=404, detail="Preview not found")
+
+    raw = await read_file_raw_content(file_id)
+    if raw is None:
+        raise HTTPException(status_code=404, detail="Preview not found")
+
+    etag = hashlib.sha256(raw).hexdigest()
+    incoming_etag = request.headers.get("if-none-match", "").strip('"')
+    if incoming_etag and incoming_etag == etag:
+        return Response(
+            status_code=304,
+            headers={
+                "Cache-Control": "private, max-age=31536000, immutable",
+                "ETag": f'"{etag}"',
+                "Vary": "Authorization",
+            },
+        )
+
+    file_path = get_file_path(file_id)
+    preview_type, _ = mimetypes.guess_type(file_path.name)
+    if not preview_type:
+        preview_type = "image/webp"
+    return Response(
+        content=raw,
+        media_type=preview_type,
+        headers={
+            "Cache-Control": "private, max-age=31536000, immutable",
+            "ETag": f'"{etag}"',
+            "Vary": "Authorization",
+        },
+    )
 
 
 # File download endpoint
@@ -3354,7 +3448,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 # Delete associated file if present
                 if should_delete_file_with_message(msg):
                     file_data = msg.get("file") or {}
-                    await delete_file(file_data["fileId"])
+                    await delete_message_file_bundle(file_data)
 
                 await cl_messages.delete_one({"_id": oid})
 

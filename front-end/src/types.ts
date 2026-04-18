@@ -33,6 +33,12 @@ export interface FileMetadata {
     fileSize: number;
     mimeType: string;
     uploadedAt: string;
+    previewFileId?: string;
+    previewMimeType?: string;
+    previewSize?: number;
+    previewWidth?: number;
+    previewHeight?: number;
+    durationSec?: number;
     title?: string;
     artist?: string;
     coverArtUrl?: string;

@@ -177,6 +177,14 @@ async def read_file_content(file_id: str) -> Optional[bytes]:
     return raw
 
 
+async def read_file_raw_content(file_id: str) -> Optional[bytes]:
+    file_path = get_file_path(file_id)
+    if not file_path.exists() or not file_path.is_file():
+        return None
+    async with aiofiles.open(file_path, "rb") as f:
+        return await f.read()
+
+
 async def encrypt_existing_uploads() -> int:
     # Deprecated: new uploads are encrypted client-side.
     # Keep as a no-op to avoid mutating existing client-encrypted files.
