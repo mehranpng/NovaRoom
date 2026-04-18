@@ -83,15 +83,14 @@
 }
 
 .file-upload-progress-inline {
-    position: absolute;
-    left: 8px;
-    right: 8px;
-    top: -12px;
+    position: static;
+    flex: 1 0 100%;
+    order: -1;
+    margin-bottom: 8px;
     height: 30px;
     display: flex;
     align-items: center;
     gap: 8px;
-    z-index: 6;
     pointer-events: auto;
 }
 
@@ -131,9 +130,7 @@
 
 @media (max-width: 640px) {
     .file-upload-progress-inline {
-        left: 6px;
-        right: 6px;
-        top: -12px;
+        margin-bottom: 6px;
         height: 28px;
     }
 }
