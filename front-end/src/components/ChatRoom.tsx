@@ -490,6 +490,7 @@ export function ChatRoom({
     const consumedInitialUnreadRef = useRef(false);
     const typingActiveRef = useRef(false);
     const typingTimeoutRef = useRef<number | null>(null);
+    const typingStartDebounceRef = useRef<number | null>(null);
     const textDebounceTimerRef = useRef<number | null>(null);
 
     const clearTypingTimeout = () => {
@@ -506,6 +507,10 @@ export function ChatRoom({
     };
 
     const stopTyping = () => {
+        if (typingStartDebounceRef.current) {
+            window.clearTimeout(typingStartDebounceRef.current);
+            typingStartDebounceRef.current = null;
+        }
         clearTypingTimeout();
         if (!typingActiveRef.current) return;
         typingActiveRef.current = false;
@@ -520,9 +525,14 @@ export function ChatRoom({
             return;
         }
 
-        if (!typingActiveRef.current) {
-            typingActiveRef.current = true;
-            emitTyping(true);
+        if (!typingActiveRef.current && !typingStartDebounceRef.current) {
+            typingStartDebounceRef.current = window.setTimeout(() => {
+                typingStartDebounceRef.current = null;
+                if (!typingActiveRef.current) {
+                    typingActiveRef.current = true;
+                    emitTyping(true);
+                }
+            }, 300);
         }
         clearTypingTimeout();
         typingTimeoutRef.current = window.setTimeout(() => {
@@ -537,6 +547,10 @@ export function ChatRoom({
             if (textDebounceTimerRef.current) {
                 window.clearTimeout(textDebounceTimerRef.current);
                 textDebounceTimerRef.current = null;
+            }
+            if (typingStartDebounceRef.current) {
+                window.clearTimeout(typingStartDebounceRef.current);
+                typingStartDebounceRef.current = null;
             }
         };
     }, []);
@@ -940,18 +954,33 @@ export function ChatRoom({
         const isChromeLikeOnIOS = /CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
         const shouldUseViewportKeyboardOffset = isIOSWebKit && !isChromeLikeOnIOS;
         let raf: number | null = null;
+        let lastRun = 0;
+        let throttleTimer: number | null = null;
         const update = () => {
-            const el = roomRef.current;
-            if (!el) return;
-            const offsetTop = typeof vv.offsetTop === 'number' ? vv.offsetTop : 0;
-            const keyboard = shouldUseViewportKeyboardOffset
-                ? Math.max(0, window.innerHeight - vv.height - offsetTop)
-                : 0;
-            el.style.setProperty('--keyboard-offset', `${Math.round(keyboard)}px`);
-            if (isAtBottomRef.current) {
-                if (raf) cancelAnimationFrame(raf);
-                raf = requestAnimationFrame(() => scrollToBottom(false));
+            const run = () => {
+                lastRun = Date.now();
+                const el = roomRef.current;
+                if (!el) return;
+                const offsetTop = typeof vv.offsetTop === 'number' ? vv.offsetTop : 0;
+                const keyboard = shouldUseViewportKeyboardOffset
+                    ? Math.max(0, window.innerHeight - vv.height - offsetTop)
+                    : 0;
+                el.style.setProperty('--keyboard-offset', `${Math.round(keyboard)}px`);
+                if (isAtBottomRef.current) {
+                    if (raf) cancelAnimationFrame(raf);
+                    raf = requestAnimationFrame(() => scrollToBottom(false));
+                }
+            };
+            const elapsed = Date.now() - lastRun;
+            if (elapsed >= 100) {
+                run();
+                return;
             }
+            if (throttleTimer) return;
+            throttleTimer = window.setTimeout(() => {
+                throttleTimer = null;
+                run();
+            }, 100 - elapsed);
         };
         update();
         vv.addEventListener('resize', update);
@@ -961,6 +990,7 @@ export function ChatRoom({
             vv.removeEventListener('resize', update);
             vv.removeEventListener('scroll', update);
             window.removeEventListener('orientationchange', update);
+            if (throttleTimer) window.clearTimeout(throttleTimer);
             if (raf) cancelAnimationFrame(raf);
             room.style.removeProperty('--keyboard-offset');
         };
@@ -2572,7 +2602,7 @@ export function ChatRoom({
                     imageUrl={openedImage.url}
                     downloadFile={openedImage.file}
                     token={token}
-                    decryptScope={`chat:${chatId}`}
+                    decryptScope={chatId}
                     onClose={() => setOpenedImage(null)}
                 />
             )}
@@ -2581,7 +2611,7 @@ export function ChatRoom({
                     videoUrl={openedVideo.url}
                     downloadFile={openedVideo.file}
                     token={token}
-                    decryptScope={`chat:${chatId}`}
+                    decryptScope={chatId}
                     onClose={() => setOpenedVideo(null)}
                 />
             )}

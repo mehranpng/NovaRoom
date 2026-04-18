@@ -18,7 +18,7 @@ import { MusicPlayerProvider } from './contexts/MusicPlayerContext';
 import { cx } from './utils/cx';
 import { NotificationCenter } from './components/NotificationCenter';
 import { notify } from './utils/notificationBus';
-import { decryptBioClientSide, decryptMessageClientSide, encryptBioClientSide, encryptChatTextClientSide } from './utils/e2ee';
+import { decryptBioClientSide, decryptMessageClientSide, encryptChatTextClientSide } from './utils/e2ee';
 import './App.css';
 
 const normalizeTimestamp = (ts: unknown): number => {
@@ -36,6 +36,22 @@ const mergeMessages = (base: Message[], incoming: Message[], mode: 'replace' | '
     if (mode === 'replace') {
         for (const m of incoming) byId.set(m.id, m);
         return Array.from(byId.values()).sort((a, b) => normalizeTimestamp(a.timestamp) - normalizeTimestamp(b.timestamp));
+    }
+    if (mode === 'append' && base.length > 0 && incoming.length > 0) {
+        const lastBaseTs = normalizeTimestamp(base[base.length - 1].timestamp);
+        const firstIncomingTs = normalizeTimestamp(incoming[0].timestamp);
+        const hasDuplicate = incoming.some((m) => base.some((b) => b.id === m.id));
+        if (!hasDuplicate && firstIncomingTs >= lastBaseTs) {
+            return [...base, ...incoming];
+        }
+    }
+    if (mode === 'prepend' && base.length > 0 && incoming.length > 0) {
+        const firstBaseTs = normalizeTimestamp(base[0].timestamp);
+        const lastIncomingTs = normalizeTimestamp(incoming[incoming.length - 1].timestamp);
+        const hasDuplicate = incoming.some((m) => base.some((b) => b.id === m.id));
+        if (!hasDuplicate && lastIncomingTs <= firstBaseTs) {
+            return [...incoming, ...base];
+        }
     }
     const combined = mode === 'prepend' ? [...incoming, ...base] : [...base, ...incoming];
     for (const m of combined) byId.set(m.id, m);
@@ -252,13 +268,30 @@ export function App() {
 
     // Mobile keyboard/viewport fix: keep app sized to VisualViewport when available.
     useEffect(() => {
-        const apply = () => {
+        let lastRun = 0;
+        let pendingTimer: number | null = null;
+        const applyNow = () => {
             const vv = window.visualViewport;
             const height = Math.round(vv?.height ?? window.innerHeight);
             const kb = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
 
             document.documentElement.style.setProperty('--app-height', `${height}px`);
             document.documentElement.style.setProperty('--keyboard-offset', `${kb}px`);
+        };
+        const apply = () => {
+            const now = Date.now();
+            const elapsed = now - lastRun;
+            if (elapsed >= 100) {
+                lastRun = now;
+                applyNow();
+                return;
+            }
+            if (pendingTimer) return;
+            pendingTimer = window.setTimeout(() => {
+                pendingTimer = null;
+                lastRun = Date.now();
+                applyNow();
+            }, 100 - elapsed);
         };
 
         apply();
@@ -268,6 +301,7 @@ export function App() {
         window.visualViewport?.addEventListener('scroll', apply);
 
         return () => {
+            if (pendingTimer) window.clearTimeout(pendingTimer);
             window.removeEventListener('resize', apply);
             window.visualViewport?.removeEventListener('resize', apply);
             window.visualViewport?.removeEventListener('scroll', apply);
@@ -1055,10 +1089,6 @@ export function App() {
             }
         };
 
-        const intervalId = window.setInterval(() => {
-            void syncFromServer();
-        }, 4000);
-
         const handleVisibilityOrFocus = () => {
             void syncFromServer();
         };
@@ -1066,7 +1096,6 @@ export function App() {
         window.addEventListener('focus', handleVisibilityOrFocus);
 
         return () => {
-            window.clearInterval(intervalId);
             document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
             window.removeEventListener('focus', handleVisibilityOrFocus);
         };
@@ -2057,9 +2086,6 @@ export function App() {
                             onBack={handleBack}
                             onUpdateProfile={async (u) => {
                                 const payload = { ...u } as any;
-                                if (typeof payload.bio === 'string' && currentUser?.chatId) {
-                                    payload.bio = await encryptBioClientSide(payload.bio, authToken || '', currentUser.chatId);
-                                }
                                 await apiFetch('/profile/me', { method: 'PATCH', body: JSON.stringify(payload) });
                                 setCurrentUser(prev => (prev ? { ...prev, ...u } : null));
                             }}

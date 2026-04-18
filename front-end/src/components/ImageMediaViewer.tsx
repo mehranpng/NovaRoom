@@ -90,9 +90,14 @@ export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token = '', 
             let blob: Blob;
             if (downloadFile?.fileId && token && decryptScope) {
                 const encryptedBytes = new Uint8Array(await response.arrayBuffer());
-                let plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, decryptScope);
-                if (plainBytes === encryptedBytes) {
+                let plainBytes: Uint8Array;
+                if (decryptScope === 'profile_avatar_shared') {
                     plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
+                } else {
+                    plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, decryptScope.replace(/^chat:/, ''));
+                    if (plainBytes === encryptedBytes) {
+                        plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
+                    }
                 }
                 blob = new Blob([new Uint8Array(plainBytes)], { type: response.headers.get('content-type') || 'application/octet-stream' });
             } else {
