@@ -282,7 +282,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                     <div className="profile__avatar-actions">
                         <label className="profile__avatar-btn" aria-disabled={updatingAvatar}>
                             <Upload size={14} />
-                            عکس پروفایل
+                            آپلود عکس
                             <input
                                 type="file"
                                 accept="image/*"
