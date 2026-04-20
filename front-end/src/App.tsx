@@ -18,7 +18,7 @@ import { MusicPlayerProvider } from './contexts/MusicPlayerContext';
 import { cx } from './utils/cx';
 import { NotificationCenter } from './components/NotificationCenter';
 import { notify } from './utils/notificationBus';
-import { decryptBioClientSide, decryptMessageClientSide, encryptBioClientSide, encryptChatTextClientSide } from './utils/e2ee';
+import { decryptBioClientSide, decryptMessageClientSide, encryptChatTextClientSide } from './utils/e2ee';
 import './App.css';
 
 const normalizeTimestamp = (ts: unknown): number => {
@@ -2056,11 +2056,7 @@ export function App() {
                             user={currentUser}
                             onBack={handleBack}
                             onUpdateProfile={async (u) => {
-                                const payload = { ...u } as any;
-                                if (typeof payload.bio === 'string' && currentUser?.chatId) {
-                                    payload.bio = await encryptBioClientSide(payload.bio, authToken || '', currentUser.chatId);
-                                }
-                                await apiFetch('/profile/me', { method: 'PATCH', body: JSON.stringify(payload) });
+                                await apiFetch('/profile/me', { method: 'PATCH', body: JSON.stringify(u) });
                                 setCurrentUser(prev => (prev ? { ...prev, ...u } : null));
                             }}
                         />

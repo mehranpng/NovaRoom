@@ -496,8 +496,22 @@ export function useWebSocket({
     useEffect(() => {
         if (!token) return;
 
+        const notifyPresenceOffline = () => {
+            if (!token) return;
+            try {
+                void fetch(`${API_BASE_URL}/presence/offline`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` },
+                    keepalive: true,
+                });
+            } catch {
+                // noop
+            }
+        };
+
         const forceOffline = () => {
             hiddenDisconnectRef.current = true;
+            notifyPresenceOffline();
             shouldReconnectRef.current = false;
             clearReconnectTimer();
             try {

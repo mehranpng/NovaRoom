@@ -457,6 +457,19 @@ async def mark_user_disconnected(user_id: str) -> bool:
     return True
 
 
+async def force_user_offline(user_id: str) -> bool:
+    if not user_id:
+        return False
+    prev = await cl_users.find_one(
+        {"chatId": user_id}, {"online": 1, "wsConnectionCount": 1}
+    )
+    was_online = resolve_user_online_state(prev)
+    await cl_users.update_one(
+        {"chatId": user_id}, {"$set": {"online": False, "wsConnectionCount": 0}}
+    )
+    return bool(was_online)
+
+
 def normalize_username(value: Optional[str]) -> str:
     return (value or "").strip()
 
@@ -982,33 +995,6 @@ async def startup_db():
 
 
 async def migrate_unencrypted_messages():
-    async for u in cl_users.find(
-        {
-            "$or": [
-                {"profile.bioEncrypted": {"$ne": True}},
-                {"profile.bio": {"$not": {"$regex": f"^{ENC_PREFIX}"}}},
-            ]
-        }
-    ):
-        chat_id = str(u.get("chatId") or "")
-        if not chat_id:
-            continue
-        bio = str(((u.get("profile") or {}).get("bio")) or "")
-        encrypted_bio = (
-            encrypt_scoped_text(bio, LEGACY_BOOTSTRAP_TOKEN, user_bio_scope(chat_id))
-            if bio and not is_ciphertext(bio)
-            else bio
-        )
-        await cl_users.update_one(
-            {"_id": u["_id"]},
-            {
-                "$set": {
-                    "profile.bio": encrypted_bio,
-                    "profile.bioEncrypted": True,
-                }
-            },
-        )
-
     async for m in cl_messages.find(
         {
             "$or": [
@@ -1307,8 +1293,8 @@ async def complete_registration(req: CompleteRegistrationRequest, request: Reque
         "profile": {
             "name": req.name,
             "username": desired_username,
-            "bio": encrypt_scoped_text("", "", user_bio_scope(chat_id)),
-            "bioEncrypted": True,
+            "bio": "",
+            "bioEncrypted": False,
             "avatar": "",
         },
         "online": False,
@@ -1478,10 +1464,8 @@ async def update_profile(
         update_data["profile.username"] = desired
 
     if updates.bio is not None:
-        update_data["profile.bio"] = encrypt_scoped_text(
-            updates.bio, "", user_bio_scope(current_user["chatId"])
-        )
-        update_data["profile.bioEncrypted"] = True
+        update_data["profile.bio"] = str(updates.bio)
+        update_data["profile.bioEncrypted"] = False
 
     if updates.avatar is not None:
         avatar_value = str(updates.avatar).strip()
@@ -1513,6 +1497,39 @@ async def get_profile_groups(current_user: dict = Depends(get_current_user)):
         for g in groups
         if g.get("inviteCode")
     ]
+
+
+@app.post("/presence/offline")
+async def set_presence_offline(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["chatId"]
+
+    sockets = list(active_connections.get(user_id) or [])
+    for ws in sockets:
+        try:
+            await ws.close(code=1001)
+        except Exception:
+            pass
+
+    active_connections.pop(user_id, None)
+    active_ai_connections.pop(user_id, None)
+
+    became_offline = await force_user_offline(user_id)
+    if became_offline:
+        user_chats = await cl_chats.find({"participants": user_id}).to_list(None)
+        contacts_to_notify = set()
+        for chat in user_chats:
+            for p in chat.get("participants", []):
+                if p != user_id:
+                    contacts_to_notify.add(p)
+
+        allowed_contacts = await _filter_recipients_by_block_status(
+            user_id, contacts_to_notify
+        )
+        await broadcast(
+            allowed_contacts,
+            {"type": "user_status", "userId": user_id, "online": False},
+        )
+    return {"ok": True}
 
 
 @app.get("/users/username-available")
