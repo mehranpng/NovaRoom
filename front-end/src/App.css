@@ -1806,6 +1806,7 @@ body,
     align-items: center;
     gap: 10px;
     direction: rtl;
+    flex-direction: row-reverse;
 }
 
 .chat-room__upload-progress-track {
