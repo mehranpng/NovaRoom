@@ -81,6 +81,7 @@ export function useWebSocket({
     const lastPongAtRef = useRef<number>(Date.now());
     const pendingRequestsRef = useRef<Map<string, { resolve: (data: any) => void; reject: (error: Error) => void; timeoutId: number }>>(new Map());
     const requestCounterRef = useRef(0);
+    const hiddenDisconnectRef = useRef(false);
 
     const onNewMessageRef = useRef(onNewMessage);
     const onMessageEditedRef = useRef(onMessageEdited);
@@ -491,6 +492,63 @@ export function useWebSocket({
 
         return () => window.clearInterval(interval);
     }, [token, send]);
+
+    useEffect(() => {
+        if (!token) return;
+
+        const forceOffline = () => {
+            hiddenDisconnectRef.current = true;
+            shouldReconnectRef.current = false;
+            clearReconnectTimer();
+            try {
+                socketRef.current?.close(1000, 'client_inactive');
+            } catch {
+                socketRef.current = null;
+            }
+        };
+
+        const restoreOnline = () => {
+            if (document.visibilityState !== 'visible' || !document.hasFocus()) return;
+            if (!hiddenDisconnectRef.current) return;
+            hiddenDisconnectRef.current = false;
+            shouldReconnectRef.current = true;
+            reconnectAttemptsRef.current = 0;
+            setReconnectExhausted(false);
+            connect();
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible' && document.hasFocus()) {
+                restoreOnline();
+                return;
+            }
+            forceOffline();
+        };
+
+        const handleWindowBlur = () => {
+            forceOffline();
+        };
+
+        const handleWindowFocus = () => {
+            restoreOnline();
+        };
+
+        const handlePageHide = () => {
+            forceOffline();
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('blur', handleWindowBlur);
+        window.addEventListener('focus', handleWindowFocus);
+        window.addEventListener('pagehide', handlePageHide);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('blur', handleWindowBlur);
+            window.removeEventListener('focus', handleWindowFocus);
+            window.removeEventListener('pagehide', handlePageHide);
+        };
+    }, [token, connect]);
 
     return {
         sendMessage,

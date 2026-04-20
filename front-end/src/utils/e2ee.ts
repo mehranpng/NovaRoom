@@ -270,6 +270,10 @@ export const decryptMessageClientSide = async (message: any, token: string, chat
         const decReply = await decryptClientText(next.replyTo.text, token, scope);
         next.replyTo = { ...next.replyTo, text: decReply };
     }
+    if (typeof next.reasoningContent === 'string') {
+        const decReasoning = await decryptClientText(next.reasoningContent, token, scope);
+        next.reasoningContent = decReasoning;
+    }
     return next;
 };
 

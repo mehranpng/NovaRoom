@@ -3304,11 +3304,11 @@ body,
     padding: 12px;
     overflow-x: auto;
     overflow-y: hidden;
-    scroll-behavior: smooth;
+    scroll-behavior: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     position: relative;
-    cursor: grab;
+    touch-action: pan-x;
     mask-image: linear-gradient(to right, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
     -webkit-mask-image: linear-gradient(to right, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
 }
@@ -3337,10 +3337,6 @@ body,
     right: 0;
     margin-left: auto;
     background: linear-gradient(to left, var(--bg-primary), rgba(255, 255, 255, 0));
-}
-
-.reaction-picker__emojis--dragging {
-    cursor: grabbing;
 }
 
 .reaction-picker__emoji {

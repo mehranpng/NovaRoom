@@ -451,6 +451,7 @@ export function ChatRoom({
     const restoreTopAfterInfoRef = useRef<number | null>(null);
     const restoreBottomAfterInfoRef = useRef(false);
     const lastScrollTopRef = useRef(0);
+    const pendingEditFocusToEndRef = useRef(false);
 
     // Scroll memory: keep per-chat scroll position in memory until refresh.
     // IMPORTANT: only restore exact scrollTop if user actually scrolled in that chat (prevents "always open at top").
@@ -737,7 +738,7 @@ export function ChatRoom({
         }
 
         // Default: always open at bottom.
-        scrollToBottom(false);
+        scrollToBottom(true);
     };
 
     const shouldPreserveExactScroll = () => {
@@ -1233,8 +1234,8 @@ export function ChatRoom({
         restoringFromInfoRef.current = false;
         restoreTopAfterInfoRef.current = null;
         restoreBottomAfterInfoRef.current = false;
-        const hasSavedPosition = Boolean(mem);
-        if (hasSavedPosition) {
+        const preserveExactScroll = Boolean(mem?.userInteracted && !mem?.atBottom);
+        if (preserveExactScroll) {
             initialMediaFollowupDoneRef.current = true;
             initialMediaPendingIdsRef.current = new Set();
         } else {
@@ -1344,6 +1345,24 @@ export function ChatRoom({
             timers.forEach((t) => window.clearTimeout(t));
         };
     }, [messages.length, showContactInfo, forwardSourceUser, viewingMemberId, showMembersList]);
+
+    useEffect(() => {
+        if (!editingId) {
+            pendingEditFocusToEndRef.current = false;
+            return;
+        }
+        if (!pendingEditFocusToEndRef.current) return;
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        const moveCaretToEnd = () => {
+            const end = textarea.value.length;
+            textarea.focus();
+            textarea.setSelectionRange(end, end);
+            pendingEditFocusToEndRef.current = false;
+        };
+        const raf = requestAnimationFrame(moveCaretToEnd);
+        return () => cancelAnimationFrame(raf);
+    }, [editingId, text]);
 
     useLayoutEffect(() => {
         const container = messagesContainerRef.current;
@@ -1747,6 +1766,7 @@ export function ChatRoom({
     };
 
     const beginEdit = (m: Message) => {
+        pendingEditFocusToEndRef.current = true;
         setEditingId(m.id); setReplyTo(null); setText(m.text);
         setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
         setTimeout(() => textareaRef.current?.focus(), 0);
@@ -2666,7 +2686,20 @@ export function ChatRoom({
                             <div className="chat-room__reply-edit-box__title">{editingId ? 'در حال ویرایش' : 'در حال پاسخ'}</div>
                             {!editingId && replyTo && <div className="chat-room__reply-edit-box__text">{getReplyPreviewText(replyTo)}</div>}
                         </div>
-                        <button type="button" className="icon-btn" aria-label="Cancel" onClick={() => { setReplyTo(null); setEditingId(null); setText(''); stopTyping(); }}>
+                        <button
+                            type="button"
+                            className="icon-btn"
+                            aria-label="Cancel"
+                            onClick={() => {
+                                const wasEditing = Boolean(editingId);
+                                setReplyTo(null);
+                                setEditingId(null);
+                                if (wasEditing) {
+                                    setText('');
+                                    stopTyping();
+                                }
+                            }}
+                        >
                             <X size={18} />
                         </button>
                     </div>
