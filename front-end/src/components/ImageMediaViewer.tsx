@@ -91,7 +91,8 @@ export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token = '', 
                 if (!encryptedResponse.ok) throw new Error('Download failed');
                 const encryptedBytes = new Uint8Array(await encryptedResponse.arrayBuffer());
                 const plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, chatId);
-                blob = new Blob([plainBytes], { type: blob.type || encryptedResponse.headers.get('content-type') || 'application/octet-stream' });
+                const normalizedBytes = new Uint8Array(plainBytes);
+                blob = new Blob([normalizedBytes], { type: blob.type || encryptedResponse.headers.get('content-type') || 'application/octet-stream' });
             }
             const extension = blob.type.split('/')[1] || 'jpg';
             const url = window.URL.createObjectURL(blob);
