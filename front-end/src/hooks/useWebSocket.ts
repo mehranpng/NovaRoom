@@ -13,6 +13,7 @@ interface UseWebSocketProps {
     onMessagesSeen?: (chatId: string) => void;
     onReactionUpdated?: (chatId: string, messageId: string, reactions: any[]) => void;
     onTypingStatus?: (chatId: string, userId: string, isTyping: boolean) => void;
+    onUploadStatus?: (chatId: string, userId: string, isUploading: boolean) => void;
     onConnectionChange?: (isConnected: boolean) => void;
     onReconnectExhausted?: () => void;
     onAINewMessage?: (message: any) => void;
@@ -34,6 +35,7 @@ type OutgoingEvent =
     | { type: 'unreact_message'; requestId: string; chatId: string; messageId: string }
     | { type: 'forward_message'; requestId: string; messageId: string; targetChatId: string }
     | { type: 'typing'; chatId: string; isTyping: boolean }
+    | { type: 'upload_status'; chatId: string; isUploading: boolean }
     | { type: 'ai_message'; text: string; aiChatId: string; clientId?: string; useReasoner?: boolean }
     | { type: 'ai_stop' }
     | { type: 'ping' };
@@ -60,6 +62,7 @@ export function useWebSocket({
     onMessagesSeen,
     onReactionUpdated,
     onTypingStatus,
+    onUploadStatus,
     onConnectionChange,
     onReconnectExhausted,
     onAINewMessage,
@@ -90,6 +93,7 @@ export function useWebSocket({
     const onMessagesSeenRef = useRef(onMessagesSeen);
     const onReactionUpdatedRef = useRef(onReactionUpdated);
     const onTypingStatusRef = useRef(onTypingStatus);
+    const onUploadStatusRef = useRef(onUploadStatus);
     const onConnectionChangeRef = useRef(onConnectionChange);
     const onReconnectExhaustedRef = useRef(onReconnectExhausted);
     const onAINewMessageRef = useRef(onAINewMessage);
@@ -106,6 +110,7 @@ export function useWebSocket({
     useEffect(() => { onMessagesSeenRef.current = onMessagesSeen; }, [onMessagesSeen]);
     useEffect(() => { onReactionUpdatedRef.current = onReactionUpdated; }, [onReactionUpdated]);
     useEffect(() => { onTypingStatusRef.current = onTypingStatus; }, [onTypingStatus]);
+    useEffect(() => { onUploadStatusRef.current = onUploadStatus; }, [onUploadStatus]);
     useEffect(() => { onConnectionChangeRef.current = onConnectionChange; }, [onConnectionChange]);
     useEffect(() => { onReconnectExhaustedRef.current = onReconnectExhausted; }, [onReconnectExhausted]);
     useEffect(() => { onAINewMessageRef.current = onAINewMessage; }, [onAINewMessage]);
@@ -241,6 +246,13 @@ export function useWebSocket({
                     if (resolvedChatId && resolvedUserId) {
                         onTypingStatusRef.current?.(resolvedChatId, resolvedUserId, typingFlag);
                     }
+                } else if (dataType === 'upload_status' || dataType === 'uploading_status' || dataType === 'user_uploading') {
+                    const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
+                    const resolvedUserId = String(data?.userId || data?.chatUserId || data?.username || '').trim();
+                    const uploadFlag = Boolean(data?.isUploading ?? data?.is_uploading ?? data?.uploading);
+                    if (resolvedChatId && resolvedUserId) {
+                        onUploadStatusRef.current?.(resolvedChatId, resolvedUserId, uploadFlag);
+                    }
                 } else if (data.type === 'ai_response') {
                     onAINewMessageRef.current?.(data.message);
                 } else if (data.type === 'ai_response_start') {
@@ -368,6 +380,14 @@ export function useWebSocket({
         (chatId: string, isTyping: boolean) => {
             if (!chatId) return;
             send({ type: 'typing', chatId, isTyping: Boolean(isTyping) });
+        },
+        [send]
+    );
+
+    const sendUploadStatus = useCallback(
+        (chatId: string, isUploading: boolean) => {
+            if (!chatId) return;
+            send({ type: 'upload_status', chatId, isUploading: Boolean(isUploading) });
         },
         [send]
     );
@@ -570,6 +590,7 @@ export function useWebSocket({
         deleteMessage,
         sendSeen,
         sendTyping,
+        sendUploadStatus,
         fetchChats,
         fetchMessages,
         reactMessage,

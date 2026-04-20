@@ -52,7 +52,9 @@ interface ChatRoomProps {
     onSetPendingForwardDraft?: (targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => void;
     onClearPendingForwardDraft?: (targetChatId: string) => void;
     typingUserIds?: string[];
+    uploadingUserIds?: string[];
     onTypingChange?: (chatId: string, isTyping: boolean) => void;
+    onUploadStatusChange?: (chatId: string, isUploading: boolean) => void;
     isUserBlocked?: (user: User) => boolean;
     onToggleBlockUser?: (user: User) => void | Promise<void>;
     hasOlderMessages?: boolean;
@@ -349,7 +351,9 @@ export function ChatRoom({
     onSetPendingForwardDraft,
     onClearPendingForwardDraft,
     typingUserIds = [],
+    uploadingUserIds = [],
     onTypingChange,
+    onUploadStatusChange,
     isUserBlocked,
     onToggleBlockUser,
     hasOlderMessages = false,
@@ -373,6 +377,12 @@ export function ChatRoom({
 
     const [text, setText] = useState('');
     const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
+    const [uploadComposerState, setUploadComposerState] = useState<{ isUploading: boolean; progress: number; fileName: string | null }>({
+        isUploading: false,
+        progress: 0,
+        fileName: null,
+    });
+    const uploadCancelRef = useRef<(() => void) | null>(null);
     const [chatMenuOpen, setChatMenuOpen] = useState(false);
     const [confirmDeleteChat, setConfirmDeleteChat] = useState(false);
     const [confirmLeaveGroup, setConfirmLeaveGroup] = useState(false);
@@ -521,6 +531,16 @@ export function ChatRoom({
             typingTimeoutRef.current = null;
         }, 1000);
     };
+
+    useEffect(() => {
+        if (!onUploadStatusChange) return;
+        onUploadStatusChange(chatId, uploadComposerState.isUploading);
+    }, [chatId, onUploadStatusChange, uploadComposerState.isUploading]);
+
+    useEffect(() => () => {
+        if (!onUploadStatusChange) return;
+        onUploadStatusChange(chatId, false);
+    }, [chatId, onUploadStatusChange]);
 
     useEffect(() => {
         if (!isContactBlocked) return;
@@ -1557,6 +1577,10 @@ export function ChatRoom({
         () => (typingUserIds || []).filter((uid) => uid && uid !== currentUserId),
         [typingUserIds, currentUserId]
     );
+    const otherUploadingUserIds = useMemo(
+        () => (uploadingUserIds || []).filter((uid) => uid && uid !== currentUserId),
+        [uploadingUserIds, currentUserId]
+    );
 
     const typingStatusLabel = useMemo(() => {
         if (isContactBlocked) return '';
@@ -1570,7 +1594,25 @@ export function ChatRoom({
         return `${toPersianDigits(otherTypingUserIds.length)} کاربر درحال تایپ هستند`;
     }, [otherTypingUserIds, isGroupChat, groupMembers, isContactBlocked]);
 
+    const uploadingStatusLabel = useMemo(() => {
+        if (isContactBlocked) return '';
+        if (otherUploadingUserIds.length === 0) return '';
+        if (!isGroupChat) return 'درحال آپلود فایل...';
+        if (otherUploadingUserIds.length === 1) {
+            const uid = otherUploadingUserIds[0];
+            const name = groupMembers[uid]?.name || 'یک کاربر';
+            return `${name} درحال آپلود فایل...`;
+        }
+        return `${toPersianDigits(otherUploadingUserIds.length)} کاربر درحال آپلود فایل هستند`;
+    }, [otherUploadingUserIds, isGroupChat, groupMembers, isContactBlocked]);
+
+    const headerActivityLabel = useMemo(() => {
+        if (typingStatusLabel) return typingStatusLabel;
+        return uploadingStatusLabel;
+    }, [typingStatusLabel, uploadingStatusLabel]);
+
     const activeInputStackCount = (replyTo || editingId ? 1 : 0)
+        + (uploadComposerState.isUploading ? 1 : 0)
         + (uploadedFile ? 1 : 0)
         + (pendingForwardDraft ? 1 : 0);
     const scrollButtonBottom = 96 + (activeInputStackCount * 56);
@@ -2108,8 +2150,8 @@ export function ChatRoom({
                         </div>
                         {!isSavedMessages && (
                             <div className={(!isGroupChat && !isContactBlocked && contact.online) ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
-                                {typingStatusLabel ? (
-                                    <span style={isGroupChat ? { color: '#16a34a' } : undefined}>{typingStatusLabel}</span>
+                                {headerActivityLabel ? (
+                                    <span style={isGroupChat ? { color: '#16a34a' } : undefined}>{headerActivityLabel}</span>
                                 ) : (isGroupChat ? (
                                     <span style={{ direction: 'rtl', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                         <span style={{ color: '#16a34a' }}>{toPersianDigits(chatStats?.onlineMembers ?? 0)} آنلاین</span>
@@ -2682,6 +2724,31 @@ export function ChatRoom({
             </AnimatePresence>
 
             <div className="chat-room__input-area">
+                {uploadComposerState.isUploading && (
+                    <div className="chat-room__upload-progress-box">
+                        <div
+                            className="chat-room__upload-progress-track"
+                            role="progressbar"
+                            aria-label={`Uploading ${uploadComposerState.progress}%`}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuenow={uploadComposerState.progress}
+                        >
+                            <div
+                                className="chat-room__upload-progress-fill"
+                                style={{ width: `${uploadComposerState.progress}%` }}
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            className="chat-room__upload-progress-cancel"
+                            aria-label="Cancel upload"
+                            onClick={() => uploadCancelRef.current?.()}
+                        >
+                            <X size={18} />
+                        </button>
+                    </div>
+                )}
                 {(replyTo || editingId) && (
                     <div className="chat-room__reply-edit-box">
                         <div style={{ minWidth: 0, flex: 1, textAlign: 'right' }}>
@@ -2747,6 +2814,10 @@ export function ChatRoom({
                                 chatId={chatId}
                                 onFileUploaded={handleFileUploaded}
                                 fileAttached={Boolean(uploadedFile)}
+                                onUploadStateChange={({ isUploading, progress, fileName, cancelUpload }) => {
+                                    setUploadComposerState({ isUploading, progress, fileName });
+                                    uploadCancelRef.current = cancelUpload ?? null;
+                                }}
                                 onRegisterUploadFile={(handler) => {
                                     setExternalFileUploadHandler(() => handler);
                                 }}

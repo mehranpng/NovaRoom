@@ -66,6 +66,7 @@ export function App() {
     const [wsConnected, setWsConnected] = useState(false);
     const [wsReconnectExhausted, setWsReconnectExhausted] = useState(false);
     const [typingUserIdsByChat, setTypingUserIdsByChat] = useState<Record<string, string[]>>({});
+    const [uploadingUserIdsByChat, setUploadingUserIdsByChat] = useState<Record<string, string[]>>({});
     const [blockedChatIds, setBlockedChatIds] = useState<string[]>([]);
     const typingTimeoutsRef = useRef<Record<string, number>>({});
     const userPresenceRef = useRef<Record<string, { online: boolean; updatedAt: number }>>({});
@@ -431,6 +432,7 @@ export function App() {
             presenceOfflineGraceTimersRef.current = {};
             userPresenceRef.current = {};
             setTypingUserIdsByChat({});
+            setUploadingUserIdsByChat({});
             navigate('/login', { replace: true });
         };
 
@@ -483,6 +485,27 @@ export function App() {
         typingTimeoutsRef.current[key] = window.setTimeout(() => {
             clearEntry();
         }, 1000);
+    }, [currentUser?.chatId]);
+
+    const handleUploadStatus = useCallback((chatId: string, userId: string, isUploading: boolean) => {
+        if (!chatId || !userId) return;
+        if (currentUser?.chatId && userId === currentUser.chatId) return;
+
+        setUploadingUserIdsByChat((prev) => {
+            const chatUsers = prev[chatId] || [];
+            if (isUploading) {
+                if (chatUsers.includes(userId)) return prev;
+                return { ...prev, [chatId]: [...chatUsers, userId] };
+            }
+            if (!chatUsers.includes(userId)) return prev;
+            const nextUsers = chatUsers.filter((id) => id !== userId);
+            if (nextUsers.length === 0) {
+                const next = { ...prev };
+                delete next[chatId];
+                return next;
+            }
+            return { ...prev, [chatId]: nextUsers };
+        });
     }, [currentUser?.chatId]);
 
     // WebSocket handlers wrapped in useCallback to prevent infinite reconnection loops
@@ -899,7 +922,7 @@ export function App() {
     }, []);
 
     // WebSocket initialization
-    const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen, sendTyping, reconnectExhausted, reconnectNow, sendAIMessage, stopAIGeneration } = useWebSocket({
+    const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen, sendTyping, sendUploadStatus, reconnectExhausted, reconnectNow, sendAIMessage, stopAIGeneration } = useWebSocket({
         token: authToken,
         onNewMessage: handleNewMessage,
         onMessageEdited: handleMessageEdited,
@@ -908,6 +931,7 @@ export function App() {
         onMessagesSeen: handleMessagesSeen,
         onReactionUpdated: handleReactionUpdated,
         onTypingStatus: handleTypingStatus,
+        onUploadStatus: handleUploadStatus,
         onConnectionChange: setWsConnected,
         onReconnectExhausted: handleWsReconnectExhausted,
         onAINewMessage: handleNewAIMessage,
@@ -2132,7 +2156,9 @@ export function App() {
                                 onSetPendingForwardDraft={handleSetPendingForwardDraft}
                                 onClearPendingForwardDraft={handleClearPendingForwardDraft}
                                 typingUserIds={typingUserIdsByChat[activeChatId || 'pending'] || []}
+                                uploadingUserIds={uploadingUserIdsByChat[activeChatId || 'pending'] || []}
                                 onTypingChange={(targetChatId, isTyping) => sendTyping(targetChatId, isTyping)}
+                                onUploadStatusChange={(targetChatId, isUploading) => sendUploadStatus(targetChatId, isUploading)}
                                 isUserBlocked={isUserBlocked}
                                 onToggleBlockUser={toggleBlockUser}
                                 hasOlderMessages={Boolean(activeRange?.hasOlder)}

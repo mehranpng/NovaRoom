@@ -12,6 +12,7 @@ interface FileUploadProps {
     onFileUploaded: (file: FileMetadata) => void;
     fileAttached?: boolean;
     onRegisterUploadFile?: (handler: ((file: File) => void) | null) => void;
+    onUploadStateChange?: (payload: { isUploading: boolean; progress: number; fileName: string | null; cancelUpload?: () => void }) => void;
 }
 
 type UploadTask = {
@@ -26,10 +27,8 @@ type UploadTask = {
 
 const uploadTasksByChat = new Map<string, UploadTask>();
 
-export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false, onRegisterUploadFile }: FileUploadProps) {
-    const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false, onRegisterUploadFile, onUploadStateChange }: FileUploadProps) {
     const [uploading, setUploading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(0);
     const [pickerMenuOpen, setPickerMenuOpen] = useState(false);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
@@ -38,6 +37,8 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
     const menuRef = useRef<HTMLDivElement>(null);
     const pickerSessionRef = useRef(false);
     const pickerCloseTimerRef = useRef<number | null>(null);
+    const xhrRef = useRef<XMLHttpRequest | null>(null);
+    const encryptCancelRef = useRef(false);
     const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
         const copy = new Uint8Array(bytes.byteLength);
         copy.set(bytes);
@@ -67,6 +68,12 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
 
     const pushTaskUpdate = (task: UploadTask) => {
         task.listeners.forEach((listener) => listener(task));
+        onUploadStateChange?.({
+            isUploading: task.status === 'uploading',
+            progress: getCombinedProgress(task),
+            fileName: task.fileName,
+            cancelUpload: cancelUpload,
+        });
     };
 
     const getCombinedProgress = (task: Pick<UploadTask, 'status' | 'uploadProgress' | 'encryptionProgress'>) => {
@@ -80,16 +87,17 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         const existingTask = uploadTasksByChat.get(chatId);
         if (!existingTask) {
             setUploading(false);
-            setUploadProgress(0);
-            setSelectedFileName(null);
             return;
         }
 
         const handleTask = (task: UploadTask) => {
-            const waitingForFileBox = task.status === 'done' && !fileAttached;
-            setUploading(task.status === 'uploading' || waitingForFileBox);
-            setUploadProgress(getCombinedProgress(task));
-            setSelectedFileName(task.fileName);
+            setUploading(task.status === 'uploading');
+            onUploadStateChange?.({
+                isUploading: task.status === 'uploading',
+                progress: getCombinedProgress(task),
+                fileName: task.fileName,
+                cancelUpload,
+            });
             if (task.status === 'done' && task.result && !task.delivered) {
                 task.delivered = true;
                 onFileUploaded(task.result);
@@ -106,7 +114,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         return () => {
             existingTask.listeners.delete(handleTask);
         };
-    }, [chatId, onFileUploaded, fileAttached]);
+    }, [chatId, onFileUploaded, fileAttached, onUploadStateChange]);
 
     const startUploadFromFile = (file: File | null | undefined) => {
         if (!file) return;
@@ -114,12 +122,11 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         // Validate file size
         if (!validateFileSize(file.size)) {
             alert('حجم فایل نباید بیشتر از ۲۰ مگابایت باشد');
-            setSelectedFileName(null);
+            onUploadStateChange?.({ isUploading: false, progress: 0, fileName: null });
             return;
         }
 
         setPickerMenuOpen(false);
-        setSelectedFileName(file.name);
         uploadFile(file);
     };
 
@@ -195,8 +202,8 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
     }, []);
 
     const uploadFile = async (file: File) => {
+        encryptCancelRef.current = false;
         setUploading(true);
-        setUploadProgress(0);
         const task: UploadTask = {
             status: 'uploading',
             fileName: file.name,
@@ -209,19 +216,21 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         let encryptionPulse: number | null = null;
         try {
             task.encryptionProgress = 10;
-            setUploadProgress(getCombinedProgress(task));
             pushTaskUpdate(task);
             encryptionPulse = window.setInterval(() => {
                 task.encryptionProgress = Math.min(95, task.encryptionProgress + 5);
-                setUploadProgress(getCombinedProgress(task));
                 pushTaskUpdate(task);
             }, 140);
             const plainBytes = new Uint8Array(await file.arrayBuffer());
             const encryptedBytes = await encryptFileBytesClientSide(plainBytes, token, chatId);
+            if (encryptCancelRef.current) {
+                uploadTasksByChat.delete(chatId);
+                resetUpload();
+                return;
+            }
             window.clearInterval(encryptionPulse);
             encryptionPulse = null;
             task.encryptionProgress = 100;
-            setUploadProgress(getCombinedProgress(task));
             pushTaskUpdate(task);
             const encryptedBuffer = toArrayBuffer(encryptedBytes);
             const encryptedBlob = new Blob([encryptedBuffer], { type: 'application/octet-stream' });
@@ -234,13 +243,13 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             formData.append('file', encryptedFile);
 
             const xhr = new XMLHttpRequest();
+            xhrRef.current = xhr;
 
             // Track upload progress
             xhr.upload.addEventListener('progress', (e) => {
                 if (e.lengthComputable) {
                     const progress = Math.round((e.loaded / e.total) * 100);
                     task.uploadProgress = progress;
-                    setUploadProgress(getCombinedProgress(task));
                     pushTaskUpdate(task);
                 }
             });
@@ -259,7 +268,6 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                         task.status = 'done';
                         task.uploadProgress = 100;
                         task.encryptionProgress = 100;
-                        setUploadProgress(100);
                         task.result = result;
                         pushTaskUpdate(task);
                     } else {
@@ -316,9 +324,10 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
     };
 
     const resetUpload = () => {
-        setSelectedFileName(null);
+        xhrRef.current = null;
+        encryptCancelRef.current = false;
         setUploading(false);
-        setUploadProgress(0);
+        onUploadStateChange?.({ isUploading: false, progress: 0, fileName: null });
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
@@ -333,23 +342,25 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         }
     };
 
+    const cancelUpload = () => {
+        encryptCancelRef.current = true;
+        const xhr = xhrRef.current;
+        if (xhr && xhr.readyState !== XMLHttpRequest.DONE) {
+            xhr.abort();
+            return;
+        }
+        uploadTasksByChat.delete(chatId);
+        resetUpload();
+    };
+
+    useEffect(() => {
+        return () => {
+            onUploadStateChange?.({ isUploading: false, progress: 0, fileName: null });
+        };
+    }, [onUploadStateChange]);
+
     return (
         <>
-            {uploading && selectedFileName && (
-                <div
-                    className="file-upload-progress-inline"
-                    role="progressbar"
-                    aria-label={`Uploading ${uploadProgress}%`}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={uploadProgress}
-                >
-                    <div
-                        className="file-upload-progress-inline__fill"
-                        style={{ width: `${uploadProgress}%` }}
-                    />
-                </div>
-            )}
             <div className="file-upload-container">
             <input
                 ref={imageInputRef}
