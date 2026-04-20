@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronsLeft, ChevronsRight, Download, Maximize, Minimize, Pause, Play, X } from 'lucide-react';
 import { API_BASE_URL } from '../config/api';
 import type { FileMetadata } from '../types';
+import { decryptFileBytesClientSide } from '../utils/e2ee';
 
 interface VideoMediaViewerProps {
     videoUrl: string;
     onClose: () => void;
     downloadFile?: Pick<FileMetadata, 'fileId' | 'fileName'> | null;
     token?: string;
+    chatId?: string;
 }
 
 function formatDuration(seconds: number): string {
@@ -20,7 +22,7 @@ function formatDuration(seconds: number): string {
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }: VideoMediaViewerProps) {
+export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '', chatId = '' }: VideoMediaViewerProps) {
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const clickTimeoutRef = useRef<number | null>(null);
@@ -126,13 +128,19 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '' }
 
     const handleDownload = async () => {
         try {
-            const response = downloadFile?.fileId
-                ? await fetch(`${API_BASE_URL}/files/${downloadFile.fileId}`, {
+            // Prefer already-decrypted media URL to avoid re-fetch/decrypt freeze.
+            const directResponse = await fetch(videoUrl);
+            if (!directResponse.ok) throw new Error('Download failed');
+            let blob = await directResponse.blob();
+            if (downloadFile?.fileId && chatId && !String(videoUrl).startsWith('blob:')) {
+                const encryptedResponse = await fetch(`${API_BASE_URL}/files/${downloadFile.fileId}`, {
                     headers: { Authorization: `Bearer ${token}` },
-                })
-                : await fetch(videoUrl);
-            if (!response.ok) throw new Error('Download failed');
-            const blob = await response.blob();
+                });
+                if (!encryptedResponse.ok) throw new Error('Download failed');
+                const encryptedBytes = new Uint8Array(await encryptedResponse.arrayBuffer());
+                const plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, chatId);
+                blob = new Blob([plainBytes], { type: blob.type || encryptedResponse.headers.get('content-type') || 'application/octet-stream' });
+            }
             const extension = blob.type.split('/')[1] || 'mp4';
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');

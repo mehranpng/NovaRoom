@@ -40,6 +40,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     const [videoError, setVideoError] = useState(false);
     const [videoDuration, setVideoDuration] = useState(0);
     const [coverUrl, setCoverUrl] = useState<string | null>(null);
+    const [downloadInProgress, setDownloadInProgress] = useState(false);
     const videoRef = useRef<HTMLVideoElement | null>(null);
 
     const musicPlayer = useMusicPlayer();
@@ -208,6 +209,24 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
 
     const handleDownload = async () => {
         try {
+            if (downloadInProgress) return;
+            setDownloadInProgress(true);
+            const readyUrl = isImage ? imageUrl : (isVideo ? videoUrl : (isAudio ? audioUrl : null));
+            if (readyUrl) {
+                const readyResponse = await fetch(readyUrl);
+                if (!readyResponse.ok) throw new Error('Download failed');
+                const readyBlob = await readyResponse.blob();
+                const readyObjectUrl = window.URL.createObjectURL(readyBlob);
+                const readyAnchor = document.createElement('a');
+                readyAnchor.href = readyObjectUrl;
+                readyAnchor.download = file.fileName;
+                document.body.appendChild(readyAnchor);
+                readyAnchor.click();
+                window.URL.revokeObjectURL(readyObjectUrl);
+                document.body.removeChild(readyAnchor);
+                return;
+            }
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
             const blob = await getOrCacheBlob({
                 cacheKey: `chat:${chatId}:file:${file.fileId}`,
                 loadBlob: async () => fetchAndDecryptBlob(file.fileId, file.mimeType),
@@ -223,6 +242,8 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
         } catch (error) {
             console.error('Error downloading file:', error);
             alert('خطا در دانلود فایل');
+        } finally {
+            setDownloadInProgress(false);
         }
     };
 
@@ -252,7 +273,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
                         />
                     )}
                     <div className="file-image-overlay">
-                        <button onClick={handleDownload} className="file-download-btn">
+                        <button onClick={handleDownload} className="file-download-btn" disabled={downloadInProgress} type="button">
                             <Download size={20} />
                         </button>
                     </div>
@@ -344,18 +365,18 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
                             </div>
                         )}
                     </div>
-                    <button onClick={handleDownload} className="file-download-btn" type="button">
+                    <button onClick={handleDownload} className="file-download-btn" type="button" disabled={downloadInProgress}>
                         <Download size={18} />
                     </button>
                 </div>
             ) : (
-                <div className="file-attachment" onClick={handleDownload}>
+                <div className="file-attachment" onClick={() => { if (!downloadInProgress) void handleDownload(); }}>
                     <div className="file-icon">{getFileIcon(file.mimeType)}</div>
                     <div className="file-info">
                         <div className="file-name">{file.fileName}</div>
                         <div className="file-size">{formatFileSize(file.fileSize)}</div>
                     </div>
-                    <button className="file-download-btn">
+                    <button className="file-download-btn" type="button" disabled={downloadInProgress}>
                         <Download size={18} />
                     </button>
                 </div>

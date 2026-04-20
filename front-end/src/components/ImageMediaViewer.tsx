@@ -2,19 +2,21 @@ import { useEffect, useRef, useState } from 'react';
 import { Download, Minus, Plus, X } from 'lucide-react';
 import { API_BASE_URL } from '../config/api';
 import type { FileMetadata } from '../types';
+import { decryptFileBytesClientSide } from '../utils/e2ee';
 
 interface ImageMediaViewerProps {
     imageUrl: string;
     onClose: () => void;
     downloadFile?: Pick<FileMetadata, 'fileId' | 'fileName'> | null;
     token?: string;
+    chatId?: string;
 }
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
 const TOGGLE_ZOOM_SCALE = 2;
 
-export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token = '' }: ImageMediaViewerProps) {
+export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token = '', chatId = '' }: ImageMediaViewerProps) {
     const [scale, setScale] = useState(1);
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const pinchDistanceRef = useRef<number | null>(null);
@@ -78,13 +80,19 @@ export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token = '' }
     };
     const downloadImage = async () => {
         try {
-            const response = downloadFile?.fileId
-                ? await fetch(`${API_BASE_URL}/files/${downloadFile.fileId}`, {
+            // Prefer already-decrypted media URL to avoid re-fetch/decrypt freeze.
+            const directResponse = await fetch(imageUrl);
+            if (!directResponse.ok) throw new Error('Download failed');
+            let blob = await directResponse.blob();
+            if (downloadFile?.fileId && chatId && !String(imageUrl).startsWith('blob:')) {
+                const encryptedResponse = await fetch(`${API_BASE_URL}/files/${downloadFile.fileId}`, {
                     headers: { Authorization: `Bearer ${token}` },
-                })
-                : await fetch(imageUrl);
-            if (!response.ok) throw new Error('Download failed');
-            const blob = await response.blob();
+                });
+                if (!encryptedResponse.ok) throw new Error('Download failed');
+                const encryptedBytes = new Uint8Array(await encryptedResponse.arrayBuffer());
+                const plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, chatId);
+                blob = new Blob([plainBytes], { type: blob.type || encryptedResponse.headers.get('content-type') || 'application/octet-stream' });
+            }
             const extension = blob.type.split('/')[1] || 'jpg';
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');

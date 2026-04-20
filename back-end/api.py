@@ -120,6 +120,7 @@ MAX_PINNED_CHATS = 20
 MAX_CHAT_MESSAGE_LENGTH = 6000
 MAX_AI_MESSAGE_LENGTH = 3000
 MAX_AI_MESSAGES_PER_CHAT = 30
+WS_IDLE_TIMEOUT_SEC = 95
 ENC_PREFIX = "enc:v1:"
 ENC_NONCE_SIZE = 16
 ENC_TAG_SIZE = 16
@@ -3203,12 +3204,20 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 {"type": "user_status", "userId": chat_id, "online": True},
             )
 
+        last_client_activity = time.time()
         while True:
             try:
                 data = await asyncio.wait_for(websocket.receive_json(), timeout=70)
+                last_client_activity = time.time()
             except asyncio.TimeoutError:
                 # Proactively probe silent/stale connections so online status
                 # doesn't stay "stuck" for a long time on abrupt network drops.
+                if (time.time() - last_client_activity) >= WS_IDLE_TIMEOUT_SEC:
+                    try:
+                        await websocket.close(code=1001)
+                    except Exception:
+                        pass
+                    break
                 try:
                     await websocket.send_json({"type": "ping"})
                 except Exception:

@@ -2570,6 +2570,7 @@ export function ChatRoom({
                     imageUrl={openedImage.url}
                     downloadFile={openedImage.file}
                     token={token}
+                    chatId={chatId}
                     onClose={() => setOpenedImage(null)}
                 />
             )}
@@ -2578,6 +2579,7 @@ export function ChatRoom({
                     videoUrl={openedVideo.url}
                     downloadFile={openedVideo.file}
                     token={token}
+                    chatId={chatId}
                     onClose={() => setOpenedVideo(null)}
                 />
             )}
