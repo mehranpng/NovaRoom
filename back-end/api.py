@@ -82,7 +82,7 @@ SESSION_INACTIVITY_EXPIRE_DAYS = 3
 MAX_ACTIVE_SESSIONS = 10
 
 client = AsyncIOMotorClient(os.getenv("MONGO_DB"))
-db = client["Messenger"]
+db = client["Messenger2"]
 cl_users = db["users"]
 cl_chats = db["chats"]
 cl_messages = db["messages"]
@@ -152,11 +152,14 @@ def _derive_enc_key_legacy_token_raw(token: str, scope: str) -> bytes:
     return hashlib.sha256(material).digest()
 
 
-
-
 def _is_server_managed_scope(scope: str) -> bool:
     value = str(scope or "")
-    return value.startswith("ai:") or value.startswith("ai-chat:") or value.startswith("ai-chat-meta:")
+    return (
+        value.startswith("ai:")
+        or value.startswith("ai-chat:")
+        or value.startswith("ai-chat-meta:")
+    )
+
 
 def _xor_stream(data: bytes, key: bytes, nonce: bytes) -> bytes:
     out = bytearray(len(data))
@@ -213,7 +216,9 @@ def _decrypt_scoped_text_raw(value: str, token: str, scope: str) -> str:
             _derive_enc_key_legacy_token_raw(token, scope),
         ]
         for key in candidate_keys:
-            expected = hmac.new(key, nonce + body, hashlib.sha256).digest()[:ENC_TAG_SIZE]
+            expected = hmac.new(key, nonce + body, hashlib.sha256).digest()[
+                :ENC_TAG_SIZE
+            ]
             if not hmac.compare_digest(tag, expected):
                 continue
             return _xor_stream(body, key, nonce).decode("utf-8", errors="ignore")
@@ -332,9 +337,17 @@ async def _remap_forward_file_to_target_chat(
         str(file_meta.get("fileName") or "forwarded-file"),
     )
     remapped_meta["uploadedBy"] = uploaded_by
-    remapped_meta["mimeType"] = str(file_meta.get("mimeType") or remapped_meta.get("mimeType") or "application/octet-stream")
-    remapped_meta["fileName"] = str(file_meta.get("fileName") or remapped_meta.get("fileName") or "forwarded-file")
-    remapped_meta["fileSize"] = int(file_meta.get("fileSize") or remapped_meta.get("fileSize") or 0)
+    remapped_meta["mimeType"] = str(
+        file_meta.get("mimeType")
+        or remapped_meta.get("mimeType")
+        or "application/octet-stream"
+    )
+    remapped_meta["fileName"] = str(
+        file_meta.get("fileName") or remapped_meta.get("fileName") or "forwarded-file"
+    )
+    remapped_meta["fileSize"] = int(
+        file_meta.get("fileSize") or remapped_meta.get("fileSize") or 0
+    )
 
     cover_art_id = str(file_meta.get("coverArtFileId") or "").strip()
     if cover_art_id:
@@ -344,11 +357,15 @@ async def _remap_forward_file_to_target_chat(
             if cover_plain is None:
                 cover_plain = cover_raw
             remapped_cover_raw = encrypt_client_file_bytes(cover_plain, target_scope)
-            remapped_cover_meta = await save_uploaded_file(remapped_cover_raw, "cover-art")
+            remapped_cover_meta = await save_uploaded_file(
+                remapped_cover_raw, "cover-art"
+            )
             remapped_cover_meta["uploadedBy"] = uploaded_by
             remapped_meta["coverArtFileId"] = remapped_cover_meta.get("fileId")
             remapped_meta["coverArtUrl"] = (
-                f"/files/{remapped_cover_meta.get('fileId')}" if remapped_cover_meta.get("fileId") else remapped_meta.get("coverArtUrl")
+                f"/files/{remapped_cover_meta.get('fileId')}"
+                if remapped_cover_meta.get("fileId")
+                else remapped_meta.get("coverArtUrl")
             )
 
     for key in ("title", "artist"):
@@ -583,6 +600,7 @@ async def create_access_token(data: dict) -> str:
 def hash_access_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
+
 def normalize_device_name(value: Any) -> str:
     text = str(value or "").strip()
     if not text:
@@ -606,16 +624,28 @@ def _normalize_session_list(user_doc: dict) -> List[dict]:
             continue
         expires_at = item.get("expiresAt")
         if isinstance(expires_at, datetime):
-            exp_dt = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
+            exp_dt = (
+                expires_at
+                if expires_at.tzinfo
+                else expires_at.replace(tzinfo=timezone.utc)
+            )
             if exp_dt <= now:
                 continue
         last_used_at = item.get("lastUsedAt")
         if isinstance(last_used_at, datetime):
-            last_used_dt = last_used_at if last_used_at.tzinfo else last_used_at.replace(tzinfo=timezone.utc)
+            last_used_dt = (
+                last_used_at
+                if last_used_at.tzinfo
+                else last_used_at.replace(tzinfo=timezone.utc)
+            )
         else:
             created_at = item.get("createdAt")
             if isinstance(created_at, datetime):
-                last_used_dt = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+                last_used_dt = (
+                    created_at
+                    if created_at.tzinfo
+                    else created_at.replace(tzinfo=timezone.utc)
+                )
             else:
                 last_used_dt = now
         if last_used_dt <= inactivity_cutoff:
@@ -682,7 +712,7 @@ async def get_user_from_session_token(token: str) -> Optional[dict]:
     if not user:
         return None
 
-    raw_sessions = ((user.get("login") or {}).get("sessions") or [])
+    raw_sessions = (user.get("login") or {}).get("sessions") or []
     if not isinstance(raw_sessions, list):
         raw_sessions = []
     token_hash = hash_access_token(token)
@@ -757,7 +787,9 @@ async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
         for p in chat.get("participants", []):
             if p != user_id:
                 contacts_to_notify.add(p)
-    allowed_contacts = await _filter_recipients_by_block_status(user_id, contacts_to_notify)
+    allowed_contacts = await _filter_recipients_by_block_status(
+        user_id, contacts_to_notify
+    )
     await broadcast(
         allowed_contacts,
         {"type": "user_status", "userId": user_id, "online": False},
@@ -765,7 +797,9 @@ async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
     return {"message": "Logged out"}
 
 
-def serialize_session_for_client(session: Dict[str, Any], current_token_hash: str) -> Dict[str, Any]:
+def serialize_session_for_client(
+    session: Dict[str, Any], current_token_hash: str
+) -> Dict[str, Any]:
     token_hash = str(session.get("tokenHash") or "")
     return {
         "tokenHash": token_hash,
@@ -782,12 +816,19 @@ async def list_sessions(current_user: dict = Depends(get_current_user)):
     token_hash = hash_access_token(token) if token else ""
     sessions = _normalize_session_list(current_user)
     serialized = [serialize_session_for_client(item, token_hash) for item in sessions]
-    serialized.sort(key=lambda item: (0 if item.get("current") else 1, -int(item.get("lastUsedAt") or 0)))
+    serialized.sort(
+        key=lambda item: (
+            0 if item.get("current") else 1,
+            -int(item.get("lastUsedAt") or 0),
+        )
+    )
     return {"sessions": serialized}
 
 
 @app.delete("/auth/sessions/{token_hash}")
-async def revoke_single_session(token_hash: str, current_user: dict = Depends(get_current_user)):
+async def revoke_single_session(
+    token_hash: str, current_user: dict = Depends(get_current_user)
+):
     my_token = str(current_user.get("_session_token") or "")
     my_hash = hash_access_token(my_token) if my_token else ""
     target_hash = str(token_hash or "").strip()
@@ -797,7 +838,9 @@ async def revoke_single_session(token_hash: str, current_user: dict = Depends(ge
         raise HTTPException(status_code=400, detail="Cannot revoke current session")
 
     sessions = _normalize_session_list(current_user)
-    next_sessions = [s for s in sessions if str(s.get("tokenHash") or "") != target_hash]
+    next_sessions = [
+        s for s in sessions if str(s.get("tokenHash") or "") != target_hash
+    ]
     await cl_users.update_one(
         {"chatId": current_user["chatId"]},
         {"$set": {"login.sessions": next_sessions}, "$unset": {"login.token": ""}},
@@ -965,13 +1008,20 @@ async def migrate_unencrypted_messages():
         )
 
     async for m in cl_messages.find(
-        {"$or": [{"textEncrypted": {"$ne": True}}, {"text": {"$not": {"$regex": f"^{ENC_PREFIX}"}}}]}
+        {
+            "$or": [
+                {"textEncrypted": {"$ne": True}},
+                {"text": {"$not": {"$regex": f"^{ENC_PREFIX}"}}},
+            ]
+        }
     ):
         chat_scope = f"chat:{m.get('chatId', '')}"
         updates: Dict[str, Any] = {"textEncrypted": True}
         txt = str(m.get("text") or "")
         if txt and not is_ciphertext(txt):
-            updates["text"] = encrypt_scoped_text(txt, LEGACY_BOOTSTRAP_TOKEN, chat_scope)
+            updates["text"] = encrypt_scoped_text(
+                txt, LEGACY_BOOTSTRAP_TOKEN, chat_scope
+            )
         reply = m.get("replyTo")
         if isinstance(reply, dict):
             r_txt = str(reply.get("text") or "")
@@ -991,7 +1041,12 @@ async def migrate_unencrypted_messages():
             await cl_messages.update_one({"_id": m["_id"]}, {"$set": updates})
 
     async for m in cl_ai_messages.find(
-        {"$or": [{"contentEncrypted": {"$ne": True}}, {"content": {"$not": {"$regex": f"^{ENC_PREFIX}"}}}]}
+        {
+            "$or": [
+                {"contentEncrypted": {"$ne": True}},
+                {"content": {"$not": {"$regex": f"^{ENC_PREFIX}"}}},
+            ]
+        }
     ):
         ai_scope = f"ai:{m.get('aiChatId', '')}"
         updates = {"contentEncrypted": True}
@@ -1027,9 +1082,7 @@ async def migrate_unencrypted_messages():
         title = str(c.get("title") or "")
         summary = str(c.get("summary") or "")
         if title and not is_ciphertext(title):
-            updates["title"] = encrypt_scoped_text(
-                title, LEGACY_BOOTSTRAP_TOKEN, scope
-            )
+            updates["title"] = encrypt_scoped_text(title, LEGACY_BOOTSTRAP_TOKEN, scope)
         if summary and not is_ciphertext(summary):
             updates["summary"] = encrypt_scoped_text(
                 summary, LEGACY_BOOTSTRAP_TOKEN, scope
@@ -1271,7 +1324,9 @@ async def complete_registration(req: CompleteRegistrationRequest, request: Reque
     token = await create_access_token({"chatId": chat_id})
 
     # Save hashed token session in database
-    device_name = normalize_device_name(req.deviceName) or normalize_device_name(request.headers.get("x-device-name"))
+    device_name = normalize_device_name(req.deviceName) or normalize_device_name(
+        request.headers.get("x-device-name")
+    )
     await attach_session_to_user(chat_id, token, device_name)
 
     return {
@@ -1356,7 +1411,9 @@ async def login(req: LoginRequest, request: Request):
 
     token = await create_access_token({"chatId": user["chatId"]})
 
-    device_name = normalize_device_name(req.deviceName) or normalize_device_name(request.headers.get("x-device-name"))
+    device_name = normalize_device_name(req.deviceName) or normalize_device_name(
+        request.headers.get("x-device-name")
+    )
     await attach_session_to_user(user["chatId"], token, device_name)
 
     return {
@@ -1842,7 +1899,9 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                         False
                         if is_group
                         else (
-                            False if blocked_relation else (
+                            False
+                            if blocked_relation
+                            else (
                                 resolve_user_online_state(other_user)
                                 if other_user
                                 else False
@@ -2138,14 +2197,20 @@ async def get_messages(
             "messages": payload,
             "hasOlder": (
                 await cl_messages.count_documents(
-                    {"chatId": chat_id, **_has_more_filter(oldest["timestamp"], oldest["id"], "$lt")},
+                    {
+                        "chatId": chat_id,
+                        **_has_more_filter(oldest["timestamp"], oldest["id"], "$lt"),
+                    },
                     limit=1,
                 )
                 > 0
             ),
             "hasNewer": (
                 await cl_messages.count_documents(
-                    {"chatId": chat_id, **_has_more_filter(newest["timestamp"], newest["id"], "$gt")},
+                    {
+                        "chatId": chat_id,
+                        **_has_more_filter(newest["timestamp"], newest["id"], "$gt"),
+                    },
                     limit=1,
                 )
                 > 0
@@ -2250,14 +2315,20 @@ async def get_messages(
         "messages": payload,
         "hasOlder": (
             await cl_messages.count_documents(
-                {"chatId": chat_id, **_has_more_filter(oldest["timestamp"], oldest["id"], "$lt")},
+                {
+                    "chatId": chat_id,
+                    **_has_more_filter(oldest["timestamp"], oldest["id"], "$lt"),
+                },
                 limit=1,
             )
             > 0
         ),
         "hasNewer": (
             await cl_messages.count_documents(
-                {"chatId": chat_id, **_has_more_filter(newest["timestamp"], newest["id"], "$gt")},
+                {
+                    "chatId": chat_id,
+                    **_has_more_filter(newest["timestamp"], newest["id"], "$gt"),
+                },
                 limit=1,
             )
             > 0
@@ -2655,7 +2726,9 @@ async def forward_message(
             original_msg.get("content", ""), session_token, source_ai_scope
         )
         reasoning_content = decrypt_with_fallback(
-            str(original_msg.get("reasoningContent") or ""), session_token, source_ai_scope
+            str(original_msg.get("reasoningContent") or ""),
+            session_token,
+            source_ai_scope,
         )
         reasoning_enabled = bool(original_msg.get("reasoningEnabled", False))
         reasoning_duration_sec = int(original_msg.get("reasoningDurationSec", 0) or 0)
@@ -2715,7 +2788,9 @@ async def forward_message(
         )
         file_data = original_msg.get("file")
         reasoning_content = decrypt_with_fallback(
-            str(original_msg.get("reasoningContent") or ""), session_token, source_chat_scope
+            str(original_msg.get("reasoningContent") or ""),
+            session_token,
+            source_chat_scope,
         )
         reasoning_enabled = bool(original_msg.get("reasoningEnabled", False))
         reasoning_duration_sec = int(original_msg.get("reasoningDurationSec", 0) or 0)
@@ -2791,10 +2866,10 @@ async def forward_message(
             "type": "new_message",
             "chatId": target_chat_id,
             "message": {
-                                "id": msg_id,
-                                "chatId": target_chat_id,
-                                "senderId": user_id,
-                                "text": encrypted_forward_text if message_text else "",
+                "id": msg_id,
+                "chatId": target_chat_id,
+                "senderId": user_id,
+                "text": encrypted_forward_text if message_text else "",
                 "timestamp": dt_to_epoch_ms(forwarded_msg["timestamp"]),
                 "seen": False,
                 "replyTo": None,
@@ -2850,7 +2925,10 @@ async def broadcast(user_ids: Iterable[str], payload: dict):
 async def safe_send_ai(user_id: str, message: dict):
     conns: List[WebSocket] = []
     seen_ws: set[int] = set()
-    for ws in [*active_ai_connections.get(user_id, []), *active_connections.get(user_id, [])]:
+    for ws in [
+        *active_ai_connections.get(user_id, []),
+        *active_connections.get(user_id, []),
+    ]:
         ws_id = id(ws)
         if ws_id in seen_ws:
             continue
@@ -2903,7 +2981,9 @@ async def build_last_message(chat_id: str, session_token: str = "") -> Optional[
     doc = m[0]
     return {
         "id": str(doc["_id"]),
-        "text": decrypt_with_fallback(doc.get("text", ""), session_token, f"chat:{chat_id}"),
+        "text": decrypt_with_fallback(
+            doc.get("text", ""), session_token, f"chat:{chat_id}"
+        ),
         "senderId": doc.get("senderId"),
         "timestamp": doc.get("timestamp"),
         "file": doc.get("file"),
@@ -3040,7 +3120,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 reasoning_duration_sec = int(
                     max(
                         0,
-                        round((first_main_content_at or time.time()) - stream_started_at),
+                        round(
+                            (first_main_content_at or time.time()) - stream_started_at
+                        ),
                     )
                 )
                 await cl_ai_messages.update_one(
@@ -3162,7 +3244,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         continue
                     if chat_doc and chat_doc.get("chatType") != "group":
                         other_id = next((p for p in participants if p != chat_id), "")
-                        if other_id and await _is_direct_blocked_between(chat_id, other_id):
+                        if other_id and await _is_direct_blocked_between(
+                            chat_id, other_id
+                        ):
                             await websocket.send_json(
                                 {
                                     "type": "error",
@@ -3252,7 +3336,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "edited": False,
                             "reactions": [],
                             "file": file_data,
-                            "clientId": client_id if isinstance(client_id, str) else None,
+                            "clientId": (
+                                client_id if isinstance(client_id, str) else None
+                            ),
                         },
                     }
 
@@ -3712,7 +3798,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     ).strip()
 
                 history_docs = (
-                    await cl_ai_messages.find({"userId": chat_id, "aiChatId": ai_chat_id})
+                    await cl_ai_messages.find(
+                        {"userId": chat_id, "aiChatId": ai_chat_id}
+                    )
                     .sort("timestamp", -1)
                     .limit(6)
                     .to_list(6)
@@ -3840,8 +3928,13 @@ async def get_ai_chats(current_user: dict = Depends(get_current_user)):
     session_token = str(current_user.get("_session_token") or "")
     rows = (
         await cl_ai_chats.find(
-            {"userId": user_id, "$or": [{"isTemporary": {"$exists": False}}, {"isTemporary": False}]}
-        ).sort("updatedAt", -1).to_list(200)
+            {
+                "userId": user_id,
+                "$or": [{"isTemporary": {"$exists": False}}, {"isTemporary": False}],
+            }
+        )
+        .sort("updatedAt", -1)
+        .to_list(200)
     )
     return [
         {
@@ -4089,8 +4182,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     max(
                         0,
                         round(
-                            (first_main_content_at or time.time())
-                            - stream_started_at
+                            (first_main_content_at or time.time()) - stream_started_at
                         ),
                     )
                 )
@@ -4352,7 +4444,9 @@ async def get_ai_messages(
             "id": str(m["_id"]),
             "aiChatId": chatId,
             "senderId": "ai" if m["role"] == "assistant" else user_id,
-            "text": decrypt_with_fallback(m.get("content", ""), session_token, ai_scope),
+            "text": decrypt_with_fallback(
+                m.get("content", ""), session_token, ai_scope
+            ),
             "reasoningContent": decrypt_with_fallback(
                 m.get("reasoningContent", ""), session_token, ai_scope
             ),
