@@ -709,6 +709,7 @@ body,
     flex-shrink: 0;
     font-size: 12px;
     color: var(--text-tertiary);
+    direction: rtl;
 }
 
 .chat-list__item-preview {
@@ -1159,6 +1160,7 @@ body,
     font-weight: 500;
     color: var(--text-secondary);
     box-shadow: var(--shadow-sm);
+    direction: rtl;
 }
 
 .message-row {
@@ -2369,7 +2371,7 @@ body,
     gap: 12px;
 }
 
-.profile__chat-id-row > div {
+.profile__chat-id-row>div {
     flex: 1;
     min-width: 0;
 }
