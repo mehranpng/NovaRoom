@@ -88,6 +88,7 @@ cl_chats = db["chats"]
 cl_messages = db["messages"]
 cl_ai_messages = db["ai_messages"]
 cl_ai_chats = db["ai_chats"]
+cl_ai_usage = db["ai_usage"]
 
 # Store active connections (multiple tabs/devices per user)
 active_connections: Dict[str, List[WebSocket]] = {}
@@ -123,6 +124,8 @@ MAX_PINNED_CHATS = 20
 MAX_CHAT_MESSAGE_LENGTH = 6000
 MAX_AI_MESSAGE_LENGTH = 3000
 MAX_AI_MESSAGES_PER_CHAT = 30
+AI_PRO_DAILY_LIMIT = 20
+TEHRAN_TZ = timezone(timedelta(hours=3, minutes=30))
 WS_IDLE_TIMEOUT_SEC = 95
 ENC_PREFIX = "enc:v1:"
 ENC_NONCE_SIZE = 16
@@ -3821,12 +3824,27 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 client_id = data.get("clientId")
                 ai_chat_id = str(data.get("aiChatId") or "").strip()
                 use_reasoner = bool(data.get("useReasoner"))
-                model_name = "deepseek-reasoner" if use_reasoner else "deepseek-chat"
+                model_key = str(data.get("modelKey") or "nova-flash").strip().lower()
+                model_name = "deepseek-v4-pro" if model_key == "nova-pro" else "deepseek-v4-flash"
 
                 if not isinstance(text, str) or not text.strip():
                     continue
                 if len(text) > MAX_AI_MESSAGE_LENGTH:
                     continue
+
+                if model_key == "nova-pro":
+                    quota = await consume_pro_quota(chat_id)
+                    if not quota.get("allowed"):
+                        await safe_send_ai(
+                            chat_id,
+                            {
+                                "type": "ai_error",
+                                "code": "ai_pro_daily_limit_reached",
+                                "remaining": quota.get("remaining", 0),
+                                "message": "سقف ۲۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ تهران صبر کنید یا از Nova Flash استفاده کنید.",
+                            },
+                        )
+                        continue
 
                 try:
                     ai_chat = await ensure_ai_chat(chat_id, ai_chat_id)
@@ -4016,6 +4034,43 @@ async def ensure_ai_chat(user_id: str, ai_chat_id: str) -> dict:
     return chat
 
 
+def tehran_day_key(now: Optional[datetime] = None) -> str:
+    base = now or datetime.now(TEHRAN_TZ)
+    return base.astimezone(TEHRAN_TZ).strftime("%Y-%m-%d")
+
+
+async def get_pro_usage_status(user_id: str) -> Dict[str, Any]:
+    day_key = tehran_day_key()
+    row = await cl_ai_usage.find_one({"userId": user_id, "dateKey": day_key})
+    used = int(row.get("proCount", 0)) if isinstance(row, dict) else 0
+    used = max(0, min(AI_PRO_DAILY_LIMIT, used))
+    return {
+        "dateKey": day_key,
+        "used": used,
+        "remaining": max(0, AI_PRO_DAILY_LIMIT - used),
+        "limit": AI_PRO_DAILY_LIMIT,
+    }
+
+
+async def consume_pro_quota(user_id: str) -> Dict[str, Any]:
+    status = await get_pro_usage_status(user_id)
+    if status["used"] >= AI_PRO_DAILY_LIMIT:
+        return {**status, "allowed": False}
+
+    day_key = status["dateKey"]
+    await cl_ai_usage.update_one(
+        {"userId": user_id, "dateKey": day_key},
+        {
+            "$inc": {"proCount": 1},
+            "$set": {"updatedAt": utc_now()},
+            "$setOnInsert": {"createdAt": utc_now()},
+        },
+        upsert=True,
+    )
+    next_status = await get_pro_usage_status(user_id)
+    return {**next_status, "allowed": True}
+
+
 @app.get("/ai/chats")
 async def get_ai_chats(current_user: dict = Depends(get_current_user)):
     user_id = current_user["chatId"]
@@ -4050,6 +4105,18 @@ async def get_ai_chats(current_user: dict = Depends(get_current_user)):
         }
         for row in rows
     ]
+
+
+@app.get("/ai/pro-usage-status")
+async def get_ai_pro_usage_status(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["chatId"]
+    status = await get_pro_usage_status(user_id)
+    return {
+        "limit": status["limit"],
+        "used": status["used"],
+        "remaining": status["remaining"],
+        "dateKey": status["dateKey"],
+    }
 
 
 class AICreateChatRequest(BaseModel):
@@ -4351,12 +4418,27 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 client_id = data.get("clientId")
                 ai_chat_id = str(data.get("aiChatId") or "").strip()
                 use_reasoner = bool(data.get("useReasoner"))
-                model_name = "deepseek-reasoner" if use_reasoner else "deepseek-chat"
+                model_key = str(data.get("modelKey") or "nova-flash").strip().lower()
+                model_name = "deepseek-v4-pro" if model_key == "nova-pro" else "deepseek-v4-flash"
 
                 if not isinstance(text, str) or not text.strip():
                     continue
                 if len(text) > MAX_AI_MESSAGE_LENGTH:
                     continue
+
+                if model_key == "nova-pro":
+                    quota = await consume_pro_quota(user_id)
+                    if not quota.get("allowed"):
+                        await safe_send_ai(
+                            user_id,
+                            {
+                                "type": "ai_error",
+                                "code": "ai_pro_daily_limit_reached",
+                                "remaining": quota.get("remaining", 0),
+                                "message": "سقف ۲۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ تهران صبر کنید یا از Nova Flash استفاده کنید.",
+                            },
+                        )
+                        continue
 
                 try:
                     ai_chat = await ensure_ai_chat(user_id, ai_chat_id)

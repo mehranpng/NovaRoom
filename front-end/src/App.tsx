@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import type { Message, View, User, Chat, ChatLastMessage, FileMetadata, AIChatSummary } from './types';
+import type { Message, View, User, Chat, ChatLastMessage, FileMetadata, AIChatSummary, AIModelKey } from './types';
 import { apiFetch } from './config/api';
 import { useWebSocket } from './hooks/useWebSocket';
 import { ChatList } from './components/ChatList';
@@ -122,6 +122,8 @@ export function App() {
     const [aiReasoningPending, setAIReasoningPending] = useState(false);
     const [aiRespondingChatId, setAIRespondingChatId] = useState<string | null>(null);
     const [temporaryAIChat, setTemporaryAIChat] = useState(false);
+    const [selectedAIModel, setSelectedAIModel] = useState<AIModelKey>('nova-flash');
+    const [aiProRemaining, setAIProRemaining] = useState<number>(20);
 
     // Track if this is the initial load (show skeleton only once)
     const [isInitialChatsLoad, setIsInitialChatsLoad] = useState(true);
@@ -308,6 +310,20 @@ export function App() {
         };
 
         loadAIChats();
+    }, [isAuthenticated]);
+
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        const loadProStatus = async () => {
+            try {
+                const status = await apiFetch('/ai/pro-usage-status');
+                const remaining = Number(status?.remaining ?? 20);
+                setAIProRemaining(Number.isFinite(remaining) ? Math.max(0, remaining) : 20);
+            } catch (error) {
+                console.error('Failed to load AI pro usage status:', error);
+            }
+        };
+        loadProStatus();
     }, [isAuthenticated]);
 
     useEffect(() => {
@@ -923,8 +939,13 @@ export function App() {
         )));
     }, [activeAIChatId]);
 
-    const handleAIError = useCallback((message: string) => {
-        alert(message);
+    const handleAIError = useCallback((payload: { message: string; code?: string; remaining?: number }) => {
+        const message = String(payload?.message || 'خطا در سرویس هوش مصنوعی');
+        notify({ message, type: payload?.code === 'ai_pro_daily_limit_reached' ? 'info' : 'error' });
+        if (payload?.code === 'ai_pro_daily_limit_reached') {
+            setSelectedAIModel('nova-flash');
+            setAIProRemaining(Math.max(0, Number(payload?.remaining ?? 0)));
+        }
         setAITyping(false);
         setAIResponding(false);
         setAIReasoningPending(false);
@@ -1892,7 +1913,7 @@ export function App() {
         handleSelectChat(savedMessagesId, { navigateToRoute: false });
     }, [currentUser, handleSelectChat, navigate]);
 
-    const handleSendAIMessage = useCallback(async (text: string, useReasoner = false): Promise<boolean> => {
+    const handleSendAIMessage = useCallback(async (text: string, useReasoner = false, modelKey: AIModelKey = 'nova-flash'): Promise<boolean> => {
         if (!currentUser) return false;
 
         if (aiResponding && aiRespondingChatId && activeAIChatId !== aiRespondingChatId) {
@@ -1949,7 +1970,13 @@ export function App() {
         }));
         setAIRespondingChatId(finalChatId);
 
-        const success = sendAIMessage(text, finalChatId, clientId, useReasoner);
+        if (modelKey === 'nova-pro' && aiProRemaining <= 0) {
+            notify({ message: 'سقف ۲۰ پیام روزانه Nova Pro تکمیل شده است. تا ۰۰:۰۰ تهران صبر کنید یا از Nova Flash استفاده کنید.', type: 'info' });
+            setSelectedAIModel('nova-flash');
+            return false;
+        }
+
+        const success = sendAIMessage(text, finalChatId, clientId, useReasoner, modelKey);
         if (!success) {
             console.warn('Failed to send message to AI');
             setAIMessagesByChat((prev) => ({
@@ -1963,8 +1990,11 @@ export function App() {
             notify({ message: 'ارتباط با سرویس هوش مصنوعی برقرار نیست. لطفاً دوباره تلاش کنید.', type: 'error' });
             return false;
         }
+        if (modelKey === 'nova-pro') {
+            setAIProRemaining((prev) => Math.max(0, prev - 1));
+        }
         return true;
-    }, [currentUser, activeAIChatId, aiMessagesByChat, sendAIMessage, aiResponding, aiRespondingChatId, aiChats]);
+    }, [currentUser, activeAIChatId, aiMessagesByChat, sendAIMessage, aiResponding, aiRespondingChatId, aiChats, aiProRemaining]);
 
     const handleStopAIResponse = useCallback(() => {
         const success = stopAIGeneration();
@@ -2130,6 +2160,9 @@ export function App() {
                                 messages={aiMessages}
                                 currentUserId={currentUser!.chatId}
                                 onSendMessage={handleSendAIMessage}
+                                selectedModel={selectedAIModel}
+                                onSelectModel={setSelectedAIModel}
+                                proRemainingToday={aiProRemaining}
                                 onStopGenerating={handleStopAIResponse}
                                 onDeleteMessage={handleDeleteAIMessage}
                                 onBack={handleBack}

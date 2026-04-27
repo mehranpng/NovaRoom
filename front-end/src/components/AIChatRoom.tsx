@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import type { Components } from 'react-markdown';
-import type { Message, Chat, FileMetadata, AIChatSummary } from '../types';
+import type { Message, Chat, FileMetadata, AIChatSummary, AIModelKey } from '../types';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
 import { ForwardModal } from './ForwardModal';
 import { notify } from '../utils/notificationBus';
@@ -13,7 +13,10 @@ import { notify } from '../utils/notificationBus';
 interface AIChatRoomProps {
     messages: Message[];
     currentUserId: string;
-    onSendMessage: (text: string, useReasoner?: boolean) => boolean | Promise<boolean>;
+    onSendMessage: (text: string, useReasoner?: boolean, modelKey?: AIModelKey) => boolean | Promise<boolean>;
+    selectedModel: AIModelKey;
+    onSelectModel: (modelKey: AIModelKey) => void;
+    proRemainingToday: number;
     onStopGenerating?: () => void;
     onDeleteMessage: (messageId: string) => void;
     onBack: () => void;
@@ -181,6 +184,9 @@ export function AIChatRoom({
     messages,
     currentUserId,
     onSendMessage,
+    selectedModel,
+    onSelectModel,
+    proRemainingToday,
     onStopGenerating,
     onBack,
     loading = false,
@@ -224,7 +230,9 @@ export function AIChatRoom({
     const [renameTitleInput, setRenameTitleInput] = useState('');
     const [renameBusy, setRenameBusy] = useState(false);
     const [pinnedAIChatIds, setPinnedAIChatIds] = useState<string[]>([]);
+    const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
     const aiDrawerScrollTopRef = useRef(0);
+    const modelDropdownRef = useRef<HTMLDivElement | null>(null);
 
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
     const aiChatActionMenuRef = useRef<HTMLDivElement | null>(null);
@@ -533,6 +541,18 @@ export function AIChatRoom({
     }, [aiChatActionMenu]);
 
     useEffect(() => {
+        const onDocClick = (e: MouseEvent) => {
+            const target = e.target as Node;
+            if (modelDropdownRef.current?.contains(target)) return;
+            setModelDropdownOpen(false);
+        };
+        if (modelDropdownOpen) {
+            document.addEventListener('mousedown', onDocClick);
+        }
+        return () => document.removeEventListener('mousedown', onDocClick);
+    }, [modelDropdownOpen]);
+
+    useEffect(() => {
         if (!aiChatsDrawerOpen) return;
         const raf = window.requestAnimationFrame(() => {
             const list = aiDrawerListRef.current;
@@ -630,7 +650,7 @@ export function AIChatRoom({
         }
         if (!t || isResponding) return;
 
-        const sent = await onSendMessage(t, reasoningEnabled);
+        const sent = await onSendMessage(t, reasoningEnabled, selectedModel);
         if (!sent) return;
         playChatSound('send');
         setText('');
@@ -645,6 +665,17 @@ export function AIChatRoom({
             }
             return next;
         });
+    };
+    const isProDisabled = proRemainingToday <= 0;
+    const selectedModelLabel = selectedModel === 'nova-pro' ? 'Nova Pro' : 'Nova Flash';
+
+    const handleSelectModel = (modelKey: AIModelKey) => {
+        if (modelKey === 'nova-pro' && isProDisabled) {
+            notify({ message: 'سهمیه روزانه Nova Pro شما تمام شده است. این مدل بعد از ۰۰:۰۰ تهران دوباره فعال می‌شود.', type: 'info' });
+            return;
+        }
+        onSelectModel(modelKey);
+        setModelDropdownOpen(false);
     };
 
     const openMessageMenu = (messageId: string, targetEl: HTMLElement, clientX?: number, clientY?: number) => {
@@ -746,7 +777,41 @@ export function AIChatRoom({
                 </button>
 
                 <div className="chat-room__header-clickable chat-room__header-clickable--full ai-chat-room__header-main">
-                    <div className="ai-chat-room__header-brand">NovaRoom AI</div>
+                    <div className="ai-chat-room__header-brand" ref={modelDropdownRef}>
+                        <button
+                            type="button"
+                            className="ai-model-switcher"
+                            onClick={() => setModelDropdownOpen((prev) => !prev)}
+                            aria-label="انتخاب مدل هوش مصنوعی"
+                        >
+                            <span>{selectedModelLabel}</span>
+                            <ChevronDown size={14} className={modelDropdownOpen ? 'ai-model-switcher__chevron ai-model-switcher__chevron--open' : 'ai-model-switcher__chevron'} />
+                        </button>
+                        <AnimatePresence>
+                            {modelDropdownOpen && (
+                                <motion.div
+                                    className="ai-model-switcher__menu"
+                                    initial={{ opacity: 0, y: -6 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -6 }}
+                                    transition={{ duration: 0.16 }}
+                                >
+                                    <button type="button" className={selectedModel === 'nova-flash' ? 'ai-model-option ai-model-option--active' : 'ai-model-option'} onClick={() => handleSelectModel('nova-flash')}>
+                                        <div className="ai-model-option__title">Nova Flash</div>
+                                        <div className="ai-model-option__desc">سریع و سبک برای گفتگوهای روزانه، سوال‌های کوتاه و پاسخ‌ فوری.</div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`${selectedModel === 'nova-pro' ? 'ai-model-option ai-model-option--active' : 'ai-model-option'}${isProDisabled ? ' ai-model-option--disabled' : ''}`}
+                                        onClick={() => handleSelectModel('nova-pro')}
+                                    >
+                                        <div className="ai-model-option__title">Nova Pro</div>
+                                        <div className="ai-model-option__desc">دقیق‌تر برای تحلیل عمیق، کارهای حرفه‌ای و درخواست‌های پیچیده‌تر.</div>
+                                    </button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
                     <div className="ai-chat-room__header-title">
                         {temporaryMode ? 'گفتگوی موقت' : (activeAIChatTitle || 'گفتگوی جدید')}
                     </div>
@@ -1352,11 +1417,73 @@ export function AIChatRoom({
                 .ai-chat-room__header-brand {
                     flex-shrink: 0;
                     font-size: 18px;
-                    font-weight: 700;
-                    color: var(--text-primary);
                     text-align: left;
                     margin-right: 8px;
                     line-height: 1.2;
+                    position: relative;
+                }
+                .ai-model-switcher {
+                    border: 0;
+                    background: transparent;
+                    color: var(--text-primary);
+                    font-weight: 700;
+                    font-size: 18px;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 4px;
+                    cursor: pointer;
+                    padding: 0;
+                    font-family: inherit;
+                }
+                .ai-model-switcher__chevron {
+                    transition: transform 0.2s ease;
+                }
+                .ai-model-switcher__chevron--open {
+                    transform: rotate(180deg);
+                }
+                .ai-model-switcher__menu {
+                    position: absolute;
+                    top: calc(100% + 8px);
+                    left: 0;
+                    width: 260px;
+                    border: 1px solid var(--border-secondary);
+                    border-radius: 12px;
+                    background: var(--bg-primary);
+                    box-shadow: var(--shadow-md);
+                    padding: 6px;
+                    z-index: 20;
+                }
+                .ai-model-option {
+                    width: 100%;
+                    border: 0;
+                    background: transparent;
+                    text-align: left;
+                    border-radius: 10px;
+                    padding: 10px;
+                    cursor: pointer;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 3px;
+                    color: var(--text-primary);
+                }
+                .ai-model-option:hover {
+                    background: var(--bg-secondary);
+                }
+                .ai-model-option--active {
+                    background: rgba(47,128,237,0.12);
+                }
+                .ai-model-option--disabled {
+                    opacity: 0.45;
+                    cursor: not-allowed;
+                }
+                .ai-model-option__title {
+                    font-size: 14px;
+                    font-weight: 700;
+                }
+                .ai-model-option__desc {
+                    font-size: 12px;
+                    color: var(--text-secondary);
+                    line-height: 1.5;
                 }
                 .typing-indicator {
                     display: flex;

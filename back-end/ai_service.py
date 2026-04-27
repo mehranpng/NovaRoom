@@ -63,7 +63,7 @@ async def generate_ai_response_stream(
     chat_id: str = "",
     bio: str = "",
     conversation_summary: str = "",
-    model: str = "deepseek-chat",
+    model: str = "deepseek-v4-flash",
     reasoning_mode: bool = False,
 ) -> AsyncIterator[Dict[str, Any]]:
     try:
@@ -104,6 +104,8 @@ async def generate_ai_response_stream(
             messages=full_messages,
             max_tokens=2000,
             stream=True,
+            reasoning_effort="high",
+            extra_body={"thinking": {"type": "enabled" if reasoning_mode else "disabled"}},
         )
 
         has_content = False
@@ -173,7 +175,7 @@ async def generate_conversation_summary(
         ]
 
         response = await client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
             messages=summary_messages,
             response_format={"type": "json_object"},
             max_tokens=250,
@@ -227,7 +229,7 @@ async def generate_chat_title(first_user_message: str) -> str:
         ]
 
         response = await client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
             messages=title_messages,
             response_format={"type": "json_object"},
             max_tokens=80,

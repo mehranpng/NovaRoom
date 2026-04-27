@@ -25,7 +25,7 @@ export function useAIWebSocket({
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<number | undefined>(undefined);
     const reconnectAttemptsRef = useRef(0);
-    const pendingMessagesRef = useRef<Array<{ text: string; aiChatId: string; clientId?: string; useReasoner: boolean }>>([]);
+    const pendingMessagesRef = useRef<Array<{ text: string; aiChatId: string; clientId?: string; useReasoner: boolean; modelKey: 'nova-flash' | 'nova-pro' }>>([]);
     const onNewMessageRef = useRef(onNewMessage);
     const onErrorRef = useRef(onError);
     const onUserMessageSavedRef = useRef(onUserMessageSaved);
@@ -62,6 +62,7 @@ export function useAIWebSocket({
                         aiChatId: payload.aiChatId,
                         clientId: payload.clientId,
                         useReasoner: payload.useReasoner,
+                        modelKey: payload.modelKey,
                     }));
                 });
             }
@@ -144,13 +145,13 @@ export function useAIWebSocket({
         };
     }, [connect]);
 
-    const sendMessage = useCallback((text: string, aiChatId: string, clientId?: string, useReasoner = false) => {
+    const sendMessage = useCallback((text: string, aiChatId: string, clientId?: string, useReasoner = false, modelKey: 'nova-flash' | 'nova-pro' = 'nova-flash') => {
         if (typeof text !== 'string' || !text.trim() || text.length > MAX_AI_MESSAGE_LENGTH) {
             return false;
         }
         if (!aiChatId) return false;
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-            pendingMessagesRef.current.push({ text, aiChatId, clientId, useReasoner });
+            pendingMessagesRef.current.push({ text, aiChatId, clientId, useReasoner, modelKey });
             console.warn('AI WebSocket not connected yet; message queued');
             return true;
         }
@@ -162,6 +163,7 @@ export function useAIWebSocket({
                 aiChatId,
                 clientId,
                 useReasoner,
+                modelKey,
             })
         );
         return true;

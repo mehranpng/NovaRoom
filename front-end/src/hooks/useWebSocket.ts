@@ -17,7 +17,7 @@ interface UseWebSocketProps {
     onConnectionChange?: (isConnected: boolean) => void;
     onReconnectExhausted?: () => void;
     onAINewMessage?: (message: any) => void;
-    onAIError?: (message: string) => void;
+    onAIError?: (payload: { message: string; code?: string; [key: string]: any }) => void;
     onAIUserMessageSaved?: (message: any, clientId?: string, title?: string) => void;
     onAIStreamStart?: (message: any) => void;
     onAIStreamChunk?: (payload: { messageId: string; text: string; chunk?: string; reasoningContent?: string; reasoningChunk?: string; hasMainContent?: boolean }) => void;
@@ -36,7 +36,7 @@ type OutgoingEvent =
     | { type: 'forward_message'; requestId: string; messageId: string; targetChatId: string }
     | { type: 'typing'; chatId: string; isTyping: boolean }
     | { type: 'upload_status'; chatId: string; isUploading: boolean }
-    | { type: 'ai_message'; text: string; aiChatId: string; clientId?: string; useReasoner?: boolean }
+    | { type: 'ai_message'; text: string; aiChatId: string; clientId?: string; useReasoner?: boolean; modelKey?: 'nova-flash' | 'nova-pro' }
     | { type: 'ai_stop' }
     | { type: 'ping' };
 
@@ -279,7 +279,10 @@ export function useWebSocket({
                 } else if (data.type === 'ai_user_message_saved') {
                     onAIUserMessageSavedRef.current?.(data.message, data.clientId, data.title);
                 } else if (data.type === 'ai_error') {
-                    onAIErrorRef.current?.(String(data.message || 'خطا در سرویس هوش مصنوعی'));
+                    onAIErrorRef.current?.({
+                        ...data,
+                        message: String(data.message || 'خطا در سرویس هوش مصنوعی'),
+                    });
                 } else if (data.type === 'block_status_changed') {
                     window.dispatchEvent(new Event('novaroom:block_status_changed'));
                 } else if (data.type === 'pong') {
@@ -401,10 +404,10 @@ export function useWebSocket({
     );
 
     const sendAIMessage = useCallback(
-        (text: string, aiChatId: string, clientId?: string, useReasoner = false) => {
+        (text: string, aiChatId: string, clientId?: string, useReasoner = false, modelKey: 'nova-flash' | 'nova-pro' = 'nova-flash') => {
             if (typeof text !== 'string' || !text.trim() || text.length > 3000) return false;
             if (!aiChatId) return false;
-            return send({ type: 'ai_message', text, aiChatId, clientId, useReasoner: Boolean(useReasoner) });
+            return send({ type: 'ai_message', text, aiChatId, clientId, useReasoner: Boolean(useReasoner), modelKey });
         },
         [send]
     );
