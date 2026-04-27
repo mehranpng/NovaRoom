@@ -1855,7 +1855,7 @@ export function App() {
             setTemporaryAIChat(true);
         } catch (error) {
             console.error('Failed to create temporary AI chat', error);
-            notify({ message: 'ساخت گفتوگوی موقت انجام نشد.', type: 'error' });
+            notify({ message: 'ساخت گفتگوی موقت انجام نشد.', type: 'error' });
         }
     }, []);
 
@@ -1884,14 +1884,14 @@ export function App() {
             }
         } catch (error) {
             console.error('Failed to delete AI chat', error);
-            alert('حذف گفتوگو با خطا مواجه شد');
+            alert('حذف گفتگو با خطا مواجه شد');
         }
     }, [activeAIChatId]);
 
     const handleRenameAIChat = useCallback(async (chatId: string, nextTitle: string): Promise<boolean> => {
         const trimmed = nextTitle.trim();
         if (!trimmed) {
-            notify({ message: 'عنوان گفتوگو نمی‌تواند خالی باشد.', type: 'info' });
+            notify({ message: 'عنوان گفتگو نمی‌تواند خالی باشد.', type: 'info' });
             return false;
         }
         try {
@@ -1903,7 +1903,7 @@ export function App() {
             return true;
         } catch (error) {
             console.error('Failed to rename AI chat', error);
-            notify({ message: 'تغییر نام گفتوگو انجام نشد.', type: 'error' });
+            notify({ message: 'تغییر نام گفتگو انجام نشد.', type: 'error' });
             return false;
         }
     }, []);
@@ -1919,8 +1919,8 @@ export function App() {
         if (!currentUser) return false;
 
         if (aiResponding && aiRespondingChatId && activeAIChatId !== aiRespondingChatId) {
-            const respondingTitle = aiChats.find((c) => c.id === aiRespondingChatId)?.title || 'گفتوگوی در حال پاسخ';
-            notify({ message: `گفتوگوی «${respondingTitle}» هنوز تکمیل نشده است.`, type: 'info' });
+            const respondingTitle = aiChats.find((c) => c.id === aiRespondingChatId)?.title || 'گفتگوی در حال پاسخ';
+            notify({ message: `گفتگوی «${respondingTitle}» هنوز تکمیل نشده است.`, type: 'info' });
             return false;
         }
 
@@ -1938,7 +1938,7 @@ export function App() {
                 targetChatId = created.id;
             } catch (error) {
                 console.error('Failed to create AI chat', error);
-                alert('ساخت گفتوگوی جدید با خطا مواجه شد');
+                alert('ساخت گفتگوی جدید با خطا مواجه شد');
                 setAITyping(false);
                 setAIResponding(false);
                 setAIReasoningPending(false);
@@ -1952,7 +1952,7 @@ export function App() {
         const currentAIChatMessages = aiMessagesByChat[finalChatId] || [];
         const sentCount = currentAIChatMessages.filter((m) => m.senderId === currentUser.chatId).length;
         if (sentCount >= 30) {
-            alert('حداکثر 30 پیام در هر گفتوگو مجاز است. لطفاً یک چت جدید باز کنید.');
+            alert('حداکثر 30 پیام در هر گفتگو مجاز است. لطفاً یک چت جدید باز کنید.');
             return false;
         }
         const clientId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

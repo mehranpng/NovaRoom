@@ -87,10 +87,7 @@ async def generate_ai_response_stream(
                 [
                     {
                         "role": "system",
-                        "content": (
-                            "خلاصه کلی گفتوگو های قبلی: "
-                            f"{summary_context}"
-                        ),
+                        "content": ("خلاصه کلی گفتگو های قبلی: " f"{summary_context}"),
                     }
                 ]
                 if summary_context
@@ -133,11 +130,17 @@ async def generate_ai_response_stream(
                 }
 
         if not has_content and not has_reasoning:
-            yield {"content": "متأسفم، نتوانستم پاسخی تولید کنم.", "reasoning_content": ""}
+            yield {
+                "content": "متأسفم، نتوانستم پاسخی تولید کنم.",
+                "reasoning_content": "",
+            }
 
     except Exception as e:
         print(f"AI generation error: {e}")
-        yield {"content": "متأسفم، خطایی رخ داده است. لطفاً دوباره تلاش کنید.", "reasoning_content": ""}
+        yield {
+            "content": "متأسفم، خطایی رخ داده است. لطفاً دوباره تلاش کنید.",
+            "reasoning_content": "",
+        }
 
 
 async def generate_conversation_summary(
@@ -210,7 +213,7 @@ async def generate_chat_title(first_user_message: str) -> str:
     try:
         raw_message = (first_user_message or "").strip()
         if not raw_message:
-            return "گفتوگوی جدید"
+            return "گفتگوی جدید"
 
         title_messages = [
             {
@@ -241,8 +244,8 @@ async def generate_chat_title(first_user_message: str) -> str:
         parsed = json.loads(payload)
         title = str(parsed.get("title") or "").strip()
         if not title:
-            return "گفتوگوی جدید"
+            return "گفتگوی جدید"
         return title[:56]
     except Exception as e:
         print(f"Title generation error: {e}")
-        return "گفتوگوی جدید"
+        return "گفتگوی جدید"

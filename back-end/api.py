@@ -134,17 +134,24 @@ FILE_MAGIC = b"NCF1"
 FILE_TEXT_PREFIX = "ncf:v1:"
 LEGACY_BOOTSTRAP_TOKEN = "__bootstrap_migration__"
 
+
 def normalize_ai_model_key(value: str) -> str:
     key = str(value or "nova-flash").strip().lower()
     return "nova-pro" if key == "nova-pro" else "nova-flash"
 
 
 def ai_model_name_from_key(model_key: str) -> str:
-    return "deepseek-v4-pro" if normalize_ai_model_key(model_key) == "nova-pro" else "deepseek-v4-flash"
+    return (
+        "deepseek-v4-pro"
+        if normalize_ai_model_key(model_key) == "nova-pro"
+        else "deepseek-v4-flash"
+    )
 
 
 def ai_model_label_from_key(model_key: str) -> str:
-    return "Nova Pro" if normalize_ai_model_key(model_key) == "nova-pro" else "Nova Flash"
+    return (
+        "Nova Pro" if normalize_ai_model_key(model_key) == "nova-pro" else "Nova Flash"
+    )
 
 
 def utc_now() -> datetime:
@@ -2805,8 +2812,14 @@ async def forward_message(
         )
         reasoning_enabled = bool(original_msg.get("reasoningEnabled", False))
         reasoning_duration_sec = int(original_msg.get("reasoningDurationSec", 0) or 0)
-        ai_model_key = normalize_ai_model_key(original_msg.get("aiModelKey") or "nova-flash") if ai_role == "assistant" else None
-        ai_model_name = ai_model_label_from_key(ai_model_key) if ai_role == "assistant" else None
+        ai_model_key = (
+            normalize_ai_model_key(original_msg.get("aiModelKey") or "nova-flash")
+            if ai_role == "assistant"
+            else None
+        )
+        ai_model_name = (
+            ai_model_label_from_key(ai_model_key) if ai_role == "assistant" else None
+        )
     else:
         existing_forwarded_from = (
             original_msg.get("forwardedFrom")
@@ -2869,8 +2882,14 @@ async def forward_message(
         )
         reasoning_enabled = bool(original_msg.get("reasoningEnabled", False))
         reasoning_duration_sec = int(original_msg.get("reasoningDurationSec", 0) or 0)
-        ai_model_key = normalize_ai_model_key(original_msg.get("aiModelKey") or "") if original_msg.get("aiModelKey") else None
-        ai_model_name = str(original_msg.get("aiModelName") or "").strip() or (ai_model_label_from_key(ai_model_key) if ai_model_key else None)
+        ai_model_key = (
+            normalize_ai_model_key(original_msg.get("aiModelKey") or "")
+            if original_msg.get("aiModelKey")
+            else None
+        )
+        ai_model_name = str(original_msg.get("aiModelName") or "").strip() or (
+            ai_model_label_from_key(ai_model_key) if ai_model_key else None
+        )
 
     # Create forwarded message
     target_scope = f"chat:{target_chat_id}"
@@ -3230,7 +3249,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 chat_update: Dict[str, Any] = {"updatedAt": utc_now()}
                 if is_temporary_chat:
                     chat_update["title"] = encrypt_scoped_text(
-                        "گفتوگوی موقت", "", f"ai-chat-meta:{ai_chat_id}"
+                        "گفتگوی موقت", "", f"ai-chat-meta:{ai_chat_id}"
                     )
                     chat_update["titleEncrypted"] = True
                 elif should_generate_title and not stopped:
@@ -3238,7 +3257,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     if (
                         isinstance(candidate_title, str)
                         and candidate_title.strip()
-                        and candidate_title.strip() != "گفتوگوی جدید"
+                        and candidate_title.strip() != "گفتگوی جدید"
                     ):
                         generated_title = candidate_title.strip()[:56]
                         chat_update["title"] = encrypt_scoped_text(
@@ -3888,7 +3907,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             chat_id,
                             {
                                 "type": "ai_error",
-                                "message": "گفتوگوی انتخاب‌شده معتبر نیست.",
+                                "message": "گفتگوی انتخاب‌شده معتبر نیست.",
                             },
                         )
                         continue
@@ -3901,7 +3920,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         chat_id,
                         {
                             "type": "ai_error",
-                            "message": "حداکثر 30 پیام در هر گفتوگو مجاز است. لطفاً گفتوگوی جدید باز کنید.",
+                            "message": "حداکثر 30 پیام در هر گفتگو مجاز است. لطفاً گفتگوی جدید باز کنید.",
                         },
                     )
                     continue
@@ -4126,7 +4145,7 @@ async def get_ai_chats(current_user: dict = Depends(get_current_user)):
                     session_token,
                     f"ai-chat-meta:{str(row['_id'])}",
                 )
-                or "گفتوگوی جدید"
+                or "گفتگوی جدید"
             ),
             "summary": decrypt_with_fallback(
                 row.get("summary") or "",
@@ -4175,7 +4194,7 @@ async def create_ai_chat(
     }
     inserted = await cl_ai_chats.insert_one(chat_doc)
     scope = f"ai-chat-meta:{str(inserted.inserted_id)}"
-    plain_title = "گفتوگوی موقت" if is_temporary else "گفتوگوی جدید"
+    plain_title = "گفتگوی موقت" if is_temporary else "گفتگوی جدید"
     await cl_ai_chats.update_one(
         {"_id": inserted.inserted_id},
         {
@@ -4403,7 +4422,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 chat_update: Dict[str, Any] = {"updatedAt": utc_now()}
                 if is_temporary_chat:
                     chat_update["title"] = encrypt_scoped_text(
-                        "گفتوگوی موقت", "", f"ai-chat-meta:{ai_chat_id}"
+                        "گفتگوی موقت", "", f"ai-chat-meta:{ai_chat_id}"
                     )
                     chat_update["titleEncrypted"] = True
                 elif should_generate_title and not stopped:
@@ -4411,7 +4430,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     if (
                         isinstance(candidate_title, str)
                         and candidate_title.strip()
-                        and candidate_title.strip() != "گفتوگوی جدید"
+                        and candidate_title.strip() != "گفتگوی جدید"
                     ):
                         generated_title = candidate_title.strip()[:56]
                         chat_update["title"] = encrypt_scoped_text(
@@ -4491,7 +4510,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                             user_id,
                             {
                                 "type": "ai_error",
-                                "message": "گفتوگوی انتخاب‌شده معتبر نیست.",
+                                "message": "گفتگوی انتخاب‌شده معتبر نیست.",
                             },
                         )
                         continue
@@ -4504,7 +4523,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                         user_id,
                         {
                             "type": "ai_error",
-                            "message": "حداکثر 30 پیام در هر گفتوگو مجاز است. لطفاً گفتوگوی جدید باز کنید.",
+                            "message": "حداکثر 30 پیام در هر گفتگو مجاز است. لطفاً گفتگوی جدید باز کنید.",
                         },
                     )
                     continue

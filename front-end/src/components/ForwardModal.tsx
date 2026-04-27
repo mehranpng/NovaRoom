@@ -47,9 +47,9 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward,
 
     const filteredChats = searchQuery
         ? availableChats.filter(chat =>
-              chat.otherUser?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              chat.otherUser?.username?.toLowerCase().includes(searchQuery.toLowerCase())
-          )
+            chat.otherUser?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            chat.otherUser?.username?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
         : availableChats;
 
     // Show saved messages only if no search query, always at top
@@ -74,71 +74,71 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward,
                         exit={{ y: 16, opacity: 0, scale: 0.98 }}
                         transition={{ duration: 0.2, ease: 'easeOut' }}
                     >
-                <div className="modal-header">
-                    <h2>فوروارد پیام</h2>
-                    <button className="icon-btn" onClick={onClose} type="button" aria-label="Close">
-                        <X size={20} />
-                    </button>
-                </div>
-
-                <div className="search-box">
-                    <Search size={18} />
-                    <input
-                        type="text"
-                        placeholder="جستجو در گفتوگو‌ها..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                </div>
-
-                <div className="results">
-                    {showSavedMessages && (
-                        <button
-                            key={savedMessagesChat.id}
-                            className="user-item"
-                            onClick={() => handlePickChat(savedMessagesChat.id)}
-                            type="button"
-                        >
-                            <Avatar name="" size="md" online={false} savedMessages />
-                            <div className="user-item-info">
-                                <div className="user-name" style={{ fontFamily: "'Vazir', sans-serif" }}>
-                                    {savedMessagesChat.name}
-                                </div>
-                            </div>
-                            <Bookmark size={18} style={{ color: 'var(--text-tertiary)', marginLeft: 'auto' }} />
-                        </button>
-                    )}
-
-                    {filteredChats.length === 0 && !showSavedMessages ? (
-                        <div className="no-results">
-                            {searchQuery ? 'گفتوگویی یافت نشد' : 'گفتوگوی فعالی وجود ندارد'}
+                        <div className="modal-header">
+                            <h2>فوروارد پیام</h2>
+                            <button className="icon-btn" onClick={onClose} type="button" aria-label="Close">
+                                <X size={20} />
+                            </button>
                         </div>
-                    ) : (
-                        filteredChats.map((chat) => {
-                            const user = chat.otherUser;
-                            if (!user) return null;
 
-                            return (
+                        <div className="search-box">
+                            <Search size={18} />
+                            <input
+                                type="text"
+                                placeholder="جستجو در گفتگو‌ها..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="results">
+                            {showSavedMessages && (
                                 <button
-                                    key={chat.id}
+                                    key={savedMessagesChat.id}
                                     className="user-item"
-                                    onClick={() => handlePickChat(chat.id)}
+                                    onClick={() => handlePickChat(savedMessagesChat.id)}
                                     type="button"
                                 >
-                                    <Avatar name={user.name || user.username} size="md" online={user.online} src={user.avatar} />
+                                    <Avatar name="" size="md" online={false} savedMessages />
                                     <div className="user-item-info">
-                                        <div className="user-name" style={{ fontFamily: "'Vazir', sans-serif", display: 'flex', alignItems: 'center', gap: 4 }}>
-                                            {user.name}
-                                            {user.verified && <VerifiedBadge size={14} />}
+                                        <div className="user-name" style={{ fontFamily: "'Vazir', sans-serif" }}>
+                                            {savedMessagesChat.name}
                                         </div>
-                                        <div className="user-username" style={{ fontFamily: "'Vazir', sans-serif" }}>@{user.username}</div>
                                     </div>
-                                    <MessageCircle size={18} style={{ color: 'var(--text-tertiary)', marginLeft: 'auto' }} />
+                                    <Bookmark size={18} style={{ color: 'var(--text-tertiary)', marginLeft: 'auto' }} />
                                 </button>
-                            );
-                        })
-                    )}
-                </div>
+                            )}
+
+                            {filteredChats.length === 0 && !showSavedMessages ? (
+                                <div className="no-results">
+                                    {searchQuery ? 'گفتگویی یافت نشد' : 'گفتگوی فعالی وجود ندارد'}
+                                </div>
+                            ) : (
+                                filteredChats.map((chat) => {
+                                    const user = chat.otherUser;
+                                    if (!user) return null;
+
+                                    return (
+                                        <button
+                                            key={chat.id}
+                                            className="user-item"
+                                            onClick={() => handlePickChat(chat.id)}
+                                            type="button"
+                                        >
+                                            <Avatar name={user.name || user.username} size="md" online={user.online} src={user.avatar} />
+                                            <div className="user-item-info">
+                                                <div className="user-name" style={{ fontFamily: "'Vazir', sans-serif", display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                    {user.name}
+                                                    {user.verified && <VerifiedBadge size={14} />}
+                                                </div>
+                                                <div className="user-username" style={{ fontFamily: "'Vazir', sans-serif" }}>@{user.username}</div>
+                                            </div>
+                                            <MessageCircle size={18} style={{ color: 'var(--text-tertiary)', marginLeft: 'auto' }} />
+                                        </button>
+                                    );
+                                })
+                            )}
+                        </div>
                     </motion.div>
                 </motion.div>
             )}
