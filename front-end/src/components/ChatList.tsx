@@ -413,6 +413,8 @@ export function ChatList({
     const chatActionMenuRef = useRef<HTMLDivElement | null>(null);
     const chatActionBtnRef = useRef<HTMLElement | null>(null);
     const dragHoverTimerRef = useRef<number | null>(null);
+    const dragHoverTargetRef = useRef<string | null>(null);
+    const [dragHoverChatId, setDragHoverChatId] = useState<string | null>(null);
 
     const [pinBusy, setPinBusy] = useState<Record<string, boolean>>({});
     const [actionBusy, setActionBusy] = useState<Record<string, boolean>>({});
@@ -428,15 +430,29 @@ export function ChatList({
 
     const queueDragHoverOpenChat = (chatId: string) => {
         if (!onDragHoverChat) return;
+        if (dragHoverTargetRef.current === chatId) return;
+        dragHoverTargetRef.current = chatId;
+        setDragHoverChatId(chatId);
         if (dragHoverTimerRef.current) window.clearTimeout(dragHoverTimerRef.current);
         dragHoverTimerRef.current = window.setTimeout(() => {
             onDragHoverChat(chatId);
+            dragHoverTimerRef.current = null;
         }, 140);
     };
 
     useEffect(() => () => {
         if (dragHoverTimerRef.current) window.clearTimeout(dragHoverTimerRef.current);
+        dragHoverTargetRef.current = null;
     }, []);
+
+    const clearDragHoverState = () => {
+        if (dragHoverTimerRef.current) {
+            window.clearTimeout(dragHoverTimerRef.current);
+            dragHoverTimerRef.current = null;
+        }
+        dragHoverTargetRef.current = null;
+        setDragHoverChatId(null);
+    };
 
     const confirmMeta = useMemo(() => {
         if (!confirmAction) return null;
@@ -906,7 +922,13 @@ export function ChatList({
             </div>
 
             {/* Chat List */}
-            <div className="chat-list__items" ref={chatItemsRef} style={{ position: 'relative' }}>
+            <div
+                className="chat-list__items"
+                ref={chatItemsRef}
+                style={{ position: 'relative' }}
+                onDrop={clearDragHoverState}
+                onDragEnd={clearDragHoverState}
+            >
                 {/* AI Chat - Always pinned at top */}
                 {showAIChat && (
                     <button
@@ -974,7 +996,7 @@ export function ChatList({
                                         e.preventDefault();
                                         queueDragHoverOpenChat(chat.id);
                                     }}
-                                    className={cx('chat-list__item', isActive && 'chat-list__item--active')}
+                                    className={cx('chat-list__item', isActive && 'chat-list__item--active', dragHoverChatId === chat.id && 'chat-list__item--drag-hover')}
                                 >
                                     <Avatar name="" size="md" savedMessages={true} />
                                     <div className="chat-list__item-content">
@@ -1049,7 +1071,8 @@ export function ChatList({
                                 className={cx(
                                     'chat-list__item',
                                     isActive && 'chat-list__item--active',
-                                    pinned && 'chat-list__item--pinned'
+                                    pinned && 'chat-list__item--pinned',
+                                    dragHoverChatId === chat.id && 'chat-list__item--drag-hover'
                                 )}
                             >
                                 <Avatar

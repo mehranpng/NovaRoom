@@ -671,6 +671,14 @@ body,
     background: #1e3a8a !important;
 }
 
+.chat-list__item--drag-hover {
+    background: rgba(37, 99, 235, 0.16) !important;
+}
+
+.dark-mode .chat-list__item--drag-hover {
+    background: rgba(59, 130, 246, 0.24) !important;
+}
+
 .chat-list__item--ai .chat-list__item-name,
 .chat-list__item--ai .chat-list__item-text {
     color: var(--text-primary);

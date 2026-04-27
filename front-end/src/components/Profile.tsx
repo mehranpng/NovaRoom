@@ -5,7 +5,7 @@ import type { User } from '../types';
 import { Avatar, getAvatarDisplayUrl } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { cx } from '../utils/cx';
-import { API_BASE_URL, apiFetch } from '../config/api';
+import { apiFetch } from '../config/api';
 import { ImageMediaViewer } from './ImageMediaViewer';
 import { encryptFileBytesClientSide } from '../utils/e2ee';
 
@@ -253,7 +253,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                 {/* Avatar & Name Section */}
                 <div className="profile__avatar-section">
                     <button type="button" onClick={openAvatarViewer} style={{ background: 'none', border: 'none', padding: 0, cursor: user.avatar ? 'zoom-in' : 'default' }}>
-                        <Avatar name={user.name} size="xl" src={user.avatar ? `${API_BASE_URL}/files/${user.avatar}` : ''} />
+                        <Avatar name={user.name} size="xl" src={user.avatar || ''} />
                     </button>
                     <div className="profile__avatar-actions">
                         <label className="profile__avatar-btn" aria-disabled={updatingAvatar}>
