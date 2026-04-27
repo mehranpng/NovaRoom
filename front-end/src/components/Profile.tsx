@@ -1,6 +1,6 @@
 import { ArrowLeft, Copy, Check, Pencil, X, Save, Calendar, Upload, Trash2, Link2, Users } from 'lucide-react';
 import { motion, type Variants } from "framer-motion";
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { User } from '../types';
 import { Avatar, getAvatarDisplayUrl } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';

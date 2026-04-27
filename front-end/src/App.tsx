@@ -138,6 +138,8 @@ export function App() {
     const pendingForwardSendHintsRef = useRef<Record<string, number>>({});
     const aiStreamStartedRef = useRef<Record<string, boolean>>({});
     const aiPendingStreamMetaRef = useRef<Record<string, Message>>({});
+    const dragHoverChatTimerRef = useRef<number | null>(null);
+    const dragHoverPendingChatIdRef = useRef<string | null>(null);
 
     const chatsRef = useRef<Chat[]>([]);
     useEffect(() => {
@@ -1200,6 +1202,25 @@ export function App() {
         loadChats(false);
     }, [loadChats, sendSeen, messagesLoadedOnce, currentUser, navigate, fetchPagedMessages]);
 
+    const handleDragHoverChat = useCallback((chatId: string) => {
+        if (!chatId) return;
+        if (dragHoverPendingChatIdRef.current === chatId) return;
+        dragHoverPendingChatIdRef.current = chatId;
+        if (dragHoverChatTimerRef.current) {
+            window.clearTimeout(dragHoverChatTimerRef.current);
+        }
+        dragHoverChatTimerRef.current = window.setTimeout(() => {
+            void handleSelectChat(chatId);
+            dragHoverPendingChatIdRef.current = null;
+        }, 120);
+    }, [handleSelectChat]);
+
+    useEffect(() => () => {
+        if (dragHoverChatTimerRef.current) {
+            window.clearTimeout(dragHoverChatTimerRef.current);
+        }
+    }, []);
+
     const loadOlderMessages = useCallback(async (chatId: string) => {
         const state = messageRangeState[chatId];
         if (!state?.hasOlder || state.loadingOlder || !state.oldestCursor) return;
@@ -2077,6 +2098,7 @@ export function App() {
                             onOpenSavedMessages={handleOpenSavedMessages}
                             onOpenDevices={handleOpenDevices}
                             onReconnectNow={reconnectNow}
+                            onDragHoverChat={handleDragHoverChat}
                             loading={isInitialChatsLoad}
                         />
                     </div>

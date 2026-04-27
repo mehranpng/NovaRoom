@@ -1,5 +1,5 @@
 import { Search, MessageCirclePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, Laptop, ChevronDown, AlignJustify, Trash2, RefreshCw, Pin, PinOff, MessageSquarePlus, Palette, Monitor } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Chat, User } from '../types';
 import { Avatar } from './Avatar';
@@ -24,6 +24,7 @@ interface ChatListProps {
     onOpenSavedMessages: () => void;
     onOpenDevices: () => void;
     onReconnectNow: () => void;
+    onDragHoverChat?: (chatId: string) => void;
     loading?: boolean;
 }
 
@@ -361,6 +362,7 @@ export function ChatList({
     onOpenSavedMessages,
     onOpenDevices,
     onReconnectNow,
+    onDragHoverChat,
     loading = false,
 }: ChatListProps) {
     const [searchQuery, setSearchQuery] = useState('');
@@ -410,12 +412,31 @@ export function ChatList({
     const chatItemsRef = useRef<HTMLDivElement | null>(null);
     const chatActionMenuRef = useRef<HTMLDivElement | null>(null);
     const chatActionBtnRef = useRef<HTMLElement | null>(null);
+    const dragHoverTimerRef = useRef<number | null>(null);
 
     const [pinBusy, setPinBusy] = useState<Record<string, boolean>>({});
     const [actionBusy, setActionBusy] = useState<Record<string, boolean>>({});
 
     const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
     const confirmOverlayRef = useRef<HTMLDivElement | null>(null);
+
+    const isFileDragEvent = (e: ReactDragEvent) => {
+        const types = e.dataTransfer?.types;
+        if (!types) return false;
+        return Array.from(types).includes('Files');
+    };
+
+    const queueDragHoverOpenChat = (chatId: string) => {
+        if (!onDragHoverChat) return;
+        if (dragHoverTimerRef.current) window.clearTimeout(dragHoverTimerRef.current);
+        dragHoverTimerRef.current = window.setTimeout(() => {
+            onDragHoverChat(chatId);
+        }, 140);
+    };
+
+    useEffect(() => () => {
+        if (dragHoverTimerRef.current) window.clearTimeout(dragHoverTimerRef.current);
+    }, []);
 
     const confirmMeta = useMemo(() => {
         if (!confirmAction) return null;
@@ -944,6 +965,15 @@ export function ChatList({
                                 <button
                                     key={chat.id}
                                     onClick={() => onSelectChat(chat.id)}
+                                    onDragEnter={(e) => {
+                                        if (!isFileDragEvent(e)) return;
+                                        queueDragHoverOpenChat(chat.id);
+                                    }}
+                                    onDragOver={(e) => {
+                                        if (!isFileDragEvent(e)) return;
+                                        e.preventDefault();
+                                        queueDragHoverOpenChat(chat.id);
+                                    }}
                                     className={cx('chat-list__item', isActive && 'chat-list__item--active')}
                                 >
                                     <Avatar name="" size="md" savedMessages={true} />
@@ -1007,6 +1037,15 @@ export function ChatList({
                             <button
                                 key={chat.id}
                                 onClick={() => onSelectChat(chat.id)}
+                                onDragEnter={(e) => {
+                                    if (!isFileDragEvent(e)) return;
+                                    queueDragHoverOpenChat(chat.id);
+                                }}
+                                onDragOver={(e) => {
+                                    if (!isFileDragEvent(e)) return;
+                                    e.preventDefault();
+                                    queueDragHoverOpenChat(chat.id);
+                                }}
                                 className={cx(
                                     'chat-list__item',
                                     isActive && 'chat-list__item--active',
