@@ -79,7 +79,7 @@ else:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 30
 SESSION_INACTIVITY_EXPIRE_DAYS = 3
-MAX_ACTIVE_SESSIONS = 10
+MAX_ACTIVE_SESSIONS = 20
 
 client = AsyncIOMotorClient(os.getenv("MONGO_DB"))
 db = client["Messenger2"]
@@ -623,6 +623,29 @@ def normalize_device_name(value: Any) -> str:
     return text[:120]
 
 
+def normalize_ip_address(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return text[:64]
+
+
+def extract_client_ip(request: Optional[Request]) -> str:
+    if not request:
+        return ""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        first = str(forwarded).split(",")[0].strip()
+        if first:
+            return normalize_ip_address(first)
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return normalize_ip_address(real_ip)
+    client = getattr(request, "client", None)
+    host = getattr(client, "host", "") if client else ""
+    return normalize_ip_address(host)
+
+
 def _normalize_session_list(user_doc: dict) -> List[dict]:
     login = (user_doc or {}).get("login") or {}
     sessions = login.get("sessions") or []
@@ -672,13 +695,16 @@ def _normalize_session_list(user_doc: dict) -> List[dict]:
                 "lastUsedAt": last_used_dt,
                 "expiresAt": expires_at,
                 "deviceName": normalize_device_name(item.get("deviceName")),
+                "ipAddress": normalize_ip_address(item.get("ipAddress")),
             }
         )
     valid_sessions.sort(key=lambda s: dt_to_epoch_ms(s.get("createdAt")), reverse=True)
     return valid_sessions[:MAX_ACTIVE_SESSIONS]
 
 
-async def attach_session_to_user(chat_id: str, token: str, device_name: str = ""):
+async def attach_session_to_user(
+    chat_id: str, token: str, device_name: str = "", ip_address: str = ""
+):
     user = await cl_users.find_one({"chatId": chat_id}, {"login": 1})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
@@ -697,6 +723,7 @@ async def attach_session_to_user(chat_id: str, token: str, device_name: str = ""
             "lastUsedAt": utc_now(),
             "expiresAt": expires_at,
             "deviceName": normalize_device_name(device_name),
+            "ipAddress": normalize_ip_address(ip_address),
         },
     )
     deduped: List[dict] = []
@@ -819,6 +846,7 @@ def serialize_session_for_client(
     return {
         "tokenHash": token_hash,
         "deviceName": normalize_device_name(session.get("deviceName")) or None,
+        "ipAddress": normalize_ip_address(session.get("ipAddress")) or None,
         "createdAt": dt_to_epoch_ms(session.get("createdAt")),
         "lastUsedAt": dt_to_epoch_ms(session.get("lastUsedAt")),
         "current": bool(current_token_hash and token_hash == current_token_hash),
@@ -1315,7 +1343,9 @@ async def complete_registration(req: CompleteRegistrationRequest, request: Reque
     device_name = normalize_device_name(req.deviceName) or normalize_device_name(
         request.headers.get("x-device-name")
     )
-    await attach_session_to_user(chat_id, token, device_name)
+    await attach_session_to_user(
+        chat_id, token, device_name, extract_client_ip(request)
+    )
 
     return {
         "token": token,
@@ -1402,7 +1432,9 @@ async def login(req: LoginRequest, request: Request):
     device_name = normalize_device_name(req.deviceName) or normalize_device_name(
         request.headers.get("x-device-name")
     )
-    await attach_session_to_user(user["chatId"], token, device_name)
+    await attach_session_to_user(
+        user["chatId"], token, device_name, extract_client_ip(request)
+    )
 
     return {
         "token": token,

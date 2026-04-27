@@ -1319,6 +1319,7 @@ export function ChatRoom({
 
     // Restore scroll after coming back from ContactInfo / forward-source info / member info / members list.
     useEffect(() => {
+        if (!restoringFromInfoRef.current) return;
         if (showContactInfo || forwardSourceUser || viewingMemberId || showMembersList) return;
         const mem = scrollMemoryRef.current[chatId];
         if (!mem) return;
@@ -1356,6 +1357,7 @@ export function ChatRoom({
     }, [showContactInfo, forwardSourceUser, viewingMemberId, showMembersList, chatId]);
 
     useEffect(() => {
+        if (!restoringFromInfoRef.current) return;
         if (showContactInfo || forwardSourceUser || viewingMemberId || showMembersList) return;
         if (!restoreBottomAfterInfoRef.current) return;
         const timers = [60, 160, 320].map((delay) => window.setTimeout(() => {
@@ -1485,7 +1487,6 @@ export function ChatRoom({
         if (!container) return;
         const currentTop = container.scrollTop;
         const lastTop = lastScrollTopRef.current;
-        const scrollingUp = currentTop < lastTop - 1;
         const scrollingDown = currentTop > lastTop + 1;
         lastScrollTopRef.current = currentTop;
 
@@ -1523,7 +1524,7 @@ export function ChatRoom({
         // keep memory fresh (in-memory only)
         saveScroll(chatId);
 
-        if (container.scrollTop <= 48 && scrollingUp && hasOlderMessages && !loadingOlderMessages && !localLoadingOlder) {
+        if (container.scrollTop <= 56 && hasOlderMessages && !loadingOlderMessages && !localLoadingOlder) {
             pendingRangeLoadTypeRef.current = 'older';
             pendingOlderAdjustRef.current = { prevHeight: container.scrollHeight, prevTop: container.scrollTop };
             const containerRect = container.getBoundingClientRect();
@@ -1621,19 +1622,25 @@ export function ChatRoom({
         setHideScrollBtnUntilBottom(true);
         setNewMsgCount(0);
         setShowScrollBtn(false);
-        scrollToBottom(true);
-        if (onJumpToLatestMessages) {
-            void Promise.resolve(onJumpToLatestMessages(chatId));
-        } else if (hasNewerMessages && onSelectChat) {
-            void Promise.resolve(onSelectChat(chatId));
-        } else if (hasNewerMessages && onLoadNewerMessages) {
-            void Promise.resolve(onLoadNewerMessages(chatId));
+        const container = messagesContainerRef.current;
+        const targetBottom = container ? Math.max(0, container.scrollHeight - container.clientHeight) : 0;
+        if (container) {
+            markProgrammaticScroll();
+            container.scrollTo({ top: targetBottom, behavior: 'smooth' });
+        } else {
+            scrollToBottom(true);
         }
-        requestAnimationFrame(() => {
-            window.setTimeout(() => {
-                if (computeNearBottom()) setHideScrollBtnUntilBottom(false);
-            }, 450);
-        });
+        if (onJumpToLatestMessages) {
+            await Promise.resolve(onJumpToLatestMessages(chatId));
+        } else if (hasNewerMessages && onSelectChat) {
+            await Promise.resolve(onSelectChat(chatId));
+        } else if (hasNewerMessages && onLoadNewerMessages) {
+            await Promise.resolve(onLoadNewerMessages(chatId));
+        }
+        scrollToBottom(true);
+        window.setTimeout(() => {
+            if (computeNearBottom()) setHideScrollBtnUntilBottom(false);
+        }, 320);
     };
 
     const submit = () => {

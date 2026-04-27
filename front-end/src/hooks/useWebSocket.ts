@@ -85,6 +85,7 @@ export function useWebSocket({
     const pendingRequestsRef = useRef<Map<string, { resolve: (data: any) => void; reject: (error: Error) => void; timeoutId: number }>>(new Map());
     const requestCounterRef = useRef(0);
     const hiddenDisconnectRef = useRef(false);
+    const offlineTimerRef = useRef<number | null>(null);
 
     const onNewMessageRef = useRef(onNewMessage);
     const onMessageEditedRef = useRef(onMessageEdited);
@@ -132,6 +133,13 @@ export function useWebSocket({
         if (reconnectTimerRef.current != null) {
             window.clearTimeout(reconnectTimerRef.current);
             reconnectTimerRef.current = null;
+        }
+    };
+
+    const clearOfflineTimer = () => {
+        if (offlineTimerRef.current != null) {
+            window.clearTimeout(offlineTimerRef.current);
+            offlineTimerRef.current = null;
         }
     };
 
@@ -530,6 +538,7 @@ export function useWebSocket({
         };
 
         const forceOffline = () => {
+            clearOfflineTimer();
             hiddenDisconnectRef.current = true;
             notifyPresenceOffline();
             shouldReconnectRef.current = false;
@@ -542,8 +551,9 @@ export function useWebSocket({
         };
 
         const restoreOnline = () => {
-            if (document.visibilityState !== 'visible' || !document.hasFocus()) return;
-            if (!hiddenDisconnectRef.current) return;
+            clearOfflineTimer();
+            if (document.visibilityState !== 'visible') return;
+            if (!hiddenDisconnectRef.current && socketRef.current?.readyState === WebSocket.OPEN) return;
             hiddenDisconnectRef.current = false;
             shouldReconnectRef.current = true;
             reconnectAttemptsRef.current = 0;
@@ -552,15 +562,22 @@ export function useWebSocket({
         };
 
         const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible' && document.hasFocus()) {
+            if (document.visibilityState === 'visible') {
                 restoreOnline();
                 return;
             }
-            forceOffline();
+            clearOfflineTimer();
+            offlineTimerRef.current = window.setTimeout(() => {
+                forceOffline();
+            }, 350);
         };
 
         const handleWindowBlur = () => {
-            forceOffline();
+            clearOfflineTimer();
+            offlineTimerRef.current = window.setTimeout(() => {
+                if (document.visibilityState === 'visible') return;
+                forceOffline();
+            }, 350);
         };
 
         const handleWindowFocus = () => {
@@ -577,6 +594,7 @@ export function useWebSocket({
         window.addEventListener('pagehide', handlePageHide);
 
         return () => {
+            clearOfflineTimer();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             window.removeEventListener('blur', handleWindowBlur);
             window.removeEventListener('focus', handleWindowFocus);

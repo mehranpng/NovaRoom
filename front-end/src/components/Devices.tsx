@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 interface DeviceSession {
     tokenHash: string;
     deviceName?: string;
+    ipAddress?: string;
     current: boolean;
     lastUsedAt: number;
     createdAt: number;
@@ -156,6 +157,7 @@ export function Devices({ onBack }: DevicesProps) {
                                             <span style={{ fontSize: 12, opacity: 0.85, fontFamily: 'Vazir, sans-serif' }}>(دستگاه فعلی)</span>
                                         </p>
                                         <p className="profile__field-label">آخرین استفاده: {toPersianDigits(toJalaliTehran(currentSession.lastUsedAt))}</p>
+                                        <p className="profile__field-label">آی‌پی: {toPersianDigits(currentSession.ipAddress || '-')}</p>
                                         <p className="profile__field-label">ایجاد نشست: {toPersianDigits(toJalaliTehran(currentSession.createdAt))}</p>
                                     </div>
                                 </div>
@@ -191,6 +193,7 @@ export function Devices({ onBack }: DevicesProps) {
                                             <Laptop size={16} /> {session.deviceName || 'نامشخص'}
                                         </p>
                                         <p className="profile__field-label">آخرین استفاده: {toPersianDigits(toJalaliTehran(session.lastUsedAt))}</p>
+                                        <p className="profile__field-label">آی‌پی: {toPersianDigits(session.ipAddress || '-')}</p>
                                         <p className="profile__field-label">ایجاد نشست: {toPersianDigits(toJalaliTehran(session.createdAt))}</p>
                                     </div>
                                     <button

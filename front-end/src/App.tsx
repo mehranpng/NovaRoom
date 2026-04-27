@@ -35,11 +35,19 @@ const mergeMessages = (base: Message[], incoming: Message[], mode: 'replace' | '
     const byId = new Map<string, Message>();
     if (mode === 'replace') {
         for (const m of incoming) byId.set(m.id, m);
-        return Array.from(byId.values()).sort((a, b) => normalizeTimestamp(a.timestamp) - normalizeTimestamp(b.timestamp));
+        return Array.from(byId.values()).sort((a, b) => {
+            const tsDiff = normalizeTimestamp(a.timestamp) - normalizeTimestamp(b.timestamp);
+            if (tsDiff !== 0) return tsDiff;
+            return String(a.id || '').localeCompare(String(b.id || ''));
+        });
     }
     const combined = mode === 'prepend' ? [...incoming, ...base] : [...base, ...incoming];
     for (const m of combined) byId.set(m.id, m);
-    return Array.from(byId.values()).sort((a, b) => normalizeTimestamp(a.timestamp) - normalizeTimestamp(b.timestamp));
+    return Array.from(byId.values()).sort((a, b) => {
+        const tsDiff = normalizeTimestamp(a.timestamp) - normalizeTimestamp(b.timestamp);
+        if (tsDiff !== 0) return tsDiff;
+        return String(a.id || '').localeCompare(String(b.id || ''));
+    });
 };
 
 export function App() {
