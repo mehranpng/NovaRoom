@@ -1,12 +1,12 @@
 import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Save, Image as ImageIcon, Trash2, RotateCcw, Ban } from 'lucide-react';
 import { motion, type Variants } from "framer-motion";
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { User } from '../types';
-import { Avatar } from './Avatar';
+import { Avatar, getAvatarDisplayUrl } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { API_BASE_URL, apiFetch } from '../config/api';
 import { ImageMediaViewer } from './ImageMediaViewer';
-import { decryptAvatarBytesClientSide, decryptFileBytesClientSide, encryptFileBytesClientSide } from '../utils/e2ee';
+import { encryptFileBytesClientSide } from '../utils/e2ee';
 
 interface ContactInfoProps {
     user: User;
@@ -34,15 +34,6 @@ function resolveVerified(val: any): boolean {
 }
 function toPersianDigits(value: string | number): string {
     return String(value).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)] ?? d);
-}
-
-function resolveAvatarUrl(rawAvatar: string): string {
-    const avatar = String(rawAvatar || '').trim();
-    if (!avatar) return '';
-    if (avatar.startsWith('blob:') || avatar.startsWith('data:')) return avatar;
-    if (avatar.startsWith('http://') || avatar.startsWith('https://')) return avatar;
-    if (avatar.startsWith('/')) return `${API_BASE_URL}${avatar}`;
-    return `${API_BASE_URL}/files/${avatar}`;
 }
 
 function extractFileIdFromAvatar(rawAvatar: string): string {
@@ -78,7 +69,6 @@ export function ContactInfo({
     const [registrationLoading, setRegistrationLoading] = useState(false);
     const [openedProfileImage, setOpenedProfileImage] = useState<{ url: string; fileId: string } | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
-    const openedImageObjectUrlRef = useRef<string | null>(null);
 
     useEffect(() => {
         setCopied(false);
@@ -254,41 +244,17 @@ export function ContactInfo({
         const rawAvatar = String(user.avatar || '').trim();
         if (!rawAvatar) return;
         const fileId = extractFileIdFromAvatar(rawAvatar);
-        const avatarUrl = resolveAvatarUrl(rawAvatar);
-        const token = localStorage.getItem('token') || '';
-        if (!avatarUrl || !token || !fileId) return;
+        if (!fileId) return;
 
         try {
-            const response = await fetch(avatarUrl, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!response.ok) throw new Error('Failed to load avatar');
-            const encryptedBytes = new Uint8Array(await response.arrayBuffer());
-            let plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, 'profile_avatar_shared');
-            if (plainBytes === encryptedBytes) {
-                plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
-            }
-            const blob = new Blob([new Uint8Array(plainBytes)], { type: response.headers.get('content-type') || 'image/*' });
-            if (openedImageObjectUrlRef.current) {
-                URL.revokeObjectURL(openedImageObjectUrlRef.current);
-            }
-            const objectUrl = URL.createObjectURL(blob);
-            openedImageObjectUrlRef.current = objectUrl;
-            setOpenedProfileImage({ url: objectUrl, fileId });
+            const cachedUrl = await getAvatarDisplayUrl(rawAvatar);
+            if (!cachedUrl) return;
+            setOpenedProfileImage({ url: cachedUrl, fileId });
         } catch (e) {
             console.error(e);
             // اگر تصویر پروفایل معتبر نبود یا قابل دریافت نبود، سکوت کن.
         }
     };
-
-    useEffect(() => {
-        return () => {
-            if (openedImageObjectUrlRef.current) {
-                URL.revokeObjectURL(openedImageObjectUrlRef.current);
-                openedImageObjectUrlRef.current = null;
-            }
-        };
-    }, []);
 
     const saveGroup = async () => {
         if (!user.chatId) return;
@@ -684,13 +650,7 @@ export function ContactInfo({
                     imageUrl={openedProfileImage.url}
                     token={localStorage.getItem('token') || ''}
                     downloadFile={{ fileId: openedProfileImage.fileId, fileName: `${user.name || 'profile'}.jpg` }}
-                    onClose={() => {
-                        setOpenedProfileImage(null);
-                        if (openedImageObjectUrlRef.current) {
-                            URL.revokeObjectURL(openedImageObjectUrlRef.current);
-                            openedImageObjectUrlRef.current = null;
-                        }
-                    }}
+                    onClose={() => setOpenedProfileImage(null)}
                 />
             )}
         </motion.div>

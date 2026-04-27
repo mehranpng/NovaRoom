@@ -129,6 +129,12 @@ async function fetchAvatar(src: string): Promise<string> {
   return promise;
 }
 
+export const getAvatarDisplayUrl = async (src: string): Promise<string> => {
+  const key = String(src || '').trim();
+  if (!key) return '';
+  return fetchAvatar(key);
+};
+
 export function Avatar({ name, size = 'md', online, savedMessages = false, src = '' }: AvatarProps) {
   const [resolvedSrc, setResolvedSrc] = useState<string>(() => {
     if (!src) return '';

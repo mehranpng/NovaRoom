@@ -1,13 +1,13 @@
 import { ArrowLeft, Copy, Check, Pencil, X, Save, Calendar, Upload, Trash2, Link2, Users } from 'lucide-react';
 import { motion, type Variants } from "framer-motion";
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { User } from '../types';
-import { Avatar } from './Avatar';
+import { Avatar, getAvatarDisplayUrl } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { cx } from '../utils/cx';
 import { API_BASE_URL, apiFetch } from '../config/api';
 import { ImageMediaViewer } from './ImageMediaViewer';
-import { decryptAvatarBytesClientSide, decryptFileBytesClientSide, encryptFileBytesClientSide } from '../utils/e2ee';
+import { encryptFileBytesClientSide } from '../utils/e2ee';
 
 interface ProfileProps {
     user: User;
@@ -34,7 +34,6 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
     const [updatingAvatar, setUpdatingAvatar] = useState(false);
     const [ownedGroups, setOwnedGroups] = useState<OwnedGroup[]>([]);
     const [openedProfileImage, setOpenedProfileImage] = useState<{ url: string; fileId: string } | null>(null);
-    const openedImageObjectUrlRef = useRef<string | null>(null);
 
     const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
     const [usernameHint, setUsernameHint] = useState<string>('');
@@ -145,15 +144,6 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
         loadOwnedGroups();
     }, []);
 
-    useEffect(() => {
-        return () => {
-            if (openedImageObjectUrlRef.current) {
-                URL.revokeObjectURL(openedImageObjectUrlRef.current);
-                openedImageObjectUrlRef.current = null;
-            }
-        };
-    }, []);
-
     const updateAvatar = async (avatarValue: string) => {
         try {
             setUpdatingAvatar(true);
@@ -199,24 +189,10 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
     const openAvatarViewer = async () => {
         const fileId = String(user.avatar || '').trim();
         if (!fileId) return;
-        const token = localStorage.getItem('token') || '';
-        if (!token) return;
         try {
-            const response = await fetch(`${API_BASE_URL}/files/${fileId}`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!response.ok) return;
-            const encryptedBytes = new Uint8Array(await response.arrayBuffer());
-            let plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, 'profile_avatar_shared');
-            if (plainBytes === encryptedBytes) {
-                plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
-            }
-            const blob = new Blob([new Uint8Array(plainBytes)], { type: response.headers.get('content-type') || 'image/*' });
-            if (!blob || blob.size === 0) return;
-            if (openedImageObjectUrlRef.current) URL.revokeObjectURL(openedImageObjectUrlRef.current);
-            const objectUrl = URL.createObjectURL(blob);
-            openedImageObjectUrlRef.current = objectUrl;
-            setOpenedProfileImage({ url: objectUrl, fileId });
+            const cachedUrl = await getAvatarDisplayUrl(fileId);
+            if (!cachedUrl) return;
+            setOpenedProfileImage({ url: cachedUrl, fileId });
         } catch (error) {
             console.debug('Profile avatar preview skipped:', error);
         }
@@ -493,13 +469,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                     imageUrl={openedProfileImage.url}
                     token={localStorage.getItem('token') || ''}
                     downloadFile={{ fileId: openedProfileImage.fileId, fileName: `${user.name || 'profile'}.jpg` }}
-                    onClose={() => {
-                        setOpenedProfileImage(null);
-                        if (openedImageObjectUrlRef.current) {
-                            URL.revokeObjectURL(openedImageObjectUrlRef.current);
-                            openedImageObjectUrlRef.current = null;
-                        }
-                    }}
+                    onClose={() => setOpenedProfileImage(null)}
                 />
             )}
         </motion.div >

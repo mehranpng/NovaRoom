@@ -156,6 +156,7 @@ const xorStream = async (data: Uint8Array, key: Uint8Array, nonce: Uint8Array): 
     const out = new Uint8Array(data.length);
     let counter = 0;
     let idx = 0;
+    let iterationsSinceYield = 0;
 
     while (idx < data.length) {
         const counterBytes = new Uint8Array(8);
@@ -172,6 +173,13 @@ const xorStream = async (data: Uint8Array, key: Uint8Array, nonce: Uint8Array): 
             idx += 1;
         }
         counter += 1;
+        iterationsSinceYield += 1;
+        if (iterationsSinceYield >= 48) {
+            iterationsSinceYield = 0;
+            await new Promise<void>((resolve) => {
+                window.setTimeout(resolve, 0);
+            });
+        }
     }
 
     return out;

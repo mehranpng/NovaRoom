@@ -448,6 +448,8 @@ export function ChatRoom({
     const isAtBottomRef = useRef(true);
 
     const prevLenRef = useRef(0);
+    const prevFirstMessageIdRef = useRef<string | null>(null);
+    const prevLastMessageIdRef = useRef<string | null>(null);
     const pendingOlderAdjustRef = useRef<{ prevHeight: number; prevTop: number } | null>(null);
     const pendingOlderAnchorRef = useRef<{ messageId: string; top: number } | null>(null);
     const pendingRangeLoadTypeRef = useRef<'older' | 'newer' | null>(null);
@@ -1289,6 +1291,8 @@ export function ChatRoom({
         pendingOlderAnchorRef.current = null;
         pendingRangeLoadTypeRef.current = null;
         lastScrollTopRef.current = 0;
+        prevFirstMessageIdRef.current = messages[0]?.id || null;
+        prevLastMessageIdRef.current = messages[messages.length - 1]?.id || null;
     }, [chatId]);
 
     // When opening a chat with unread messages, compute anchor once for this open session.
@@ -1305,15 +1309,6 @@ export function ChatRoom({
         if (loading) return;
         if (messages.length === 0) return;
         settleToBottomIfNeeded();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [chatId, loading, messages.length, displayUnreadCount]);
-
-    useEffect(() => {
-        if (loading) return;
-        if (messages.length === 0) return;
-        const delays = [0, 80, 180, 350, 700];
-        const timers = delays.map((d) => window.setTimeout(() => settleToBottomIfNeeded(), d));
-        return () => { timers.forEach((t) => window.clearTimeout(t)); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId, loading, messages.length, displayUnreadCount]);
 
@@ -1429,6 +1424,16 @@ export function ChatRoom({
         }
 
         const added = messages.length - prevLenRef.current;
+        const prevFirstId = prevFirstMessageIdRef.current;
+        const prevLastId = prevLastMessageIdRef.current;
+        const nextFirstId = messages[0]?.id || null;
+        const nextLastId = messages[messages.length - 1]?.id || null;
+        const likelyPrependedOlder =
+            added > 0
+            && Boolean(prevFirstId)
+            && nextFirstId !== prevFirstId
+            && Boolean(prevLastId)
+            && nextLastId === prevLastId;
         const finishedOlderRangeLoad =
             pendingRangeLoadTypeRef.current === 'older'
             && !loadingOlderMessages
@@ -1455,14 +1460,24 @@ export function ChatRoom({
             pendingOlderAnchorRef.current = null;
             pendingRangeLoadTypeRef.current = null;
             prevLenRef.current = messages.length;
+            prevFirstMessageIdRef.current = nextFirstId;
+            prevLastMessageIdRef.current = nextLastId;
             return;
         }
         if (pendingRangeLoadTypeRef.current === 'newer' && !loadingNewerMessages) {
             pendingRangeLoadTypeRef.current = null;
         }
         if (added > 0) {
+            if (likelyPrependedOlder) {
+                prevLenRef.current = messages.length;
+                prevFirstMessageIdRef.current = nextFirstId;
+                prevLastMessageIdRef.current = nextLastId;
+                return;
+            }
             if (pendingRangeLoadTypeRef.current) {
                 prevLenRef.current = messages.length;
+                prevFirstMessageIdRef.current = nextFirstId;
+                prevLastMessageIdRef.current = nextLastId;
                 return;
             }
             if (nearBottom) {
@@ -1470,6 +1485,8 @@ export function ChatRoom({
                 const shouldAnimate = !openedRecently && added <= 2;
                 const raf = requestAnimationFrame(() => scrollToBottom(shouldAnimate));
                 prevLenRef.current = messages.length;
+                prevFirstMessageIdRef.current = nextFirstId;
+                prevLastMessageIdRef.current = nextLastId;
                 return () => cancelAnimationFrame(raf);
             }
             const recentlyAddedMessages = messages.slice(Math.max(0, prevLenRef.current));
@@ -1479,6 +1496,8 @@ export function ChatRoom({
             }
         }
         prevLenRef.current = messages.length;
+        prevFirstMessageIdRef.current = nextFirstId;
+        prevLastMessageIdRef.current = nextLastId;
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [messages, messages.length, chatId, loading, displayUnreadCount, unreadAnchorId, currentUserId, loadingOlderMessages, loadingNewerMessages]);
 

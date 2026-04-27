@@ -39,11 +39,6 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
     const pickerCloseTimerRef = useRef<number | null>(null);
     const xhrRef = useRef<XMLHttpRequest | null>(null);
     const encryptCancelRef = useRef(false);
-    const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
-        const copy = new Uint8Array(bytes.byteLength);
-        copy.set(bytes);
-        return copy.buffer;
-    };
 
     const clearPickerCloseTimer = () => {
         if (pickerCloseTimerRef.current != null) {
@@ -232,8 +227,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             encryptionPulse = null;
             task.encryptionProgress = 100;
             pushTaskUpdate(task);
-            const encryptedBuffer = toArrayBuffer(encryptedBytes);
-            const encryptedBlob = new Blob([encryptedBuffer], { type: 'application/octet-stream' });
+            const encryptedBlob = new Blob([encryptedBytes], { type: 'application/octet-stream' });
             const encryptedFile = new window.File([encryptedBlob], file.name, {
                 type: 'application/octet-stream',
                 lastModified: file.lastModified,
