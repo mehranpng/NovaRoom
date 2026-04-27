@@ -12,6 +12,92 @@ client = AsyncOpenAI(
     base_url="https://api.deepseek.com",
 )
 
+PERSIAN_STOPWORDS = {
+    "من",
+    "تو",
+    "شما",
+    "او",
+    "ما",
+    "این",
+    "اون",
+    "است",
+    "هست",
+    "هستم",
+    "هستی",
+    "هستیم",
+    "رو",
+    "را",
+    "که",
+    "برای",
+    "با",
+    "و",
+    "یا",
+    "از",
+    "در",
+    "به",
+    "یه",
+    "یک",
+    "می",
+    "میخوام",
+    "می‌خوام",
+    "لطفا",
+    "لطفاً",
+    "خواهش",
+}
+
+
+def _coerce_chunk_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts = []
+        for item in value:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                parts.append(
+                    str(
+                        item.get("text")
+                        or item.get("content")
+                        or item.get("value")
+                        or ""
+                    )
+                )
+            else:
+                text_attr = getattr(item, "text", None) or getattr(
+                    item, "content", None
+                )
+                if text_attr:
+                    parts.append(str(text_attr))
+        return "".join(parts)
+    if isinstance(value, dict):
+        return str(value.get("text") or value.get("content") or value.get("value") or "")
+    text_attr = getattr(value, "text", None) or getattr(value, "content", None)
+    if text_attr is not None:
+        return str(text_attr)
+    return str(value)
+
+
+def _build_rule_based_title(raw: str) -> str:
+    cleaned = re.sub(r"\s+", " ", str(raw or "").strip())
+    cleaned = re.sub(r"[\"'`“”‘’]+", "", cleaned)
+    tokens = re.findall(r"[آ-یA-Za-z0-9]+", cleaned)
+    keywords: List[str] = []
+    for token in tokens:
+        t = token.strip().lower()
+        if not t or t in PERSIAN_STOPWORDS:
+            continue
+        if t.isdigit():
+            continue
+        keywords.append(token.strip())
+        if len(keywords) >= 5:
+            break
+    if not keywords:
+        return "موضوع جدید گفتگو"
+    return f"گفتگو درباره {' '.join(keywords[:4])}"[:56].strip()
+
 
 def get_system_prompt(
     user_name: str = "",
@@ -116,8 +202,10 @@ async def generate_ai_response_stream(
             reasoning_delta = ""
             if chunk.choices and chunk.choices[0].delta:
                 delta = chunk.choices[0].delta
-                content_delta = getattr(delta, "content", "") or ""
-                reasoning_delta = getattr(delta, "reasoning_content", "") or ""
+                content_delta = _coerce_chunk_text(getattr(delta, "content", ""))
+                reasoning_delta = _coerce_chunk_text(
+                    getattr(delta, "reasoning_content", "")
+                )
 
             if content_delta:
                 has_content = True
@@ -211,18 +299,10 @@ async def generate_conversation_summary(
 
 
 async def generate_chat_title(first_user_message: str) -> str:
-    def _fallback_title(raw: str) -> str:
-        normalized = re.sub(r"\s+", " ", str(raw or "").strip())
-        normalized = re.sub(r"[\"'`“”‘’]+", "", normalized)
-        normalized = normalized.strip(" .,!?:;،؛…")
-        if not normalized:
-            return "گفتگوی جدید"
-        return normalized[:56]
-
     try:
         raw_message = (first_user_message or "").strip()
         if not raw_message:
-            return "گفتگوی جدید"
+            return "موضوع جدید گفتگو"
 
         title_messages = [
             {
@@ -252,9 +332,10 @@ async def generate_chat_title(first_user_message: str) -> str:
         payload = response.choices[0].message.content or ""
         parsed = json.loads(payload)
         title = str(parsed.get("title") or "").strip()
-        if not title:
-            return _fallback_title(raw_message)
-        return _fallback_title(title)
+        normalized_title = re.sub(r"\s+", " ", title).strip(" .,!?:;،؛…")
+        if not normalized_title or normalized_title == "گفتگوی جدید":
+            return _build_rule_based_title(raw_message)
+        return normalized_title[:56]
     except Exception as e:
         print(f"Title generation error: {e}")
-        return _fallback_title(first_user_message)
+        return _build_rule_based_title(first_user_message)
