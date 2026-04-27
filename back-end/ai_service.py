@@ -99,14 +99,17 @@ async def generate_ai_response_stream(
             *messages,
         ]
 
-        stream = await client.chat.completions.create(
-            model=model,
-            messages=full_messages,
-            max_tokens=2000,
-            stream=True,
-            reasoning_effort="high",
-            extra_body={"thinking": {"type": "enabled" if reasoning_mode else "disabled"}},
-        )
+        request_kwargs: Dict[str, Any] = {
+            "model": model,
+            "messages": full_messages,
+            "max_tokens": 2000,
+            "stream": True,
+        }
+        if reasoning_mode:
+            request_kwargs["reasoning_effort"] = "high"
+            request_kwargs["extra_body"] = {"thinking": {"type": "enabled"}}
+
+        stream = await client.chat.completions.create(**request_kwargs)
 
         has_content = False
         has_reasoning = False

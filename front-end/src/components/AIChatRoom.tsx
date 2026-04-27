@@ -1402,7 +1402,7 @@ export function AIChatRoom({
                     direction: ltr;
                     align-items: center;
                     position: relative;
-                    z-index: 110;
+                    z-index: 60;
                 }
                 .ai-chat-room__header-title {
                     min-width: 0;
@@ -1455,9 +1455,12 @@ export function AIChatRoom({
                     background: var(--bg-primary);
                     box-shadow: var(--shadow-md);
                     padding: 6px;
-                    z-index: 111;
+                    z-index: 61;
                     direction: rtl;
                     font-family: Vazir, sans-serif;
+                    opacity: 1;
+                    backdrop-filter: none;
+                    -webkit-backdrop-filter: none;
                 }
                 .ai-model-option {
                     width: 100%;
@@ -1485,11 +1488,13 @@ export function AIChatRoom({
                 .ai-model-option__title {
                     font-size: 14px;
                     font-weight: 700;
+                    font-family: Vazir, sans-serif;
                 }
                 .ai-model-option__desc {
                     font-size: 12px;
                     color: var(--text-secondary);
                     line-height: 1.5;
+                    font-family: Vazir, sans-serif;
                 }
                 .typing-indicator {
                     display: flex;
