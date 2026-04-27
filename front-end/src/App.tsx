@@ -1973,7 +1973,7 @@ export function App() {
         setAIRespondingChatId(finalChatId);
 
         if (modelKey === 'nova-pro' && aiProRemaining <= 0) {
-            notify({ message: 'سقف ۱۰ پیام روزانه Nova Pro تکمیل شده است. تا ۰۰:۰۰ تهران صبر کنید یا از Nova Flash استفاده کنید.', type: 'info' });
+            notify({ message: 'سقف ۱۰ پیام روزانه Nova Pro تکمیل شده است. تا ۰۰:۰۰ صبر کنید یا از Nova Flash استفاده کنید.', type: 'info' });
             setSelectedAIModel('nova-flash');
             return false;
         }

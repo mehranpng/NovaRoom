@@ -671,7 +671,7 @@ export function AIChatRoom({
 
     const handleSelectModel = (modelKey: AIModelKey) => {
         if (modelKey === 'nova-pro' && isProDisabled) {
-            notify({ message: 'سهمیه روزانه Nova Pro شما تمام شده است. این مدل بعد از ۰۰:۰۰ تهران دوباره فعال می‌شود.', type: 'info' });
+            notify({ message: 'سهمیه روزانه Nova Pro شما تمام شده است. این مدل بعد از ۰۰:۰۰ دوباره فعال می‌شود.', type: 'info' });
             return;
         }
         onSelectModel(modelKey);
@@ -798,7 +798,7 @@ export function AIChatRoom({
                                 >
                                     <button type="button" className={selectedModel === 'nova-flash' ? 'ai-model-option ai-model-option--active' : 'ai-model-option'} onClick={() => handleSelectModel('nova-flash')}>
                                         <div className="ai-model-option__title">Nova Flash</div>
-                                        <div className="ai-model-option__desc">سریع و سبک برای گفتگوهای روزانه، سوال‌های کوتاه و پاسخ‌ فوری.</div>
+                                        <div className="ai-model-option__desc">سریع و سبک برای گفتگوهای روزانه، سوال‌های کوتاه و پاسخ‌ فوری</div>
                                     </button>
                                     <button
                                         type="button"
@@ -806,7 +806,7 @@ export function AIChatRoom({
                                         onClick={() => handleSelectModel('nova-pro')}
                                     >
                                         <div className="ai-model-option__title">Nova Pro</div>
-                                        <div className="ai-model-option__desc">دقیق‌تر برای تحلیل عمیق، کارهای حرفه‌ای و درخواست‌های پیچیده‌تر.</div>
+                                        <div className="ai-model-option__desc">دقیق‌تر برای تحلیل عمیق، کارهای حرفه‌ای و درخواست‌های پیچیده‌تر</div>
                                     </button>
                                 </motion.div>
                             )}
@@ -1458,7 +1458,6 @@ export function AIChatRoom({
                     z-index: 61;
                     direction: rtl;
                     font-family: Vazir, sans-serif;
-                    opacity: 1;
                     backdrop-filter: none;
                     -webkit-backdrop-filter: none;
                 }

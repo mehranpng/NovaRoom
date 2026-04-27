@@ -3872,7 +3872,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                                 "type": "ai_error",
                                 "code": "ai_pro_daily_limit_reached",
                                 "remaining": quota.get("remaining", 0),
-                                "message": "سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ تهران صبر کنید یا از Nova Flash استفاده کنید.",
+                                "message": "سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Flash استفاده کنید.",
                             },
                         )
                         continue
@@ -4474,7 +4474,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                                 "type": "ai_error",
                                 "code": "ai_pro_daily_limit_reached",
                                 "remaining": quota.get("remaining", 0),
-                                "message": "سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ تهران صبر کنید یا از Nova Flash استفاده کنید.",
+                                "message": "سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Flash استفاده کنید.",
                             },
                         )
                         continue
