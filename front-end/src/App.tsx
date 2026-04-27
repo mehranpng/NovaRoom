@@ -155,6 +155,7 @@ export function App() {
     const lastSeenAckMessageIdRef = useRef<Record<string, string>>({});
     const lastReceiveSoundMessageRef = useRef<Record<string, string>>({});
     const chatLoadRequestRef = useRef(0);
+    const aiSendInFlightRef = useRef(false);
     useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
     useEffect(() => { viewRef.current = view; }, [view]);
 
@@ -1917,85 +1918,91 @@ export function App() {
 
     const handleSendAIMessage = useCallback(async (text: string, useReasoner = false, modelKey: AIModelKey = 'nova-flash'): Promise<boolean> => {
         if (!currentUser) return false;
+        if (aiSendInFlightRef.current) return false;
+        aiSendInFlightRef.current = true;
+        try {
 
-        if (aiResponding && aiRespondingChatId && activeAIChatId !== aiRespondingChatId) {
-            const respondingTitle = aiChats.find((c) => c.id === aiRespondingChatId)?.title || 'گفتگوی در حال پاسخ';
-            notify({ message: `گفتگوی «${respondingTitle}» هنوز تکمیل نشده است.`, type: 'info' });
-            return false;
-        }
+            if (aiResponding && aiRespondingChatId && activeAIChatId !== aiRespondingChatId) {
+                const respondingTitle = aiChats.find((c) => c.id === aiRespondingChatId)?.title || 'گفتگوی در حال پاسخ';
+                notify({ message: `گفتگوی «${respondingTitle}» هنوز تکمیل نشده است.`, type: 'info' });
+                return false;
+            }
 
-        setAITyping(true);
-        setAIResponding(true);
-        setAIReasoningPending(Boolean(useReasoner));
+            setAITyping(true);
+            setAIResponding(true);
+            setAIReasoningPending(Boolean(useReasoner));
 
-        let targetChatId = activeAIChatId;
-        if (!targetChatId) {
-            try {
-                const created = await apiFetch('/ai/chats', { method: 'POST' });
-                setAIChats((prev) => [created, ...prev]);
-                setAIMessagesByChat((prev) => ({ ...prev, [created.id]: [] }));
-                setActiveAIChatId(created.id);
-                targetChatId = created.id;
-            } catch (error) {
-                console.error('Failed to create AI chat', error);
-                alert('ساخت گفتگوی جدید با خطا مواجه شد');
+            let targetChatId = activeAIChatId;
+            if (!targetChatId) {
+                try {
+                    const created = await apiFetch('/ai/chats', { method: 'POST' });
+                    setAIChats((prev) => [created, ...prev]);
+                    setAIMessagesByChat((prev) => ({ ...prev, [created.id]: [] }));
+                    setActiveAIChatId(created.id);
+                    targetChatId = created.id;
+                } catch (error) {
+                    console.error('Failed to create AI chat', error);
+                    alert('ساخت گفتگوی جدید با خطا مواجه شد');
+                    setAITyping(false);
+                    setAIResponding(false);
+                    setAIReasoningPending(false);
+                    return false;
+                }
+            }
+            if (!targetChatId) return false;
+
+            const finalChatId = targetChatId;
+
+            const currentAIChatMessages = aiMessagesByChat[finalChatId] || [];
+            const sentCount = currentAIChatMessages.filter((m) => m.senderId === currentUser.chatId).length;
+            if (sentCount >= 30) {
+                alert('حداکثر 30 پیام در هر گفتگو مجاز است. لطفاً یک چت جدید باز کنید.');
+                return false;
+            }
+            const clientId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+            const userMessage: Message = {
+                id: clientId,
+                chatId: finalChatId,
+                senderId: currentUser.chatId,
+                text,
+                timestamp: Date.now(),
+                seen: false,
+            };
+
+            setAIMessagesByChat((prev) => ({
+                ...prev,
+                [finalChatId]: [...(prev[finalChatId] || []), userMessage],
+            }));
+            setAIRespondingChatId(finalChatId);
+
+            if (modelKey === 'nova-pro' && aiProRemaining <= 0) {
+                notify({ message: 'سقف ۱۰ پیام روزانه Nova Pro تکمیل شده است. تا ۰۰:۰۰ صبر کنید یا از Nova Flash استفاده کنید.', type: 'info' });
+                setSelectedAIModel('nova-flash');
+                return false;
+            }
+
+            const success = sendAIMessage(text, finalChatId, clientId, useReasoner, modelKey);
+            if (!success) {
+                console.warn('Failed to send message to AI');
+                setAIMessagesByChat((prev) => ({
+                    ...prev,
+                    [finalChatId]: (prev[finalChatId] || []).filter((m) => m.id !== clientId),
+                }));
                 setAITyping(false);
                 setAIResponding(false);
                 setAIReasoningPending(false);
+                setAIRespondingChatId(null);
+                notify({ message: 'ارتباط با سرویس هوش مصنوعی برقرار نیست. لطفاً دوباره تلاش کنید.', type: 'error' });
                 return false;
             }
+            if (modelKey === 'nova-pro') {
+                setAIProRemaining((prev) => Math.max(0, prev - 1));
+            }
+            return true;
+        } finally {
+            aiSendInFlightRef.current = false;
         }
-        if (!targetChatId) return false;
-
-        const finalChatId = targetChatId;
-
-        const currentAIChatMessages = aiMessagesByChat[finalChatId] || [];
-        const sentCount = currentAIChatMessages.filter((m) => m.senderId === currentUser.chatId).length;
-        if (sentCount >= 30) {
-            alert('حداکثر 30 پیام در هر گفتگو مجاز است. لطفاً یک چت جدید باز کنید.');
-            return false;
-        }
-        const clientId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-        const userMessage: Message = {
-            id: clientId,
-            chatId: finalChatId,
-            senderId: currentUser.chatId,
-            text,
-            timestamp: Date.now(),
-            seen: false,
-        };
-
-        setAIMessagesByChat((prev) => ({
-            ...prev,
-            [finalChatId]: [...(prev[finalChatId] || []), userMessage],
-        }));
-        setAIRespondingChatId(finalChatId);
-
-        if (modelKey === 'nova-pro' && aiProRemaining <= 0) {
-            notify({ message: 'سقف ۱۰ پیام روزانه Nova Pro تکمیل شده است. تا ۰۰:۰۰ صبر کنید یا از Nova Flash استفاده کنید.', type: 'info' });
-            setSelectedAIModel('nova-flash');
-            return false;
-        }
-
-        const success = sendAIMessage(text, finalChatId, clientId, useReasoner, modelKey);
-        if (!success) {
-            console.warn('Failed to send message to AI');
-            setAIMessagesByChat((prev) => ({
-                ...prev,
-                [finalChatId]: (prev[finalChatId] || []).filter((m) => m.id !== clientId),
-            }));
-            setAITyping(false);
-            setAIResponding(false);
-            setAIReasoningPending(false);
-            setAIRespondingChatId(null);
-            notify({ message: 'ارتباط با سرویس هوش مصنوعی برقرار نیست. لطفاً دوباره تلاش کنید.', type: 'error' });
-            return false;
-        }
-        if (modelKey === 'nova-pro') {
-            setAIProRemaining((prev) => Math.max(0, prev - 1));
-        }
-        return true;
     }, [currentUser, activeAIChatId, aiMessagesByChat, sendAIMessage, aiResponding, aiRespondingChatId, aiChats, aiProRemaining]);
 
     const handleStopAIResponse = useCallback(() => {

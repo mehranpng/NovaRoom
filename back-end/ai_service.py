@@ -95,8 +95,12 @@ def _build_rule_based_title(raw: str) -> str:
         if len(keywords) >= 5:
             break
     if not keywords:
-        return "موضوع جدید گفتگو"
-    return f"گفتگو درباره {' '.join(keywords[:4])}"[:56].strip()
+        return "موضوع جدید"
+    return " ".join(keywords[:4])[:56].strip()
+
+
+def _contains_cjk(text: str) -> bool:
+    return bool(re.search(r"[\u3400-\u9FFF]", str(text or "")))
 
 
 def get_system_prompt(
@@ -112,6 +116,7 @@ def get_system_prompt(
     - پاسخ دقیق، جدی و ساختاریافته باشد.
     - شوخی نکن مگر کاربر بخواهد.
     - فرض‌ها و نتیجه‌گیری را مرحله‌ای و شفاف بنویس.
+    - متن روند استدلال و متن پاسخ نهایی را فقط فارسی بنویس.
     """
         if reasoning_mode
         else ""
@@ -206,6 +211,8 @@ async def generate_ai_response_stream(
                 reasoning_delta = _coerce_chunk_text(
                     getattr(delta, "reasoning_content", "")
                 )
+                if _contains_cjk(reasoning_delta):
+                    reasoning_delta = ""
 
             if content_delta:
                 has_content = True
@@ -218,9 +225,9 @@ async def generate_ai_response_stream(
                     "reasoning_content": reasoning_delta,
                 }
 
-        if not has_content and not has_reasoning:
+        if not has_content:
             yield {
-                "content": "متأسفم، نتوانستم پاسخی تولید کنم.",
+                "content": "خلاصه پاسخ: نتیجه نهایی آماده نشد. لطفاً یک‌بار دیگر ارسال کنید.",
                 "reasoning_content": "",
             }
 
