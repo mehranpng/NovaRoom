@@ -1,4 +1,5 @@
 import os
+import re
 import json
 from openai import AsyncOpenAI
 from typing import List, Dict, AsyncIterator, Any
@@ -210,6 +211,14 @@ async def generate_conversation_summary(
 
 
 async def generate_chat_title(first_user_message: str) -> str:
+    def _fallback_title(raw: str) -> str:
+        normalized = re.sub(r"\s+", " ", str(raw or "").strip())
+        normalized = re.sub(r"[\"'`“”‘’]+", "", normalized)
+        normalized = normalized.strip(" .,!?:;،؛…")
+        if not normalized:
+            return "گفتگوی جدید"
+        return normalized[:56]
+
     try:
         raw_message = (first_user_message or "").strip()
         if not raw_message:
@@ -244,8 +253,8 @@ async def generate_chat_title(first_user_message: str) -> str:
         parsed = json.loads(payload)
         title = str(parsed.get("title") or "").strip()
         if not title:
-            return "گفتگوی جدید"
-        return title[:56]
+            return _fallback_title(raw_message)
+        return _fallback_title(title)
     except Exception as e:
         print(f"Title generation error: {e}")
-        return "گفتگوی جدید"
+        return _fallback_title(first_user_message)
