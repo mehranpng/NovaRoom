@@ -1672,6 +1672,16 @@ body,
     opacity: 0.9;
 }
 
+.message-ai-model-label {
+    font-size: 10px;
+    opacity: 0.8;
+    order: 1;
+}
+
+.message-meta--mine .message-ai-model-label {
+    opacity: 0.95;
+}
+
 .message-seen {
     font-size: 10px;
     font-weight: 800;

@@ -123,7 +123,7 @@ export function App() {
     const [aiRespondingChatId, setAIRespondingChatId] = useState<string | null>(null);
     const [temporaryAIChat, setTemporaryAIChat] = useState(false);
     const [selectedAIModel, setSelectedAIModel] = useState<AIModelKey>('nova-flash');
-    const [aiProRemaining, setAIProRemaining] = useState<number>(20);
+    const [aiProRemaining, setAIProRemaining] = useState<number>(10);
 
     // Track if this is the initial load (show skeleton only once)
     const [isInitialChatsLoad, setIsInitialChatsLoad] = useState(true);
@@ -317,8 +317,8 @@ export function App() {
         const loadProStatus = async () => {
             try {
                 const status = await apiFetch('/ai/pro-usage-status');
-                const remaining = Number(status?.remaining ?? 20);
-                setAIProRemaining(Number.isFinite(remaining) ? Math.max(0, remaining) : 20);
+                const remaining = Number(status?.remaining ?? 10);
+                setAIProRemaining(Number.isFinite(remaining) ? Math.max(0, remaining) : 10);
             } catch (error) {
                 console.error('Failed to load AI pro usage status:', error);
             }
@@ -1564,6 +1564,8 @@ export function App() {
                 reasoningContent: sourceMessage.reasoningContent,
                 reasoningEnabled: sourceMessage.reasoningEnabled,
                 reasoningDurationSec: sourceMessage.reasoningDurationSec,
+                aiModelKey: sourceMessage.aiModelKey,
+                aiModelName: sourceMessage.aiModelName,
             };
             setMessages((prev) => ({
                 ...prev,
@@ -1971,7 +1973,7 @@ export function App() {
         setAIRespondingChatId(finalChatId);
 
         if (modelKey === 'nova-pro' && aiProRemaining <= 0) {
-            notify({ message: 'سقف ۲۰ پیام روزانه Nova Pro تکمیل شده است. تا ۰۰:۰۰ تهران صبر کنید یا از Nova Flash استفاده کنید.', type: 'info' });
+            notify({ message: 'سقف ۱۰ پیام روزانه Nova Pro تکمیل شده است. تا ۰۰:۰۰ تهران صبر کنید یا از Nova Flash استفاده کنید.', type: 'info' });
             setSelectedAIModel('nova-flash');
             return false;
         }

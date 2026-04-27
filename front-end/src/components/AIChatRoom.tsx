@@ -916,6 +916,7 @@ export function AIChatRoom({
                                                 </div>
                                             </div>
                                             <div className="message-meta message-meta--theirs">
+                                                {message.aiModelName && <span className="message-ai-model-label">{message.aiModelName}</span>}
                                                 <span className="message-time">{formatMessageTime(message.timestamp)}</span>
                                             </div>
                                         </div>
@@ -950,6 +951,7 @@ export function AIChatRoom({
                                                 </div>
                                             )}
                                             <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
+                                                {message.aiModelName && <span className="message-ai-model-label">{message.aiModelName}</span>}
                                                 <span className="message-time">{formatMessageTime(message.timestamp)}</span>
                                             </div>
                                         </div>
@@ -1399,6 +1401,8 @@ export function AIChatRoom({
                     gap: 6px;
                     direction: ltr;
                     align-items: center;
+                    position: relative;
+                    z-index: 110;
                 }
                 .ai-chat-room__header-title {
                     min-width: 0;
@@ -1451,13 +1455,15 @@ export function AIChatRoom({
                     background: var(--bg-primary);
                     box-shadow: var(--shadow-md);
                     padding: 6px;
-                    z-index: 20;
+                    z-index: 111;
+                    direction: rtl;
+                    font-family: Vazir, sans-serif;
                 }
                 .ai-model-option {
                     width: 100%;
                     border: 0;
                     background: transparent;
-                    text-align: left;
+                    text-align: right;
                     border-radius: 10px;
                     padding: 10px;
                     cursor: pointer;

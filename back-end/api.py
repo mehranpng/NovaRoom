@@ -124,7 +124,7 @@ MAX_PINNED_CHATS = 20
 MAX_CHAT_MESSAGE_LENGTH = 6000
 MAX_AI_MESSAGE_LENGTH = 3000
 MAX_AI_MESSAGES_PER_CHAT = 30
-AI_PRO_DAILY_LIMIT = 20
+AI_PRO_DAILY_LIMIT = 10
 TEHRAN_TZ = timezone(timedelta(hours=3, minutes=30))
 WS_IDLE_TIMEOUT_SEC = 95
 ENC_PREFIX = "enc:v1:"
@@ -133,6 +133,18 @@ ENC_TAG_SIZE = 16
 FILE_MAGIC = b"NCF1"
 FILE_TEXT_PREFIX = "ncf:v1:"
 LEGACY_BOOTSTRAP_TOKEN = "__bootstrap_migration__"
+
+def normalize_ai_model_key(value: str) -> str:
+    key = str(value or "nova-flash").strip().lower()
+    return "nova-pro" if key == "nova-pro" else "nova-flash"
+
+
+def ai_model_name_from_key(model_key: str) -> str:
+    return "deepseek-v4-pro" if normalize_ai_model_key(model_key) == "nova-pro" else "deepseek-v4-flash"
+
+
+def ai_model_label_from_key(model_key: str) -> str:
+    return "Nova Pro" if normalize_ai_model_key(model_key) == "nova-pro" else "Nova Flash"
 
 
 def utc_now() -> datetime:
@@ -2235,6 +2247,8 @@ async def get_messages(
                 ),
                 "reasoningEnabled": bool(m.get("reasoningEnabled", False)),
                 "reasoningDurationSec": int(m.get("reasoningDurationSec", 0) or 0),
+                "aiModelKey": m.get("aiModelKey"),
+                "aiModelName": m.get("aiModelName"),
             }
             for m in msgs
         ]
@@ -2353,6 +2367,8 @@ async def get_messages(
             ),
             "reasoningEnabled": bool(m.get("reasoningEnabled", False)),
             "reasoningDurationSec": int(m.get("reasoningDurationSec", 0) or 0),
+            "aiModelKey": m.get("aiModelKey"),
+            "aiModelName": m.get("aiModelName"),
         }
         for m in msgs
     ]
@@ -2789,6 +2805,8 @@ async def forward_message(
         )
         reasoning_enabled = bool(original_msg.get("reasoningEnabled", False))
         reasoning_duration_sec = int(original_msg.get("reasoningDurationSec", 0) or 0)
+        ai_model_key = normalize_ai_model_key(original_msg.get("aiModelKey") or "nova-flash") if ai_role == "assistant" else None
+        ai_model_name = ai_model_label_from_key(ai_model_key) if ai_role == "assistant" else None
     else:
         existing_forwarded_from = (
             original_msg.get("forwardedFrom")
@@ -2851,6 +2869,8 @@ async def forward_message(
         )
         reasoning_enabled = bool(original_msg.get("reasoningEnabled", False))
         reasoning_duration_sec = int(original_msg.get("reasoningDurationSec", 0) or 0)
+        ai_model_key = normalize_ai_model_key(original_msg.get("aiModelKey") or "") if original_msg.get("aiModelKey") else None
+        ai_model_name = str(original_msg.get("aiModelName") or "").strip() or (ai_model_label_from_key(ai_model_key) if ai_model_key else None)
 
     # Create forwarded message
     target_scope = f"chat:{target_chat_id}"
@@ -2877,6 +2897,8 @@ async def forward_message(
         "reasoningContent": encrypted_forward_reasoning,
         "reasoningEnabled": reasoning_enabled,
         "reasoningDurationSec": reasoning_duration_sec,
+        "aiModelKey": ai_model_key,
+        "aiModelName": ai_model_name,
     }
 
     # Add file data if present (remap encrypted bytes to target chat scope)
@@ -2937,6 +2959,8 @@ async def forward_message(
                 "reasoningContent": encrypted_forward_reasoning,
                 "reasoningEnabled": reasoning_enabled,
                 "reasoningDurationSec": reasoning_duration_sec,
+                "aiModelKey": ai_model_key,
+                "aiModelName": ai_model_name,
                 "clientId": client_id or None,
             },
         }
@@ -3073,6 +3097,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
             prompt_messages: List[Dict[str, str]],
             memory_summary: str,
             model_name: str,
+            model_key: str,
             reasoning_mode: bool,
             should_generate_title: bool = False,
             first_user_message: str = "",
@@ -3088,6 +3113,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 "reasoningContent": encrypt_scoped_text("", token, ai_scope),
                 "reasoningEnabled": bool(reasoning_mode),
                 "streamCompleted": False,
+                "aiModelKey": normalize_ai_model_key(model_key),
+                "aiModelName": ai_model_label_from_key(model_key),
                 "timestamp": utc_now(),
             }
             result = await cl_ai_messages.insert_one(ai_message_doc)
@@ -3107,6 +3134,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         "reasoningEnabled": bool(reasoning_mode),
                         "isStreaming": True,
                         "streamCompleted": False,
+                        "aiModelKey": normalize_ai_model_key(model_key),
+                        "aiModelName": ai_model_label_from_key(model_key),
                         "timestamp": message_ts_ms,
                     },
                 },
@@ -3237,6 +3266,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "isStreaming": False,
                             "streamCompleted": True,
                             "reasoningDurationSec": reasoning_duration_sec,
+                            "aiModelKey": normalize_ai_model_key(model_key),
+                            "aiModelName": ai_model_label_from_key(model_key),
                             "timestamp": message_ts_ms,
                         },
                     },
@@ -3824,8 +3855,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 client_id = data.get("clientId")
                 ai_chat_id = str(data.get("aiChatId") or "").strip()
                 use_reasoner = bool(data.get("useReasoner"))
-                model_key = str(data.get("modelKey") or "nova-flash").strip().lower()
-                model_name = "deepseek-v4-pro" if model_key == "nova-pro" else "deepseek-v4-flash"
+                model_key = normalize_ai_model_key(data.get("modelKey") or "nova-flash")
+                model_name = ai_model_name_from_key(model_key)
 
                 if not isinstance(text, str) or not text.strip():
                     continue
@@ -3841,7 +3872,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                                 "type": "ai_error",
                                 "code": "ai_pro_daily_limit_reached",
                                 "remaining": quota.get("remaining", 0),
-                                "message": "سقف ۲۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ تهران صبر کنید یا از Nova Flash استفاده کنید.",
+                                "message": "سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ تهران صبر کنید یا از Nova Flash استفاده کنید.",
                             },
                         )
                         continue
@@ -3965,6 +3996,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         messages,
                         refreshed_summary,
                         model_name,
+                        model_key,
                         use_reasoner,
                         should_generate_title=(user_msg_count == 0),
                         first_user_message=text,
@@ -4238,6 +4270,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
             prompt_messages: List[Dict[str, str]],
             memory_summary: str,
             model_name: str,
+            model_key: str,
             reasoning_mode: bool,
             should_generate_title: bool = False,
             first_user_message: str = "",
@@ -4253,6 +4286,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 "reasoningContent": encrypt_scoped_text("", token, ai_scope),
                 "reasoningEnabled": bool(reasoning_mode),
                 "streamCompleted": False,
+                "aiModelKey": normalize_ai_model_key(model_key),
+                "aiModelName": ai_model_label_from_key(model_key),
                 "timestamp": utc_now(),
             }
             result = await cl_ai_messages.insert_one(ai_message_doc)
@@ -4272,6 +4307,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                         "reasoningEnabled": bool(reasoning_mode),
                         "isStreaming": True,
                         "streamCompleted": False,
+                        "aiModelKey": normalize_ai_model_key(model_key),
+                        "aiModelName": ai_model_label_from_key(model_key),
                         "timestamp": message_ts_ms,
                     },
                 },
@@ -4402,6 +4439,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "isStreaming": False,
                             "streamCompleted": True,
                             "reasoningDurationSec": reasoning_duration_sec,
+                            "aiModelKey": normalize_ai_model_key(model_key),
+                            "aiModelName": ai_model_label_from_key(model_key),
                             "timestamp": message_ts_ms,
                         },
                     },
@@ -4418,8 +4457,8 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 client_id = data.get("clientId")
                 ai_chat_id = str(data.get("aiChatId") or "").strip()
                 use_reasoner = bool(data.get("useReasoner"))
-                model_key = str(data.get("modelKey") or "nova-flash").strip().lower()
-                model_name = "deepseek-v4-pro" if model_key == "nova-pro" else "deepseek-v4-flash"
+                model_key = normalize_ai_model_key(data.get("modelKey") or "nova-flash")
+                model_name = ai_model_name_from_key(model_key)
 
                 if not isinstance(text, str) or not text.strip():
                     continue
@@ -4435,7 +4474,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                                 "type": "ai_error",
                                 "code": "ai_pro_daily_limit_reached",
                                 "remaining": quota.get("remaining", 0),
-                                "message": "سقف ۲۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ تهران صبر کنید یا از Nova Flash استفاده کنید.",
+                                "message": "سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ تهران صبر کنید یا از Nova Flash استفاده کنید.",
                             },
                         )
                         continue
@@ -4560,6 +4599,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                         messages,
                         refreshed_summary,
                         model_name,
+                        model_key,
                         use_reasoner,
                         should_generate_title=(user_msg_count == 0),
                         first_user_message=text,
@@ -4632,6 +4672,8 @@ async def get_ai_messages(
             ),
             "streamCompleted": bool(m.get("streamCompleted", True)),
             "reasoningDurationSec": int(m.get("reasoningDurationSec", 0) or 0),
+            "aiModelKey": m.get("aiModelKey"),
+            "aiModelName": m.get("aiModelName"),
             "timestamp": dt_to_epoch_ms(m.get("timestamp")),
         }
         for m in msgs

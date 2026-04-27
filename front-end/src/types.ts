@@ -58,6 +58,8 @@ export interface Message {
     isStreaming?: boolean;
     streamCompleted?: boolean;
     reasoningDurationSec?: number;
+    aiModelKey?: AIModelKey;
+    aiModelName?: string;
 }
 
 export interface ChatLastMessage {

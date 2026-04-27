@@ -2534,6 +2534,7 @@ export function ChatRoom({
 
                                             <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
                                                 {m.edited && <span className="message-edited-label">ویرایش شده</span>}
+                                                {m.aiModelName && <span className="message-ai-model-label">{m.aiModelName}</span>}
                                                 <span className="message-time">{formatMessageTime(m.timestamp)}</span>
                                                 {isMine && (
                                                     m.deliveryStatus === 'sending'
