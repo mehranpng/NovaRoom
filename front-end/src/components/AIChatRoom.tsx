@@ -57,7 +57,8 @@ function iranShiftedDate(ts: unknown): Date {
 
 function formatMessageTime(ts: unknown) {
     const d = iranShiftedDate(ts);
-    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
+    const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
+    return toPersianDigits(time);
 }
 
 function toPersianDigits(value: string | number): string {
@@ -548,7 +549,7 @@ export function AIChatRoom({
     const togglePinAIChat = (chatId: string) => {
         const pinned = pinnedAIChatIds.includes(chatId);
         if (!pinned && pinnedAIChatIds.length >= 10) {
-            notify({ message: 'حداکثر ۱۰ گفتوگوی AI را می‌توانید سنجاق کنید.', type: 'info' });
+            notify({ message: 'حداکثر ۱۰ گفتگوی AI را می‌توانید سنجاق کنید.', type: 'info' });
             return;
         }
         const next = pinned
@@ -747,7 +748,7 @@ export function AIChatRoom({
                 <div className="chat-room__header-clickable chat-room__header-clickable--full ai-chat-room__header-main">
                     <div className="ai-chat-room__header-brand">NovaRoom AI</div>
                     <div className="ai-chat-room__header-title">
-                        {temporaryMode ? 'گفتوگوی موقت' : (activeAIChatTitle || 'گفتوگوی جدید')}
+                        {temporaryMode ? 'گفتگوی موقت' : (activeAIChatTitle || 'گفتگوی جدید')}
                     </div>
                 </div>
                 <button
@@ -774,8 +775,8 @@ export function AIChatRoom({
                             {temporaryMode ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
                                     <MessageSquareDashed size={34} />
-                                    <div style={{ fontSize: 24, fontWeight: 800 }}>گفتوگوی موقت</div>
-                                    <div style={{ fontSize: 13, fontWeight: 500, opacity: 0.85 }}>پیام‌های گفتوگوی موقت ذخیره نمی‌شوند و با خروج از این صفحه حذف می‌شوند.</div>
+                                    <div style={{ fontSize: 24, fontWeight: 800 }}>گفتگوی موقت</div>
+                                    <div style={{ fontSize: 13, fontWeight: 500, opacity: 0.85 }}>پیام‌های گفتگوی موقت ذخیره نمی‌شوند و با خروج از این صفحه حذف می‌شوند.</div>
                                 </div>
                             ) : emptyStatePrompt}
                         </div>
@@ -934,7 +935,7 @@ export function AIChatRoom({
                                 type="button"
                                 className="ai-chat-drawer__icon-btn"
                                 onClick={() => setAIChatsDrawerOpen(false)}
-                                aria-label="بستن منوی گفتوگوها"
+                                aria-label="بستن منوی گفتگوها"
                             >
                                 <PanelRight size={18} />
                             </button>
@@ -949,7 +950,7 @@ export function AIChatRoom({
                                         setAIChatsDrawerOpen(false);
                                     }}
                                 >
-                                    <span>گفتوگوی موقت</span>
+                                    <span>گفتگوی موقت</span>
                                     <MessageSquareDashed size={16} />
                                 </button>
                                 <button
@@ -961,7 +962,7 @@ export function AIChatRoom({
                                         setAIChatsDrawerOpen(false);
                                     }}
                                 >
-                                    <span>گفتوگوی جدید</span>
+                                    <span>گفتگوی جدید</span>
                                     <PencilLine size={16} />
                                 </button>
                             </div>
@@ -987,7 +988,7 @@ export function AIChatRoom({
                                         >
                                             {respondingAIChatId === chat.id && <span className="ai-chat-drawer__loader" />}
                                             {pinnedAIChatIds.includes(chat.id) && <Pin size={13} className="ai-chat-drawer__pin" style={{ fill: 'currentColor' }} />}
-                                            {chat.title || 'گفتوگوی جدید'}
+                                            {chat.title || 'گفتگوی جدید'}
                                         </button>
                                         <button
                                             type="button"
@@ -996,7 +997,7 @@ export function AIChatRoom({
                                                 aiChatActionBtnRef.current = e.currentTarget;
                                                 openAIChatActionMenu(chat.id, e.currentTarget);
                                             }}
-                                            aria-label="گزینه‌های گفتوگو"
+                                            aria-label="گزینه‌های گفتگو"
                                         >
                                             <Menu size={16} />
                                         </button>
@@ -1071,9 +1072,9 @@ export function AIChatRoom({
                             exit={{ opacity: 0, y: 10, scale: 0.98 }}
                             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                         >
-                            <h3 className="chat-room-confirm-modal__title">حذف گفتوگو؟</h3>
+                            <h3 className="chat-room-confirm-modal__title">حذف گفتگو؟</h3>
                             <p className="chat-room-confirm-modal__text">
-                                {`گفتوگوی «${pendingDeleteChat.title || 'گفتوگوی جدید'}» حذف شود؟`}
+                                {`گفتگوی «${pendingDeleteChat.title || 'گفتگوی جدید'}» حذف شود؟`}
                             </p>
                             <div className="chat-room-confirm-modal__actions">
                                 <button
@@ -1119,7 +1120,7 @@ export function AIChatRoom({
                             exit={{ opacity: 0, y: 10, scale: 0.98 }}
                             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                         >
-                            <h3 className="chat-room-confirm-modal__title">تغییر نام گفتوگو</h3>
+                            <h3 className="chat-room-confirm-modal__title">تغییر نام گفتگو</h3>
                             <input
                                 value={renameTitleInput}
                                 onChange={(e) => setRenameTitleInput(e.target.value)}

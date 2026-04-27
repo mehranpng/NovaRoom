@@ -139,7 +139,7 @@ function formatDayLabel(ts: any) {
     const diffDays = today - thatDay;
     if (diffDays === 0) return 'امروز';
     if (diffDays === 1) return 'دیروز';
-    if (diffDays <= 7) {
+    if (diffDays <= 6) {
         return persianWeekdayFmt.format(new Date(normalizeTs(ts)));
     }
     const currentJalaliYear = persianJalaliYearFmt.format(new Date());
@@ -1694,7 +1694,7 @@ export function ChatRoom({
             await apiFetch(`/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
             setConfirmDeleteChat(false); setChatMenuOpen(false);
             if (onChatDeleted) onChatDeleted(chatId); else onBack();
-        } catch { alert('حذف گفتوگو با خطا مواجه شد'); }
+        } catch { alert('حذف گفتگو با خطا مواجه شد'); }
     };
 
     const doLeaveGroup = async () => {
@@ -2235,7 +2235,7 @@ export function ChatRoom({
                                         type="button"
                                     >
                                         <Trash2 size={16} />
-                                        حذف گفتوگو
+                                        حذف گفتگو
                                     </button>
                                 )}
                             </div>
@@ -2900,9 +2900,9 @@ export function ChatRoom({
                 {confirmDeleteChat && (
                     <motion.div className="chat-room-modal-overlay" ref={confirmDeleteChatRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16, ease: 'easeOut' }}>
                         <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 12, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.985 }} transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}>
-                            <h3 className="chat-room-confirm-modal__title">{isGroupChat ? 'گروه حذف شود؟' : 'گفتوگو حذف شود؟'}</h3>
+                            <h3 className="chat-room-confirm-modal__title">{isGroupChat ? 'گروه حذف شود؟' : 'گفتگو حذف شود؟'}</h3>
                             <p className="chat-room-confirm-modal__text">
-                                {isGroupChat ? 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.' : 'این عمل گفتوگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'}
+                                {isGroupChat ? 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.' : 'این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'}
                             </p>
                             <div className="chat-room-confirm-modal__actions">
                                 <button className="chat-room-confirm-modal__btn" onClick={() => setConfirmDeleteChat(false)} type="button">لغو</button>
