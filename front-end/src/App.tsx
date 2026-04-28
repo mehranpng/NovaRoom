@@ -1090,14 +1090,15 @@ export function App() {
                 if (!targetChatId || viewRef.current !== 'chatRoom' || showAIChat) return;
 
                 const state = messageRangeState[targetChatId];
-                if (state?.newestCursor) {
+                const userIsViewingHistory = Boolean(state?.hasNewer);
+                if (state?.newestCursor && !userIsViewingHistory) {
                     await fetchPagedMessages(targetChatId, {
                         direction: 'newer',
                         cursorTs: state.newestCursor.cursorTs,
                         cursorId: state.newestCursor.cursorId,
                         mode: 'append',
                     });
-                } else if (messagesLoadedOnce[targetChatId]) {
+                } else if (!userIsViewingHistory && messagesLoadedOnce[targetChatId]) {
                     await fetchPagedMessages(targetChatId, { direction: 'latest', mode: 'replace' });
                 }
 

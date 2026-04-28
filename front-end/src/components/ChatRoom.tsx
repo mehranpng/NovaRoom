@@ -2128,7 +2128,6 @@ export function ChatRoom({
     return (
         <motion.div
             className="chat-room" style={{ position: 'relative', willChange: 'transform' }} ref={roomRef}
-            layout="preserve-aspect"
             variants={toastVariants}
             initial="hidden"
             animate="visible"
