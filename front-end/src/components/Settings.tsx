@@ -1,4 +1,5 @@
 import { ArrowLeft, ChevronLeft, Laptop, Palette } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { Devices } from './Devices';
 import { ThemeSettings } from './ThemeSettings';
 
@@ -16,14 +17,14 @@ export function Settings({ section, onBack, onOpenSection, onBackToMenu }: Setti
 
   if (section === 'theme') {
     return (
-      <div className="profile" style={{ fontFamily: 'Vazir, sans-serif' }}>
+      <motion.div className="profile" style={{ fontFamily: 'Vazir, sans-serif' }} initial={{ opacity: 0, y: 8, scale: 0.995 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
         <div className="profile__header" style={{ direction: 'ltr' }}>
           <button onClick={onBackToMenu} className="profile__header-back"><ArrowLeft size={22} /></button>
           <h1 className="profile__header-title">تم</h1>
           <div className="profile__header-spacer" />
         </div>
         <ThemeSettings />
-      </div>
+      </motion.div>
     );
   }
 

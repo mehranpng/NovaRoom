@@ -218,7 +218,25 @@ export function useDarkMode() {
       document.head.appendChild(m);
       themeMetas.push(m);
     }
-    themeMetas.forEach((m) => m.setAttribute('content', themeColor));
+    themeMetas.forEach((m) => {
+      m.setAttribute('content', themeColor);
+      m.removeAttribute('media');
+    });
+
+    const ensureThemeMetaForScheme = (scheme: 'dark' | 'light') => {
+      let m = document.querySelector(`meta[name="theme-color"][media="(prefers-color-scheme: ${scheme})"]`) as HTMLMetaElement | null;
+      if (!m) {
+        m = document.createElement('meta');
+        m.name = 'theme-color';
+        m.setAttribute('media', `(prefers-color-scheme: ${scheme})`);
+        document.head.appendChild(m);
+      }
+      m.setAttribute('content', themeColor);
+    };
+
+    ensureThemeMetaForScheme('light');
+    ensureThemeMetaForScheme('dark');
+    document.body.style.backgroundColor = themeColor;
 
     const ensureMeta = (name: string) => {
       let m = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
