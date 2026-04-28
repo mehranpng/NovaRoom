@@ -300,12 +300,26 @@ async def generate_chat_title(first_user_message: str) -> str:
                 response = await client.chat.completions.create(
                     model=model_name,
                     messages=title_messages,
-                    response_format={"type": "json_object"},
                     max_tokens=80,
                 )
                 payload = response.choices[0].message.content or ""
-                parsed = json.loads(payload)
-                title = _normalize_title(str(parsed.get("title") or ""))
+                parsed_title = ""
+                try:
+                    parsed = json.loads(payload)
+                    parsed_title = str(parsed.get("title") or "")
+                except Exception:
+                    json_match = re.search(
+                        r'"title"\s*:\s*"([^"]+)"',
+                        payload,
+                        re.IGNORECASE,
+                    )
+                    if json_match:
+                        parsed_title = json_match.group(1)
+                    else:
+                        cleaned = re.sub(r"```(?:json)?|```", "", payload).strip()
+                        parsed_title = cleaned.splitlines()[0] if cleaned else ""
+
+                title = _normalize_title(parsed_title)
                 if (
                     title
                     and title not in {"گفتگوی جدید", "گفتگوی جدید"}

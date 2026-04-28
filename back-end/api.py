@@ -154,57 +154,6 @@ def ai_model_label_from_key(model_key: str) -> str:
     )
 
 
-IMPORTANT_MEMORY_MARKERS = (
-    "یادم",
-    "یادآوری",
-    "به خاطر بسپار",
-    "مهم",
-    "ترجیح",
-    "علاقه",
-    "دوست دارم",
-    "دوست ندارم",
-    "هدف",
-    "برنامه",
-    "قرار",
-    "deadline",
-    "remember",
-    "preference",
-    "important",
-    "my name is",
-)
-TRIVIAL_CHAT_PREFIXES = (
-    "سلام",
-    "درود",
-    "خوبی",
-    "چه خبر",
-    "hi",
-    "hello",
-    "hey",
-    "صبح بخیر",
-    "شب بخیر",
-)
-
-
-def should_refresh_ai_memory_summary(
-    latest_user_text: str,
-    current_summary: str = "",
-) -> bool:
-    text = str(latest_user_text or "").strip()
-    if not text:
-        return False
-    lowered = text.lower()
-
-    if any(marker in lowered for marker in IMPORTANT_MEMORY_MARKERS):
-        return True
-    if any(lowered.startswith(prefix) for prefix in TRIVIAL_CHAT_PREFIXES) and len(text) < 42:
-        return False
-    if len(text) >= 48:
-        return True
-    if any(ch.isdigit() for ch in text) and len(text) >= 16:
-        return True
-    return bool(current_summary and len(text) >= 22)
-
-
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -4029,36 +3978,28 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     for doc in history_docs
                 ]
 
-                if should_refresh_ai_memory_summary(text, memory_summary):
-                    async def refresh_summary_in_background() -> None:
-                        refreshed_summary = await generate_conversation_summary(
-                            messages,
-                            previous_summary=memory_summary,
-                            user_name=user_name,
-                            username=username,
-                            chat_id=chat_id,
-                            bio=user_bio,
-                        )
-                        await cl_ai_chats.update_one(
-                            {"_id": ai_chat["_id"], "userId": chat_id},
-                            {
-                                "$set": {
-                                    "summary": encrypt_scoped_text(
-                                        refreshed_summary,
-                                        "",
-                                        f"ai-chat-meta:{ai_chat_id}",
-                                    ),
-                                    "summaryEncrypted": True,
-                                    "updatedAt": utc_now(),
-                                }
-                            },
-                        )
-
-                    summary_task = asyncio.create_task(refresh_summary_in_background())
-                    summary_task.add_done_callback(
-                        lambda task: task.exception()
-                        and print(f"AI summary background error: {task.exception()}")
-                    )
+                refreshed_summary = await generate_conversation_summary(
+                    messages,
+                    previous_summary=memory_summary,
+                    user_name=user_name,
+                    username=username,
+                    chat_id=chat_id,
+                    bio=user_bio,
+                )
+                await cl_ai_chats.update_one(
+                    {"_id": ai_chat["_id"], "userId": chat_id},
+                    {
+                        "$set": {
+                            "summary": encrypt_scoped_text(
+                                refreshed_summary,
+                                "",
+                                f"ai-chat-meta:{ai_chat_id}",
+                            ),
+                            "summaryEncrypted": True,
+                            "updatedAt": utc_now(),
+                        }
+                    },
+                )
 
                 current_stream_task = active_ai_stream_tasks.get(chat_id)
                 if current_stream_task and not current_stream_task.done():
@@ -4072,7 +4013,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     stream_ai_reply(
                         ai_chat_id,
                         messages,
-                        memory_summary,
+                        refreshed_summary,
                         model_name,
                         model_key,
                         use_reasoner,
@@ -4642,34 +4583,26 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     for doc in history_docs
                 ]
 
-                if should_refresh_ai_memory_summary(text, memory_summary):
-                    async def refresh_summary_in_background() -> None:
-                        refreshed_summary = await generate_conversation_summary(
-                            messages,
-                            previous_summary=memory_summary,
-                            user_name=user_name,
-                            username=username,
-                            chat_id=user_id,
-                            bio=user_bio,
-                        )
-                        await cl_ai_chats.update_one(
-                            {"_id": ai_chat["_id"], "userId": user_id},
-                            {
-                                "$set": {
-                                    "summary": encrypt_scoped_text(
-                                        refreshed_summary, "", f"ai-chat-meta:{ai_chat_id}"
-                                    ),
-                                    "summaryEncrypted": True,
-                                    "updatedAt": utc_now(),
-                                }
-                            },
-                        )
-
-                    summary_task = asyncio.create_task(refresh_summary_in_background())
-                    summary_task.add_done_callback(
-                        lambda task: task.exception()
-                        and print(f"AI summary background error: {task.exception()}")
-                    )
+                refreshed_summary = await generate_conversation_summary(
+                    messages,
+                    previous_summary=memory_summary,
+                    user_name=user_name,
+                    username=username,
+                    chat_id=user_id,
+                    bio=user_bio,
+                )
+                await cl_ai_chats.update_one(
+                    {"_id": ai_chat["_id"], "userId": user_id},
+                    {
+                        "$set": {
+                            "summary": encrypt_scoped_text(
+                                refreshed_summary, "", f"ai-chat-meta:{ai_chat_id}"
+                            ),
+                            "summaryEncrypted": True,
+                            "updatedAt": utc_now(),
+                        }
+                    },
+                )
 
                 current_stream_task = active_ai_stream_tasks.get(user_id)
                 if current_stream_task and not current_stream_task.done():
@@ -4683,7 +4616,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     stream_ai_reply(
                         ai_chat_id,
                         messages,
-                        memory_summary,
+                        refreshed_summary,
                         model_name,
                         model_key,
                         use_reasoner,

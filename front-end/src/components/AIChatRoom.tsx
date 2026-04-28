@@ -1440,9 +1440,8 @@ export function AIChatRoom({
                     align-items: center;
                     gap: 4px;
                     cursor: pointer;
-                    padding: 4px 10px;
-                    border-radius: 10px;
-                    border: 1px solid var(--border-secondary);
+                    padding: 0;
+                    border-radius: 0;
                     font-family: inherit;
                 }
                 .ai-model-switcher__chevron {
@@ -1484,7 +1483,7 @@ export function AIChatRoom({
                     background: var(--bg-secondary);
                 }
                 .ai-model-option--active {
-                    background: rgba(47,128,237,0.12);
+                    background: var(--bg-tertiary);
                 }
                 .ai-model-option--disabled {
                     opacity: 0.45;
