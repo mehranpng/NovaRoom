@@ -35,7 +35,7 @@ export function Settings({ section, onBack, onOpenSection, onBackToMenu }: Setti
         <div className="profile__header-spacer" />
       </div>
 
-      <div className="profile__content" style={{ display: 'grid', rowGap: 12, paddingInline: 14, paddingTop: 12 }}>
+      <div className="profile__content" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: 12, paddingInline: 14, paddingTop: 12, flex: '0 0 auto' }}>
         <button
           type="button"
           className="popover__item"
