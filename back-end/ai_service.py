@@ -77,7 +77,7 @@ def get_system_prompt(
     سازندگان: Seytan، Mehran، PALPARD.
     اگر درباره سازنده/مدل پرسیده شد فقط بگو: "توسط Seytan، Mehran و PALPARD ساخته شدم."
     نام مدل/ارائه‌دهنده پایه را نگو.
-    اگر پرسیده شد «نوا روم چیه؟» یا «NovaRoom چیست؟» دقیقاً بگو:
+    اگر پرسیده شد «نوا روم چیه؟» یا «Nova AI چیست؟» دقیقاً بگو:
     "نوا روم یک پیام‌رسان بر پایه وب‌سوکت است که امکان چت لحظه‌ای با افراد مختلف را فراهم می‌کند."
 
     ## زبان و سبک
@@ -238,7 +238,7 @@ async def generate_conversation_summary(
             "seytan",
             "mehran",
             "palpard",
-            "novaroom",
+            "nova ai",
             "نوا روم",
             "دستیار فارسی",
             "پیام‌رسان بر پایه وب‌سوکت",
@@ -258,39 +258,18 @@ async def generate_chat_title(first_user_message: str) -> str:
     def _normalize_title(raw: str) -> str:
         return re.sub(r"\s+", " ", str(raw or "").strip()).strip(" .,!?:;،؛…")
 
-    def _keyword_set(text: str) -> set[str]:
-        words = re.findall(r"[A-Za-z\u0600-\u06FF0-9]+", str(text or "").lower())
-        stop = {
-            "و",
-            "در",
-            "به",
-            "از",
-            "که",
-            "این",
-            "اون",
-            "را",
-            "با",
-            "برای",
-            "the",
-            "and",
-            "for",
-            "with",
-            "to",
-            "a",
-            "an",
-            "is",
-            "are",
-        }
-        return {w for w in words if len(w) > 1 and w not in stop}
-
-    def _is_relevant_title(title: str, raw_message: str) -> bool:
-        title_words = _keyword_set(title)
-        msg_words = _keyword_set(raw_message)
-        if not title_words:
+    def _looks_like_message_fragment(title: str, raw_message: str) -> bool:
+        t = _normalize_title(title)
+        m = _normalize_title(raw_message)
+        if not t or not m:
             return False
-        if not msg_words:
+        if t == m:
             return True
-        return bool(title_words.intersection(msg_words))
+        if m.startswith(t) or t.startswith(m):
+            return True
+        if len(m) > 20 and t in m:
+            return True
+        return False
 
     try:
         raw_message = (first_user_message or "").strip()
@@ -318,7 +297,7 @@ async def generate_chat_title(first_user_message: str) -> str:
             },
         ]
 
-        for model_name in ("deepseek-v4-flash",):
+        for model_name in ("deepseek-chat", "deepseek-v4-flash"):
             try:
                 response = await client.chat.completions.create(
                     model=model_name,
@@ -327,55 +306,16 @@ async def generate_chat_title(first_user_message: str) -> str:
                     max_tokens=80,
                 )
                 payload = response.choices[0].message.content or ""
-                parsed_title = ""
-                try:
-                    parsed = json.loads(payload)
-                    parsed_title = str(parsed.get("title") or "")
-                except Exception:
-                    json_match = re.search(
-                        r'"title"\s*:\s*"([^"]+)"',
-                        payload,
-                        re.IGNORECASE,
-                    )
-                    if json_match:
-                        parsed_title = json_match.group(1)
-                    else:
-                        cleaned = re.sub(r"```(?:json)?|```", "", payload).strip()
-                        parsed_title = cleaned.splitlines()[0] if cleaned else ""
-
-                title = _normalize_title(parsed_title)
+                parsed = json.loads(payload)
+                title = _normalize_title(str(parsed.get("title") or ""))
                 if (
                     title
                     and title not in {"گفتگوی جدید", "گفتگوی جدید"}
-                    and _is_relevant_title(title, raw_message)
+                    and not _looks_like_message_fragment(title, raw_message)
                 ):
                     return title[:56]
             except Exception:
                 continue
-
-        # Last-resort AI retry with stronger relevance instruction.
-        retry_messages = [
-            *title_messages,
-            {
-                "role": "user",
-                "content": "Title must directly match the same topic and key entities.",
-            },
-        ]
-        try:
-            retry = await client.chat.completions.create(
-                model="deepseek-v4-flash",
-                messages=retry_messages,
-                response_format={"type": "json_object"},
-                max_tokens=80,
-            )
-            payload = retry.choices[0].message.content or ""
-            parsed = json.loads(payload)
-            title = _normalize_title(str(parsed.get("title") or ""))
-            if title and title not in {"گفتگوی جدید", "گفتگوی جدید"}:
-                return title[:56]
-        except Exception:
-            pass
-
         return "گفتگوی جدید"
     except Exception as e:
         print(f"Title generation error: {e}")
