@@ -2005,6 +2005,9 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                     "isGroup": is_group,
                 },
                 "lastMessage": last_msg,
+                "messageRevision": (
+                    f"{dt_to_epoch_ms(chat.get('updatedAt'))}:{(last_msg or {}).get('id', '')}"
+                ),
                 "unreadCount": unread_map.get(chat["_id"], 0),
             }
         )
@@ -2046,6 +2049,11 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                     "registrationDate": None,
                 },
                 "lastMessage": saved_last_msg,
+                "messageRevision": (
+                    f"{int(saved_last_msg.get('timestamp', 0))}:{saved_last_msg.get('id', '')}"
+                    if saved_last_msg
+                    else "0:"
+                ),
                 "unreadCount": 0,
             }
         )

@@ -19,6 +19,7 @@ import { cx } from './utils/cx';
 import { NotificationCenter } from './components/NotificationCenter';
 import { notify } from './utils/notificationBus';
 import { decryptBioClientSide, decryptMessageClientSide, encryptChatTextClientSide } from './utils/e2ee';
+import { clearAllMessageCaches, getCachedChatMessages, setCachedChatMessages } from './utils/messageCache';
 import './App.css';
 
 const normalizeTimestamp = (ts: unknown): number => {
@@ -49,6 +50,15 @@ const mergeMessages = (base: Message[], incoming: Message[], mode: 'replace' | '
         return String(a.id || '').localeCompare(String(b.id || ''));
     });
 };
+
+const normalizeMessageRangeState = (state: any) => ({
+    hasOlder: Boolean(state?.hasOlder),
+    hasNewer: Boolean(state?.hasNewer),
+    loadingOlder: false,
+    loadingNewer: false,
+    oldestCursor: state?.oldestCursor || null,
+    newestCursor: state?.newestCursor || null,
+});
 
 export function App() {
     const MESSAGE_PAGE_SIZE = 50;
@@ -147,6 +157,35 @@ export function App() {
     useEffect(() => {
         chatsRef.current = chats;
     }, [chats]);
+
+    const getChatRevision = useCallback((chatId: string): string => {
+        const chat = chatsRef.current.find((c) => c.id === chatId);
+        return String(chat?.messageRevision || '');
+    }, []);
+
+    const persistChatMessagesCache = useCallback((chatId: string, nextMessages?: Message[], nextRangeState?: any) => {
+        if (!chatId) return;
+        const messagesForChat = nextMessages ?? messages[chatId] ?? [];
+        if (!messagesForChat.length) return;
+        const rangeStateForChat = normalizeMessageRangeState(nextRangeState ?? messageRangeState[chatId] ?? {});
+        const revision = getChatRevision(chatId);
+        setCachedChatMessages(chatId, {
+            revision,
+            messages: messagesForChat,
+            rangeState: rangeStateForChat,
+        });
+    }, [getChatRevision, messageRangeState, messages]);
+
+    const applyCachedMessagesToState = useCallback((chatId: string, revision: string): boolean => {
+        const cached = getCachedChatMessages(chatId);
+        if (!cached) return false;
+        if (String(cached.revision || '') !== String(revision || '')) return false;
+        setMessages((prev) => ({ ...prev, [chatId]: cached.messages || [] }));
+        setMessageRangeState((prev) => ({ ...prev, [chatId]: normalizeMessageRangeState(cached.rangeState || {}) }));
+        setMessagesLoadedOnce((prev) => ({ ...prev, [chatId]: true }));
+        setMessagesLoading((prev) => ({ ...prev, [chatId]: false }));
+        return true;
+    }, []);
 
     // Keep a ref to activeChatId and view so WebSocket callbacks always read the latest values
     // without needing to be re-created (avoids stale closure bug on unread badge).
@@ -358,8 +397,8 @@ export function App() {
         loadAIMessages();
     }, [isAuthenticated, activeAIChatId, aiMessagesByChat]);
 
-    const loadChats = useCallback(async (showLoading = true) => {
-        if (!isAuthenticated) return;
+    const loadChats = useCallback(async (showLoading = true): Promise<Chat[]> => {
+        if (!isAuthenticated) return [];
 
         if (showLoading && isInitialChatsLoad) {
             // skeleton shown via isInitialChatsLoad flag
@@ -417,10 +456,13 @@ export function App() {
             });
 
             setChats(merged);
+            chatsRef.current = merged;
             setIsInitialChatsLoad(false);
+            return merged;
         } catch (error) {
             console.error('Failed to load chats', error);
             setIsInitialChatsLoad(false);
+            return [];
         }
     }, [isAuthenticated, isInitialChatsLoad, authToken]);
 
@@ -432,6 +474,7 @@ export function App() {
     const handleLogout = useCallback(() => {
         const finalizeLogout = () => {
             localStorage.removeItem('token');
+            clearAllMessageCaches();
             setAuthToken(null);
             setIsAuthenticated(false);
             setCurrentUser(null);
@@ -539,6 +582,7 @@ export function App() {
     const handleNewMessage = useCallback((chatId: string, newMsg: Message) => {
         let isDuplicateMessage = false;
         let replacedOptimisticMine = false;
+        let cachedMessagesForChat: Message[] | null = null;
         setMessages(prev => {
             const currentMessages = prev[chatId] || [];
             if (newMsg.clientId) {
@@ -547,11 +591,13 @@ export function App() {
                     replacedOptimisticMine = true;
                     const nextMessages = [...currentMessages];
                     nextMessages[optimisticIdx] = { ...newMsg, deliveryStatus: 'sent' };
+                    cachedMessagesForChat = nextMessages;
                     return { ...prev, [chatId]: nextMessages };
                 }
             }
             if (currentMessages.some(m => m.id === newMsg.id)) {
                 isDuplicateMessage = true;
+                cachedMessagesForChat = currentMessages;
                 return prev;
             }
             const optimisticMineIdx = currentMessages.findIndex((m) => {
@@ -569,13 +615,19 @@ export function App() {
                 replacedOptimisticMine = true;
                 const nextMessages = [...currentMessages];
                 nextMessages[optimisticMineIdx] = { ...newMsg, deliveryStatus: 'sent' };
+                cachedMessagesForChat = nextMessages;
                 return { ...prev, [chatId]: nextMessages };
             }
+            const nextMessages = [...currentMessages, newMsg];
+            cachedMessagesForChat = nextMessages;
             return {
                 ...prev,
-                [chatId]: [...currentMessages, newMsg]
+                [chatId]: nextMessages
             };
         });
+        if (cachedMessagesForChat) {
+            persistChatMessagesCache(chatId, cachedMessagesForChat);
+        }
 
         // Prevent double unread increments / duplicated chat-lastMessage updates
         // when the same message event is delivered more than once.
@@ -633,17 +685,20 @@ export function App() {
                 };
             });
         });
-    }, [currentUser?.chatId, loadChats, playChatSound]);
+    }, [currentUser?.chatId, loadChats, playChatSound, persistChatMessagesCache]);
 
     const handleMessageEdited = useCallback((chatId: string, updated: Message) => {
+        let nextMessagesForChat: Message[] | null = null;
         setMessages(prev => {
             const arr = prev[chatId];
             if (!arr) return prev;
+            nextMessagesForChat = arr.map(m => (m.id === updated.id ? { ...m, ...updated } : m));
             return {
                 ...prev,
-                [chatId]: arr.map(m => (m.id === updated.id ? { ...m, ...updated } : m))
+                [chatId]: nextMessagesForChat
             };
         });
+        if (nextMessagesForChat) persistChatMessagesCache(chatId, nextMessagesForChat);
 
         setChats(prev => prev.map(c => {
             if (c.id !== chatId) return c;
@@ -656,17 +711,20 @@ export function App() {
                 }
             };
         }));
-    }, []);
+    }, [persistChatMessagesCache]);
 
     const handleMessageDeleted = useCallback((chatId: string, messageId: string, lastMessage?: any) => {
+        let nextMessagesForChat: Message[] | null = null;
         setMessages(prev => {
             const arr = prev[chatId];
             if (!arr) return prev;
+            nextMessagesForChat = arr.filter(m => m.id !== messageId);
             return {
                 ...prev,
-                [chatId]: arr.filter(m => m.id !== messageId)
+                [chatId]: nextMessagesForChat
             };
         });
+        if (nextMessagesForChat) persistChatMessagesCache(chatId, nextMessagesForChat);
 
         if (lastMessage) {
             setChats(prev => prev.map(c => {
@@ -685,7 +743,7 @@ export function App() {
                 return { ...c, lastMessage: null };
             }));
         }
-    }, []);
+    }, [persistChatMessagesCache]);
 
     const handleUserStatusChange = useCallback((userId: string, online: boolean) => {
         const normalizedUserId = String(userId || '').trim();
@@ -743,26 +801,32 @@ export function App() {
     }, []);
 
     const handleMessagesSeen = useCallback((chatId: string) => {
+        let nextMessagesForChat: Message[] | null = null;
         setMessages(prev => {
             if (!prev[chatId]) return prev;
+            nextMessagesForChat = prev[chatId].map(m => ({ ...m, seen: true }));
             return {
                 ...prev,
-                [chatId]: prev[chatId].map(m => ({ ...m, seen: true }))
+                [chatId]: nextMessagesForChat
             };
         });
+        if (nextMessagesForChat) persistChatMessagesCache(chatId, nextMessagesForChat);
         setChats(prev => prev.map(c => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
-    }, []);
+    }, [persistChatMessagesCache]);
 
     const handleReactionUpdated = useCallback((chatId: string, messageId: string, reactions: any[]) => {
+        let nextMessagesForChat: Message[] | null = null;
         setMessages(prev => {
             const arr = prev[chatId];
             if (!arr) return prev;
+            nextMessagesForChat = arr.map(m => (m.id === messageId ? { ...m, reactions } : m));
             return {
                 ...prev,
-                [chatId]: arr.map(m => (m.id === messageId ? { ...m, reactions } : m))
+                [chatId]: nextMessagesForChat
             };
         });
-    }, []);
+        if (nextMessagesForChat) persistChatMessagesCache(chatId, nextMessagesForChat);
+    }, [persistChatMessagesCache]);
 
     const handleWsReconnectExhausted = useCallback(() => {
         setWsReconnectExhausted(true);
@@ -1041,32 +1105,40 @@ export function App() {
             rawChunk.map((message) => decryptMessageClientSide(message, authToken || '', chatId))
         );
 
+        let mergedMessages: Message[] = [];
         setMessages((prev) => {
-            const merged = mergeMessages(prev[chatId] || [], chunk, mode);
-            return { ...prev, [chatId]: merged };
+            mergedMessages = mergeMessages(prev[chatId] || [], chunk, mode);
+            return { ...prev, [chatId]: mergedMessages };
         });
 
+        const nextRangeState = normalizeMessageRangeState({
+            hasOlder: Boolean(res?.hasOlder),
+            hasNewer: Boolean(res?.hasNewer),
+            oldestCursor: res?.oldestCursor || null,
+            newestCursor: res?.newestCursor || null,
+        });
         setMessageRangeState((prev) => ({
             ...prev,
-            [chatId]: {
-                ...(prev[chatId] || { loadingOlder: false, loadingNewer: false }),
-                hasOlder: Boolean(res?.hasOlder),
-                hasNewer: Boolean(res?.hasNewer),
-                oldestCursor: res?.oldestCursor || null,
-                newestCursor: res?.newestCursor || null,
-                loadingOlder: false,
-                loadingNewer: false,
-            },
+            [chatId]: nextRangeState,
         }));
+        persistChatMessagesCache(chatId, mergedMessages, nextRangeState);
         return chunk.length;
-    }, []);
+    }, [persistChatMessagesCache]);
 
     useEffect(() => {
         if (!wsConnected || !isAuthenticated) return;
         setWsReconnectExhausted(false);
-        loadChats(false);
+        void loadChats(false);
 
         if (!activeChatId) return;
+        const currentRevision = getChatRevision(activeChatId);
+        const usedCache = applyCachedMessagesToState(activeChatId, currentRevision);
+        if (usedCache) {
+            if (currentUser && activeChatId !== `saved_messages_${currentUser.chatId}`) {
+                sendSeen(activeChatId);
+            }
+            return;
+        }
         fetchPagedMessages(activeChatId, { direction: 'latest', mode: 'replace' })
             .then(() => {
                 if (currentUser && activeChatId !== `saved_messages_${currentUser.chatId}`) {
@@ -1074,7 +1146,7 @@ export function App() {
                 }
             })
             .catch((err) => console.error('Failed to sync messages after reconnect', err));
-    }, [wsConnected, isAuthenticated, loadChats, activeChatId, currentUser, sendSeen, fetchPagedMessages]);
+    }, [wsConnected, isAuthenticated, loadChats, activeChatId, currentUser, sendSeen, fetchPagedMessages, applyCachedMessagesToState, getChatRevision]);
 
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -1084,21 +1156,25 @@ export function App() {
             if (document.visibilityState !== 'visible') return;
             realtimeRecoveryInFlightRef.current = true;
             try {
-                await loadChats(false);
+                const latestChats = await loadChats(false);
 
                 const targetChatId = activeChatIdRef.current;
                 if (!targetChatId || viewRef.current !== 'chatRoom' || showAIChat) return;
 
                 const state = messageRangeState[targetChatId];
+                const latestChat = latestChats.find((chat) => chat.id === targetChatId);
+                const latestRevision = String(latestChat?.messageRevision || '');
+                const cached = getCachedChatMessages(targetChatId);
+                const cacheRevisionMatches = Boolean(cached && String(cached.revision || '') === latestRevision);
                 const userIsViewingHistory = Boolean(state?.hasNewer);
-                if (state?.newestCursor && !userIsViewingHistory) {
+                if (state?.newestCursor && !userIsViewingHistory && !cacheRevisionMatches) {
                     await fetchPagedMessages(targetChatId, {
                         direction: 'newer',
                         cursorTs: state.newestCursor.cursorTs,
                         cursorId: state.newestCursor.cursorId,
                         mode: 'append',
                     });
-                } else if (!userIsViewingHistory && messagesLoadedOnce[targetChatId]) {
+                } else if (!userIsViewingHistory && messagesLoadedOnce[targetChatId] && !cacheRevisionMatches) {
                     await fetchPagedMessages(targetChatId, { direction: 'latest', mode: 'replace' });
                 }
 
@@ -1200,6 +1276,15 @@ export function App() {
             setMessagesLoading(prev => ({ ...prev, [chatId]: true }));
         }
 
+        const revision = getChatRevision(chatId);
+        const usedCache = applyCachedMessagesToState(chatId, revision);
+        if (usedCache) {
+            if (currentUser && chatId !== `saved_messages_${currentUser.chatId}`) {
+                sendSeen(chatId);
+            }
+            return;
+        }
+
         try {
             let loadedCount = await fetchPagedMessages(chatId, { direction: 'latest', mode: 'replace' });
             if (loadedCount === 0 && chatLoadRequestRef.current === requestId) {
@@ -1223,7 +1308,7 @@ export function App() {
         }
 
         loadChats(false);
-    }, [loadChats, sendSeen, messagesLoadedOnce, currentUser, navigate, fetchPagedMessages]);
+    }, [loadChats, sendSeen, messagesLoadedOnce, currentUser, navigate, fetchPagedMessages, applyCachedMessagesToState, getChatRevision]);
 
     const handleDragHoverChat = useCallback((chatId: string) => {
         if (!chatId) return;

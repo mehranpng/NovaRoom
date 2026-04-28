@@ -77,6 +77,7 @@ export interface Chat {
     participantIds: string[];
     chatType?: 'direct' | 'group';
     lastMessage?: ChatLastMessage | null;
+    messageRevision?: string;
     unreadCount: number;
 }
 
