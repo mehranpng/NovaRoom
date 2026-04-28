@@ -618,6 +618,7 @@ export function AIChatRoom({
         const container = messagesContainerRef.current;
         if (!container) return;
         if (msgMenu) setMsgMenu(null);
+        if (aiChatActionMenu) setAIChatActionMenu(null);
 
         const nearBottom = computeNearBottom();
         isAtBottomRef.current = nearBottom;
@@ -1041,7 +1042,10 @@ export function AIChatRoom({
                             <div
                                 className="ai-chat-drawer__list"
                                 ref={aiDrawerListRef}
-                                onScroll={(e) => { aiDrawerScrollTopRef.current = e.currentTarget.scrollTop; }}
+                                onScroll={(e) => {
+                                    aiDrawerScrollTopRef.current = e.currentTarget.scrollTop;
+                                    if (aiChatActionMenu) setAIChatActionMenu(null);
+                                }}
                             >
                                 {sortedAIChats.map((chat) => (
                                     <div key={chat.id} className="ai-chat-drawer__item">
@@ -1428,15 +1432,17 @@ export function AIChatRoom({
                 }
                 .ai-model-switcher {
                     border: 0;
-                    background: transparent;
+                    background: var(--bg-primary);
                     color: var(--text-primary);
                     font-weight: 700;
-                    font-size: 18px;
+                    font-size: 16px;
                     display: inline-flex;
                     align-items: center;
                     gap: 4px;
                     cursor: pointer;
-                    padding: 0;
+                    padding: 4px 10px;
+                    border-radius: 10px;
+                    border: 1px solid var(--border-secondary);
                     font-family: inherit;
                 }
                 .ai-model-switcher__chevron {

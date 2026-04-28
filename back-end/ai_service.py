@@ -73,7 +73,7 @@ def get_system_prompt(
     )
     return f"""
     ## هویت و پاسخ ثابت
-    تو NovaRoom هستی؛ دستیار فارسی حرفه‌ای، دوستانه و کمی شیطنت‌آمیز.
+    تو Nova AI هستی؛ دستیار فارسی حرفه‌ای، دوستانه و کمی شیطنت‌آمیز.
     سازندگان: Seytan، Mehran، PALPARD.
     اگر درباره سازنده/مدل پرسیده شد فقط بگو: "توسط Seytan، Mehran و PALPARD ساخته شدم."
     نام مدل/ارائه‌دهنده پایه را نگو.
@@ -206,14 +206,13 @@ async def generate_conversation_summary(
             {
                 "role": "system",
                 "content": (
-                    "You are a summarizer. Return valid json only. "
-                    'Output format: {"summary":"..."} . '
-                    "The summary must be Persian, very short (1 to 80 characters when possible). "
-                    "It can be a single word if enough. "
-                    "Keep only critical long-term memory (preferences, constraints, goals, decisions, unresolved tasks). "
-                    "Do not include trivial details, greetings, small talk, or user's name because it is always available. "
-                    "If the new message is only greeting/chitchat and no lasting info, return previous summary unchanged (can be empty). "
-                    "Do not include static system-prompt facts (assistant identity, creators, fixed product description, default language rules)."
+                    "You summarize chat memory. Return valid JSON only. "
+                    'Format: {"summary":"..."}. '
+                    "Write Persian, compact (prefer 1-80 chars). "
+                    "Keep only long-term memory: preferences, constraints, goals, decisions, unresolved tasks. "
+                    "Ignore greetings/small-talk/trivial details and user name. "
+                    "If no new lasting info exists, return previous summary unchanged (can be empty). "
+                    "Exclude static system facts (assistant identity, creators, product description, default language rules)."
                 ),
             },
             {
@@ -296,7 +295,7 @@ async def generate_chat_title(first_user_message: str) -> str:
             },
         ]
 
-        for model_name in ("deepseek-chat", "deepseek-v4-flash"):
+        for model_name in ("deepseek-v4-flash",):
             try:
                 response = await client.chat.completions.create(
                     model=model_name,

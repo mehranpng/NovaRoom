@@ -1541,17 +1541,17 @@ export function ChatRoom({
         const scrollingDown = currentTop > lastTop + 1;
         lastScrollTopRef.current = currentTop;
 
+        if (msgMenu || reactionMenu || seenByMenu) {
+            setMsgMenu(null);
+            setReactionMenu(null);
+            setSeenByMenu(null);
+        }
+
         // Ignore programmatic scroll events first (initial unread jump / restore / auto-scroll).
         // These events should not consume unread state.
         if (programmaticScrollEventsRef.current > 0) {
             programmaticScrollEventsRef.current -= 1;
             return;
-        }
-
-        if (msgMenu || reactionMenu || seenByMenu) {
-            setMsgMenu(null);
-            setReactionMenu(null);
-            setSeenByMenu(null);
         }
 
         const nearBottom = computeNearBottom();

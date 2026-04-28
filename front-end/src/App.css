@@ -156,6 +156,18 @@ body,
     }
 }
 
+@media (min-width: 1120px) {
+    .app__main {
+        flex: 0 0 740px;
+        max-width: 740px;
+    }
+
+    .app__sidebar {
+        width: calc(100% - 740px);
+        min-width: 380px;
+    }
+}
+
 /* ========================================
    SKELETON LOADING
    ======================================== */
