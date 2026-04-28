@@ -207,9 +207,10 @@ export function useDarkMode() {
     }
 
     const computed = getComputedStyle(root);
-    const bgColor = computed.getPropertyValue('--bg-primary').trim() || (isDarkMode ? '#1b1d21' : '#ffffff');
-    const accentColor = computed.getPropertyValue('--accent-primary').trim() || bgColor;
-    const themeColor = themeTone === 'custom' ? accentColor : bgColor;
+    const headerColor = computed.getPropertyValue('--bg-secondary').trim()
+      || computed.getPropertyValue('--bg-primary').trim()
+      || (isDarkMode ? '#22252b' : '#f9fafb');
+    const themeColor = headerColor;
     const ensureMeta = (name: string, media?: string) => {
       const selector = media ? `meta[name="${name}"][media="${media}"]` : `meta[name="${name}"]:not([media])`;
       let m = document.querySelector(selector) as HTMLMetaElement | null;
