@@ -1465,6 +1465,9 @@ export function AIChatRoom({
                     font-family: Vazir, sans-serif;
                     backdrop-filter: none;
                     -webkit-backdrop-filter: none;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 4px;
                 }
                 .ai-model-option {
                     width: 100%;
@@ -1472,7 +1475,7 @@ export function AIChatRoom({
                     background: transparent;
                     text-align: right;
                     border-radius: 10px;
-                    padding: 10px;
+                    padding: 8px 10px;
                     cursor: pointer;
                     display: flex;
                     flex-direction: column;

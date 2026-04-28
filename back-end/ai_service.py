@@ -258,19 +258,6 @@ async def generate_chat_title(first_user_message: str) -> str:
     def _normalize_title(raw: str) -> str:
         return re.sub(r"\s+", " ", str(raw or "").strip()).strip(" .,!?:;،؛…")
 
-    def _looks_like_message_fragment(title: str, raw_message: str) -> bool:
-        t = _normalize_title(title)
-        m = _normalize_title(raw_message)
-        if not t or not m:
-            return False
-        if t == m:
-            return True
-        if m.startswith(t) or t.startswith(m):
-            return True
-        if len(m) > 20 and t in m:
-            return True
-        return False
-
     try:
         raw_message = (first_user_message or "").strip()
         if not raw_message:
@@ -320,11 +307,7 @@ async def generate_chat_title(first_user_message: str) -> str:
                         parsed_title = cleaned.splitlines()[0] if cleaned else ""
 
                 title = _normalize_title(parsed_title)
-                if (
-                    title
-                    and title not in {"گفتگوی جدید", "گفتگوی جدید"}
-                    and not _looks_like_message_fragment(title, raw_message)
-                ):
+                if title and title not in {"گفتگوی جدید", "گفتگوی جدید"}:
                     return title[:56]
             except Exception:
                 continue
