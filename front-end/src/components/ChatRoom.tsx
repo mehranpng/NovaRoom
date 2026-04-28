@@ -445,6 +445,7 @@ export function ChatRoom({
     const [memberSearch, setMemberSearch] = useState('');
     const [externalFileUploadHandler, setExternalFileUploadHandler] = useState<((file: File) => void) | null>(null);
     const [dragUploadActive, setDragUploadActive] = useState(false);
+    const [chatContentReady, setChatContentReady] = useState(true);
     const isAtBottomRef = useRef(true);
 
     const prevLenRef = useRef(0);
@@ -1230,6 +1231,11 @@ export function ChatRoom({
 
     useEffect(() => {
         if (lastChatIdRef.current === chatId) return;
+        setChatContentReady(false);
+        let secondRaf = 0;
+        const firstRaf = requestAnimationFrame(() => {
+            secondRaf = requestAnimationFrame(() => setChatContentReady(true));
+        });
         const mem = scrollMemoryRef.current[chatId];
         lastChatIdRef.current = chatId;
         openedAtRef.current = Date.now();
@@ -1275,6 +1281,10 @@ export function ChatRoom({
                 initialMediaFollowupDoneRef.current = true;
             }
         }
+        return () => {
+            cancelAnimationFrame(firstRaf);
+            if (secondRaf) cancelAnimationFrame(secondRaf);
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
 
@@ -1315,10 +1325,11 @@ export function ChatRoom({
     // Back→open can mount while layout is still settling (mobile show/hide); retry a few times to avoid sticking at top.
     useLayoutEffect(() => {
         if (loading) return;
+        if (!chatContentReady) return;
         if (messages.length === 0) return;
         settleToBottomIfNeeded();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [chatId, loading, messages.length, displayUnreadCount]);
+    }, [chatId, loading, messages.length, displayUnreadCount, chatContentReady]);
 
     // Restore scroll after coming back from ContactInfo / forward-source info / member info / members list.
     useEffect(() => {
@@ -1390,6 +1401,7 @@ export function ChatRoom({
     }, [editingId, text]);
 
     useLayoutEffect(() => {
+        if (!chatContentReady) return;
         const container = messagesContainerRef.current;
         if (!container) { prevLenRef.current = messages.length; return; }
 
@@ -1428,9 +1440,10 @@ export function ChatRoom({
             prevLenRef.current = messages.length;
             return;
         }
-    }, [chatId, loading, messages.length, displayUnreadCount]);
+    }, [chatId, loading, messages.length, displayUnreadCount, chatContentReady]);
 
     useEffect(() => {
+        if (!chatContentReady) return;
         if (!initialScrollDoneRef.current) return;
         const container = messagesContainerRef.current;
         if (!container) { prevLenRef.current = messages.length; return; }
@@ -1513,7 +1526,7 @@ export function ChatRoom({
         prevFirstMessageIdRef.current = nextFirstId;
         prevLastMessageIdRef.current = nextLastId;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [messages, messages.length, currentUserId, loadingOlderMessages, loadingNewerMessages]);
+    }, [messages, messages.length, currentUserId, loadingOlderMessages, loadingNewerMessages, chatContentReady]);
 
     const onMessagesScroll = () => {
         if (scrollRafRef.current !== null) return;
@@ -1611,15 +1624,18 @@ export function ChatRoom({
         }
     };
 
-    const items = useMemo(() => messages.map((m, idx) => {
-        const prev = idx > 0 ? messages[idx - 1] : null;
-        const next = idx < messages.length - 1 ? messages[idx + 1] : null;
-        const isMine = m.senderId === currentUserId;
-        const prevSameSender = prev ? prev.senderId === m.senderId : false;
-        const nextSameSender = next ? next.senderId === m.senderId : false;
-        const dayBreak = !prev || !sameDay(prev.timestamp, m.timestamp);
-        return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender) };
-    }), [messages, messages.length, currentUserId]);
+    const items = useMemo(() => {
+        if (!chatContentReady) return [];
+        return messages.map((m, idx) => {
+            const prev = idx > 0 ? messages[idx - 1] : null;
+            const next = idx < messages.length - 1 ? messages[idx + 1] : null;
+            const isMine = m.senderId === currentUserId;
+            const prevSameSender = prev ? prev.senderId === m.senderId : false;
+            const nextSameSender = next ? next.senderId === m.senderId : false;
+            const dayBreak = !prev || !sameDay(prev.timestamp, m.timestamp);
+            return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender) };
+        });
+    }, [chatContentReady, messages, messages.length, currentUserId]);
 
     const otherTypingUserIds = useMemo(
         () => (typingUserIds || []).filter((uid) => uid && uid !== currentUserId),
@@ -2291,7 +2307,7 @@ export function ChatRoom({
                 }}
             >
                 <div className="chat-room__messages-inner">
-                    {loading ? <ChatMessagesSkeleton /> : (
+                    {(loading || !chatContentReady) ? <ChatMessagesSkeleton /> : (
                         <>
                             {(loadingOlderMessages || localLoadingOlder) && (
                                 <div className="chat-range-loader-wrap chat-range-loader-wrap--top">
