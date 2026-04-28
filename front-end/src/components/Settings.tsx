@@ -41,7 +41,7 @@ export function Settings({ section, onBack, onOpenSection, onBackToMenu }: Setti
           type="button"
           className="popover__item"
           onClick={() => onOpenSection('devices')}
-          style={{ border: '1px solid var(--border-primary)', borderRadius: 14, height: 40, justifyContent: 'space-between', direction: 'rtl', padding: '6px 10px' }}
+          style={{ border: '1px solid var(--border-primary)', borderRadius: 14, height: 60, justifyContent: 'space-between', direction: 'rtl', padding: '6px 15px' }}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textAlign: 'right' }}>
             <Laptop size={18} /> دستگاه‌ها
@@ -53,7 +53,7 @@ export function Settings({ section, onBack, onOpenSection, onBackToMenu }: Setti
           type="button"
           className="popover__item"
           onClick={() => onOpenSection('theme')}
-          style={{ border: '1px solid var(--border-primary)', borderRadius: 14, height: 40, justifyContent: 'space-between', direction: 'rtl', padding: '6px 10px' }}
+          style={{ border: '1px solid var(--border-primary)', borderRadius: 14, height: 60, justifyContent: 'space-between', direction: 'rtl', padding: '6px 15px' }}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textAlign: 'right' }}>
             <Palette size={18} /> تم
