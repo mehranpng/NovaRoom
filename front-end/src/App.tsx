@@ -19,6 +19,7 @@ import { cx } from './utils/cx';
 import { NotificationCenter } from './components/NotificationCenter';
 import { notify } from './utils/notificationBus';
 import { decryptBioClientSide, decryptMessageClientSide, encryptChatTextClientSide } from './utils/e2ee';
+import { clearCachedMessages, readCachedChatMessages, removeCachedChatMessages, type MessageRangeSnapshot, writeCachedChatMessages } from './utils/messageCache';
 import './App.css';
 
 const normalizeTimestamp = (ts: unknown): number => {
@@ -50,6 +51,8 @@ const mergeMessages = (base: Message[], incoming: Message[], mode: 'replace' | '
     });
 };
 
+type MessageRangeState = MessageRangeSnapshot;
+
 export function App() {
     const MESSAGE_PAGE_SIZE = 50;
     const navigate = useNavigate();
@@ -62,14 +65,7 @@ export function App() {
     const [activeChatId, setActiveChatId] = useState<string | null>(null);
     const [chats, setChats] = useState<Chat[]>([]);
     const [messages, setMessages] = useState<Record<string, Message[]>>({});
-    const [messageRangeState, setMessageRangeState] = useState<Record<string, {
-        hasOlder: boolean;
-        hasNewer: boolean;
-        loadingOlder: boolean;
-        loadingNewer: boolean;
-        oldestCursor?: { cursorTs: number; cursorId: string } | null;
-        newestCursor?: { cursorTs: number; cursorId: string } | null;
-    }>>({});
+    const [messageRangeState, setMessageRangeState] = useState<Record<string, MessageRangeState>>({});
     const [newChatModalOpen, setNewChatModalOpen] = useState(false);
     const [wsConnected, setWsConnected] = useState(false);
     const [wsReconnectExhausted, setWsReconnectExhausted] = useState(false);
@@ -129,6 +125,8 @@ export function App() {
     const [isInitialChatsLoad, setIsInitialChatsLoad] = useState(true);
     const [messagesLoadedOnce, setMessagesLoadedOnce] = useState<Record<string, boolean>>({});
     const [messagesLoading, setMessagesLoading] = useState<Record<string, boolean>>({});
+    const messagesRef = useRef<Record<string, Message[]>>({});
+    const messageRangeRef = useRef<Record<string, MessageRangeState>>({});
 
     const sendSoundRef = useRef<HTMLAudioElement | null>(null);
     const receiveSoundRef = useRef<HTMLAudioElement | null>(null);
@@ -147,6 +145,12 @@ export function App() {
     useEffect(() => {
         chatsRef.current = chats;
     }, [chats]);
+    useEffect(() => {
+        messagesRef.current = messages;
+    }, [messages]);
+    useEffect(() => {
+        messageRangeRef.current = messageRangeState;
+    }, [messageRangeState]);
 
     // Keep a ref to activeChatId and view so WebSocket callbacks always read the latest values
     // without needing to be re-created (avoids stale closure bug on unread badge).
@@ -158,6 +162,25 @@ export function App() {
     const aiSendInFlightRef = useRef(false);
     useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
     useEffect(() => { viewRef.current = view; }, [view]);
+
+    const persistChatCache = useCallback((chatId: string, nextMessages?: Message[], nextRange?: MessageRangeState) => {
+        if (!chatId) return;
+        const messagesToWrite = nextMessages ?? messagesRef.current[chatId] ?? [];
+        const rangeToWrite = nextRange ?? messageRangeRef.current[chatId] ?? {
+            hasOlder: false,
+            hasNewer: false,
+            loadingOlder: false,
+            loadingNewer: false,
+            oldestCursor: null,
+            newestCursor: null,
+        };
+        void writeCachedChatMessages(chatId, messagesToWrite, rangeToWrite);
+    }, []);
+
+    const removeChatCache = useCallback((chatId: string | null | undefined) => {
+        if (!chatId) return;
+        void removeCachedChatMessages(chatId);
+    }, []);
 
     useEffect(() => {
         sendSoundRef.current = new Audio('/sounds/send.mp3');
@@ -431,6 +454,7 @@ export function App() {
 
     const handleLogout = useCallback(() => {
         const finalizeLogout = () => {
+            void clearCachedMessages();
             localStorage.removeItem('token');
             setAuthToken(null);
             setIsAuthenticated(false);
@@ -539,6 +563,7 @@ export function App() {
     const handleNewMessage = useCallback((chatId: string, newMsg: Message) => {
         let isDuplicateMessage = false;
         let replacedOptimisticMine = false;
+        let nextMessagesForCache: Message[] | null = null;
         setMessages(prev => {
             const currentMessages = prev[chatId] || [];
             if (newMsg.clientId) {
@@ -547,6 +572,7 @@ export function App() {
                     replacedOptimisticMine = true;
                     const nextMessages = [...currentMessages];
                     nextMessages[optimisticIdx] = { ...newMsg, deliveryStatus: 'sent' };
+                    nextMessagesForCache = nextMessages;
                     return { ...prev, [chatId]: nextMessages };
                 }
             }
@@ -569,13 +595,16 @@ export function App() {
                 replacedOptimisticMine = true;
                 const nextMessages = [...currentMessages];
                 nextMessages[optimisticMineIdx] = { ...newMsg, deliveryStatus: 'sent' };
+                nextMessagesForCache = nextMessages;
                 return { ...prev, [chatId]: nextMessages };
             }
+            nextMessagesForCache = [...currentMessages, newMsg];
             return {
                 ...prev,
-                [chatId]: [...currentMessages, newMsg]
+                [chatId]: nextMessagesForCache
             };
         });
+        if (nextMessagesForCache) persistChatCache(chatId, nextMessagesForCache);
 
         // Prevent double unread increments / duplicated chat-lastMessage updates
         // when the same message event is delivered more than once.
@@ -633,17 +662,20 @@ export function App() {
                 };
             });
         });
-    }, [currentUser?.chatId, loadChats, playChatSound]);
+    }, [currentUser?.chatId, loadChats, playChatSound, persistChatCache]);
 
     const handleMessageEdited = useCallback((chatId: string, updated: Message) => {
+        let nextMessagesForCache: Message[] | null = null;
         setMessages(prev => {
             const arr = prev[chatId];
             if (!arr) return prev;
+            nextMessagesForCache = arr.map(m => (m.id === updated.id ? { ...m, ...updated } : m));
             return {
                 ...prev,
-                [chatId]: arr.map(m => (m.id === updated.id ? { ...m, ...updated } : m))
+                [chatId]: nextMessagesForCache
             };
         });
+        if (nextMessagesForCache) persistChatCache(chatId, nextMessagesForCache);
 
         setChats(prev => prev.map(c => {
             if (c.id !== chatId) return c;
@@ -656,17 +688,20 @@ export function App() {
                 }
             };
         }));
-    }, []);
+    }, [persistChatCache]);
 
     const handleMessageDeleted = useCallback((chatId: string, messageId: string, lastMessage?: any) => {
+        let nextMessagesForCache: Message[] | null = null;
         setMessages(prev => {
             const arr = prev[chatId];
             if (!arr) return prev;
+            nextMessagesForCache = arr.filter(m => m.id !== messageId);
             return {
                 ...prev,
-                [chatId]: arr.filter(m => m.id !== messageId)
+                [chatId]: nextMessagesForCache
             };
         });
+        if (nextMessagesForCache) persistChatCache(chatId, nextMessagesForCache);
 
         if (lastMessage) {
             setChats(prev => prev.map(c => {
@@ -685,7 +720,7 @@ export function App() {
                 return { ...c, lastMessage: null };
             }));
         }
-    }, []);
+    }, [persistChatCache]);
 
     const handleUserStatusChange = useCallback((userId: string, online: boolean) => {
         const normalizedUserId = String(userId || '').trim();
@@ -743,26 +778,32 @@ export function App() {
     }, []);
 
     const handleMessagesSeen = useCallback((chatId: string) => {
+        let nextMessagesForCache: Message[] | null = null;
         setMessages(prev => {
             if (!prev[chatId]) return prev;
+            nextMessagesForCache = prev[chatId].map(m => ({ ...m, seen: true }));
             return {
                 ...prev,
-                [chatId]: prev[chatId].map(m => ({ ...m, seen: true }))
+                [chatId]: nextMessagesForCache
             };
         });
+        if (nextMessagesForCache) persistChatCache(chatId, nextMessagesForCache);
         setChats(prev => prev.map(c => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
-    }, []);
+    }, [persistChatCache]);
 
     const handleReactionUpdated = useCallback((chatId: string, messageId: string, reactions: any[]) => {
+        let nextMessagesForCache: Message[] | null = null;
         setMessages(prev => {
             const arr = prev[chatId];
             if (!arr) return prev;
+            nextMessagesForCache = arr.map(m => (m.id === messageId ? { ...m, reactions } : m));
             return {
                 ...prev,
-                [chatId]: arr.map(m => (m.id === messageId ? { ...m, reactions } : m))
+                [chatId]: nextMessagesForCache
             };
         });
-    }, []);
+        if (nextMessagesForCache) persistChatCache(chatId, nextMessagesForCache);
+    }, [persistChatCache]);
 
     const handleWsReconnectExhausted = useCallback(() => {
         setWsReconnectExhausted(true);
@@ -1043,6 +1084,14 @@ export function App() {
 
         setMessages((prev) => {
             const merged = mergeMessages(prev[chatId] || [], chunk, mode);
+            persistChatCache(chatId, merged, {
+                hasOlder: Boolean(res?.hasOlder),
+                hasNewer: Boolean(res?.hasNewer),
+                oldestCursor: res?.oldestCursor || null,
+                newestCursor: res?.newestCursor || null,
+                loadingOlder: false,
+                loadingNewer: false,
+            });
             return { ...prev, [chatId]: merged };
         });
 
@@ -1059,7 +1108,7 @@ export function App() {
             },
         }));
         return chunk.length;
-    }, []);
+    }, [authToken, persistChatCache]);
 
     useEffect(() => {
         if (!wsConnected || !isAuthenticated) return;
@@ -1067,6 +1116,7 @@ export function App() {
         loadChats(false);
 
         if (!activeChatId) return;
+        if (messagesLoadedOnce[activeChatId]) return;
         fetchPagedMessages(activeChatId, { direction: 'latest', mode: 'replace' })
             .then(() => {
                 if (currentUser && activeChatId !== `saved_messages_${currentUser.chatId}`) {
@@ -1074,7 +1124,7 @@ export function App() {
                 }
             })
             .catch((err) => console.error('Failed to sync messages after reconnect', err));
-    }, [wsConnected, isAuthenticated, loadChats, activeChatId, currentUser, sendSeen, fetchPagedMessages]);
+    }, [wsConnected, isAuthenticated, loadChats, activeChatId, currentUser, sendSeen, fetchPagedMessages, messagesLoadedOnce]);
 
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -1091,15 +1141,15 @@ export function App() {
 
                 const state = messageRangeState[targetChatId];
                 const userIsViewingHistory = Boolean(state?.hasNewer);
-                if (state?.newestCursor && !userIsViewingHistory) {
+                if (!messagesLoadedOnce[targetChatId]) {
+                    await fetchPagedMessages(targetChatId, { direction: 'latest', mode: 'replace' });
+                } else if (state?.newestCursor && !userIsViewingHistory) {
                     await fetchPagedMessages(targetChatId, {
                         direction: 'newer',
                         cursorTs: state.newestCursor.cursorTs,
                         cursorId: state.newestCursor.cursorId,
                         mode: 'append',
                     });
-                } else if (!userIsViewingHistory && messagesLoadedOnce[targetChatId]) {
-                    await fetchPagedMessages(targetChatId, { direction: 'latest', mode: 'replace' });
                 }
 
                 if (currentUser && targetChatId !== `saved_messages_${currentUser.chatId}`) {
@@ -1201,9 +1251,27 @@ export function App() {
         }
 
         try {
-            let loadedCount = await fetchPagedMessages(chatId, { direction: 'latest', mode: 'replace' });
-            if (loadedCount === 0 && chatLoadRequestRef.current === requestId) {
-                // Retry once for occasional race/network hiccups when rapidly switching chats.
+            let loadedFromCache = false;
+            if (!messagesLoadedOnce[chatId]) {
+                const cached = await readCachedChatMessages(chatId);
+                if (cached?.messages?.length) {
+                    loadedFromCache = true;
+                    setMessages((prev) => ({ ...prev, [chatId]: cached.messages }));
+                    setMessageRangeState((prev) => ({
+                        ...prev,
+                        [chatId]: {
+                            hasOlder: Boolean(cached.range?.hasOlder),
+                            hasNewer: Boolean(cached.range?.hasNewer),
+                            oldestCursor: cached.range?.oldestCursor || null,
+                            newestCursor: cached.range?.newestCursor || null,
+                            loadingOlder: false,
+                            loadingNewer: false,
+                        },
+                    }));
+                }
+            }
+            let loadedCount = loadedFromCache ? 1 : await fetchPagedMessages(chatId, { direction: 'latest', mode: 'replace' });
+            if (!loadedFromCache && loadedCount === 0 && chatLoadRequestRef.current === requestId) {
                 await new Promise((resolve) => window.setTimeout(resolve, 180));
                 loadedCount = await fetchPagedMessages(chatId, { direction: 'latest', mode: 'replace' });
             }
@@ -1419,10 +1487,14 @@ export function App() {
                 file: payload.file,
                 replyTo: replySrc ? { id: replySrc.id, senderId: replySrc.senderId, text: replySrc.text } : undefined,
             };
-            setMessages((prev) => ({
-                ...prev,
-                [targetChatId]: [...(prev[targetChatId] || []), optimistic],
-            }));
+            setMessages((prev) => {
+                const nextChatMessages = [...(prev[targetChatId] || []), optimistic];
+                persistChatCache(targetChatId, nextChatMessages);
+                return {
+                    ...prev,
+                    [targetChatId]: nextChatMessages,
+                };
+            });
             setChats((prev) => prev.map((chat) => (
                 chat.id === targetChatId
                     ? {
@@ -1439,10 +1511,14 @@ export function App() {
             )));
         };
         const removeOptimisticMessage = (targetChatId: string, clientId: string) => {
-            setMessages((prev) => ({
-                ...prev,
-                [targetChatId]: (prev[targetChatId] || []).filter((m) => m.id !== clientId),
-            }));
+            setMessages((prev) => {
+                const nextChatMessages = (prev[targetChatId] || []).filter((m) => m.id !== clientId);
+                persistChatCache(targetChatId, nextChatMessages);
+                return {
+                    ...prev,
+                    [targetChatId]: nextChatMessages,
+                };
+            });
         };
 
         if (payload.editMessageId) {
@@ -1525,7 +1601,7 @@ export function App() {
             console.warn('WebSocket not connected');
             removeOptimisticMessage(activeChatId, clientId);
         }
-    }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, navigate, chats, isUserBlocked, messages]);
+    }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, navigate, chats, isUserBlocked, messages, persistChatCache]);
 
     const handleDeleteMessage = useCallback((messageId: string) => {
         if (!activeChatId) return;
@@ -1569,10 +1645,14 @@ export function App() {
                 aiModelKey: sourceMessage.aiModelKey,
                 aiModelName: sourceMessage.aiModelName,
             };
-            setMessages((prev) => ({
-                ...prev,
-                [targetChatId]: [...(prev[targetChatId] || []), optimisticForward],
-            }));
+            setMessages((prev) => {
+                const nextChatMessages = [...(prev[targetChatId] || []), optimisticForward];
+                persistChatCache(targetChatId, nextChatMessages);
+                return {
+                    ...prev,
+                    [targetChatId]: nextChatMessages,
+                };
+            });
         }
         if (!sourceMessage) return;
         try {
@@ -1605,13 +1685,17 @@ export function App() {
             // websocket/new sync confirms server copy.
         } catch (e) {
             console.error('Failed to refresh forwarded target chat messages', e);
-            setMessages((prev) => ({
-                ...prev,
-                [targetChatId]: (prev[targetChatId] || []).filter((m) => m.id !== forwardClientId),
-            }));
+            setMessages((prev) => {
+                const nextChatMessages = (prev[targetChatId] || []).filter((m) => m.id !== forwardClientId);
+                persistChatCache(targetChatId, nextChatMessages);
+                return {
+                    ...prev,
+                    [targetChatId]: nextChatMessages,
+                };
+            });
         }
         loadChats(false);
-    }, [playChatSound, loadChats, messages, aiMessagesByChat, authToken, currentUser, chats, activeChatId, fetchPagedMessages]);
+    }, [playChatSound, loadChats, messages, aiMessagesByChat, authToken, currentUser, chats, activeChatId, fetchPagedMessages, persistChatCache]);
 
     const handleSetPendingForwardDraft = useCallback((targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => {
         if (!targetChatId || !draft?.sourceChatId || !draft?.messageId) return;
@@ -1786,6 +1870,7 @@ export function App() {
     }, []);
     const disposeChatSession = useCallback((chatId: string | null) => {
         if (!chatId) return;
+        removeChatCache(chatId);
         setMessages((prev) => {
             const { [chatId]: _, ...rest } = prev;
             return rest;
@@ -1802,7 +1887,7 @@ export function App() {
             const { [chatId]: _, ...rest } = prev;
             return rest;
         });
-    }, []);
+    }, [removeChatCache]);
     const handleBack = () => {
         if (temporaryAIChat && activeAIChatId && !aiResponding) {
             void cleanupTemporaryAIChat(activeAIChatId);
@@ -1828,6 +1913,7 @@ export function App() {
     };
 
     const handleChatDeleted = (chatId: string) => {
+        removeChatCache(chatId);
         setChats(prev => prev.filter(c => c.id !== chatId));
         setMessages(prev => {
             const { [chatId]: _, ...rest } = prev;
