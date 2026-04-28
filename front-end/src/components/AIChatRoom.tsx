@@ -1298,7 +1298,7 @@ export function AIChatRoom({
                                         width: 6,
                                         height: 6,
                                         borderRadius: 999,
-                                        background: '#2F80ED',
+                                        background: 'var(--accent-primary)',
                                         marginTop: 4,
                                     }}
                                 />
@@ -1319,9 +1319,9 @@ export function AIChatRoom({
                             height: 44,
                             padding: '0 10px',
                             borderRadius: 12,
-                            border: `1px solid ${reasoningEnabled ? 'rgba(47,128,237,0.45)' : 'var(--border-secondary)'}`,
-                            background: reasoningEnabled ? 'rgba(47,128,237,0.16)' : 'var(--bg-secondary)',
-                            color: reasoningEnabled ? '#2F80ED' : 'var(--text-secondary)',
+                            border: `1px solid ${reasoningEnabled ? 'color-mix(in srgb, var(--accent-primary) 50%, transparent)' : 'var(--border-secondary)'}`,
+                            background: reasoningEnabled ? 'color-mix(in srgb, var(--accent-primary) 18%, var(--bg-secondary))' : 'var(--bg-secondary)',
+                            color: reasoningEnabled ? 'var(--accent-hover)' : 'var(--text-secondary)',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: 6,

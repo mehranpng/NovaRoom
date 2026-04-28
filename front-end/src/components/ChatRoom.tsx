@@ -2442,7 +2442,7 @@ export function ChatRoom({
                                                 boxShadow: isHighlighted
                                                     ? '0 0 0 3px rgba(245, 158, 11, 0.4)'
                                                     : isMenuActive
-                                                        ? '0 0 0 2px rgba(47, 128, 237, 0.35)'
+                                                        ? '0 0 0 2px color-mix(in srgb, var(--accent-primary) 36%, transparent)'
                                                         : undefined,
                                             }}
                                         >
@@ -2784,7 +2784,7 @@ export function ChatRoom({
                         {newMsgCount > 0 && (
                             <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 <span style={{ fontVariantNumeric: 'tabular-nums', fontFamily: 'Vazir, sans-serif' }}>{toPersianDigits(newMsgCount)}</span>
-                                <span style={{ width: 6, height: 6, borderRadius: 999, background: '#2F80ED', marginTop: 4 }} />
+                                <span style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--accent-primary)', marginTop: 4 }} />
                             </span>
                         )}
                     </motion.button>

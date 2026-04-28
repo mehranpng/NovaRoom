@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type ThemeTone = 'neutral' | 'custom';
-export type ThemePalette = 'blue' | 'green' | 'purple' | 'orange' | 'rose' | 'teal' | 'indigo' | 'amber';
+export type ThemePalette = 'blue' | 'green' | 'purple' | 'orange' | 'rose' | 'teal' | 'amber' | 'red' | 'pink';
 
 const STORAGE_KEY = 'themeMode';
 const TONE_STORAGE_KEY = 'themeTone';
@@ -16,8 +16,9 @@ const paletteMeta: Record<ThemePalette, { label: string; color: string }> = {
   orange: { label: 'نارنجی', color: '#ea580c' },
   rose: { label: 'رز', color: '#e11d48' },
   teal: { label: 'فیروزه‌ای', color: '#0f766e' },
-  indigo: { label: 'ایندیگو', color: '#4338ca' },
   amber: { label: 'کهربایی', color: '#d97706' },
+  red: { label: 'قرمز', color: '#dc2626' },
+  pink: { label: 'صورتی', color: '#db2777' },
 };
 
 const paletteAccentVars: Record<ThemePalette, { light: Record<string, string>; dark: Record<string, string> }> = {
@@ -45,13 +46,17 @@ const paletteAccentVars: Record<ThemePalette, { light: Record<string, string>; d
     light: { '--accent-primary': '#0f766e', '--accent-hover': '#115e59', '--accent-soft': '#ccfbf1', '--accent-soft-text': '#134e4a' },
     dark: { '--accent-primary': '#14b8a6', '--accent-hover': '#0f766e', '--accent-soft': 'rgba(20,184,166,0.24)', '--accent-soft-text': '#ccfbf1' },
   },
-  indigo: {
-    light: { '--accent-primary': '#4338ca', '--accent-hover': '#3730a3', '--accent-soft': '#e0e7ff', '--accent-soft-text': '#312e81' },
-    dark: { '--accent-primary': '#6366f1', '--accent-hover': '#4338ca', '--accent-soft': 'rgba(99,102,241,0.24)', '--accent-soft-text': '#e0e7ff' },
-  },
   amber: {
     light: { '--accent-primary': '#d97706', '--accent-hover': '#b45309', '--accent-soft': '#fef3c7', '--accent-soft-text': '#92400e' },
     dark: { '--accent-primary': '#f59e0b', '--accent-hover': '#d97706', '--accent-soft': 'rgba(245,158,11,0.24)', '--accent-soft-text': '#fef3c7' },
+  },
+  red: {
+    light: { '--accent-primary': '#dc2626', '--accent-hover': '#b91c1c', '--accent-soft': '#fee2e2', '--accent-soft-text': '#991b1b' },
+    dark: { '--accent-primary': '#ef4444', '--accent-hover': '#dc2626', '--accent-soft': 'rgba(239,68,68,0.24)', '--accent-soft-text': '#fecaca' },
+  },
+  pink: {
+    light: { '--accent-primary': '#db2777', '--accent-hover': '#be185d', '--accent-soft': '#fce7f3', '--accent-soft-text': '#9d174d' },
+    dark: { '--accent-primary': '#ec4899', '--accent-hover': '#db2777', '--accent-soft': 'rgba(236,72,153,0.24)', '--accent-soft-text': '#fbcfe8' },
   },
 };
 
