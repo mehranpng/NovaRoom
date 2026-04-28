@@ -258,6 +258,40 @@ async def generate_chat_title(first_user_message: str) -> str:
     def _normalize_title(raw: str) -> str:
         return re.sub(r"\s+", " ", str(raw or "").strip()).strip(" .,!?:;،؛…")
 
+    def _keyword_set(text: str) -> set[str]:
+        words = re.findall(r"[A-Za-z\u0600-\u06FF0-9]+", str(text or "").lower())
+        stop = {
+            "و",
+            "در",
+            "به",
+            "از",
+            "که",
+            "این",
+            "اون",
+            "را",
+            "با",
+            "برای",
+            "the",
+            "and",
+            "for",
+            "with",
+            "to",
+            "a",
+            "an",
+            "is",
+            "are",
+        }
+        return {w for w in words if len(w) > 1 and w not in stop}
+
+    def _is_relevant_title(title: str, raw_message: str) -> bool:
+        title_words = _keyword_set(title)
+        msg_words = _keyword_set(raw_message)
+        if not title_words:
+            return False
+        if not msg_words:
+            return True
+        return bool(title_words.intersection(msg_words))
+
     try:
         raw_message = (first_user_message or "").strip()
         if not raw_message:
@@ -270,6 +304,8 @@ async def generate_chat_title(first_user_message: str) -> str:
                     "Return valid json only. "
                     'Output format: {"title":"..."} . '
                     "Create a short Persian chat title (max 56 chars) based on the first user message. "
+                    "The title must be creative and rewritten (not copied from the message). "
+                    "It must stay directly related to the message topic. "
                     "No punctuation-heavy text. No emojis. No quotes."
                 ),
             },
@@ -287,6 +323,7 @@ async def generate_chat_title(first_user_message: str) -> str:
                 response = await client.chat.completions.create(
                     model=model_name,
                     messages=title_messages,
+                    response_format={"type": "json_object"},
                     max_tokens=80,
                 )
                 payload = response.choices[0].message.content or ""
@@ -307,10 +344,38 @@ async def generate_chat_title(first_user_message: str) -> str:
                         parsed_title = cleaned.splitlines()[0] if cleaned else ""
 
                 title = _normalize_title(parsed_title)
-                if title and title not in {"گفتگوی جدید", "گفتگوی جدید"}:
+                if (
+                    title
+                    and title not in {"گفتگوی جدید", "گفتگوی جدید"}
+                    and _is_relevant_title(title, raw_message)
+                ):
                     return title[:56]
             except Exception:
                 continue
+
+        # Last-resort AI retry with stronger relevance instruction.
+        retry_messages = [
+            *title_messages,
+            {
+                "role": "user",
+                "content": "Title must directly match the same topic and key entities.",
+            },
+        ]
+        try:
+            retry = await client.chat.completions.create(
+                model="deepseek-v4-flash",
+                messages=retry_messages,
+                response_format={"type": "json_object"},
+                max_tokens=80,
+            )
+            payload = retry.choices[0].message.content or ""
+            parsed = json.loads(payload)
+            title = _normalize_title(str(parsed.get("title") or ""))
+            if title and title not in {"گفتگوی جدید", "گفتگوی جدید"}:
+                return title[:56]
+        except Exception:
+            pass
+
         return "گفتگوی جدید"
     except Exception as e:
         print(f"Title generation error: {e}")
