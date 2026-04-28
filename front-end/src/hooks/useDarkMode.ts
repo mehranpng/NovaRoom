@@ -23,35 +23,35 @@ const paletteMeta: Record<ThemePalette, { label: string; color: string }> = {
 const paletteAccentVars: Record<ThemePalette, { light: Record<string, string>; dark: Record<string, string> }> = {
   blue: {
     light: { '--accent-primary': '#2563eb', '--accent-hover': '#1d4ed8', '--accent-soft': '#dbeafe', '--accent-soft-text': '#1e40af' },
-    dark: { '--accent-primary': '#60a5fa', '--accent-hover': '#3b82f6', '--accent-soft': 'rgba(96,165,250,0.18)', '--accent-soft-text': '#bfdbfe' },
+    dark: { '--accent-primary': '#3b82f6', '--accent-hover': '#2563eb', '--accent-soft': 'rgba(59,130,246,0.24)', '--accent-soft-text': '#dbeafe' },
   },
   green: {
     light: { '--accent-primary': '#16a34a', '--accent-hover': '#15803d', '--accent-soft': '#dcfce7', '--accent-soft-text': '#166534' },
-    dark: { '--accent-primary': '#4ade80', '--accent-hover': '#22c55e', '--accent-soft': 'rgba(74,222,128,0.16)', '--accent-soft-text': '#bbf7d0' },
+    dark: { '--accent-primary': '#22c55e', '--accent-hover': '#16a34a', '--accent-soft': 'rgba(34,197,94,0.22)', '--accent-soft-text': '#dcfce7' },
   },
   purple: {
     light: { '--accent-primary': '#7c3aed', '--accent-hover': '#6d28d9', '--accent-soft': '#ede9fe', '--accent-soft-text': '#5b21b6' },
-    dark: { '--accent-primary': '#a78bfa', '--accent-hover': '#8b5cf6', '--accent-soft': 'rgba(167,139,250,0.17)', '--accent-soft-text': '#ddd6fe' },
+    dark: { '--accent-primary': '#8b5cf6', '--accent-hover': '#7c3aed', '--accent-soft': 'rgba(139,92,246,0.24)', '--accent-soft-text': '#ede9fe' },
   },
   orange: {
     light: { '--accent-primary': '#ea580c', '--accent-hover': '#c2410c', '--accent-soft': '#ffedd5', '--accent-soft-text': '#9a3412' },
-    dark: { '--accent-primary': '#fb923c', '--accent-hover': '#f97316', '--accent-soft': 'rgba(251,146,60,0.17)', '--accent-soft-text': '#fed7aa' },
+    dark: { '--accent-primary': '#f97316', '--accent-hover': '#ea580c', '--accent-soft': 'rgba(249,115,22,0.24)', '--accent-soft-text': '#ffedd5' },
   },
   rose: {
     light: { '--accent-primary': '#e11d48', '--accent-hover': '#be123c', '--accent-soft': '#ffe4e6', '--accent-soft-text': '#9f1239' },
-    dark: { '--accent-primary': '#fb7185', '--accent-hover': '#f43f5e', '--accent-soft': 'rgba(251,113,133,0.17)', '--accent-soft-text': '#fecdd3' },
+    dark: { '--accent-primary': '#f43f5e', '--accent-hover': '#e11d48', '--accent-soft': 'rgba(244,63,94,0.24)', '--accent-soft-text': '#ffe4e6' },
   },
   teal: {
     light: { '--accent-primary': '#0f766e', '--accent-hover': '#115e59', '--accent-soft': '#ccfbf1', '--accent-soft-text': '#134e4a' },
-    dark: { '--accent-primary': '#2dd4bf', '--accent-hover': '#14b8a6', '--accent-soft': 'rgba(45,212,191,0.17)', '--accent-soft-text': '#99f6e4' },
+    dark: { '--accent-primary': '#14b8a6', '--accent-hover': '#0f766e', '--accent-soft': 'rgba(20,184,166,0.24)', '--accent-soft-text': '#ccfbf1' },
   },
   indigo: {
     light: { '--accent-primary': '#4338ca', '--accent-hover': '#3730a3', '--accent-soft': '#e0e7ff', '--accent-soft-text': '#312e81' },
-    dark: { '--accent-primary': '#818cf8', '--accent-hover': '#6366f1', '--accent-soft': 'rgba(129,140,248,0.16)', '--accent-soft-text': '#c7d2fe' },
+    dark: { '--accent-primary': '#6366f1', '--accent-hover': '#4338ca', '--accent-soft': 'rgba(99,102,241,0.24)', '--accent-soft-text': '#e0e7ff' },
   },
   amber: {
     light: { '--accent-primary': '#d97706', '--accent-hover': '#b45309', '--accent-soft': '#fef3c7', '--accent-soft-text': '#92400e' },
-    dark: { '--accent-primary': '#fbbf24', '--accent-hover': '#f59e0b', '--accent-soft': 'rgba(251,191,36,0.18)', '--accent-soft-text': '#fde68a' },
+    dark: { '--accent-primary': '#f59e0b', '--accent-hover': '#d97706', '--accent-soft': 'rgba(245,158,11,0.24)', '--accent-soft-text': '#fef3c7' },
   },
 };
 
@@ -138,18 +138,18 @@ const createCustomSurfaceVars = (isDarkMode: boolean): Record<string, string> =>
   }
 
   return {
-    '--bg-primary': 'color-mix(in srgb, var(--accent-primary) 12%, #14161a)',
-    '--bg-secondary': 'color-mix(in srgb, var(--accent-primary) 18%, #1c1f26)',
-    '--bg-tertiary': 'color-mix(in srgb, var(--accent-primary) 24%, #242934)',
-    '--border-primary': 'color-mix(in srgb, var(--accent-primary) 26%, #323846)',
-    '--border-secondary': 'color-mix(in srgb, var(--accent-primary) 34%, #3b4350)',
-    '--hover-bg': 'color-mix(in srgb, var(--accent-primary) 30%, #2b313d)',
-    '--hover-bg-light': 'color-mix(in srgb, var(--accent-primary) 24%, #252b35)',
-    '--message-theirs-bg': 'color-mix(in srgb, var(--accent-primary) 18%, #2b313d)',
-    '--input-bg': 'color-mix(in srgb, var(--accent-primary) 22%, #2b313d)',
-    '--input-bg-focus': 'color-mix(in srgb, var(--accent-primary) 30%, #343b49)',
-    '--reply-box-bg': 'color-mix(in srgb, var(--accent-primary) 20%, #2b313d)',
-    '--reply-box-border': 'color-mix(in srgb, var(--accent-primary) 28%, #343b49)',
+    '--bg-primary': 'color-mix(in srgb, var(--accent-primary) 7%, #16181d)',
+    '--bg-secondary': 'color-mix(in srgb, var(--accent-primary) 12%, #1f232b)',
+    '--bg-tertiary': 'color-mix(in srgb, var(--accent-primary) 16%, #272c36)',
+    '--border-primary': 'color-mix(in srgb, var(--accent-primary) 18%, #323846)',
+    '--border-secondary': 'color-mix(in srgb, var(--accent-primary) 24%, #3b4350)',
+    '--hover-bg': 'color-mix(in srgb, var(--accent-primary) 20%, #2b313d)',
+    '--hover-bg-light': 'color-mix(in srgb, var(--accent-primary) 16%, #252b35)',
+    '--message-theirs-bg': 'color-mix(in srgb, var(--accent-primary) 12%, #2b313d)',
+    '--input-bg': 'color-mix(in srgb, var(--accent-primary) 14%, #2b313d)',
+    '--input-bg-focus': 'color-mix(in srgb, var(--accent-primary) 20%, #343b49)',
+    '--reply-box-bg': 'color-mix(in srgb, var(--accent-primary) 14%, #2b313d)',
+    '--reply-box-border': 'color-mix(in srgb, var(--accent-primary) 18%, #343b49)',
   };
 };
 
