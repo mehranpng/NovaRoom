@@ -12,40 +12,6 @@ client = AsyncOpenAI(
     base_url="https://api.deepseek.com",
 )
 
-PERSIAN_STOPWORDS = {
-    "من",
-    "تو",
-    "شما",
-    "او",
-    "ما",
-    "این",
-    "اون",
-    "است",
-    "هست",
-    "هستم",
-    "هستی",
-    "هستیم",
-    "رو",
-    "را",
-    "که",
-    "برای",
-    "با",
-    "و",
-    "یا",
-    "از",
-    "در",
-    "به",
-    "یه",
-    "یک",
-    "می",
-    "میخوام",
-    "می‌خوام",
-    "لطفا",
-    "لطفاً",
-    "خواهش",
-}
-
-
 def _coerce_chunk_text(value: Any) -> str:
     if value is None:
         return ""
@@ -78,25 +44,6 @@ def _coerce_chunk_text(value: Any) -> str:
     if text_attr is not None:
         return str(text_attr)
     return str(value)
-
-
-def _build_rule_based_title(raw: str) -> str:
-    cleaned = re.sub(r"\s+", " ", str(raw or "").strip())
-    cleaned = re.sub(r"[\"'`“”‘’]+", "", cleaned)
-    tokens = re.findall(r"[آ-یA-Za-z0-9]+", cleaned)
-    keywords: List[str] = []
-    for token in tokens:
-        t = token.strip().lower()
-        if not t or t in PERSIAN_STOPWORDS:
-            continue
-        if t.isdigit():
-            continue
-        keywords.append(token.strip())
-        if len(keywords) >= 5:
-            break
-    if not keywords:
-        return "موضوع جدید"
-    return " ".join(keywords[:4])[:56].strip()
 
 
 def _contains_cjk(text: str) -> bool:
@@ -306,10 +253,26 @@ async def generate_conversation_summary(
 
 
 async def generate_chat_title(first_user_message: str) -> str:
+    def _normalize_title(raw: str) -> str:
+        return re.sub(r"\s+", " ", str(raw or "").strip()).strip(" .,!?:;،؛…")
+
+    def _looks_like_message_fragment(title: str, raw_message: str) -> bool:
+        t = _normalize_title(title)
+        m = _normalize_title(raw_message)
+        if not t or not m:
+            return False
+        if t == m:
+            return True
+        if m.startswith(t) or t.startswith(m):
+            return True
+        if len(m) > 20 and t in m:
+            return True
+        return False
+
     try:
         raw_message = (first_user_message or "").strip()
         if not raw_message:
-            return "موضوع جدید گفتگو"
+            return "گفتوگوی جدید"
 
         title_messages = [
             {
@@ -318,6 +281,7 @@ async def generate_chat_title(first_user_message: str) -> str:
                     "Return valid json only. "
                     'Output format: {"title":"..."} . '
                     "Create a short Persian chat title (max 56 chars) based on the first user message. "
+                    "The title must be creative and rewritten (not copied from the message). "
                     "No punctuation-heavy text. No emojis. No quotes."
                 ),
             },
@@ -330,19 +294,26 @@ async def generate_chat_title(first_user_message: str) -> str:
             },
         ]
 
-        response = await client.chat.completions.create(
-            model="deepseek-v4-flash",
-            messages=title_messages,
-            response_format={"type": "json_object"},
-            max_tokens=80,
-        )
-        payload = response.choices[0].message.content or ""
-        parsed = json.loads(payload)
-        title = str(parsed.get("title") or "").strip()
-        normalized_title = re.sub(r"\s+", " ", title).strip(" .,!?:;،؛…")
-        if not normalized_title or normalized_title == "گفتگوی جدید":
-            return _build_rule_based_title(raw_message)
-        return normalized_title[:56]
+        for model_name in ("deepseek-chat", "deepseek-v4-flash"):
+            try:
+                response = await client.chat.completions.create(
+                    model=model_name,
+                    messages=title_messages,
+                    response_format={"type": "json_object"},
+                    max_tokens=80,
+                )
+                payload = response.choices[0].message.content or ""
+                parsed = json.loads(payload)
+                title = _normalize_title(str(parsed.get("title") or ""))
+                if (
+                    title
+                    and title not in {"گفتگوی جدید", "گفتوگوی جدید"}
+                    and not _looks_like_message_fragment(title, raw_message)
+                ):
+                    return title[:56]
+            except Exception:
+                continue
+        return "گفتوگوی جدید"
     except Exception as e:
         print(f"Title generation error: {e}")
-        return _build_rule_based_title(first_user_message)
+        return "گفتوگوی جدید"
