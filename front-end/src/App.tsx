@@ -7,7 +7,7 @@ import { ChatList } from './components/ChatList';
 import { ChatRoom } from './components/ChatRoom';
 import { AIChatRoom } from './components/AIChatRoom';
 import { Profile } from './components/Profile';
-import { Devices } from './components/Devices';
+import { Settings } from './components/Settings';
 import { EmptyState } from './components/EmptyState';
 import { Login } from './components/Login';
 import { Register } from './components/Register';
@@ -1307,8 +1307,16 @@ export function App() {
             setView('profile');
             return;
         }
-        if (pathname === '/devices') {
-            setView('devices');
+        if (pathname === '/settings' || pathname === '/settings/') {
+            setView('settings');
+            return;
+        }
+        if (pathname === '/settings/devices') {
+            setView('settingsDevices');
+            return;
+        }
+        if (pathname === '/settings/theme') {
+            setView('settingsTheme');
             return;
         }
 
@@ -1766,9 +1774,9 @@ export function App() {
         setView('profile');
         navigate('/profile');
     };
-    const handleOpenDevices = () => {
-        setView('devices');
-        navigate('/devices');
+    const handleOpenSettings = () => {
+        setView('settings');
+        navigate('/settings');
     };
     const cleanupTemporaryAIChat = useCallback(async (chatId: string) => {
         try {
@@ -2145,7 +2153,7 @@ export function App() {
             <MiniMusicPlayer />
             <NotificationCenter />
             <div className="app">
-                {view !== 'profile' && view !== 'devices' && (
+                {view !== 'profile' && !String(view).startsWith('settings') && (
                     <div className={cx('app__sidebar', view === 'chatRoom' && 'app__sidebar--hidden-mobile')}>
                         <ChatList
                             chats={chats}
@@ -2159,7 +2167,7 @@ export function App() {
                             onLogout={handleLogout}
                             onOpenAIChat={handleOpenAIChat}
                             onOpenSavedMessages={handleOpenSavedMessages}
-                            onOpenDevices={handleOpenDevices}
+                            onOpenSettings={handleOpenSettings}
                             onReconnectNow={reconnectNow}
                             onDragHoverChat={handleDragHoverChat}
                             loading={isInitialChatsLoad}
@@ -2180,13 +2188,18 @@ export function App() {
                     </div>
                 )}
 
-                {view === 'devices' && (
+                {String(view).startsWith('settings') && (
                     <div className="app__main">
-                        <Devices onBack={handleBack} />
+                        <Settings
+                            section={view === 'settingsDevices' ? 'devices' : view === 'settingsTheme' ? 'theme' : 'menu'}
+                            onBack={handleBack}
+                            onOpenSection={(section) => navigate(`/settings/${section}`)}
+                            onBackToMenu={() => navigate('/settings')}
+                        />
                     </div>
                 )}
 
-                {view !== 'profile' && view !== 'devices' && (
+                {view !== 'profile' && !String(view).startsWith('settings') && (
                     <div className={cx('app__main', view === 'chatList' && 'app__main--hidden-mobile')}>
                         {view === 'chatRoom' && showAIChat ? (
                             <AIChatRoom

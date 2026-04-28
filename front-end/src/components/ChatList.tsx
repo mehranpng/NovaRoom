@@ -1,4 +1,4 @@
-import { Search, MessageCirclePlus, Menu, User as UserIcon, LogOut, Bookmark, Moon, Sun, Laptop, ChevronDown, AlignJustify, Trash2, RefreshCw, Pin, PinOff, MessageSquarePlus, Palette, Monitor } from 'lucide-react';
+import { Search, MessageCirclePlus, Menu, User as UserIcon, LogOut, Bookmark, Settings as SettingsIcon, AlignJustify, Trash2, RefreshCw, Pin, PinOff, MessageSquarePlus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Chat, User } from '../types';
@@ -22,7 +22,7 @@ interface ChatListProps {
     onLogout: () => void;
     onOpenAIChat: () => void;
     onOpenSavedMessages: () => void;
-    onOpenDevices: () => void;
+    onOpenSettings: () => void;
     onReconnectNow: () => void;
     onDragHoverChat?: (chatId: string) => void;
     loading?: boolean;
@@ -360,16 +360,15 @@ export function ChatList({
     onLogout,
     onOpenAIChat,
     onOpenSavedMessages,
-    onOpenDevices,
+    onOpenSettings,
     onReconnectNow,
     onDragHoverChat,
     loading = false,
 }: ChatListProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const [menuOpen, setMenuOpen] = useState(false);
-    const [themeMenuOpen, setThemeMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement | null>(null);
-    const { themeMode, setThemeMode } = useDarkMode();
+    useDarkMode();
 
     const isMobile = useIsMobile(768);
 
@@ -528,16 +527,11 @@ export function ChatList({
             if (!menuRef.current) return;
             if (menuRef.current.contains(e.target as Node)) return;
             setMenuOpen(false);
-            setThemeMenuOpen(false);
         };
         if (menuOpen) {
             document.addEventListener('mousedown', onDocClick);
         }
         return () => document.removeEventListener('mousedown', onDocClick);
-    }, [menuOpen]);
-
-    useEffect(() => {
-        if (!menuOpen) setThemeMenuOpen(false);
     }, [menuOpen]);
 
     useEffect(() => {
@@ -553,23 +547,6 @@ export function ChatList({
         }
         return () => document.removeEventListener('mousedown', onDocClick);
     }, [chatActionMenu]);
-
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        const style = getComputedStyle(document.documentElement);
-        const themeColor = (style.getPropertyValue('--bg-primary') || '').trim() || (style.getPropertyValue('--bg-secondary') || '').trim() || '#ffffff';
-        const ensureMeta = (name: string) => {
-            let m = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
-            if (!m) {
-                m = document.createElement('meta');
-                m.name = name;
-                document.head.appendChild(m);
-            }
-            m.setAttribute('content', themeColor);
-        };
-        ensureMeta('theme-color');
-        ensureMeta('msapplication-navbutton-color');
-    }, [themeMode]);
 
     useEffect(() => {
         if (!confirmAction) return;
@@ -866,51 +843,10 @@ export function ChatList({
                                     <Bookmark size={16} />
                                     پیام‌های ذخیره شده
                                 </button>
-                                <button className="popover__item" onClick={() => { setMenuOpen(false); onOpenDevices(); }} type="button">
-                                    <Laptop size={16} />
-                                    دستگاه‌ها
+                                <button className="popover__item" onClick={() => { setMenuOpen(false); onOpenSettings(); }} type="button">
+                                    <SettingsIcon size={16} />
+                                    تنظیمات
                                 </button>
-                                <div style={{ width: '100%' }}>
-                                    <button
-                                        className="popover__item"
-                                        onClick={() => setThemeMenuOpen((v) => !v)}
-                                        type="button"
-                                        style={{ justifyContent: 'space-between' }}
-                                    >
-                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                                            <Palette size={16} />
-                                            حالت نمایش
-                                        </span>
-                                        <ChevronDown size={14} style={{ transform: themeMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }} />
-                                    </button>
-
-                                    <AnimatePresence initial={false}>
-                                        {themeMenuOpen && (
-                                            <motion.div
-                                                initial={{ height: 0, opacity: 0 }}
-                                                animate={{ height: 'auto', opacity: 1 }}
-                                                exit={{ height: 0, opacity: 0 }}
-                                                transition={{ duration: 0.2, ease: 'easeInOut' }}
-                                                style={{ overflow: 'hidden' }}
-                                            >
-                                                <div style={{ padding: '4px 0 0' }}>
-                                                    <button className="popover__item" onClick={() => { setThemeMode('system'); setMenuOpen(false); }} type="button" style={{ paddingInlineStart: 28 }}>
-                                                        <Monitor size={16} />
-                                                        سیستم{themeMode === 'system' ? ' ✓' : ''}
-                                                    </button>
-                                                    <button className="popover__item" onClick={() => { setThemeMode('light'); setMenuOpen(false); }} type="button" style={{ paddingInlineStart: 28 }}>
-                                                        <Sun size={16} />
-                                                        روشن{themeMode === 'light' ? ' ✓' : ''}
-                                                    </button>
-                                                    <button className="popover__item" onClick={() => { setThemeMode('dark'); setMenuOpen(false); }} type="button" style={{ paddingInlineStart: 28 }}>
-                                                        <Moon size={16} />
-                                                        تاریک{themeMode === 'dark' ? ' ✓' : ''}
-                                                    </button>
-                                                </div>
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
-                                </div>
                                 <button className="popover__item popover__item--danger" onClick={() => { setMenuOpen(false); requestLogout(); }} type="button">
                                     <LogOut size={16} />
                                     خروج
