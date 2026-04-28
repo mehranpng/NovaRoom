@@ -1784,9 +1784,31 @@ export function App() {
         });
         setActiveAIChatId((prev) => (prev === chatId ? null : prev));
     }, []);
+    const disposeChatSession = useCallback((chatId: string | null) => {
+        if (!chatId) return;
+        setMessages((prev) => {
+            const { [chatId]: _, ...rest } = prev;
+            return rest;
+        });
+        setMessagesLoadedOnce((prev) => {
+            const { [chatId]: _, ...rest } = prev;
+            return rest;
+        });
+        setMessagesLoading((prev) => {
+            const { [chatId]: _, ...rest } = prev;
+            return rest;
+        });
+        setMessageRangeState((prev) => {
+            const { [chatId]: _, ...rest } = prev;
+            return rest;
+        });
+    }, []);
     const handleBack = () => {
         if (temporaryAIChat && activeAIChatId && !aiResponding) {
             void cleanupTemporaryAIChat(activeAIChatId);
+        }
+        if (!showAIChat) {
+            disposeChatSession(activeChatIdRef.current);
         }
         setView('chatList');
         setPendingUser(null);
@@ -1797,6 +1819,7 @@ export function App() {
     };
 
     const handleCloseChat = () => {
+        disposeChatSession(activeChatIdRef.current);
         setActiveChatId(null);
         setPendingUser(null);
         setShowAIChat(false);
@@ -2196,6 +2219,7 @@ export function App() {
                             />
                         ) : view === 'chatRoom' && (activeChat || pendingUser || isSavedMessagesActive) ? (
                             <ChatRoom
+                                key={activeChatId || 'pending'}
                                 chatId={activeChatId || 'pending'}
                                 contact={getActiveContact()}
                                 messages={activeMessages}
