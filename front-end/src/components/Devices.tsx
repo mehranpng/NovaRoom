@@ -130,7 +130,7 @@ export function Devices({ onBack }: DevicesProps) {
                 <div className="profile__header-spacer" />
             </div>
 
-            <div className="profile__content" style={{ gap: 8, paddingInline: 14 }}>
+            <div className="profile__content" style={{ gap: 8, paddingInline: 14, paddingTop: 12 }}>
                 {loading ? (
                     <div style={{ textAlign: 'center', direction: 'rtl', opacity: 0.8, fontSize: 13, padding: '14px 0' }}>
                         در حال بارگیری نشست‌ها...

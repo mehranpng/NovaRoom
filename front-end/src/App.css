@@ -1712,11 +1712,12 @@ body,
 
 .message-seen--single {
     opacity: 0.75;
+    color: rgba(255, 255, 255, 0.88);
 }
 
 .message-seen--double {
     opacity: 1;
-    color: var(--accent-primary);
+    color: #ffffff;
 }
 
 .message-pending-indicator {
@@ -2285,11 +2286,11 @@ body,
     align-items: center;
     gap: 6px;
     border-radius: 12px;
-    background: var(--accent-soft);
+    background: var(--accent-primary);
     padding: 6px 12px;
     font-size: 14px;
     font-weight: 500;
-    color: var(--accent-hover);
+    color: #ffffff;
     border: none;
     cursor: pointer;
     transition: background 0.15s;
@@ -2297,18 +2298,7 @@ body,
 }
 
 .profile__edit-btn:hover {
-    background: var(--accent-soft);
-}
-
-.dark-mode .profile__edit-btn {
-    background: color-mix(in srgb, var(--accent-primary) 24%, var(--bg-secondary));
-    color: #ffffff;
-    border: 1px solid color-mix(in srgb, var(--accent-primary) 45%, transparent);
-    box-shadow: 0 8px 18px color-mix(in srgb, var(--accent-primary) 28%, transparent);
-}
-
-.dark-mode .profile__edit-btn:hover {
-    background: color-mix(in srgb, var(--accent-primary) 34%, var(--bg-secondary));
+    background: var(--accent-hover);
 }
 
 .profile__cancel-btn {

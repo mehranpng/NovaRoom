@@ -14,7 +14,7 @@ const paletteMeta: Record<ThemePalette, { label: string; color: string }> = {
   green: { label: 'سبز', color: '#16a34a' },
   purple: { label: 'بنفش', color: '#7c3aed' },
   orange: { label: 'نارنجی', color: '#ea580c' },
-  rose: { label: 'رز', color: '#e11d48' },
+  rose: { label: 'رز', color: '#c026d3' },
   teal: { label: 'فیروزه‌ای', color: '#0f766e' },
   amber: { label: 'کهربایی', color: '#d97706' },
   red: { label: 'قرمز', color: '#dc2626' },
@@ -40,8 +40,8 @@ const paletteAccentVars: Record<ThemePalette, { light: Record<string, string>; d
     dark: { '--accent-primary': '#f97316', '--accent-hover': '#ea580c', '--accent-soft': 'rgba(249,115,22,0.24)', '--accent-soft-text': '#ffedd5' },
   },
   rose: {
-    light: { '--accent-primary': '#e11d48', '--accent-hover': '#be123c', '--accent-soft': '#ffe4e6', '--accent-soft-text': '#9f1239' },
-    dark: { '--accent-primary': '#f43f5e', '--accent-hover': '#e11d48', '--accent-soft': 'rgba(244,63,94,0.24)', '--accent-soft-text': '#ffe4e6' },
+    light: { '--accent-primary': '#c026d3', '--accent-hover': '#a21caf', '--accent-soft': '#fae8ff', '--accent-soft-text': '#86198f' },
+    dark: { '--accent-primary': '#d946ef', '--accent-hover': '#c026d3', '--accent-soft': 'rgba(217,70,239,0.24)', '--accent-soft-text': '#f5d0fe' },
   },
   teal: {
     light: { '--accent-primary': '#0f766e', '--accent-hover': '#115e59', '--accent-soft': '#ccfbf1', '--accent-soft-text': '#134e4a' },

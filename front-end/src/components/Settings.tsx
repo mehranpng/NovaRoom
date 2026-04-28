@@ -35,29 +35,29 @@ export function Settings({ section, onBack, onOpenSection, onBackToMenu }: Setti
         <div className="profile__header-spacer" />
       </div>
 
-      <div className="profile__content" style={{ gap: 10, paddingInline: 14 }}>
+      <div className="profile__content" style={{ gap: 10, paddingInline: 14, paddingTop: 12 }}>
         <button
           type="button"
           className="popover__item"
           onClick={() => onOpenSection('devices')}
-          style={{ border: '1px solid var(--border-primary)', borderRadius: 14, minHeight: 50, justifyContent: 'space-between' }}
+          style={{ border: '1px solid var(--border-primary)', borderRadius: 14, minHeight: 50, justifyContent: 'space-between', direction: 'rtl' }}
         >
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textAlign: 'right' }}>
             <Laptop size={18} /> دستگاه‌ها
           </span>
-          <ChevronLeft size={18} />
+          <ChevronLeft size={18} style={{ marginInlineStart: 8 }} />
         </button>
 
         <button
           type="button"
           className="popover__item"
           onClick={() => onOpenSection('theme')}
-          style={{ border: '1px solid var(--border-primary)', borderRadius: 14, minHeight: 50, justifyContent: 'space-between' }}
+          style={{ border: '1px solid var(--border-primary)', borderRadius: 14, minHeight: 50, justifyContent: 'space-between', direction: 'rtl' }}
         >
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textAlign: 'right' }}>
             <Palette size={18} /> تم
           </span>
-          <ChevronLeft size={18} />
+          <ChevronLeft size={18} style={{ marginInlineStart: 8 }} />
         </button>
       </div>
     </div>

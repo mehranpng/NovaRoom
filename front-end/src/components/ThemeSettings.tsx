@@ -8,8 +8,8 @@ const modeOptions: Array<{ value: ThemeMode; label: string; icon: typeof Sun }> 
 ];
 
 const toneOptions: Array<{ value: ThemeTone; label: string; description: string }> = [
-  { value: 'neutral', label: 'خنثی', description: 'پالت انتخابی روی اکسنت‌ها اعمال می‌شود ولی پس‌زمینه‌ها خنثی می‌مانند.' },
-  { value: 'custom', label: 'سفارشی', description: 'پالت انتخابی روی همه بخش‌ها از جمله پس‌زمینه‌ها اعمال می‌شود.' },
+  { value: 'neutral', label: 'خنثی', description: 'فقط رنگ‌های اصلی تغییر می‌کند.' },
+  { value: 'custom', label: 'سفارشی', description: 'کل ظاهر برنامه با پالت رنگی می‌شود.' },
 ];
 
 export function ThemeSettings() {
@@ -24,7 +24,7 @@ export function ThemeSettings() {
   } = useDarkMode();
 
   return (
-    <div className="profile__content" style={{ gap: 12, paddingInline: 14 }}>
+    <div className="profile__content" style={{ gap: 12, paddingInline: 14, paddingTop: 12 }}>
       <div className="profile__chat-id-card" style={{ direction: 'rtl', textAlign: 'right' }}>
         <p className="profile__field-label" style={{ marginBottom: 10 }}>حالت نمایش</p>
         <div style={{ display: 'grid', gap: 8 }}>
@@ -54,11 +54,11 @@ export function ThemeSettings() {
               type="button"
               className="popover__item"
               onClick={() => setThemeTone(option.value)}
-              style={{ borderRadius: 12, border: '1px solid var(--border-primary)', alignItems: 'start', flexDirection: 'column', gap: 4 }}
+              style={{ borderRadius: 12, border: '1px solid var(--border-primary)', alignItems: 'start', flexDirection: 'column', gap: 4, direction: 'rtl', textAlign: 'right' }}
             >
               <span style={{ display: 'inline-flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>{option.label}</span>
-                {themeTone === option.value ? <Check size={16} /> : null}
+                {themeTone === option.value ? <Check size={16} style={{ alignSelf: 'center' }} /> : null}
               </span>
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{option.description}</span>
             </button>

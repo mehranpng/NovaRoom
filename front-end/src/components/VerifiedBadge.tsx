@@ -9,7 +9,7 @@ export function VerifiedBadge({ size = 16 }: { size?: number }) {
                 width: size,
                 height: size,
                 borderRadius: 999,
-                background: '#2F80ED',
+                background: 'var(--accent-primary)',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
