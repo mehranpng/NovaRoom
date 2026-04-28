@@ -211,21 +211,25 @@ export function useDarkMode() {
       || computed.getPropertyValue('--bg-primary').trim()
       || (isDarkMode ? '#22252b' : '#f9fafb');
     const themeColor = headerColor;
-    const ensureMeta = (name: string, media?: string) => {
-      const selector = media ? `meta[name="${name}"][media="${media}"]` : `meta[name="${name}"]:not([media])`;
-      let m = document.querySelector(selector) as HTMLMetaElement | null;
+    const themeMetas = Array.from(document.querySelectorAll('meta[name="theme-color"]')) as HTMLMetaElement[];
+    if (themeMetas.length === 0) {
+      const m = document.createElement('meta');
+      m.name = 'theme-color';
+      document.head.appendChild(m);
+      themeMetas.push(m);
+    }
+    themeMetas.forEach((m) => m.setAttribute('content', themeColor));
+
+    const ensureMeta = (name: string) => {
+      let m = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
       if (!m) {
         m = document.createElement('meta');
         m.name = name;
-        if (media) m.media = media;
         document.head.appendChild(m);
       }
       m.setAttribute('content', themeColor);
     };
 
-    ensureMeta('theme-color');
-    ensureMeta('theme-color', '(prefers-color-scheme: dark)');
-    ensureMeta('theme-color', '(prefers-color-scheme: light)');
     ensureMeta('msapplication-navbutton-color');
     (root.style as any).colorScheme = isDarkMode ? 'dark' : 'light';
   }, [isDarkMode, themeMode, themeTone, themePalette]);

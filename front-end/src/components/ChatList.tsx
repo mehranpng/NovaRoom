@@ -1089,7 +1089,7 @@ export function ChatList({
                                         <p className="chat-list__item-text">
                                             {group && groupStats ? (
                                                 <span style={{ direction: 'rtl', display: 'inline-flex', alignItems: 'center', gap: 4, marginInlineEnd: 6 }}>
-                                                    <span style={{ color: 'var(--accent-hover)' }}>{toPersianDigits(groupStats.onlineMembers)} آنلاین</span>
+                                                    <span style={{ color: 'var(--accent-soft-text)' }}>{toPersianDigits(groupStats.onlineMembers)} آنلاین</span>
                                                     <span style={{ color: 'var(--text-muted)' }}>•</span>
                                                     <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(groupStats.totalMembers)} عضو</span>
                                                     <span style={{ color: 'var(--text-muted)' }}>|</span>
