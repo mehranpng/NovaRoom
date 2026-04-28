@@ -284,7 +284,6 @@ async def generate_chat_title(first_user_message: str) -> str:
                     "Return valid json only. "
                     'Output format: {"title":"..."} . '
                     "Create a short Persian chat title (max 56 chars) based on the first user message. "
-                    "The title must be creative and rewritten (not copied from the message). "
                     "No punctuation-heavy text. No emojis. No quotes."
                 ),
             },
