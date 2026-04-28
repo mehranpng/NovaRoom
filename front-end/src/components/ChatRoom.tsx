@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
+import { startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, Copy, Eye, AlignJustify, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload } from 'lucide-react';
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
@@ -572,7 +571,7 @@ export function ChatRoom({
 
     const handleInitialMediaReady = (messageId: string) => {
         if (!shouldPreserveExactScroll() && (isAtBottomRef.current || (!userHasScrolledRef.current && displayUnreadCount <= 0))) {
-            requestAnimationFrame(() => scrollToBottom(false));
+            requestAnimationFrame(() => scrollToBottom(true));
         }
         if (restoringFromInfoRef.current && restoreTopAfterInfoRef.current !== null) {
             const container = messagesContainerRef.current;
@@ -1238,15 +1237,15 @@ export function ChatRoom({
         prevLenRef.current = messages.length;
         userReadingOlderRef.current = false;
         isAtBottomRef.current = true;
-        flushSync(() => {
+        setShowContactInfo(false);
+        setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
+        setReplyTo(null); setEditingId(null);
+        startTransition(() => {
             setNewMsgCount(0); setShowScrollBtn(false);
             setHideScrollBtnUntilBottom(false);
-            setShowContactInfo(false);
             setShowMembersList(false);
             setViewingMemberId(null);
             setForwardSourceUser(null);
-            setReplyTo(null); setEditingId(null);
-            setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
             setText('');
             setUploadedFile(pendingUploadedFileByChat[chatId] || null);
             setUnreadAnchorId(null);
@@ -1393,8 +1392,6 @@ export function ChatRoom({
     useLayoutEffect(() => {
         const container = messagesContainerRef.current;
         if (!container) { prevLenRef.current = messages.length; return; }
-        const nearBottom = computeNearBottom();
-        isAtBottomRef.current = nearBottom;
 
         if (!initialScrollDoneRef.current) {
             if (messages.length > 0 && !loading) {
@@ -1431,6 +1428,14 @@ export function ChatRoom({
             prevLenRef.current = messages.length;
             return;
         }
+    }, [chatId, loading, messages.length, displayUnreadCount]);
+
+    useEffect(() => {
+        if (!initialScrollDoneRef.current) return;
+        const container = messagesContainerRef.current;
+        if (!container) { prevLenRef.current = messages.length; return; }
+        const nearBottom = computeNearBottom();
+        isAtBottomRef.current = nearBottom;
 
         const added = messages.length - prevLenRef.current;
         const prevFirstId = prevFirstMessageIdRef.current;
@@ -1508,7 +1513,7 @@ export function ChatRoom({
         prevFirstMessageIdRef.current = nextFirstId;
         prevLastMessageIdRef.current = nextLastId;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [messages, messages.length, chatId, loading, displayUnreadCount, unreadAnchorId, currentUserId, loadingOlderMessages, loadingNewerMessages]);
+    }, [messages, messages.length, currentUserId, loadingOlderMessages, loadingNewerMessages]);
 
     const onMessagesScroll = () => {
         if (scrollRafRef.current !== null) return;
@@ -2122,7 +2127,8 @@ export function ChatRoom({
     };
     return (
         <motion.div
-            className="chat-room" style={{ position: 'relative' }} ref={roomRef}
+            className="chat-room" style={{ position: 'relative', willChange: 'transform' }} ref={roomRef}
+            layout="preserve-aspect"
             variants={toastVariants}
             initial="hidden"
             animate="visible"
