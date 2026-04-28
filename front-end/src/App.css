@@ -379,7 +379,7 @@ body,
 }
 
 .avatar__status--online {
-    background-color: #10b981;
+    background-color: var(--accent-primary);
 }
 
 .avatar__status--offline {
@@ -1146,7 +1146,7 @@ body,
 }
 
 .chat-room__contact-status--online {
-    color: #059669;
+    color: var(--accent-hover);
     direction: rtl;
     text-align: left;
 }
@@ -1716,6 +1716,7 @@ body,
 
 .message-seen--double {
     opacity: 1;
+    color: var(--accent-primary);
 }
 
 .message-pending-indicator {
@@ -2065,7 +2066,7 @@ body,
 }
 
 .contact-info__status--online {
-    color: #059669;
+    color: var(--accent-hover);
 }
 
 .contact-info__card {
@@ -2300,12 +2301,14 @@ body,
 }
 
 .dark-mode .profile__edit-btn {
-    background: var(--accent-soft);
-    color: var(--accent-hover);
+    background: color-mix(in srgb, var(--accent-primary) 24%, var(--bg-secondary));
+    color: #ffffff;
+    border: 1px solid color-mix(in srgb, var(--accent-primary) 45%, transparent);
+    box-shadow: 0 8px 18px color-mix(in srgb, var(--accent-primary) 28%, transparent);
 }
 
 .dark-mode .profile__edit-btn:hover {
-    background: color-mix(in srgb, var(--accent-primary) 26%, var(--bg-secondary));
+    background: color-mix(in srgb, var(--accent-primary) 34%, var(--bg-secondary));
 }
 
 .profile__cancel-btn {
@@ -2400,7 +2403,7 @@ body,
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #10b981;
+    background: var(--accent-primary);
 }
 
 .profile__avatar-actions {
@@ -2773,7 +2776,7 @@ body,
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #10b981;
+    background: var(--accent-primary);
 }
 
 @media (max-width: 768px) {
@@ -2791,13 +2794,13 @@ body,
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-primary) 14%, #ffffff), color-mix(in srgb, var(--accent-primary) 22%, #ffffff));
     padding: 20px;
     position: relative;
 }
 
 .dark-mode .login-page {
-    background: linear-gradient(135deg, #0f172a, #1e293b);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-primary) 20%, #0f172a), color-mix(in srgb, var(--accent-primary) 15%, #1e293b));
 }
 
 .login-page__dark-toggle {
@@ -2996,7 +2999,7 @@ body,
 
 .success-message svg {
     flex-shrink: 0;
-    color: #10b981;
+    color: var(--accent-primary);
     margin-top: 12px;
 }
 

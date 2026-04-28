@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type ThemeTone = 'neutral' | 'custom';
-export type ThemePalette = 'blue' | 'green' | 'purple' | 'orange' | 'rose' | 'teal' | 'amber' | 'red' | 'pink';
+export type ThemePalette = 'blue' | 'green' | 'purple' | 'orange' | 'rose' | 'teal' | 'amber' | 'red' | 'pink' | 'cyan';
 
 const STORAGE_KEY = 'themeMode';
 const TONE_STORAGE_KEY = 'themeTone';
@@ -19,6 +19,7 @@ const paletteMeta: Record<ThemePalette, { label: string; color: string }> = {
   amber: { label: 'کهربایی', color: '#d97706' },
   red: { label: 'قرمز', color: '#dc2626' },
   pink: { label: 'صورتی', color: '#db2777' },
+  cyan: { label: 'آبی روشن', color: '#0891b2' },
 };
 
 const paletteAccentVars: Record<ThemePalette, { light: Record<string, string>; dark: Record<string, string> }> = {
@@ -57,6 +58,10 @@ const paletteAccentVars: Record<ThemePalette, { light: Record<string, string>; d
   pink: {
     light: { '--accent-primary': '#db2777', '--accent-hover': '#be185d', '--accent-soft': '#fce7f3', '--accent-soft-text': '#9d174d' },
     dark: { '--accent-primary': '#ec4899', '--accent-hover': '#db2777', '--accent-soft': 'rgba(236,72,153,0.24)', '--accent-soft-text': '#fbcfe8' },
+  },
+  cyan: {
+    light: { '--accent-primary': '#0891b2', '--accent-hover': '#0e7490', '--accent-soft': '#cffafe', '--accent-soft-text': '#155e75' },
+    dark: { '--accent-primary': '#06b6d4', '--accent-hover': '#0891b2', '--accent-soft': 'rgba(6,182,212,0.24)', '--accent-soft-text': '#a5f3fc' },
   },
 };
 

@@ -459,7 +459,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                             />
                             {!!usernameHint && (
                                 <small style={{
-                                    color: usernameStatus === 'available' ? '#16a34a' :
+                                    color: usernameStatus === 'available' ? 'var(--accent-hover)' :
                                            usernameStatus === 'taken' || usernameStatus === 'invalid' ? '#dc2626' : '#6b7280',
                                     fontSize: '12px',
                                     marginTop: '5px',

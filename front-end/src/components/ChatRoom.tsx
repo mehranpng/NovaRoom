@@ -2035,7 +2035,7 @@ export function ChatRoom({
                             </button>
                             <div className="contact-info__name" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{contact.name}</div>
                             <div className="contact-info__status" style={{ direction: 'rtl' }}>
-                                <span style={{ color: '#22c55e' }}>{toPersianDigits(Math.max(onlineCount, Number(chatStats?.onlineMembers || 0)))} آنلاین</span>
+                                <span style={{ color: 'var(--accent-hover)' }}>{toPersianDigits(Math.max(onlineCount, Number(chatStats?.onlineMembers || 0)))} آنلاین</span>
                                 <span style={{ color: 'var(--text-muted)' }}> • </span>
                                 <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(membersList.length)} عضو</span>
                             </div>
@@ -2101,7 +2101,7 @@ export function ChatRoom({
                                             </div>
                                             <div style={{ fontSize: 13, marginTop: 2 }}>
                                                 {member.online ? (
-                                                    <span style={{ color: '#22c55e' }}>آنلاین</span>
+                                                    <span style={{ color: 'var(--accent-hover)' }}>آنلاین</span>
                                                 ) : (
                                                     <span style={{ color: 'var(--text-secondary)' }}>
                                                         {member.username ? `@${member.username}` : 'آفلاین'}
@@ -2218,10 +2218,10 @@ export function ChatRoom({
                         {!isSavedMessages && (
                             <div className={(!isGroupChat && !isContactBlocked && contact.online) ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
                                 {headerActivityLabel ? (
-                                    <span style={isGroupChat ? { color: '#16a34a' } : undefined}>{headerActivityLabel}</span>
+                                    <span style={isGroupChat ? { color: 'var(--accent-hover)' } : undefined}>{headerActivityLabel}</span>
                                 ) : (isGroupChat ? (
                                     <span style={{ direction: 'rtl', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                        <span style={{ color: '#16a34a' }}>{toPersianDigits(chatStats?.onlineMembers ?? 0)} آنلاین</span>
+                                        <span style={{ color: 'var(--accent-hover)' }}>{toPersianDigits(chatStats?.onlineMembers ?? 0)} آنلاین</span>
                                         <span style={{ color: 'var(--text-muted)' }}>•</span>
                                         <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0)} عضو</span>
                                     </span>
