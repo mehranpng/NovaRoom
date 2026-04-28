@@ -377,10 +377,10 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                                             fontSize: 12,
                                             color:
                                                 usernameStatus === 'available'
-                                                    ? '#16a34a'
+                                                    ? 'var(--accent-hover)'
                                                     : usernameStatus === 'taken' || usernameStatus === 'invalid'
                                                         ? '#dc2626'
-                                                        : '#6b7280',
+                                                        : 'var(--text-secondary)',
                                         }}
                                     >
                                         {usernameHint}

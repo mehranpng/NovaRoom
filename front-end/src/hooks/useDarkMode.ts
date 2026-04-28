@@ -206,18 +206,25 @@ export function useDarkMode() {
       Object.entries(customSurfaceVars).forEach(([key, value]) => root.style.setProperty(key, value));
     }
 
-    const themeColor = getComputedStyle(root).getPropertyValue('--bg-primary').trim() || (isDarkMode ? '#1b1d21' : '#ffffff');
-    const ensureMeta = (name: string) => {
-      let m = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
+    const computed = getComputedStyle(root);
+    const bgColor = computed.getPropertyValue('--bg-primary').trim() || (isDarkMode ? '#1b1d21' : '#ffffff');
+    const accentColor = computed.getPropertyValue('--accent-primary').trim() || bgColor;
+    const themeColor = themeTone === 'custom' ? accentColor : bgColor;
+    const ensureMeta = (name: string, media?: string) => {
+      const selector = media ? `meta[name="${name}"][media="${media}"]` : `meta[name="${name}"]:not([media])`;
+      let m = document.querySelector(selector) as HTMLMetaElement | null;
       if (!m) {
         m = document.createElement('meta');
         m.name = name;
+        if (media) m.media = media;
         document.head.appendChild(m);
       }
       m.setAttribute('content', themeColor);
     };
 
     ensureMeta('theme-color');
+    ensureMeta('theme-color', '(prefers-color-scheme: dark)');
+    ensureMeta('theme-color', '(prefers-color-scheme: light)');
     ensureMeta('msapplication-navbutton-color');
     (root.style as any).colorScheme = isDarkMode ? 'dark' : 'light';
   }, [isDarkMode, themeMode, themeTone, themePalette]);
