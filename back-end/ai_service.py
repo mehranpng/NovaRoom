@@ -12,6 +12,7 @@ client = AsyncOpenAI(
     base_url="https://api.deepseek.com",
 )
 
+
 def _coerce_chunk_text(value: Any) -> str:
     if value is None:
         return ""
@@ -39,7 +40,9 @@ def _coerce_chunk_text(value: Any) -> str:
                     parts.append(str(text_attr))
         return "".join(parts)
     if isinstance(value, dict):
-        return str(value.get("text") or value.get("content") or value.get("value") or "")
+        return str(
+            value.get("text") or value.get("content") or value.get("value") or ""
+        )
     text_attr = getattr(value, "text", None) or getattr(value, "content", None)
     if text_attr is not None:
         return str(text_attr)
@@ -272,7 +275,7 @@ async def generate_chat_title(first_user_message: str) -> str:
     try:
         raw_message = (first_user_message or "").strip()
         if not raw_message:
-            return "گفتوگوی جدید"
+            return "گفتگوی جدید"
 
         title_messages = [
             {
@@ -307,13 +310,13 @@ async def generate_chat_title(first_user_message: str) -> str:
                 title = _normalize_title(str(parsed.get("title") or ""))
                 if (
                     title
-                    and title not in {"گفتگوی جدید", "گفتوگوی جدید"}
+                    and title not in {"گفتگوی جدید", "گفتگوی جدید"}
                     and not _looks_like_message_fragment(title, raw_message)
                 ):
                     return title[:56]
             except Exception:
                 continue
-        return "گفتوگوی جدید"
+        return "گفتگوی جدید"
     except Exception as e:
         print(f"Title generation error: {e}")
-        return "گفتوگوی جدید"
+        return "گفتگوی جدید"
