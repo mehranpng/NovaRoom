@@ -1408,6 +1408,9 @@ export function AIChatRoom({
                     position: relative;
                     z-index: 60;
                 }
+                .ai-chat-room__header-main.chat-room__header-clickable:hover {
+                    opacity: 1;
+                }
                 .ai-chat-room__header-title {
                     min-width: 0;
                     flex: 1;
