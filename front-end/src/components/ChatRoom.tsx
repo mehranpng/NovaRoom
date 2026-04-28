@@ -456,7 +456,6 @@ export function ChatRoom({
     const pendingRangeLoadTypeRef = useRef<'older' | 'newer' | null>(null);
     const openedAtRef = useRef<number>(Date.now());
     const initialScrollDoneRef = useRef(false);
-    const lastChatIdRef = useRef<string | null>(null);
     const initialMediaPendingIdsRef = useRef<Set<string>>(new Set());
     const initialMediaFollowupDoneRef = useRef(false);
     const unreadConsumedInSessionRef = useRef(false);
@@ -1230,14 +1229,12 @@ export function ChatRoom({
     }, [chatId]);
 
     useEffect(() => {
-        if (lastChatIdRef.current === chatId) return;
         setChatContentReady(false);
         let secondRaf = 0;
         const firstRaf = requestAnimationFrame(() => {
             secondRaf = requestAnimationFrame(() => setChatContentReady(true));
         });
         const mem = scrollMemoryRef.current[chatId];
-        lastChatIdRef.current = chatId;
         openedAtRef.current = Date.now();
         initialScrollDoneRef.current = false;
         prevLenRef.current = messages.length;
