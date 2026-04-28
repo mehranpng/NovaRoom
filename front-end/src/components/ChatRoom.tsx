@@ -2121,13 +2121,13 @@ export function ChatRoom({
     }
 
     const toastVariants: Variants = {
-        hidden: { opacity: 0, },
-        visible: { opacity: 1, transition: { duration: 0.3 } },
-        exit: { opacity: 0, transition: { duration: 0.3 } },
+        hidden: { opacity: 0 },
+        visible: { opacity: 1, transition: { duration: 0.22, ease: 'easeOut' } },
+        exit: { opacity: 0, transition: { duration: 0.18, ease: 'easeIn' } },
     };
     return (
         <motion.div
-            className="chat-room" style={{ position: 'relative', willChange: 'transform' }} ref={roomRef}
+            className="chat-room" style={{ position: 'relative' }} ref={roomRef}
             variants={toastVariants}
             initial="hidden"
             animate="visible"
