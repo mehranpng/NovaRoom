@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { ArrowDown, ArrowLeft, Copy, Eye, AlignJustify, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload } from 'lucide-react';
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
@@ -464,6 +465,8 @@ export function ChatRoom({
     const restoreBottomAfterInfoRef = useRef(false);
     const lastScrollTopRef = useRef(0);
     const pendingEditFocusToEndRef = useRef(false);
+    const userReadingOlderRef = useRef(false);
+    const scrollRafRef = useRef<number | null>(null);
 
     // Scroll memory: keep per-chat scroll position in memory until refresh.
     // IMPORTANT: only restore exact scrollTop if user actually scrolled in that chat (prevents "always open at top").
@@ -568,6 +571,9 @@ export function ChatRoom({
     );
 
     const handleInitialMediaReady = (messageId: string) => {
+        if (!shouldPreserveExactScroll() && (isAtBottomRef.current || (!userHasScrolledRef.current && displayUnreadCount <= 0))) {
+            requestAnimationFrame(() => scrollToBottom(false));
+        }
         if (restoringFromInfoRef.current && restoreTopAfterInfoRef.current !== null) {
             const container = messagesContainerRef.current;
             if (container) {
@@ -1211,6 +1217,7 @@ export function ChatRoom({
         return () => {
             if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
             if (highlightRafRef.current) cancelAnimationFrame(highlightRafRef.current);
+            if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
         };
     }, []);
 
@@ -1229,24 +1236,26 @@ export function ChatRoom({
         openedAtRef.current = Date.now();
         initialScrollDoneRef.current = false;
         prevLenRef.current = messages.length;
-        setNewMsgCount(0); setShowScrollBtn(false);
-        setHideScrollBtnUntilBottom(false);
+        userReadingOlderRef.current = false;
         isAtBottomRef.current = true;
-        setShowContactInfo(false);
-        setShowMembersList(false);
-        setViewingMemberId(null);
-        setForwardSourceUser(null);
-        setReplyTo(null); setEditingId(null);
-        setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
-        setText('');
+        flushSync(() => {
+            setNewMsgCount(0); setShowScrollBtn(false);
+            setHideScrollBtnUntilBottom(false);
+            setShowContactInfo(false);
+            setShowMembersList(false);
+            setViewingMemberId(null);
+            setForwardSourceUser(null);
+            setReplyTo(null); setEditingId(null);
+            setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
+            setText('');
+            setUploadedFile(pendingUploadedFileByChat[chatId] || null);
+            setUnreadAnchorId(null);
+            setOptimisticReactions({});
+            setReasoningPanelByMessage({});
+            setSeenByLoadingMessageId(null);
+            setDisplayUnreadCount(initialUnreadCount);
+        });
         stopTyping();
-        setUploadedFile(pendingUploadedFileByChat[chatId] || null);
-        setUnreadAnchorId(null);
-        setOptimisticReactions({});
-        setReasoningPanelByMessage({});
-        setSeenByLoadingMessageId(null);
-
-        setDisplayUnreadCount(initialUnreadCount);
         autoJumpedToUnreadRef.current = false;
         userScrolledAfterAutoJumpRef.current = false;
         programmaticScrollEventsRef.current = 0;
@@ -1502,6 +1511,14 @@ export function ChatRoom({
     }, [messages, messages.length, chatId, loading, displayUnreadCount, unreadAnchorId, currentUserId, loadingOlderMessages, loadingNewerMessages]);
 
     const onMessagesScroll = () => {
+        if (scrollRafRef.current !== null) return;
+        scrollRafRef.current = requestAnimationFrame(() => {
+            scrollRafRef.current = null;
+            handleMessagesScroll();
+        });
+    };
+
+    const handleMessagesScroll = () => {
         const container = messagesContainerRef.current;
         if (!container) return;
         const currentTop = container.scrollTop;
@@ -1524,6 +1541,12 @@ export function ChatRoom({
 
         const nearBottom = computeNearBottom();
         isAtBottomRef.current = nearBottom;
+        const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+        if (nearBottom || distanceToBottom <= 24) {
+            userReadingOlderRef.current = false;
+        } else if (!scrollingDown && distanceToBottom > 140) {
+            userReadingOlderRef.current = true;
+        }
         if (nearBottom) {
             setNewMsgCount(0);
             setShowScrollBtn(false);
@@ -1563,7 +1586,6 @@ export function ChatRoom({
                 window.setTimeout(() => setLocalLoadingOlder(false), 180);
             });
         }
-        const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
         // IMPORTANT: avoid triggering "newer" load when user is already at absolute bottom
         // and just does an overscroll/pull gesture. Only load newer while actively scrolling down
         // from inside the list (not at bottom-most end).
@@ -1574,6 +1596,7 @@ export function ChatRoom({
             && hasNewerMessages
             && !loadingNewerMessages
             && !localLoadingNewer
+            && !userReadingOlderRef.current
         ) {
             pendingRangeLoadTypeRef.current = 'newer';
             setLocalLoadingNewer(true);

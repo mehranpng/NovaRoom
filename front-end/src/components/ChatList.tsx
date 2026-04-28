@@ -454,6 +454,22 @@ export function ChatList({
         setDragHoverChatId(null);
     };
 
+    useEffect(() => {
+        clearDragHoverState();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeChatId]);
+
+    useEffect(() => {
+        const onGlobalDragFinish = () => clearDragHoverState();
+        window.addEventListener('drop', onGlobalDragFinish);
+        window.addEventListener('dragend', onGlobalDragFinish);
+        return () => {
+            window.removeEventListener('drop', onGlobalDragFinish);
+            window.removeEventListener('dragend', onGlobalDragFinish);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const confirmMeta = useMemo(() => {
         if (!confirmAction) return null;
         if (confirmAction.kind === 'leave_group') {
