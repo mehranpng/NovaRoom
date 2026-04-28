@@ -8,8 +8,8 @@ const modeOptions: Array<{ value: ThemeMode; label: string; icon: typeof Sun }> 
 ];
 
 const toneOptions: Array<{ value: ThemeTone; label: string; description: string }> = [
-  { value: 'neutral', label: 'خنثی', description: 'تم لایت و دارک با پالت خنثی اعمال می‌شود.' },
-  { value: 'custom', label: 'سفارشی', description: 'رنگ اصلی کل برنامه از پالت انتخابی اعمال می‌شود.' },
+  { value: 'neutral', label: 'خنثی', description: 'پالت انتخابی روی اکسنت‌ها اعمال می‌شود ولی پس‌زمینه‌ها خنثی می‌مانند.' },
+  { value: 'custom', label: 'سفارشی', description: 'پالت انتخابی روی همه بخش‌ها از جمله پس‌زمینه‌ها اعمال می‌شود.' },
 ];
 
 export function ThemeSettings() {
@@ -66,39 +66,38 @@ export function ThemeSettings() {
         </div>
       </div>
 
-      {themeTone === 'custom' && (
-        <div className="profile__chat-id-card" style={{ direction: 'rtl', textAlign: 'right' }}>
-          <p className="profile__field-label" style={{ marginBottom: 10 }}>رنگ‌های آماده</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
-            {(Object.entries(paletteOptions) as Array<[ThemePalette, { label: string; color: string }]>).map(([palette, meta]) => (
-              <button
-                key={palette}
-                type="button"
-                onClick={() => setThemePalette(palette)}
-                style={{
-                  border: `1px solid ${themePalette === palette ? 'var(--accent-primary)' : 'var(--border-primary)'}`,
-                  background: 'var(--bg-secondary)',
-                  color: 'var(--text-primary)',
-                  borderRadius: 14,
-                  minHeight: 48,
-                  padding: '8px 10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 8,
-                  cursor: 'pointer',
-                }}
-              >
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ width: 16, height: 16, borderRadius: 999, background: meta.color, border: '1px solid rgba(255,255,255,0.3)' }} />
-                  {meta.label}
-                </span>
-                {themePalette === palette ? <Check size={15} /> : null}
-              </button>
-            ))}
-          </div>
+      <div className="profile__chat-id-card" style={{ direction: 'rtl', textAlign: 'right' }}>
+        <p className="profile__field-label" style={{ marginBottom: 10 }}>رنگ‌های آماده</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+          {(Object.entries(paletteOptions) as Array<[ThemePalette, { label: string; color: string }]>).map(([palette, meta]) => (
+            <button
+              key={palette}
+              type="button"
+              onClick={() => setThemePalette(palette)}
+              style={{
+                fontFamily: 'Vazir, sans-serif',
+                border: `1px solid ${themePalette === palette ? 'var(--accent-primary)' : 'var(--border-primary)'}`,
+                background: 'var(--bg-secondary)',
+                color: 'var(--text-primary)',
+                borderRadius: 14,
+                minHeight: 48,
+                padding: '8px 10px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{ fontFamily: 'Vazir, sans-serif', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 16, height: 16, borderRadius: 999, background: meta.color, border: '1px solid rgba(255,255,255,0.3)' }} />
+                {meta.label}
+              </span>
+              {themePalette === palette ? <Check size={15} /> : null}
+            </button>
+          ))}
         </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -20,10 +20,7 @@ const paletteMeta: Record<ThemePalette, { label: string; color: string }> = {
   amber: { label: 'کهربایی', color: '#d97706' },
 };
 
-const customPaletteVars: Record<ThemePalette, {
-  light: Record<string, string>;
-  dark: Record<string, string>;
-}> = {
+const paletteAccentVars: Record<ThemePalette, { light: Record<string, string>; dark: Record<string, string> }> = {
   blue: {
     light: { '--accent-primary': '#2563eb', '--accent-hover': '#1d4ed8', '--accent-soft': '#dbeafe', '--accent-soft-text': '#1e40af' },
     dark: { '--accent-primary': '#60a5fa', '--accent-hover': '#3b82f6', '--accent-soft': 'rgba(96,165,250,0.18)', '--accent-soft-text': '#bfdbfe' },
@@ -78,10 +75,6 @@ const neutralThemeVars = {
     '--reply-box-border': '#f3f4f6',
     '--reply-box-text': '#374151',
     '--reply-box-text-secondary': '#6b7280',
-    '--accent-primary': '#2563eb',
-    '--accent-hover': '#1d4ed8',
-    '--accent-soft': '#dbeafe',
-    '--accent-soft-text': '#1e40af',
   },
   dark: {
     '--bg-primary': '#1b1d21',
@@ -102,59 +95,79 @@ const neutralThemeVars = {
     '--reply-box-border': '#3a414d',
     '--reply-box-text': '#f3f4f6',
     '--reply-box-text-secondary': '#d1d5db',
-    '--accent-primary': '#60a5fa',
-    '--accent-hover': '#3b82f6',
-    '--accent-soft': 'rgba(96,165,250,0.18)',
-    '--accent-soft-text': '#bfdbfe',
   },
 };
 
 function getInitialThemeMode(): ThemeMode {
   if (typeof window === 'undefined') return 'system';
-
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === 'system' || stored === 'light' || stored === 'dark') {
-    return stored;
-  }
-
+  if (stored === 'system' || stored === 'light' || stored === 'dark') return stored;
   const legacyDarkMode = localStorage.getItem(LEGACY_DARK_MODE_KEY);
   if (legacyDarkMode === 'true') return 'dark';
   if (legacyDarkMode === 'false') return 'light';
-
   return 'system';
 }
 
 function getInitialTone(): ThemeTone {
   if (typeof window === 'undefined') return 'neutral';
-  const stored = localStorage.getItem(TONE_STORAGE_KEY);
-  return stored === 'custom' ? 'custom' : 'neutral';
+  return localStorage.getItem(TONE_STORAGE_KEY) === 'custom' ? 'custom' : 'neutral';
 }
 
 function getInitialPalette(): ThemePalette {
   if (typeof window === 'undefined') return 'blue';
   const stored = localStorage.getItem(PALETTE_STORAGE_KEY) as ThemePalette | null;
-  if (stored && stored in paletteMeta) return stored;
-  return 'blue';
+  return stored && stored in paletteMeta ? stored : 'blue';
 }
+
+const createCustomSurfaceVars = (isDarkMode: boolean): Record<string, string> => {
+  if (!isDarkMode) {
+    return {
+      '--bg-primary': 'color-mix(in srgb, var(--accent-primary) 8%, #ffffff)',
+      '--bg-secondary': 'color-mix(in srgb, var(--accent-primary) 14%, #ffffff)',
+      '--bg-tertiary': 'color-mix(in srgb, var(--accent-primary) 20%, #ffffff)',
+      '--border-primary': 'color-mix(in srgb, var(--accent-primary) 24%, #e5e7eb)',
+      '--border-secondary': 'color-mix(in srgb, var(--accent-primary) 34%, #d1d5db)',
+      '--hover-bg': 'color-mix(in srgb, var(--accent-primary) 26%, #f3f4f6)',
+      '--hover-bg-light': 'color-mix(in srgb, var(--accent-primary) 16%, #f9fafb)',
+      '--message-theirs-bg': 'color-mix(in srgb, var(--accent-primary) 10%, #ffffff)',
+      '--input-bg': 'color-mix(in srgb, var(--accent-primary) 18%, #f3f4f6)',
+      '--input-bg-focus': 'color-mix(in srgb, var(--accent-primary) 24%, #f3f4f6)',
+      '--reply-box-bg': 'color-mix(in srgb, var(--accent-primary) 14%, #f9fafb)',
+      '--reply-box-border': 'color-mix(in srgb, var(--accent-primary) 24%, #e5e7eb)',
+    };
+  }
+
+  return {
+    '--bg-primary': 'color-mix(in srgb, var(--accent-primary) 12%, #14161a)',
+    '--bg-secondary': 'color-mix(in srgb, var(--accent-primary) 18%, #1c1f26)',
+    '--bg-tertiary': 'color-mix(in srgb, var(--accent-primary) 24%, #242934)',
+    '--border-primary': 'color-mix(in srgb, var(--accent-primary) 26%, #323846)',
+    '--border-secondary': 'color-mix(in srgb, var(--accent-primary) 34%, #3b4350)',
+    '--hover-bg': 'color-mix(in srgb, var(--accent-primary) 30%, #2b313d)',
+    '--hover-bg-light': 'color-mix(in srgb, var(--accent-primary) 24%, #252b35)',
+    '--message-theirs-bg': 'color-mix(in srgb, var(--accent-primary) 18%, #2b313d)',
+    '--input-bg': 'color-mix(in srgb, var(--accent-primary) 22%, #2b313d)',
+    '--input-bg-focus': 'color-mix(in srgb, var(--accent-primary) 30%, #343b49)',
+    '--reply-box-bg': 'color-mix(in srgb, var(--accent-primary) 20%, #2b313d)',
+    '--reply-box-border': 'color-mix(in srgb, var(--accent-primary) 28%, #343b49)',
+  };
+};
 
 export function useDarkMode() {
   const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode);
   const [themeTone, setThemeTone] = useState<ThemeTone>(getInitialTone);
   const [themePalette, setThemePalette] = useState<ThemePalette>(getInitialPalette);
-  const [systemPrefersDark, setSystemPrefersDark] = useState<boolean>(() => {
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
   });
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
-
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const onChange = (event: MediaQueryListEvent) => setSystemPrefersDark(event.matches);
-
     setSystemPrefersDark(media.matches);
     media.addEventListener('change', onChange);
-
     return () => media.removeEventListener('change', onChange);
   }, []);
 
@@ -175,9 +188,12 @@ export function useDarkMode() {
     const baseVars = isDarkMode ? neutralThemeVars.dark : neutralThemeVars.light;
     Object.entries(baseVars).forEach(([key, value]) => root.style.setProperty(key, value));
 
+    const accentVars = isDarkMode ? paletteAccentVars[themePalette].dark : paletteAccentVars[themePalette].light;
+    Object.entries(accentVars).forEach(([key, value]) => root.style.setProperty(key, value));
+
     if (themeTone === 'custom') {
-      const paletteVars = isDarkMode ? customPaletteVars[themePalette].dark : customPaletteVars[themePalette].light;
-      Object.entries(paletteVars).forEach(([key, value]) => root.style.setProperty(key, value));
+      const customSurfaceVars = createCustomSurfaceVars(isDarkMode);
+      Object.entries(customSurfaceVars).forEach(([key, value]) => root.style.setProperty(key, value));
     }
 
     const themeColor = getComputedStyle(root).getPropertyValue('--bg-primary').trim() || (isDarkMode ? '#1b1d21' : '#ffffff');
