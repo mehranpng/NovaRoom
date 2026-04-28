@@ -9,7 +9,7 @@ const modeOptions: Array<{ value: ThemeMode; label: string; icon: typeof Sun }> 
 
 const toneOptions: Array<{ value: ThemeTone; label: string; description: string }> = [
   { value: 'neutral', label: 'خنثی', description: 'فقط رنگ‌های اصلی تغییر می‌کند.' },
-  { value: 'custom', label: 'سفارشی', description: 'کل ظاهر برنامه با پالت رنگی می‌شود.' },
+  { value: 'custom', label: 'کلی', description: 'کل ظاهر برنامه با پالت رنگی می‌شود.' },
 ];
 
 export function ThemeSettings() {
