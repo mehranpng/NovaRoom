@@ -1139,17 +1139,8 @@ export function App() {
                 const targetChatId = activeChatIdRef.current;
                 if (!targetChatId || viewRef.current !== 'chatRoom' || showAIChat) return;
 
-                const state = messageRangeState[targetChatId];
-                const userIsViewingHistory = Boolean(state?.hasNewer);
                 if (!messagesLoadedOnce[targetChatId]) {
                     await fetchPagedMessages(targetChatId, { direction: 'latest', mode: 'replace' });
-                } else if (state?.newestCursor && !userIsViewingHistory) {
-                    await fetchPagedMessages(targetChatId, {
-                        direction: 'newer',
-                        cursorTs: state.newestCursor.cursorTs,
-                        cursorId: state.newestCursor.cursorId,
-                        mode: 'append',
-                    });
                 }
 
                 if (currentUser && targetChatId !== `saved_messages_${currentUser.chatId}`) {
@@ -1184,7 +1175,6 @@ export function App() {
         currentUser,
         sendSeen,
         messagesLoadedOnce,
-        messageRangeState,
         showAIChat,
     ]);
 
@@ -1870,7 +1860,6 @@ export function App() {
     }, []);
     const disposeChatSession = useCallback((chatId: string | null) => {
         if (!chatId) return;
-        removeChatCache(chatId);
         setMessages((prev) => {
             const { [chatId]: _, ...rest } = prev;
             return rest;
@@ -1887,7 +1876,7 @@ export function App() {
             const { [chatId]: _, ...rest } = prev;
             return rest;
         });
-    }, [removeChatCache]);
+    }, []);
     const handleBack = () => {
         if (temporaryAIChat && activeAIChatId && !aiResponding) {
             void cleanupTemporaryAIChat(activeAIChatId);
