@@ -85,15 +85,15 @@ export function ThemeSettings() {
             max={2}
             step={1}
             className="theme-intensity-slider"
-            dir="ltr"
-            value={2 - intensityOptions.findIndex((o) => o.value === accentIntensity)}
-            onChange={(e) => setAccentIntensity(intensityOptions[2 - Number(e.currentTarget.value)]?.value ?? 'high')}
+            dir="rtl"
+            value={intensityOptions.findIndex((o) => o.value === accentIntensity)}
+            onChange={(e) => setAccentIntensity(intensityOptions[Number(e.currentTarget.value)]?.value ?? 'high')}
             style={{
               width: '100%',
               border: 'none',
               outline: 'none',
               boxShadow: 'none',
-              background: `linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-primary) ${((2 - intensityOptions.findIndex((o) => o.value === accentIntensity)) / 2) * 100}%, var(--border-secondary) ${((2 - intensityOptions.findIndex((o) => o.value === accentIntensity)) / 2) * 100}%, var(--border-secondary) 100%)`,
+              background: `linear-gradient(270deg, var(--accent-primary) 0%, var(--accent-primary) ${(intensityOptions.findIndex((o) => o.value === accentIntensity) / 2) * 100}%, var(--border-secondary) ${(intensityOptions.findIndex((o) => o.value === accentIntensity) / 2) * 100}%, var(--border-secondary) 100%)`,
             }}
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', fontSize: 12 }}>
