@@ -2542,14 +2542,18 @@ export function ChatRoom({
                                                 </div>
                                             )}
                                             {m.text && !Boolean(m.reasoningEnabled && m.reasoningContent) && (
-                                                <div className="message-text message-text--markdown">
-                                                    <ReactMarkdown
-                                                        remarkPlugins={[remarkGfm, remarkBreaks]}
-                                                        components={markdownComponents}
-                                                    >
-                                                        {m.text}
-                                                    </ReactMarkdown>
-                                                </div>
+                                                /\n\n/.test(m.text)
+                                                    ? <div className="message-text">{m.text}</div>
+                                                    : (
+                                                        <div className="message-text message-text--markdown">
+                                                            <ReactMarkdown
+                                                                remarkPlugins={[remarkGfm, remarkBreaks]}
+                                                                components={markdownComponents}
+                                                            >
+                                                                {m.text}
+                                                            </ReactMarkdown>
+                                                        </div>
+                                                    )
                                             )}
                                             {m.text && Boolean(m.reasoningEnabled && m.reasoningContent) && (
                                                 <div className="ai-reasoning-answer" style={{ marginTop: 0 }}>
