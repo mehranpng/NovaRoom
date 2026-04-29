@@ -259,6 +259,7 @@ export function useDarkMode() {
 
     const baseVars = isDarkMode ? neutralThemeVars.dark : neutralThemeVars.light;
     Object.entries(baseVars).forEach(([key, value]) => root.style.setProperty(key, value));
+    root.style.setProperty('--message-mine-text', accentIntensity === 'low' ? '#111827' : '#ffffff');
 
     const baseAccentVars = isDarkMode ? paletteAccentVars[themePalette].dark : paletteAccentVars[themePalette].light;
     const accentVars = buildAccentVarsWithIntensity(baseAccentVars, isDarkMode, accentIntensity);

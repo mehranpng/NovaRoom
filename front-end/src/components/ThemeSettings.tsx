@@ -84,9 +84,16 @@ export function ThemeSettings() {
             min={0}
             max={2}
             step={1}
+            className="theme-intensity-slider"
             value={intensityOptions.findIndex((o) => o.value === accentIntensity)}
             onChange={(e) => setAccentIntensity(intensityOptions[Number(e.currentTarget.value)]?.value ?? 'high')}
-            style={{ width: '100%', accentColor: 'var(--accent-primary)' }}
+            style={{
+              width: '100%',
+              border: 'none',
+              outline: 'none',
+              boxShadow: 'none',
+              background: `linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-primary) ${(intensityOptions.findIndex((o) => o.value === accentIntensity) / 2) * 100}%, var(--border-secondary) ${(intensityOptions.findIndex((o) => o.value === accentIntensity) / 2) * 100}%, var(--border-secondary) 100%)`,
+            }}
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', fontSize: 12 }}>
             {intensityOptions.map((option) => (
