@@ -2176,7 +2176,7 @@ export function App() {
                 )}
 
                 {view === 'profile' && currentUser && (
-                    <div className="app__main">
+                    <div className="app__main app__main--full">
                         <Profile
                             user={currentUser}
                             onBack={handleBack}
@@ -2189,7 +2189,7 @@ export function App() {
                 )}
 
                 {String(view).startsWith('settings') && (
-                    <div className="app__main">
+                    <div className="app__main app__main--full">
                         <Settings
                             section={view === 'settingsDevices' ? 'devices' : view === 'settingsTheme' ? 'theme' : 'menu'}
                             onBack={handleBack}

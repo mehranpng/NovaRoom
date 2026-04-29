@@ -3,12 +3,65 @@ import { useEffect, useMemo, useState } from 'react';
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type ThemeTone = 'neutral' | 'custom';
 export type ThemePalette = 'blue' | 'green' | 'purple' | 'orange' | 'rose' | 'teal' | 'amber' | 'red' | 'pink' | 'cyan';
+export type AccentIntensity = 'low' | 'medium' | 'high';
 
 const STORAGE_KEY = 'themeMode';
 const TONE_STORAGE_KEY = 'themeTone';
 const PALETTE_STORAGE_KEY = 'themePalette';
 const LEGACY_DARK_MODE_KEY = 'darkMode';
+const INTENSITY_STORAGE_KEY = 'themeAccentIntensity';
 
+
+
+const intensityScale: Record<AccentIntensity, number> = {
+  low: 0.56,
+  medium: 0.78,
+  high: 1,
+};
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const clean = hex.replace('#', '').trim();
+  if (!/^[0-9a-fA-F]{6}$/.test(clean)) return null;
+  return {
+    r: parseInt(clean.slice(0, 2), 16),
+    g: parseInt(clean.slice(2, 4), 16),
+    b: parseInt(clean.slice(4, 6), 16),
+  };
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  return `#${[r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('')}`;
+}
+
+function mixHex(baseHex: string, targetHex: string, amount: number): string {
+  const base = hexToRgb(baseHex);
+  const target = hexToRgb(targetHex);
+  if (!base || !target) return baseHex;
+  const t = Math.max(0, Math.min(1, amount));
+  return rgbToHex(
+    base.r + (target.r - base.r) * t,
+    base.g + (target.g - base.g) * t,
+    base.b + (target.b - base.b) * t,
+  );
+}
+
+function buildAccentVarsWithIntensity(accentVars: Record<string, string>, isDarkMode: boolean, intensity: AccentIntensity): Record<string, string> {
+  if (intensity === 'high') return accentVars;
+  const keep = intensityScale[intensity];
+  const blendTo = isDarkMode ? '#d1d5db' : '#ffffff';
+  const next = { ...accentVars };
+  next['--accent-primary'] = mixHex(accentVars['--accent-primary'], blendTo, 1 - keep);
+  next['--accent-hover'] = mixHex(accentVars['--accent-hover'], blendTo, 1 - keep);
+  next['--accent-soft-text'] = mixHex(accentVars['--accent-soft-text'], blendTo, 1 - keep * 0.85);
+  if (isDarkMode) {
+    const alpha = intensity === 'medium' ? '0.20' : '0.14';
+    next['--accent-soft'] = `color-mix(in srgb, ${next['--accent-primary']} 24%, rgba(255,255,255,${alpha}))`;
+  } else {
+    const bgAmount = intensity === 'medium' ? '20%' : '12%';
+    next['--accent-soft'] = `color-mix(in srgb, ${next['--accent-primary']} ${bgAmount}, #ffffff)`;
+  }
+  return next;
+}
 const paletteMeta: Record<ThemePalette, { label: string; color: string }> = {
   blue: { label: 'آبی', color: '#2563eb' },
   green: { label: 'سبز', color: '#16a34a' },
@@ -123,6 +176,13 @@ function getInitialTone(): ThemeTone {
   return localStorage.getItem(TONE_STORAGE_KEY) === 'custom' ? 'custom' : 'neutral';
 }
 
+function getInitialIntensity(): AccentIntensity {
+  if (typeof window === 'undefined') return 'high';
+  const stored = localStorage.getItem(INTENSITY_STORAGE_KEY);
+  if (stored === 'low' || stored === 'medium' || stored === 'high') return stored;
+  return 'high';
+}
+
 function getInitialPalette(): ThemePalette {
   if (typeof window === 'undefined') return 'blue';
   const stored = localStorage.getItem(PALETTE_STORAGE_KEY) as ThemePalette | null;
@@ -167,6 +227,7 @@ export function useDarkMode() {
   const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode);
   const [themeTone, setThemeTone] = useState<ThemeTone>(getInitialTone);
   const [themePalette, setThemePalette] = useState<ThemePalette>(getInitialPalette);
+  const [accentIntensity, setAccentIntensity] = useState<AccentIntensity>(getInitialIntensity);
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
@@ -194,11 +255,13 @@ export function useDarkMode() {
     localStorage.setItem(STORAGE_KEY, themeMode);
     localStorage.setItem(TONE_STORAGE_KEY, themeTone);
     localStorage.setItem(PALETTE_STORAGE_KEY, themePalette);
+    localStorage.setItem(INTENSITY_STORAGE_KEY, accentIntensity);
 
     const baseVars = isDarkMode ? neutralThemeVars.dark : neutralThemeVars.light;
     Object.entries(baseVars).forEach(([key, value]) => root.style.setProperty(key, value));
 
-    const accentVars = isDarkMode ? paletteAccentVars[themePalette].dark : paletteAccentVars[themePalette].light;
+    const baseAccentVars = isDarkMode ? paletteAccentVars[themePalette].dark : paletteAccentVars[themePalette].light;
+    const accentVars = buildAccentVarsWithIntensity(baseAccentVars, isDarkMode, accentIntensity);
     Object.entries(accentVars).forEach(([key, value]) => root.style.setProperty(key, value));
 
     if (themeTone === 'custom') {
@@ -250,7 +313,7 @@ export function useDarkMode() {
 
     ensureMeta('msapplication-navbutton-color');
     (root.style as any).colorScheme = isDarkMode ? 'dark' : 'light';
-  }, [isDarkMode, themeMode, themeTone, themePalette]);
+  }, [isDarkMode, themeMode, themeTone, themePalette, accentIntensity]);
 
   return {
     themeMode,
@@ -261,5 +324,7 @@ export function useDarkMode() {
     themePalette,
     setThemePalette,
     paletteOptions: paletteMeta,
+    accentIntensity,
+    setAccentIntensity,
   };
 }

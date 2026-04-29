@@ -144,6 +144,11 @@ body,
     min-width: 0;
 }
 
+.app__main--full {
+    flex: 1 1 100%;
+    max-width: 100%;
+}
+
 .app__main--hidden-mobile {
     display: none;
 }
@@ -170,6 +175,11 @@ body,
     .app__main {
         flex: 0 0 740px;
         max-width: 740px;
+    }
+
+    .app__main--full {
+        flex: 1 1 100%;
+        max-width: 100%;
     }
 
     .app__sidebar {
@@ -393,7 +403,7 @@ body,
 }
 
 .avatar-color-1 {
-    background: linear-gradient(135deg, var(--accent-primary), #0891b2);
+    background: linear-gradient(135deg, #2563eb, #0891b2);
 }
 
 .avatar-color-2 {
@@ -409,7 +419,7 @@ body,
 }
 
 .avatar-color-5 {
-    background: linear-gradient(135deg, #6366f1, var(--accent-hover));
+    background: linear-gradient(135deg, #6366f1, #3b82f6);
 }
 
 .avatar-color-6 {
@@ -1142,13 +1152,13 @@ body,
 
 .chat-room__contact-status {
     font-size: 12px;
-    color: var(--text-secondary);
+    color: color-mix(in srgb, var(--accent-primary) 44%, var(--text-secondary));
     direction: rtl;
     text-align: left;
 }
 
 .chat-room__contact-status--online {
-    color: var(--accent-hover);
+    color: color-mix(in srgb, var(--accent-primary) 72%, var(--text-primary));
     direction: rtl;
     text-align: left;
 }
@@ -1652,7 +1662,7 @@ body,
 }
 
 .message-bubble--mine .message-text--markdown .md-link {
-    color: var(--accent-soft-text);
+    color: #ffffff;
 }
 
 .message-bubble--mine .message-text--markdown .md-h1 {

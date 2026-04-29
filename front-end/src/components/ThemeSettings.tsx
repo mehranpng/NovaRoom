@@ -1,10 +1,16 @@
 import { Check, Monitor, Moon, Sun } from 'lucide-react';
-import { useDarkMode, type ThemeMode, type ThemePalette, type ThemeTone } from '../hooks/useDarkMode';
+import { useDarkMode, type AccentIntensity, type ThemeMode, type ThemePalette, type ThemeTone } from '../hooks/useDarkMode';
 
 const modeOptions: Array<{ value: ThemeMode; label: string; icon: typeof Sun }> = [
   { value: 'system', label: 'سیستم', icon: Monitor },
   { value: 'light', label: 'روشن', icon: Sun },
   { value: 'dark', label: 'تاریک', icon: Moon },
+];
+
+const intensityOptions: Array<{ value: AccentIntensity; label: string }> = [
+  { value: 'low', label: 'کم' },
+  { value: 'medium', label: 'متوسط' },
+  { value: 'high', label: 'زیاد' },
 ];
 
 const toneOptions: Array<{ value: ThemeTone; label: string; description: string }> = [
@@ -21,6 +27,8 @@ export function ThemeSettings() {
     themePalette,
     setThemePalette,
     paletteOptions,
+    accentIntensity,
+    setAccentIntensity,
   } = useDarkMode();
 
   return (
@@ -63,6 +71,28 @@ export function ThemeSettings() {
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{option.description}</span>
             </button>
           ))}
+        </div>
+      </div>
+
+
+
+      <div className="profile__chat-id-card" style={{ direction: 'rtl', textAlign: 'right' }}>
+        <p className="profile__field-label" style={{ marginBottom: 10 }}>شدت رنگ‌های اصلی</p>
+        <div style={{ display: 'grid', gap: 8 }}>
+          <input
+            type="range"
+            min={0}
+            max={2}
+            step={1}
+            value={intensityOptions.findIndex((o) => o.value === accentIntensity)}
+            onChange={(e) => setAccentIntensity(intensityOptions[Number(e.currentTarget.value)]?.value ?? 'high')}
+            style={{ width: '100%', accentColor: 'var(--accent-primary)' }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', fontSize: 12 }}>
+            {intensityOptions.map((option) => (
+              <span key={option.value} style={{ color: accentIntensity === option.value ? 'var(--accent-primary)' : 'var(--text-secondary)', fontWeight: accentIntensity === option.value ? 700 : 500 }}>{option.label}</span>
+            ))}
+          </div>
         </div>
       </div>
 
