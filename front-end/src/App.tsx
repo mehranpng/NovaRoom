@@ -2241,9 +2241,9 @@ export function App() {
         <MusicPlayerProvider>
             <MiniMusicPlayer />
             <NotificationCenter />
-            <div className="app">
+            <div className={cx('app', 'app--resizable-desktop')} style={desktopSidebarWidth != null ? ({ ['--desktop-sidebar-width' as string]: `${desktopSidebarWidth}px` }) : undefined}>
                 {view !== 'profile' && !String(view).startsWith('settings') && (
-                    <div className={cx('app__sidebar', view === 'chatRoom' && 'app__sidebar--hidden-mobile')} style={desktopSidebarWidth != null ? { width: `${desktopSidebarWidth}px` } : undefined}>
+                    <div className={cx('app__sidebar', view === 'chatRoom' && 'app__sidebar--hidden-mobile')}>
                         <ChatList
                             chats={chats}
                             currentUser={currentUser!}
@@ -2302,7 +2302,7 @@ export function App() {
                 )}
 
                 {view !== 'profile' && !String(view).startsWith('settings') && (
-                    <div className={cx('app__main', view === 'chatList' && 'app__main--hidden-mobile')} style={desktopSidebarWidth != null ? { flex: `1 1 calc(100% - ${desktopSidebarWidth}px)` } : undefined}>
+                    <div className={cx('app__main', view === 'chatList' && 'app__main--hidden-mobile')}>
                         {view === 'chatRoom' && showAIChat ? (
                             <AIChatRoom
                                 messages={aiMessages}

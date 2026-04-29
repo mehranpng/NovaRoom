@@ -2078,7 +2078,7 @@ export function ChatRoom({
                                     style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, fontSize: 14, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', direction: 'rtl' }} />
                             </div>
                         </div>
-                        <div style={{ padding: '8px 4px 4px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'Vazir, sans-serif' }}>اعضا ({toPersianDigits(membersList.length)})</div>
+                        <div className="contact-info__members-title">اعضا ({toPersianDigits(membersList.length)})</div>
                         <div className="contact-info__card" style={{ padding: 0, overflow: 'hidden' }}>
                             {membersLoading && membersList.length === 0 ? (
                                 Array.from({ length: 6 }).map((_, idx) => (
