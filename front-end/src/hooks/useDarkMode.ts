@@ -266,6 +266,7 @@ export function useDarkMode() {
     const baseAccentVars = isDarkMode ? paletteAccentVars[themePalette].dark : paletteAccentVars[themePalette].light;
     const accentVars = buildAccentVarsWithIntensity(baseAccentVars, isDarkMode, accentIntensity);
     Object.entries(accentVars).forEach(([key, value]) => root.style.setProperty(key, value));
+    root.style.setProperty('--status-online-color', 'color-mix(in srgb, var(--accent-primary) 68%, var(--text-primary))');
 
     if (themeTone === 'custom') {
       const customSurfaceVars = createCustomSurfaceVars(isDarkMode);
