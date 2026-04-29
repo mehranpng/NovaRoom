@@ -2476,7 +2476,7 @@ export function ChatRoom({
                                                     onKeyDown={(e) => { if (e.key === 'Enter') scrollToMessage(m.replyTo!.id); }}
                                                     className="message-reply-box"
                                                     style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
-                                                    <div className="message-reply-box__label">پاسخ</div>
+                                                    <div className="message-reply-box__label">{isGroupChat ? getReplyPreviewText(m.replyTo) : 'پاسخ'}</div>
                                                     <div className="message-reply-box__text">{getReplyPreviewText(m.replyTo)}</div>
                                                 </div>
                                             )}
