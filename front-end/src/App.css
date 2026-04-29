@@ -157,6 +157,10 @@ body,
     display: none;
 }
 
+.app__resizer {
+    display: none;
+}
+
 @media (min-width: 1024px) {
     .app__sidebar {
         width: 380px;
@@ -172,6 +176,28 @@ body,
 
     .app__main--hidden-mobile {
         display: block;
+    }
+
+    .app__resizer {
+        display: block;
+        width: 8px;
+        cursor: col-resize;
+        flex-shrink: 0;
+        background: transparent;
+        position: relative;
+    }
+
+    .app__resizer::before {
+        content: '';
+        position: absolute;
+        inset: 0 3px;
+        background: var(--border-primary);
+        opacity: 0;
+        transition: opacity 0.15s ease;
+    }
+
+    .app__resizer:hover::before {
+        opacity: 1;
     }
 }
 
@@ -1931,6 +1957,13 @@ body,
     justify-content: center;
     z-index: 100;
     animation: overlay-soft-in var(--motion-fast) var(--motion-ease-standard);
+}
+
+@media (min-width: 1024px) {
+    .chat-room-modal-overlay {
+        position: fixed;
+        z-index: 1200;
+    }
 }
 
 .dark-mode .chat-room-modal-overlay {

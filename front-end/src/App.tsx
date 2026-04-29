@@ -81,6 +81,10 @@ const mergeMessages = (base: Message[], incoming: Message[], mode: 'replace' | '
 
 export function App() {
     const MESSAGE_PAGE_SIZE = 50;
+    const DESKTOP_BREAKPOINT = 1024;
+    const DESKTOP_SIDEBAR_MIN = 320;
+    const DESKTOP_MAIN_MIN = 520;
+    const DESKTOP_SIDEBAR_KEY = 'desktopLayout:chatListWidth';
     const navigate = useNavigate();
     const location = useLocation();
     const [authToken, setAuthToken] = useState<string | null>(() => localStorage.getItem('token'));
@@ -131,6 +135,17 @@ export function App() {
     // IMPORTANT: this should be consumed (cleared) after first use, otherwise reopening the chat
     // will keep triggering the unread-jump logic.
     const [openChatUnread, setOpenChatUnread] = useState<{ chatId: string; count: number } | null>(null);
+    const [desktopSidebarWidth, setDesktopSidebarWidth] = useState<number | null>(() => {
+        try {
+            const raw = localStorage.getItem(DESKTOP_SIDEBAR_KEY);
+            if (!raw) return null;
+            const value = Number(raw);
+            return Number.isFinite(value) ? value : null;
+        } catch {
+            return null;
+        }
+    });
+    const [isResizingDesktopLayout, setIsResizingDesktopLayout] = useState(false);
 
     const consumeOpenChatUnread = useCallback((id: string) => {
         setOpenChatUnread((prev) => {
@@ -201,6 +216,33 @@ export function App() {
             receiveSoundRef.current = null;
         };
     }, []);
+
+    useEffect(() => {
+        if (desktopSidebarWidth == null) return;
+        try {
+            localStorage.setItem(DESKTOP_SIDEBAR_KEY, String(Math.round(desktopSidebarWidth)));
+        } catch {
+            // ignore storage failures
+        }
+    }, [desktopSidebarWidth]);
+
+    useEffect(() => {
+        if (!isResizingDesktopLayout) return;
+        const onMove = (event: MouseEvent) => {
+            if (window.innerWidth < DESKTOP_BREAKPOINT) return;
+            const totalWidth = window.innerWidth;
+            const maxSidebar = Math.max(DESKTOP_SIDEBAR_MIN, totalWidth - DESKTOP_MAIN_MIN);
+            const next = Math.min(maxSidebar, Math.max(DESKTOP_SIDEBAR_MIN, event.clientX));
+            setDesktopSidebarWidth(next);
+        };
+        const onUp = () => setIsResizingDesktopLayout(false);
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+        return () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+    }, [isResizingDesktopLayout]);
 
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -2201,7 +2243,7 @@ export function App() {
             <NotificationCenter />
             <div className="app">
                 {view !== 'profile' && !String(view).startsWith('settings') && (
-                    <div className={cx('app__sidebar', view === 'chatRoom' && 'app__sidebar--hidden-mobile')}>
+                    <div className={cx('app__sidebar', view === 'chatRoom' && 'app__sidebar--hidden-mobile')} style={desktopSidebarWidth != null ? { width: `${desktopSidebarWidth}px` } : undefined}>
                         <ChatList
                             chats={chats}
                             currentUser={currentUser!}
@@ -2245,9 +2287,22 @@ export function App() {
                         />
                     </div>
                 )}
+                {view !== 'profile' && !String(view).startsWith('settings') && (
+                    <div
+                        className="app__resizer"
+                        onMouseDown={(event) => {
+                            if (window.innerWidth < DESKTOP_BREAKPOINT) return;
+                            event.preventDefault();
+                            setIsResizingDesktopLayout(true);
+                        }}
+                        role="separator"
+                        aria-orientation="vertical"
+                        aria-label="Resize panels"
+                    />
+                )}
 
                 {view !== 'profile' && !String(view).startsWith('settings') && (
-                    <div className={cx('app__main', view === 'chatList' && 'app__main--hidden-mobile')}>
+                    <div className={cx('app__main', view === 'chatList' && 'app__main--hidden-mobile')} style={desktopSidebarWidth != null ? { flex: `1 1 calc(100% - ${desktopSidebarWidth}px)` } : undefined}>
                         {view === 'chatRoom' && showAIChat ? (
                             <AIChatRoom
                                 messages={aiMessages}
