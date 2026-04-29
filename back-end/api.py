@@ -89,6 +89,7 @@ cl_messages = db["messages"]
 cl_ai_messages = db["ai_messages"]
 cl_ai_chats = db["ai_chats"]
 cl_ai_usage = db["ai_usage"]
+cl_meta = db["meta"]
 
 # Store active connections (multiple tabs/devices per user)
 active_connections: Dict[str, List[WebSocket]] = {}
@@ -282,6 +283,10 @@ def decrypt_with_fallback(cipher: Any, token: str, scope: str) -> str:
         return legacy_plain
     # Prevent empty UI bubbles when decrypt fails for unknown legacy formats.
     return "🔐"
+
+
+async def decrypt_with_fallback_async(cipher: Any, token: str, scope: str) -> str:
+    return await asyncio.to_thread(decrypt_with_fallback, cipher, token, scope)
 
 
 def _derive_client_shared_key(scope: str) -> bytes:
@@ -1043,7 +1048,19 @@ async def startup_db():
     )
     await cl_ai_chats.create_index([("userId", 1), ("updatedAt", -1)])
     await cl_users.update_many({}, {"$set": {"online": False, "wsConnectionCount": 0}})
-    await migrate_unencrypted_messages()
+    migration_state = await cl_meta.find_one({"_id": "startup_migrations_v1"}) or {}
+    if not migration_state.get("messagesEncryptedAtStartup"):
+        await migrate_unencrypted_messages()
+        await cl_meta.update_one(
+            {"_id": "startup_migrations_v1"},
+            {
+                "$set": {
+                    "messagesEncryptedAtStartup": True,
+                    "messagesEncryptedAt": utc_now(),
+                }
+            },
+            upsert=True,
+        )
     await encrypt_existing_uploads()
 
 
@@ -1879,9 +1896,21 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
         if other_id:
             other_ids.append(other_id)
 
-    other_users = await cl_users.find({"chatId": {"$in": other_ids}}).to_list(
-        len(other_ids) or 1
-    )
+    other_users = await cl_users.find(
+        {"chatId": {"$in": other_ids}},
+        {
+            "_id": 0,
+            "chatId": 1,
+            "profile.name": 1,
+            "profile.username": 1,
+            "profile.avatar": 1,
+            "profile.avatarShape": 1,
+            "profile.bio": 1,
+            "online": 1,
+            "verified": 1,
+            "blockedUsers": 1,
+        },
+    ).to_list(len(other_ids) or 1)
     user_by_id = {u["chatId"]: u for u in other_users}
 
     # Compute unread counts in one aggregation (avoid N count_documents)
@@ -1920,11 +1949,12 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
         last_msg = chat.get("lastMessage")
         if isinstance(last_msg, dict) and last_msg.get("timestamp") is not None:
             chat_scope = f"chat:{chat.get('_id', '')}"
+            decrypted_last_text = await decrypt_with_fallback_async(
+                last_msg.get("text", ""), session_token, chat_scope
+            )
             last_msg = {
                 **last_msg,
-                "text": decrypt_with_fallback(
-                    last_msg.get("text", ""), session_token, chat_scope
-                ),
+                "text": decrypted_last_text,
                 "timestamp": dt_to_epoch_ms(last_msg.get("timestamp")),
             }
 
