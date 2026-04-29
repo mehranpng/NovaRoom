@@ -177,10 +177,10 @@ function getInitialTone(): ThemeTone {
 }
 
 function getInitialIntensity(): AccentIntensity {
-  if (typeof window === 'undefined') return 'high';
+  if (typeof window === 'undefined') return 'medium';
   const stored = localStorage.getItem(INTENSITY_STORAGE_KEY);
   if (stored === 'low' || stored === 'medium' || stored === 'high') return stored;
-  return 'high';
+  return 'medium';
 }
 
 function getInitialPalette(): ThemePalette {

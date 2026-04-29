@@ -77,7 +77,7 @@ export function ThemeSettings() {
 
 
       <div className="profile__chat-id-card" style={{ direction: 'rtl', textAlign: 'right' }}>
-        <p className="profile__field-label" style={{ marginBottom: 10 }}>شدت رنگ‌های اصلی</p>
+        <p className="profile__field-label" style={{ marginBottom: 10 }}>شدت رنگ ها</p>
         <div style={{ display: 'grid', gap: 8 }}>
           <input
             type="range"
