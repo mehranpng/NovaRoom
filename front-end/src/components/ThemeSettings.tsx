@@ -85,6 +85,7 @@ export function ThemeSettings() {
             max={2}
             step={1}
             className="theme-intensity-slider"
+            dir="ltr"
             value={intensityOptions.findIndex((o) => o.value === accentIntensity)}
             onChange={(e) => setAccentIntensity(intensityOptions[Number(e.currentTarget.value)]?.value ?? 'high')}
             style={{

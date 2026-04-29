@@ -1684,7 +1684,7 @@ body,
 }
 
 .message-meta--mine {
-    color: rgba(255, 255, 255, 0.94);
+    color: color-mix(in srgb, var(--message-mine-text) 94%, transparent);
 }
 
 .message-meta--theirs {
@@ -1726,12 +1726,12 @@ body,
 
 .message-seen--single {
     opacity: 0.75;
-    color: rgba(255, 255, 255, 0.88);
+    color: color-mix(in srgb, var(--message-mine-text) 88%, transparent);
 }
 
 .message-seen--double {
     opacity: 1;
-    color: #ffffff;
+    color: var(--message-mine-text);
 }
 
 .message-pending-indicator {
@@ -3626,12 +3626,12 @@ body[data-music-player='active'] .app {
 .theme-intensity-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 16px;
-    height: 16px;
+    width: 20px;
+    height: 20px;
     border-radius: 999px;
-    margin-top: -5px;
+    margin-top: -7px;
     background: var(--accent-primary);
-    border: 2px solid #fff;
+    border: none;
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 42%, transparent);
 }
 
@@ -3643,9 +3643,9 @@ body[data-music-player='active'] .app {
 }
 
 .theme-intensity-slider::-moz-range-thumb {
-    width: 16px;
-    height: 16px;
+    width: 20px;
+    height: 20px;
     border-radius: 999px;
     background: var(--accent-primary);
-    border: 2px solid #fff;
+    border: none;
 }
