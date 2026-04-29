@@ -331,7 +331,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                     {/* Editable Fields */}
                     {/* Name */}
                     <div className="profile__field-group">
-                        <label className="profile__field-label" style={{ textAlign: 'right' }}>نام</label>
+                        <label className="profile__field-label" style={{ textAlign: 'left', paddingLeft: 6 }}>نام</label>
                         {isEditing ? (
                             <input
                                 ref={nameRef}
@@ -354,7 +354,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
 
                     {/* Username */}
                     <div className="profile__field-group">
-                        <label className="profile__field-label" style={{ textAlign: 'right' }}>نام کاربری</label>
+                        <label className="profile__field-label" style={{ textAlign: 'left', paddingLeft: 6 }}>نام کاربری</label>
                         {isEditing ? (
                             <div>
                                 <div className="profile__username-wrapper">
@@ -405,7 +405,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
 
                     {/* Bio */}
                     <div className="profile__field-group">
-                        <label className="profile__field-label" style={{ textAlign: 'right' }}>بیوگرافی</label>
+                        <label className="profile__field-label" style={{ textAlign: 'left', paddingLeft: 6 }}>بیوگرافی</label>
                         {isEditing ? (
                             <div>
                                 <textarea

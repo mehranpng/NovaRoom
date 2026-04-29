@@ -562,6 +562,11 @@ export function useWebSocket({
             reconnectAttemptsRef.current = 0;
             setReconnectExhausted(false);
             connect();
+            window.setTimeout(() => {
+                if (document.visibilityState !== 'visible') return;
+                if (socketRef.current?.readyState === WebSocket.OPEN || socketRef.current?.readyState === WebSocket.CONNECTING) return;
+                connect();
+            }, 800);
         };
 
         const handleVisibilityChange = () => {
@@ -591,10 +596,21 @@ export function useWebSocket({
             forceOffline();
         };
 
+        const handleBeforeUnload = () => {
+            forceOffline();
+        };
+
+        const handlePageShow = () => {
+            restoreOnline();
+        };
+
         document.addEventListener('visibilitychange', handleVisibilityChange);
         window.addEventListener('blur', handleWindowBlur);
         window.addEventListener('focus', handleWindowFocus);
         window.addEventListener('pagehide', handlePageHide);
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        window.addEventListener('pageshow', handlePageShow);
+        window.addEventListener('online', handleWindowFocus);
 
         return () => {
             clearOfflineTimer();
@@ -602,6 +618,9 @@ export function useWebSocket({
             window.removeEventListener('blur', handleWindowBlur);
             window.removeEventListener('focus', handleWindowFocus);
             window.removeEventListener('pagehide', handlePageHide);
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            window.removeEventListener('pageshow', handlePageShow);
+            window.removeEventListener('online', handleWindowFocus);
         };
     }, [token, connect]);
 
