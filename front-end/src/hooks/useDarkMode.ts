@@ -189,37 +189,46 @@ function getInitialPalette(): ThemePalette {
   return stored && stored in paletteMeta ? stored : 'blue';
 }
 
-const createCustomSurfaceVars = (isDarkMode: boolean): Record<string, string> => {
+const customToneIntensityScale: Record<AccentIntensity, number> = {
+  low: 0.35,
+  medium: 0.65,
+  high: 1,
+};
+
+const createCustomSurfaceVars = (isDarkMode: boolean, intensity: AccentIntensity): Record<string, string> => {
+  const toneAmount = customToneIntensityScale[intensity];
   if (!isDarkMode) {
+    const tone = (base: number) => `${Math.max(2, Math.round(base * toneAmount))}%`;
     return {
-      '--bg-primary': 'color-mix(in srgb, var(--accent-primary) 8%, #ffffff)',
-      '--bg-secondary': 'color-mix(in srgb, var(--accent-primary) 14%, #ffffff)',
-      '--bg-tertiary': 'color-mix(in srgb, var(--accent-primary) 20%, #ffffff)',
-      '--border-primary': 'color-mix(in srgb, var(--accent-primary) 24%, #e5e7eb)',
-      '--border-secondary': 'color-mix(in srgb, var(--accent-primary) 34%, #d1d5db)',
-      '--hover-bg': 'color-mix(in srgb, var(--accent-primary) 26%, #f3f4f6)',
-      '--hover-bg-light': 'color-mix(in srgb, var(--accent-primary) 16%, #f9fafb)',
-      '--message-theirs-bg': 'color-mix(in srgb, var(--accent-primary) 10%, #ffffff)',
-      '--input-bg': 'color-mix(in srgb, var(--accent-primary) 18%, #f3f4f6)',
-      '--input-bg-focus': 'color-mix(in srgb, var(--accent-primary) 24%, #f3f4f6)',
-      '--reply-box-bg': 'color-mix(in srgb, var(--accent-primary) 14%, #f9fafb)',
-      '--reply-box-border': 'color-mix(in srgb, var(--accent-primary) 24%, #e5e7eb)',
+      '--bg-primary': `color-mix(in srgb, var(--accent-primary) ${tone(8)}, #ffffff)`,
+      '--bg-secondary': `color-mix(in srgb, var(--accent-primary) ${tone(14)}, #ffffff)`,
+      '--bg-tertiary': `color-mix(in srgb, var(--accent-primary) ${tone(20)}, #ffffff)`,
+      '--border-primary': `color-mix(in srgb, var(--accent-primary) ${tone(24)}, #e5e7eb)`,
+      '--border-secondary': `color-mix(in srgb, var(--accent-primary) ${tone(34)}, #d1d5db)`,
+      '--hover-bg': `color-mix(in srgb, var(--accent-primary) ${tone(26)}, #f3f4f6)`,
+      '--hover-bg-light': `color-mix(in srgb, var(--accent-primary) ${tone(16)}, #f9fafb)`,
+      '--message-theirs-bg': `color-mix(in srgb, var(--accent-primary) ${tone(10)}, #f8fafc)`,
+      '--input-bg': `color-mix(in srgb, var(--accent-primary) ${tone(18)}, #f3f4f6)`,
+      '--input-bg-focus': `color-mix(in srgb, var(--accent-primary) ${tone(24)}, #f3f4f6)`,
+      '--reply-box-bg': `color-mix(in srgb, var(--accent-primary) ${tone(14)}, #f9fafb)`,
+      '--reply-box-border': `color-mix(in srgb, var(--accent-primary) ${tone(24)}, #e5e7eb)`,
     };
   }
 
+  const tone = (base: number) => `${Math.max(4, Math.round(base * toneAmount))}%`;
   return {
-    '--bg-primary': 'color-mix(in srgb, var(--accent-primary) 7%, #16181d)',
-    '--bg-secondary': 'color-mix(in srgb, var(--accent-primary) 12%, #1f232b)',
-    '--bg-tertiary': 'color-mix(in srgb, var(--accent-primary) 16%, #272c36)',
-    '--border-primary': 'color-mix(in srgb, var(--accent-primary) 18%, #323846)',
-    '--border-secondary': 'color-mix(in srgb, var(--accent-primary) 24%, #3b4350)',
-    '--hover-bg': 'color-mix(in srgb, var(--accent-primary) 20%, #2b313d)',
-    '--hover-bg-light': 'color-mix(in srgb, var(--accent-primary) 16%, #252b35)',
-    '--message-theirs-bg': 'color-mix(in srgb, var(--accent-primary) 12%, #2b313d)',
-    '--input-bg': 'color-mix(in srgb, var(--accent-primary) 14%, #2b313d)',
-    '--input-bg-focus': 'color-mix(in srgb, var(--accent-primary) 20%, #343b49)',
-    '--reply-box-bg': 'color-mix(in srgb, var(--accent-primary) 14%, #2b313d)',
-    '--reply-box-border': 'color-mix(in srgb, var(--accent-primary) 18%, #343b49)',
+    '--bg-primary': `color-mix(in srgb, var(--accent-primary) ${tone(7)}, #16181d)`,
+    '--bg-secondary': `color-mix(in srgb, var(--accent-primary) ${tone(12)}, #1f232b)`,
+    '--bg-tertiary': `color-mix(in srgb, var(--accent-primary) ${tone(16)}, #272c36)`,
+    '--border-primary': `color-mix(in srgb, var(--accent-primary) ${tone(18)}, #323846)`,
+    '--border-secondary': `color-mix(in srgb, var(--accent-primary) ${tone(24)}, #3b4350)`,
+    '--hover-bg': `color-mix(in srgb, var(--accent-primary) ${tone(20)}, #2b313d)`,
+    '--hover-bg-light': `color-mix(in srgb, var(--accent-primary) ${tone(16)}, #252b35)`,
+    '--message-theirs-bg': `color-mix(in srgb, var(--accent-primary) ${tone(12)}, #2b313d)`,
+    '--input-bg': `color-mix(in srgb, var(--accent-primary) ${tone(14)}, #2b313d)`,
+    '--input-bg-focus': `color-mix(in srgb, var(--accent-primary) ${tone(20)}, #343b49)`,
+    '--reply-box-bg': `color-mix(in srgb, var(--accent-primary) ${tone(14)}, #2b313d)`,
+    '--reply-box-border': `color-mix(in srgb, var(--accent-primary) ${tone(18)}, #343b49)`,
   };
 };
 
@@ -269,7 +278,7 @@ export function useDarkMode() {
     root.style.setProperty('--status-online-color', 'color-mix(in srgb, var(--accent-primary) 68%, var(--text-primary))');
 
     if (themeTone === 'custom') {
-      const customSurfaceVars = createCustomSurfaceVars(isDarkMode);
+      const customSurfaceVars = createCustomSurfaceVars(isDarkMode, accentIntensity);
       Object.entries(customSurfaceVars).forEach(([key, value]) => root.style.setProperty(key, value));
     }
 

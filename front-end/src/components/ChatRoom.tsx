@@ -154,6 +154,15 @@ function formatMessageTime(ts: any) {
     return persianTimeFmt.format(new Date(normalizeTs(ts)));
 }
 
+
+function normalizeMarkdownText(value: string): string {
+    if (!value) return value;
+    return value
+        .split('\n')
+        .map((line) => line.replace(/^(\s*)[0۰](\s+)/, '$1#$2'))
+        .join('\n');
+}
+
 function bubbleShape(prevSameSender: boolean, nextSameSender: boolean) {
     if (!prevSameSender && !nextSameSender) return 'msg-shape--single';
     if (!prevSameSender && nextSameSender) return 'msg-shape--first';
@@ -2543,14 +2552,14 @@ export function ChatRoom({
                                             )}
                                             {m.text && !Boolean(m.reasoningEnabled && m.reasoningContent) && (
                                                 /\n\n/.test(m.text)
-                                                    ? <div className="message-text">{m.text}</div>
+                                                    ? <div className="message-text">{normalizeMarkdownText(m.text)}</div>
                                                     : (
                                                         <div className="message-text message-text--markdown">
                                                             <ReactMarkdown
                                                                 remarkPlugins={[remarkGfm, remarkBreaks]}
                                                                 components={markdownComponents}
                                                             >
-                                                                {m.text}
+                                                                {normalizeMarkdownText(m.text)}
                                                             </ReactMarkdown>
                                                         </div>
                                                     )
@@ -2562,7 +2571,7 @@ export function ChatRoom({
                                                             remarkPlugins={[remarkGfm, remarkBreaks]}
                                                             components={markdownComponents}
                                                         >
-                                                            {m.text}
+                                                            {normalizeMarkdownText(m.text)}
                                                         </ReactMarkdown>
                                                     </div>
                                                 </div>
