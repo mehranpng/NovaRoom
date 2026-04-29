@@ -1225,16 +1225,29 @@ export function App() {
 
         setChats(prev => prev.map(c => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
 
-        const shouldShowSkeleton = !messagesLoadedOnce[chatId];
+        const inMemory = messages[chatId] || [];
+        const cached = inMemory.length > 0 ? inMemory : readCachedMessages(chatId, currentUser?.chatId || null);
+        const hasImmediateMessages = cached.length > 0;
+
+        if (hasImmediateMessages && inMemory.length === 0) {
+            setMessages((prev) => ({ ...prev, [chatId]: cached }));
+        }
+
+        const shouldShowSkeleton = !messagesLoadedOnce[chatId] && !hasImmediateMessages;
         if (shouldShowSkeleton) {
             setMessagesLoading(prev => ({ ...prev, [chatId]: true }));
-            const cached = readCachedMessages(chatId, currentUser?.chatId || null);
-            if (cached.length > 0) {
-                setMessages((prev) => ({ ...prev, [chatId]: cached }));
-            }
         }
 
         try {
+            if (hasImmediateMessages) {
+                setMessagesLoadedOnce(prev => ({ ...prev, [chatId]: true }));
+                if (currentUser && chatId !== `saved_messages_${currentUser.chatId}`) {
+                    sendSeen(chatId);
+                }
+                void fetchPagedMessages(chatId, { direction: 'latest', mode: 'replace' });
+                return;
+            }
+
             let loadedCount = await fetchPagedMessages(chatId, { direction: 'latest', mode: 'replace' });
             if (loadedCount === 0 && chatLoadRequestRef.current === requestId) {
                 // Retry once for occasional race/network hiccups when rapidly switching chats.
@@ -1257,7 +1270,7 @@ export function App() {
         }
 
         loadChats(false);
-    }, [loadChats, sendSeen, messagesLoadedOnce, currentUser, navigate, fetchPagedMessages]);
+    }, [loadChats, sendSeen, messagesLoadedOnce, currentUser, navigate, fetchPagedMessages, messages]);
 
     const handleDragHoverChat = useCallback((chatId: string) => {
         if (!chatId) return;
