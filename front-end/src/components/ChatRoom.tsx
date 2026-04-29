@@ -1647,7 +1647,18 @@ export function ChatRoom({
             const dayBreak = !prev || !sameDay(prev.timestamp, m.timestamp);
             return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender) };
         });
-    }, [chatContentReady, messages, messages.length, currentUserId]);
+    }, [chatContentReady, messages, currentUserId]);
+
+    const isMobileViewport = useMemo(() => {
+        if (typeof window === 'undefined') return false;
+        return window.matchMedia('(max-width: 768px)').matches;
+    }, []);
+    const renderedItems = useMemo(() => {
+        if (!isMobileViewport) return items;
+        const maxMobileDomMessages = 120;
+        if (items.length <= maxMobileDomMessages) return items;
+        return items.slice(items.length - maxMobileDomMessages);
+    }, [items, isMobileViewport]);
 
     const otherTypingUserIds = useMemo(
         () => (typingUserIds || []).filter((uid) => uid && uid !== currentUserId),
@@ -2326,7 +2337,7 @@ export function ChatRoom({
                                     <span className="chat-range-loader chat-range-loader--active" />
                                 </div>
                             )}
-                            {items.map(({ m, isMine, dayBreak, shape }) => {
+                            {renderedItems.map(({ m, isMine, dayBreak, shape }) => {
                             const isHighlighted = highlightId === m.id;
                             const dragX = dragState.id === m.id ? dragState.x : 0;
                             const dragActive = dragState.id === m.id ? dragState.active : false;

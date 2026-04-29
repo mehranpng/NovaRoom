@@ -1252,6 +1252,9 @@ body,
     margin-top: 3px;
     touch-action: pan-y;
     position: relative;
+    content-visibility: auto;
+    contain: layout style paint;
+    contain-intrinsic-size: 52px;
 }
 
 .message-row--mine {
@@ -1278,6 +1281,7 @@ body,
     border-radius: 18px;
     margin-bottom: 2px;
     transition: transform var(--motion-fast) var(--motion-ease-standard), box-shadow var(--motion-base) var(--motion-ease-standard);
+    will-change: transform;
 }
 
 @media (min-width: 640px) {
