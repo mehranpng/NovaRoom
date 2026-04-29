@@ -222,11 +222,12 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
 
                 {mode === 'chat' ? (
                     <>
-                        <div className="search-box">
+                        <div className="search-box" style={{ direction: 'rtl', flexDirection: 'row-reverse' }}>
                             <Search size={20} />
                             <input
                                 ref={inputRef}
                                 type="text"
+                                style={{ direction: 'rtl', textAlign: 'right' }}
                                 placeholder="جستجو با نام کاربری..."
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}

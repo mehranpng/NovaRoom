@@ -331,7 +331,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                     {/* Editable Fields */}
                     {/* Name */}
                     <div className="profile__field-group">
-                        <label className="profile__field-label">نام</label>
+                        <label className="profile__field-label" style={{ textAlign: 'right' }}>نام</label>
                         {isEditing ? (
                             <input
                                 ref={nameRef}
@@ -354,7 +354,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
 
                     {/* Username */}
                     <div className="profile__field-group">
-                        <label className="profile__field-label">نام کاربری</label>
+                        <label className="profile__field-label" style={{ textAlign: 'right' }}>نام کاربری</label>
                         {isEditing ? (
                             <div>
                                 <div className="profile__username-wrapper">
@@ -405,7 +405,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
 
                     {/* Bio */}
                     <div className="profile__field-group">
-                        <label className="profile__field-label">بیوگرافی</label>
+                        <label className="profile__field-label" style={{ textAlign: 'right' }}>بیوگرافی</label>
                         {isEditing ? (
                             <div>
                                 <textarea
@@ -418,7 +418,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                                     rows={3}
                                     maxLength={150}
                                 />
-                                <p className="profile__char-count">{bio.length}/150</p>
+                                <p className="profile__char-count" style={{ textAlign: 'left', direction: 'ltr' }}>{toPersianDigits(bio.length)}/{toPersianDigits(150)}</p>
                             </div>
                         ) : (
                             <div className="profile__field-static">
