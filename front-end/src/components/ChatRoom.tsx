@@ -316,6 +316,16 @@ const markdownComponents: Components = {
     ),
 };
 
+const markdownRemarkPlugins = [remarkGfm, remarkBreaks];
+
+const MemoizedMarkdown = React.memo(function MemoizedMarkdown({ text }: { text: string }) {
+    return (
+        <ReactMarkdown remarkPlugins={markdownRemarkPlugins} components={markdownComponents}>
+            {text}
+        </ReactMarkdown>
+    );
+}, (prev, next) => prev.text === next.text);
+
 /** ویبره خیلی کوتاه — فقط اگر دستگاه پشتیبانی کند */
 function triggerHaptic() {
     try { navigator.vibrate?.(18); } catch { /* ignore */ }
@@ -943,14 +953,11 @@ export function ChatRoom({
     const canDeleteChat = chatId !== 'pending' && !isSavedMessages;
     const token = localStorage.getItem('token') || '';
 
-    const resizeTextarea = () => {
-        const textarea = textareaRef.current;
+    const resizeTextarea = (textarea: HTMLTextAreaElement | null) => {
         if (!textarea) return;
         textarea.style.height = 'auto';
         textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 44), 200)}px`;
     };
-
-    useEffect(() => { resizeTextarea(); }, [text]);
 
     useEffect(() => {
         const room = roomRef.current;
@@ -1649,9 +1656,17 @@ export function ChatRoom({
         });
     }, [chatContentReady, messages, currentUserId]);
 
-    const isMobileViewport = useMemo(() => {
+    const [isMobileViewport, setIsMobileViewport] = useState(() => {
         if (typeof window === 'undefined') return false;
         return window.matchMedia('(max-width: 768px)').matches;
+    });
+    useEffect(() => {
+        if (typeof window === 'undefined') return undefined;
+        const media = window.matchMedia('(max-width: 768px)');
+        const onChange = () => setIsMobileViewport(media.matches);
+        onChange();
+        media.addEventListener('change', onChange);
+        return () => media.removeEventListener('change', onChange);
     }, []);
     const renderedItems = useMemo(() => {
         if (!isMobileViewport) return items;
@@ -2557,24 +2572,14 @@ export function ChatRoom({
                                                     ? <div className="message-text">{m.text}</div>
                                                     : (
                                                         <div className="message-text message-text--markdown">
-                                                            <ReactMarkdown
-                                                                remarkPlugins={[remarkGfm, remarkBreaks]}
-                                                                components={markdownComponents}
-                                                            >
-                                                                {m.text}
-                                                            </ReactMarkdown>
+                                                            <MemoizedMarkdown text={m.text} />
                                                         </div>
                                                     )
                                             )}
                                             {m.text && Boolean(m.reasoningEnabled && m.reasoningContent) && (
                                                 <div className="ai-reasoning-answer" style={{ marginTop: 0 }}>
                                                     <div className="message-text message-text--markdown">
-                                                        <ReactMarkdown
-                                                            remarkPlugins={[remarkGfm, remarkBreaks]}
-                                                            components={markdownComponents}
-                                                        >
-                                                            {m.text}
-                                                        </ReactMarkdown>
+                                                        <MemoizedMarkdown text={m.text} />
                                                     </div>
                                                 </div>
                                             )}
@@ -2925,6 +2930,7 @@ export function ChatRoom({
                                 onChange={(e) => {
                                     const nextValue = e.target.value;
                                     setText(nextValue);
+                                    resizeTextarea(e.target);
                                     refreshTyping(nextValue);
                                 }}
                                 onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
