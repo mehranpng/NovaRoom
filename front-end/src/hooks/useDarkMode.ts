@@ -260,6 +260,8 @@ export function useDarkMode() {
     const baseVars = isDarkMode ? neutralThemeVars.dark : neutralThemeVars.light;
     Object.entries(baseVars).forEach(([key, value]) => root.style.setProperty(key, value));
     root.style.setProperty('--message-mine-text', accentIntensity === 'low' && !isDarkMode ? '#111827' : '#ffffff');
+    root.style.setProperty('--message-reply-text', accentIntensity === 'low' && !isDarkMode ? '#111827' : (isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(255, 255, 255, 0.9)'));
+    root.style.setProperty('--message-reply-text-secondary', accentIntensity === 'low' && !isDarkMode ? '#111827' : (isDarkMode ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.95)'));
 
     const baseAccentVars = isDarkMode ? paletteAccentVars[themePalette].dark : paletteAccentVars[themePalette].light;
     const accentVars = buildAccentVarsWithIntensity(baseAccentVars, isDarkMode, accentIntensity);

@@ -792,18 +792,16 @@ export function ChatRoom({
     const getReplyPreviewText = (reply: MessageReplyType | null | undefined) => {
         if (!reply) return '';
         const repliedMessage = messages.find((msg) => msg.id === reply.id);
-        const repliedFile = repliedMessage?.file;
-        const fileMime = (repliedFile?.mimeType || '').toLowerCase();
-        const fallbackText = (reply.text || '').trim();
+        const senderId = String(repliedMessage?.senderId || reply.senderId || '').trim();
 
-        if (!repliedFile) return fallbackText;
+        if (!senderId) return 'کاربر';
+        if (senderId === currentUserId) return 'شما';
+        if (senderId === contact.chatId) return contact.name || contact.username || 'کاربر';
 
-        let prefix = '📎 فایل';
-        if (fileMime.startsWith('image/')) prefix = '🖼️ تصویر';
-        else if (fileMime.startsWith('video/')) prefix = '🎥 ویدیو';
-        else if (fileMime.startsWith('audio/')) prefix = '🎵 صوت';
+        const memberName = groupMembers[senderId]?.name;
+        if (memberName) return memberName;
 
-        return fallbackText ? `${prefix} • ${fallbackText}` : prefix;
+        return senderId;
     };
 
     const getForwardPreviewText = (draft: { previewText?: string; previewFile?: FileMetadata | null } | null | undefined) => {
