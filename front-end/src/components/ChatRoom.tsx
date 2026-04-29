@@ -789,8 +789,8 @@ export function ChatRoom({
         if (c.scrollTop < 20) scrollToBottom(false);
     };
 
-    const getReplyPreviewText = (reply: MessageReplyType | null | undefined) => {
-        if (!reply) return '';
+    const getReplySenderName = (reply: MessageReplyType | null | undefined) => {
+        if (!reply) return 'کاربر';
         const repliedMessage = messages.find((msg) => msg.id === reply.id);
         const senderId = String(repliedMessage?.senderId || reply.senderId || '').trim();
 
@@ -802,6 +802,23 @@ export function ChatRoom({
         if (memberName) return memberName;
 
         return senderId;
+    };
+
+    const getReplyPreviewText = (reply: MessageReplyType | null | undefined) => {
+        if (!reply) return '';
+        const repliedMessage = messages.find((msg) => msg.id === reply.id);
+        const repliedFile = repliedMessage?.file;
+        const fileMime = (repliedFile?.mimeType || '').toLowerCase();
+        const fallbackText = (reply.text || '').trim();
+
+        if (!repliedFile) return fallbackText;
+
+        let prefix = '📎 فایل';
+        if (fileMime.startsWith('image/')) prefix = '🖼️ تصویر';
+        else if (fileMime.startsWith('video/')) prefix = '🎥 ویدیو';
+        else if (fileMime.startsWith('audio/')) prefix = '🎵 صوت';
+
+        return fallbackText ? `${prefix} • ${fallbackText}` : prefix;
     };
 
     const getForwardPreviewText = (draft: { previewText?: string; previewFile?: FileMetadata | null } | null | undefined) => {
@@ -2033,7 +2050,7 @@ export function ChatRoom({
                             </button>
                             <div className="contact-info__name" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{contact.name}</div>
                             <div className="contact-info__status" style={{ direction: 'rtl' }}>
-                                <span style={{ color: 'var(--accent-soft-text)' }}>{toPersianDigits(Math.max(onlineCount, Number(chatStats?.onlineMembers || 0)))} آنلاین</span>
+                                <span className="status-online-text">{toPersianDigits(Math.max(onlineCount, Number(chatStats?.onlineMembers || 0)))} آنلاین</span>
                                 <span style={{ color: 'var(--text-muted)' }}> • </span>
                                 <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(membersList.length)} عضو</span>
                             </div>
@@ -2099,7 +2116,7 @@ export function ChatRoom({
                                             </div>
                                             <div style={{ fontSize: 13, marginTop: 2 }}>
                                                 {member.online ? (
-                                                    <span style={{ color: 'var(--accent-soft-text)' }}>آنلاین</span>
+                                                    <span className="status-online-text">آنلاین</span>
                                                 ) : (
                                                     <span style={{ color: 'var(--text-secondary)' }}>
                                                         {member.username ? `@${member.username}` : 'آفلاین'}
@@ -2216,10 +2233,10 @@ export function ChatRoom({
                         {!isSavedMessages && (
                             <div className={(!isGroupChat && !isContactBlocked && contact.online) ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
                                 {headerActivityLabel ? (
-                                    <span style={isGroupChat ? { color: 'var(--accent-soft-text)' } : undefined}>{headerActivityLabel}</span>
+                                    <span className="status-online-text">{headerActivityLabel}</span>
                                 ) : (isGroupChat ? (
                                     <span style={{ direction: 'rtl', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                        <span style={{ color: 'var(--accent-soft-text)' }}>{toPersianDigits(chatStats?.onlineMembers ?? 0)} آنلاین</span>
+                                        <span className="status-online-text">{toPersianDigits(chatStats?.onlineMembers ?? 0)} آنلاین</span>
                                         <span style={{ color: 'var(--text-muted)' }}>•</span>
                                         <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0)} عضو</span>
                                     </span>
@@ -2476,7 +2493,7 @@ export function ChatRoom({
                                                     onKeyDown={(e) => { if (e.key === 'Enter') scrollToMessage(m.replyTo!.id); }}
                                                     className="message-reply-box"
                                                     style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
-                                                    <div className="message-reply-box__label">{isGroupChat ? getReplyPreviewText(m.replyTo) : 'پاسخ'}</div>
+                                                    <div className="message-reply-box__label">{isGroupChat ? getReplySenderName(m.replyTo) : 'پاسخ'}</div>
                                                     <div className="message-reply-box__text">{getReplyPreviewText(m.replyTo)}</div>
                                                 </div>
                                             )}
