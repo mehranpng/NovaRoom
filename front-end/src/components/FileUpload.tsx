@@ -52,13 +52,26 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         if (!active) clearPickerCloseTimer();
     };
 
+    const triggerNativeFilePicker = (input: HTMLInputElement) => {
+        const picker = (input as HTMLInputElement & { showPicker?: () => void }).showPicker;
+        if (typeof picker === 'function') {
+            picker.call(input);
+            return;
+        }
+        input.click();
+    };
+
     const openPicker = (inputRef: React.RefObject<HTMLInputElement | null>) => (e: React.MouseEvent<HTMLButtonElement>) => {
         e.preventDefault();
         e.stopPropagation();
         if (uploading) return;
-        setPickerMenuOpen(false);
+
+        const input = inputRef.current;
+        if (!input) return;
+
         setPickerSession(true);
-        inputRef.current?.click();
+        triggerNativeFilePicker(input);
+        window.setTimeout(() => setPickerMenuOpen(false), 0);
     };
 
     const pushTaskUpdate = (task: UploadTask) => {
