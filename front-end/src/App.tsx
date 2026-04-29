@@ -21,6 +21,35 @@ import { notify } from './utils/notificationBus';
 import { decryptBioClientSide, decryptMessageClientSide, encryptChatTextClientSide } from './utils/e2ee';
 import './App.css';
 
+
+const MESSAGE_CACHE_VERSION = 'v1';
+const MAX_CACHED_MESSAGES_PER_CHAT = 120;
+
+function getMessageCacheKey(chatId: string, viewerId?: string | null): string {
+    return `messageCache:${MESSAGE_CACHE_VERSION}:${viewerId || 'anon'}:${chatId}`;
+}
+
+function readCachedMessages(chatId: string, viewerId?: string | null): Message[] {
+    try {
+        const raw = localStorage.getItem(getMessageCacheKey(chatId, viewerId));
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed as Message[];
+    } catch {
+        return [];
+    }
+}
+
+function writeCachedMessages(chatId: string, viewerId: string | null | undefined, messages: Message[]): void {
+    if (!viewerId) return;
+    try {
+        const trimmed = messages.slice(-MAX_CACHED_MESSAGES_PER_CHAT);
+        localStorage.setItem(getMessageCacheKey(chatId, viewerId), JSON.stringify(trimmed));
+    } catch {
+        // ignore quota/storage errors
+    }
+}
 const normalizeTimestamp = (ts: unknown): number => {
     if (typeof ts === 'number' && Number.isFinite(ts)) return ts;
     if (typeof ts === 'string') {
@@ -109,7 +138,7 @@ export function App() {
             if (prev.chatId !== id) return prev;
             return null;
         });
-    }, []);
+    }, [authToken, currentUser?.chatId]);
 
     // AI Chat state
     const [showAIChat, setShowAIChat] = useState(false);
@@ -1043,6 +1072,7 @@ export function App() {
 
         setMessages((prev) => {
             const merged = mergeMessages(prev[chatId] || [], chunk, mode);
+            writeCachedMessages(chatId, currentUser?.chatId, merged);
             return { ...prev, [chatId]: merged };
         });
 
@@ -1059,7 +1089,7 @@ export function App() {
             },
         }));
         return chunk.length;
-    }, []);
+    }, [authToken, currentUser?.chatId]);
 
     useEffect(() => {
         if (!wsConnected || !isAuthenticated) return;
@@ -1198,6 +1228,10 @@ export function App() {
         const shouldShowSkeleton = !messagesLoadedOnce[chatId];
         if (shouldShowSkeleton) {
             setMessagesLoading(prev => ({ ...prev, [chatId]: true }));
+            const cached = readCachedMessages(chatId, currentUser?.chatId || null);
+            if (cached.length > 0) {
+                setMessages((prev) => ({ ...prev, [chatId]: cached }));
+            }
         }
 
         try {
