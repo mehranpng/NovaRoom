@@ -2920,7 +2920,9 @@ export function ChatRoom({
                             {blockedByOther ? 'این کاربر شما را بلاک کرده است.' : 'شما این کاربر را بلاک کرده‌اید.'}
                         </div>
                     ) : !canSendInOfficialChannel ? (
-                        <div className="chat-room__blocked-box">فقط کاربران تاییدشده می‌توانند در این کانال پیام ارسال کنند.</div>
+                        <div className="chat-room__blocked-box" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-primary)', background: 'var(--bg-secondary)' }}>
+                            فقط کاربران تاییدشده می‌توانند در این کانال پیام ارسال کنند.
+                        </div>
                     ) : (
                         <>
                             <FileUpload

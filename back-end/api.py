@@ -2131,6 +2131,30 @@ async def get_chat_members(
     chat_id: str, current_user: dict = Depends(get_current_user)
 ):
     my_id = current_user["chatId"]
+    if is_official_channel_chat(chat_id):
+        sender_ids = await cl_messages.distinct("senderId", {"chatId": OFFICIAL_CHANNEL_CHAT_ID})
+        unique_sender_ids = [str(uid).strip() for uid in sender_ids if str(uid or "").strip()]
+        users = await cl_users.find({"chatId": {"$in": unique_sender_ids}}).to_list(len(unique_sender_ids) or 1)
+        users_by_id = {str(u.get("chatId", "")).strip(): u for u in users}
+        result = []
+        for uid in unique_sender_ids:
+            u = users_by_id.get(uid)
+            if not u:
+                continue
+            profile = u.get("profile", {})
+            result.append(
+                {
+                    "chatId": uid,
+                    "name": profile.get("name") or profile.get("username") or uid,
+                    "username": profile.get("username", ""),
+                    "avatar": profile.get("avatar", ""),
+                    "bio": decrypt_user_bio(u, str(current_user.get("_session_token") or "")),
+                    "verified": bool(u.get("verified", False)),
+                    "online": resolve_user_online_state(u),
+                }
+            )
+        return result
+
     chat = await cl_chats.find_one({"_id": chat_id})
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -3477,13 +3501,15 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 }
 
                 # Only update chat document for normal chats (not saved messages)
-                if not is_saved:
+                if not is_saved and not is_official:
                     await cl_chats.update_one(
                         {"_id": chat_id_target},
                         {"$set": {"lastMessage": last_msg, "updatedAt": utc_now()}},
                     )
 
-                participants = [chat_id] if (is_saved or is_official) else []
+                participants = [chat_id] if is_saved else []
+                if is_official:
+                    participants = await cl_users.distinct("chatId", {})
                 if not is_saved and not is_official:
                     participants_doc = await cl_chats.find_one(
                         {"_id": chat_id_target}, {"participants": 1}
@@ -3542,7 +3568,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 saved_chat_id = get_saved_messages_id(chat_id)
                 is_saved = chat_id_target == saved_chat_id
-                if not is_saved:
+                is_official = is_official_channel_chat(chat_id_target)
+                if is_official and not bool(user.get("verified", False)):
+                    continue
+                if not is_saved and not is_official:
                     chat_doc = await cl_chats.find_one(
                         {"_id": chat_id_target}, {"participants": 1}
                     )
@@ -3563,7 +3592,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 )
 
                 # Update lastMessage text if it points to this message.
-                if not is_saved:
+                if not is_saved and not is_official:
                     await cl_chats.update_one(
                         {"_id": chat_id_target, "lastMessage.id": message_id},
                         {
@@ -3576,7 +3605,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         },
                     )
 
-                participants = [chat_id] if (is_saved or is_official) else []
+                participants = [chat_id] if is_saved else []
+                if is_official:
+                    participants = await cl_users.distinct("chatId", {})
                 if not is_saved and not is_official:
                     participants_doc = await cl_chats.find_one(
                         {"_id": chat_id_target}, {"participants": 1}
@@ -3642,7 +3673,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 saved_chat_id = get_saved_messages_id(chat_id)
                 is_saved = chat_id_target == saved_chat_id
-                if not is_saved:
+                is_official = is_official_channel_chat(chat_id_target)
+                if not is_saved and not is_official:
                     chat_doc = await cl_chats.find_one(
                         {"_id": chat_id_target}, {"participants": 1}
                     )
@@ -3658,14 +3690,16 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 # Rebuild lastMessage if needed.
                 last_msg = None
-                if not is_saved:
+                if not is_saved and not is_official:
                     last_msg = await build_last_message(chat_id_target, token)
                     await cl_chats.update_one(
                         {"_id": chat_id_target},
                         {"$set": {"lastMessage": last_msg, "updatedAt": utc_now()}},
                     )
 
-                participants = [chat_id] if (is_saved or is_official) else []
+                participants = [chat_id] if is_saved else []
+                if is_official:
+                    participants = await cl_users.distinct("chatId", {})
                 if not is_saved and not is_official:
                     participants_doc = await cl_chats.find_one(
                         {"_id": chat_id_target}, {"participants": 1}

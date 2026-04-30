@@ -1,4 +1,4 @@
-import { Search, MessageCirclePlus, Menu, User as UserIcon, LogOut, Bookmark, Settings as SettingsIcon, AlignJustify, Trash2, RefreshCw, Pin, PinOff, MessageSquarePlus } from 'lucide-react';
+import { Search, MessageCirclePlus, Menu, User as UserIcon, LogOut, Bookmark, Settings as SettingsIcon, AlignJustify, Trash2, RefreshCw, Pin, PinOff, MessageSquarePlus, Megaphone, Bot } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Chat, User } from '../types';
@@ -904,6 +904,7 @@ export function ChatList({
                                     className="chat-list__item-name"
                                     style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                                 >
+                                    <Bot size={14} style={{ opacity: 0.95 }} />
                                     Nova AI
                                     <VerifiedBadge size={14} />
                                 </span>
@@ -1041,11 +1042,9 @@ export function ChatList({
                                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                                         >
                                             {group ? (
-                                                <FilledGroupIcon
-                                                    size={14}
-                                                    title="گروه"
-                                                    style={{ opacity: 0.9 }}
-                                                />
+                                                chat.id === 'official-channel'
+                                                    ? <Megaphone size={14} title="کانال رسمی" style={{ opacity: 0.9 }} />
+                                                    : <FilledGroupIcon size={14} title="گروه" style={{ opacity: 0.9 }} />
                                             ) : null}
                                             {contact.name}
                                             {contact.verified ? <VerifiedBadge size={14} /> : null}

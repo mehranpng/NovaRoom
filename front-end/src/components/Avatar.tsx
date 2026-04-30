@@ -59,6 +59,7 @@ function resolveAvatarUrl(src: string): string {
   }
 
   if (src.startsWith('/')) {
+    if (src === '/favicon.png') return src;
     return `${API_BASE_URL}${src}`;
   }
 
