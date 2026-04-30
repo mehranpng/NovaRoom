@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, Copy, Eye, AlignJustify, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload } from 'lucide-react';
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
@@ -315,6 +315,16 @@ const markdownComponents: Components = {
         <a className="md-link" href={href} target="_blank" rel="noopener noreferrer">{children}</a>
     ),
 };
+
+const MarkdownMessage = memo(function MarkdownMessage({ text }: { text: string }) {
+    const markdownNode = useMemo(() => (
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
+            {text}
+        </ReactMarkdown>
+    ), [text]);
+
+    return <div className="message-text message-text--markdown">{markdownNode}</div>;
+});
 
 /** ویبره خیلی کوتاه — فقط اگر دستگاه پشتیبانی کند */
 function triggerHaptic() {
@@ -1538,7 +1548,7 @@ export function ChatRoom({
         prevFirstMessageIdRef.current = nextFirstId;
         prevLastMessageIdRef.current = nextLastId;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [messages, messages.length, currentUserId, loadingOlderMessages, loadingNewerMessages, chatContentReady]);
+    }, [messages, currentUserId, loadingOlderMessages, loadingNewerMessages, chatContentReady]);
 
     const onMessagesScroll = () => {
         if (scrollRafRef.current !== null) return;
@@ -1647,7 +1657,7 @@ export function ChatRoom({
             const dayBreak = !prev || !sameDay(prev.timestamp, m.timestamp);
             return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender) };
         });
-    }, [chatContentReady, messages, messages.length, currentUserId]);
+    }, [chatContentReady, messages, currentUserId]);
 
     const otherTypingUserIds = useMemo(
         () => (typingUserIds || []).filter((uid) => uid && uid !== currentUserId),
@@ -2544,27 +2554,11 @@ export function ChatRoom({
                                             {m.text && !Boolean(m.reasoningEnabled && m.reasoningContent) && (
                                                 /\n\n/.test(m.text)
                                                     ? <div className="message-text">{m.text}</div>
-                                                    : (
-                                                        <div className="message-text message-text--markdown">
-                                                            <ReactMarkdown
-                                                                remarkPlugins={[remarkGfm, remarkBreaks]}
-                                                                components={markdownComponents}
-                                                            >
-                                                                {m.text}
-                                                            </ReactMarkdown>
-                                                        </div>
-                                                    )
+                                                    : <MarkdownMessage text={m.text} />
                                             )}
                                             {m.text && Boolean(m.reasoningEnabled && m.reasoningContent) && (
                                                 <div className="ai-reasoning-answer" style={{ marginTop: 0 }}>
-                                                    <div className="message-text message-text--markdown">
-                                                        <ReactMarkdown
-                                                            remarkPlugins={[remarkGfm, remarkBreaks]}
-                                                            components={markdownComponents}
-                                                        >
-                                                            {m.text}
-                                                        </ReactMarkdown>
-                                                    </div>
+                                                    <MarkdownMessage text={m.text} />
                                                 </div>
                                             )}
 
