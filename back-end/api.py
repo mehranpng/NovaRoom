@@ -1028,6 +1028,8 @@ def _user_can_pin_chat(user_id: str, chat_id: str) -> bool:
     # Allow pin for saved messages.
     if chat_id == get_saved_messages_id(user_id):
         return True
+    if is_official_channel_chat(chat_id):
+        return True
     # Allow only real chat ids.
     return isinstance(chat_id, str) and (
         chat_id.startswith("chat_") or chat_id.startswith("grp_")
@@ -1152,7 +1154,7 @@ async def pin_chat(chat_id: str, current_user: dict = Depends(get_current_user))
         raise HTTPException(status_code=400, detail="Invalid chatId")
 
     # Ensure user can access chat (except saved messages)
-    if chat_id != get_saved_messages_id(user_id):
+    if chat_id != get_saved_messages_id(user_id) and not is_official_channel_chat(chat_id):
         chat = await cl_chats.find_one({"_id": chat_id}, {"participants": 1})
         if not chat:
             raise HTTPException(status_code=404, detail="Chat not found")
@@ -1775,6 +1777,8 @@ async def join_group(
 @app.post("/groups/{chat_id}/leave")
 async def leave_group(chat_id: str, current_user: dict = Depends(get_current_user)):
     my_id = current_user["chatId"]
+    if is_official_channel_chat(chat_id):
+        raise HTTPException(status_code=403, detail="Cannot leave official channel")
 
     chat = await cl_chats.find_one({"_id": chat_id})
     if not chat:

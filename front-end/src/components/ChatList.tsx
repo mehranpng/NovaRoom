@@ -1,4 +1,4 @@
-import { Search, MessageCirclePlus, Menu, User as UserIcon, LogOut, Bookmark, Settings as SettingsIcon, AlignJustify, Trash2, RefreshCw, Pin, PinOff, MessageSquarePlus, Megaphone, Bot } from 'lucide-react';
+import { Search, MessageCirclePlus, Menu, User as UserIcon, LogOut, Bookmark, Settings as SettingsIcon, AlignJustify, Trash2, RefreshCw, Pin, PinOff, MessageSquarePlus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Chat, User } from '../types';
@@ -52,6 +52,32 @@ function FilledGroupIcon({ size = 16, className, style, title }: IconProps) {
                 d="M7.6 11.2c1.8 0 3.3-1.5 3.3-3.3S9.4 4.6 7.6 4.6 4.3 6.1 4.3 7.9s1.5 3.3 3.3 3.3Zm8.8 0c1.7 0 3.1-1.4 3.1-3.1S18.1 5 16.4 5s-3.1 1.4-3.1 3.1 1.4 3.1 3.1 3.1Zm-8.8 1.2c-2.9 0-5.3 2.3-5.3 5.2v1c0 .5.4.9.9.9h9.4c.5 0 .9-.4.9-.9v-1c0-2.9-2.4-5.2-5.9-5.2Zm9.1.3c-.7 0-1.4.1-2 .3 1.4 1.1 2.3 2.7 2.4 4.6h4.9c.5 0 .9-.4.9-.9v-.6c0-2-1.7-3.4-4.2-3.4Z"
             />
         </svg>
+    );
+}
+
+function FilledMegaphoneIcon({ size = 14, className, style, title }: IconProps) {
+    return (
+        <span className={className} style={{ display: 'inline-flex', ...style }} title={title}>
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M3 10.5c0-.83.67-1.5 1.5-1.5H7l7.8-4.68A1 1 0 0 1 16.3 5v14a1 1 0 0 1-1.5.86L7 15H4.5A1.5 1.5 0 0 1 3 13.5v-3Z" fill="currentColor" />
+                <path d="M9 15.5 10.8 20a1 1 0 0 1-1.86.74L7.1 16" fill="currentColor" opacity=".9" />
+                <path d="M18.8 8.2a1 1 0 0 1 1.4 0 5 5 0 0 1 0 7.07 1 1 0 1 1-1.4-1.42 3 3 0 0 0 0-4.23 1 1 0 0 1 0-1.42Z" fill="currentColor" />
+            </svg>
+        </span>
+    );
+}
+
+function FilledBotIcon({ size = 14, className, style, title }: IconProps) {
+    return (
+        <span className={className} style={{ display: 'inline-flex', ...style }} title={title}>
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+                <rect x="4" y="7" width="16" height="12" rx="5" fill="currentColor" />
+                <rect x="10.8" y="3" width="2.4" height="4" rx="1.2" fill="currentColor" />
+                <circle cx="9.2" cy="12.6" r="1.4" fill="white" />
+                <circle cx="14.8" cy="12.6" r="1.4" fill="white" />
+                <rect x="8.5" y="15.3" width="7" height="1.6" rx=".8" fill="white" />
+            </svg>
+        </span>
     );
 }
 
@@ -904,7 +930,7 @@ export function ChatList({
                                     className="chat-list__item-name"
                                     style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                                 >
-                                    <Bot size={14} style={{ opacity: 0.95 }} />
+                                    <FilledBotIcon size={14} style={{ opacity: 0.95 }} />
                                     Nova AI
                                     <VerifiedBadge size={14} />
                                 </span>
@@ -934,6 +960,7 @@ export function ChatList({
                         const isSaved = chat.id === savedMessagesId;
                         const pinned = isPinned(chat.id);
                         const group = !isSaved && isGroupChat(chat);
+                        const isOfficial = chat.id === 'official-channel';
 
                         if (isSaved) {
                             return (
@@ -1043,7 +1070,7 @@ export function ChatList({
                                         >
                                             {group ? (
                                                 chat.id === 'official-channel'
-                                                    ? <Megaphone size={14} title="کانال رسمی" style={{ opacity: 0.9 }} />
+                                                    ? <FilledMegaphoneIcon size={14} title="کانال رسمی" style={{ opacity: 0.95 }} />
                                                     : <FilledGroupIcon size={14} title="گروه" style={{ opacity: 0.9 }} />
                                             ) : null}
                                             {contact.name}
@@ -1135,7 +1162,7 @@ export function ChatList({
                         {actionMenuPinned ? 'برداشتن سنجاق' : 'سنجاق'}
                     </button>
 
-                    {actionMenuSaved ? null : actionMenuGroup ? (
+                    {actionMenuSaved || actionMenuChat?.id === 'official-channel' ? null : actionMenuGroup ? (
                         <>
                             <button
                                 className="popover__item popover__item--danger"
