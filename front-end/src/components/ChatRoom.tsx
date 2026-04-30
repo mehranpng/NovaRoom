@@ -789,9 +789,16 @@ export function ChatRoom({
         if (c.scrollTop < 20) scrollToBottom(false);
     };
 
+
+    const messageById = useMemo(() => {
+        const map = new Map<string, Message>();
+        for (const msg of messages) map.set(msg.id, msg);
+        return map;
+    }, [messages]);
+
     const getReplySenderName = (reply: MessageReplyType | null | undefined) => {
         if (!reply) return 'کاربر';
-        const repliedMessage = messages.find((msg) => msg.id === reply.id);
+        const repliedMessage = messageById.get(reply.id);
         const senderId = String(repliedMessage?.senderId || reply.senderId || '').trim();
 
         if (!senderId) return 'کاربر';
@@ -806,7 +813,7 @@ export function ChatRoom({
 
     const getReplyPreviewText = (reply: MessageReplyType | null | undefined) => {
         if (!reply) return '';
-        const repliedMessage = messages.find((msg) => msg.id === reply.id);
+        const repliedMessage = messageById.get(reply.id);
         const repliedFile = repliedMessage?.file;
         const fileMime = (repliedFile?.mimeType || '').toLowerCase();
         const fallbackText = (reply.text || '').trim();
@@ -896,7 +903,7 @@ export function ChatRoom({
             }
         };
         loadStats();
-        const timer = window.setInterval(loadStats, 15000);
+        const timer = window.setInterval(loadStats, 45000);
         return () => { cancelled = true; window.clearInterval(timer); };
     }, [chatId, isGroupChat]);
 
@@ -930,7 +937,7 @@ export function ChatRoom({
         };
         loadMembers();
         // به روز کردن وضعیت آنلاین هر 15 ثانیه یکبار
-        const timer = window.setInterval(loadMembers, 15000);
+        const timer = window.setInterval(loadMembers, 45000);
         return () => { cancelled = true; window.clearInterval(timer); };
     }, [chatId, isGroupChat]);
 
@@ -2326,7 +2333,7 @@ export function ChatRoom({
                                     <span className="chat-range-loader chat-range-loader--active" />
                                 </div>
                             )}
-                            {items.map(({ m, isMine, dayBreak, shape }) => {
+                            {(items.length > 160 ? items.slice(items.length - 160) : items).map(({ m, isMine, dayBreak, shape }) => {
                             const isHighlighted = highlightId === m.id;
                             const dragX = dragState.id === m.id ? dragState.x : 0;
                             const dragActive = dragState.id === m.id ? dragState.active : false;
