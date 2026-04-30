@@ -1563,7 +1563,7 @@ export function ChatRoom({
         prevFirstMessageIdRef.current = nextFirstId;
         prevLastMessageIdRef.current = nextLastId;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [messages, messages.length, currentUserId, loadingOlderMessages, loadingNewerMessages, chatContentReady]);
+    }, [messages, currentUserId, loadingOlderMessages, loadingNewerMessages, chatContentReady]);
 
     const onMessagesScroll = () => {
         if (scrollRafRef.current !== null) return;
@@ -1672,7 +1672,7 @@ export function ChatRoom({
             const dayBreak = !prev || !sameDay(prev.timestamp, m.timestamp);
             return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender) };
         });
-    }, [chatContentReady, messages, messages.length, currentUserId]);
+    }, [chatContentReady, messages, currentUserId]);
 
     const otherTypingUserIds = useMemo(
         () => (typingUserIds || []).filter((uid) => uid && uid !== currentUserId),

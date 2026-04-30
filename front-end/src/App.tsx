@@ -153,7 +153,7 @@ export function App() {
             if (prev.chatId !== id) return prev;
             return null;
         });
-    }, [authToken, currentUser?.chatId]);
+    }, []);
 
     // AI Chat state
     const [showAIChat, setShowAIChat] = useState(false);
@@ -189,12 +189,24 @@ export function App() {
 
     const chatsRef = useRef<Chat[]>([]);
     const messagesRef = useRef<Record<string, Message[]>>({});
+    const messagesLoadedOnceRef = useRef<Record<string, boolean>>({});
+    const messageRangeStateRef = useRef(messageRangeState);
+    const isInitialChatsLoadRef = useRef(isInitialChatsLoad);
     useEffect(() => {
         chatsRef.current = chats;
     }, [chats]);
     useEffect(() => {
         messagesRef.current = messages;
     }, [messages]);
+    useEffect(() => {
+        messagesLoadedOnceRef.current = messagesLoadedOnce;
+    }, [messagesLoadedOnce]);
+    useEffect(() => {
+        messageRangeStateRef.current = messageRangeState;
+    }, [messageRangeState]);
+    useEffect(() => {
+        isInitialChatsLoadRef.current = isInitialChatsLoad;
+    }, [isInitialChatsLoad]);
 
     // Keep a ref to activeChatId and view so WebSocket callbacks always read the latest values
     // without needing to be re-created (avoids stale closure bug on unread badge).
@@ -436,7 +448,7 @@ export function App() {
     const loadChats = useCallback(async (showLoading = true) => {
         if (!isAuthenticated) return;
 
-        if (showLoading && isInitialChatsLoad) {
+        if (showLoading && isInitialChatsLoadRef.current) {
             // skeleton shown via isInitialChatsLoad flag
         }
 
@@ -497,7 +509,7 @@ export function App() {
             console.error('Failed to load chats', error);
             setIsInitialChatsLoad(false);
         }
-    }, [isAuthenticated, isInitialChatsLoad, authToken]);
+    }, [isAuthenticated, authToken]);
 
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -1165,7 +1177,7 @@ export function App() {
                 const targetChatId = activeChatIdRef.current;
                 if (!targetChatId || viewRef.current !== 'chatRoom' || showAIChat) return;
 
-                const state = messageRangeState[targetChatId];
+                const state = messageRangeStateRef.current[targetChatId];
                 const userIsViewingHistory = Boolean(state?.hasNewer);
                 if (state?.newestCursor && !userIsViewingHistory) {
                     await fetchPagedMessages(targetChatId, {
@@ -1174,7 +1186,7 @@ export function App() {
                         cursorId: state.newestCursor.cursorId,
                         mode: 'append',
                     });
-                } else if (!userIsViewingHistory && messagesLoadedOnce[targetChatId]) {
+                } else if (!userIsViewingHistory && messagesLoadedOnceRef.current[targetChatId]) {
                     await fetchPagedMessages(targetChatId, { direction: 'latest', mode: 'replace' });
                 }
 
@@ -1209,8 +1221,6 @@ export function App() {
         fetchPagedMessages,
         currentUser,
         sendSeen,
-        messagesLoadedOnce,
-        messageRangeState,
         showAIChat,
     ]);
 
@@ -1279,7 +1289,7 @@ export function App() {
             setMessages((prev) => ({ ...prev, [chatId]: cached }));
         }
 
-        const shouldShowSkeleton = !messagesLoadedOnce[chatId] && !hasImmediateMessages;
+        const shouldShowSkeleton = !messagesLoadedOnceRef.current[chatId] && !hasImmediateMessages;
         if (shouldShowSkeleton) {
             setMessagesLoading(prev => ({ ...prev, [chatId]: true }));
         }
@@ -1316,7 +1326,7 @@ export function App() {
         }
 
         loadChats(false);
-    }, [loadChats, sendSeen, messagesLoadedOnce, currentUser, navigate, fetchPagedMessages]);
+    }, [loadChats, sendSeen, currentUser, navigate, fetchPagedMessages]);
 
     const handleDragHoverChat = useCallback((chatId: string) => {
         if (!chatId) return;
