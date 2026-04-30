@@ -233,8 +233,30 @@ export function useWebSocket({
                         : data.lastMessage;
                     onMessageDeletedRef.current?.(resolvedChatId, String(data.messageId || data.message_id || data?.message?.id || ''), lastMessage);
                 } else if (dataType === 'user_status' || dataType === 'presence' || dataType === 'status_update') {
-                    const resolvedUserId = String(data.userId || data.chatId || data.username || data.memberId || '').trim();
-                    const resolvedOnline = Boolean(data.online ?? data.isOnline ?? data.status === 'online');
+                    const resolvedUserId = String(
+                        data.userId
+                        || data.user_id
+                        || data.chatUserId
+                        || data.memberId
+                        || data.username
+                        || data.chatId
+                        || data.chat_id
+                        || data.payload?.userId
+                        || data.payload?.user_id
+                        || data.payload?.chatUserId
+                        || data.payload?.memberId
+                        || ''
+                    ).trim();
+                    const rawStatus = String(data.status ?? data.state ?? data.payload?.status ?? '').trim().toLowerCase();
+                    const resolvedOnline = Boolean(
+                        data.online
+                        ?? data.isOnline
+                        ?? data.is_online
+                        ?? data.payload?.online
+                        ?? data.payload?.isOnline
+                        ?? data.payload?.is_online
+                        ?? (rawStatus ? rawStatus === 'online' : undefined)
+                    );
                     if (resolvedUserId) {
                         onUserStatusChangeRef.current?.(resolvedUserId, resolvedOnline);
                     }

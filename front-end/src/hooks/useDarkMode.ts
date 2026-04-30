@@ -14,7 +14,7 @@ const INTENSITY_STORAGE_KEY = 'themeAccentIntensity';
 
 
 const intensityScale: Record<AccentIntensity, number> = {
-  low: 0.56,
+  low: 0.64,
   medium: 0.78,
   high: 1,
 };
@@ -48,14 +48,14 @@ function mixHex(baseHex: string, targetHex: string, amount: number): string {
 function buildAccentVarsWithIntensity(accentVars: Record<string, string>, isDarkMode: boolean, intensity: AccentIntensity): Record<string, string> {
   if (intensity === 'high') return accentVars;
   const keep = intensityScale[intensity];
-  const blendTo = isDarkMode ? '#d1d5db' : '#ffffff';
+  const blendTo = isDarkMode ? '#9ca3af' : '#ffffff';
   const next = { ...accentVars };
   next['--accent-primary'] = mixHex(accentVars['--accent-primary'], blendTo, 1 - keep);
   next['--accent-hover'] = mixHex(accentVars['--accent-hover'], blendTo, 1 - keep);
   next['--accent-soft-text'] = mixHex(accentVars['--accent-soft-text'], blendTo, 1 - keep * 0.85);
   if (isDarkMode) {
-    const alpha = intensity === 'medium' ? '0.20' : '0.14';
-    next['--accent-soft'] = `color-mix(in srgb, ${next['--accent-primary']} 24%, rgba(255,255,255,${alpha}))`;
+    const alpha = intensity === 'medium' ? '0.14' : '0.08';
+    next['--accent-soft'] = `color-mix(in srgb, ${next['--accent-primary']} 28%, rgba(255,255,255,${alpha}))`;
   } else {
     const bgAmount = intensity === 'medium' ? '20%' : '12%';
     next['--accent-soft'] = `color-mix(in srgb, ${next['--accent-primary']} ${bgAmount}, #ffffff)`;

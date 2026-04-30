@@ -744,6 +744,15 @@ export function ChatRoom({
         return messages[0]?.id || null;
     };
 
+    const isUnreadAnchorValid = (messageId: string | null): boolean => {
+        if (!messageId) return false;
+        const message = messages.find((m) => m.id === messageId);
+        if (!message) return false;
+        if (message.senderId === currentUserId) return false;
+        if ((message as any).seen === true) return false;
+        return true;
+    };
+
     const applyInitialScroll = () => {
         const mem = scrollMemoryRef.current[chatId];
 
@@ -780,7 +789,14 @@ export function ChatRoom({
         }
 
         // Default: always open at bottom.
-        scrollToBottom(true);
+        scrollToBottom(false);
+        [70, 180, 360].forEach((delay) => {
+            window.setTimeout(() => {
+                if (displayUnreadCount > 0) return;
+                if (shouldPreserveExactScroll()) return;
+                scrollToBottom(false);
+            }, delay);
+        });
     };
 
     const shouldPreserveExactScroll = () => {
@@ -1342,10 +1358,10 @@ export function ChatRoom({
 
     // When opening a chat with unread messages, compute anchor once for this open session.
     useEffect(() => {
-        if (unreadAnchorId) return;
+        if (isUnreadAnchorValid(unreadAnchorId)) return;
         if (!displayUnreadCount || displayUnreadCount <= 0) return;
         const id = computeUnreadAnchorId(displayUnreadCount);
-        if (id) setUnreadAnchorId(id);
+        setUnreadAnchorId(id && isUnreadAnchorValid(id) ? id : null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [displayUnreadCount, messages.length, chatId]);
 
