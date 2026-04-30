@@ -208,6 +208,19 @@ type SeenByUser = {
 
 // ── Optimistic reaction helpers ──────────────────────────────────────────────
 type ReactionEntry = { emoji: string; count: number; userIds: string[] };
+const areReactionsEqual = (a: ReactionEntry[] = [], b: ReactionEntry[] = []) => {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i += 1) {
+        const ar = a[i];
+        const br = b[i];
+        if (!br || ar.emoji !== br.emoji || ar.count !== br.count) return false;
+        if (ar.userIds.length !== br.userIds.length) return false;
+        for (let j = 0; j < ar.userIds.length; j += 1) {
+            if (ar.userIds[j] !== br.userIds[j]) return false;
+        }
+    }
+    return true;
+};
 
 function applyOptimisticReact(
     reactions: ReactionEntry[] | undefined,
@@ -789,9 +802,15 @@ export function ChatRoom({
         if (c.scrollTop < 20) scrollToBottom(false);
     };
 
+    const messageById = useMemo(() => {
+        const map = new Map<string, Message>();
+        messages.forEach((msg) => map.set(msg.id, msg));
+        return map;
+    }, [messages]);
+
     const getReplySenderName = (reply: MessageReplyType | null | undefined) => {
         if (!reply) return 'کاربر';
-        const repliedMessage = messages.find((msg) => msg.id === reply.id);
+        const repliedMessage = messageById.get(reply.id);
         const senderId = String(repliedMessage?.senderId || reply.senderId || '').trim();
 
         if (!senderId) return 'کاربر';
@@ -806,7 +825,7 @@ export function ChatRoom({
 
     const getReplyPreviewText = (reply: MessageReplyType | null | undefined) => {
         if (!reply) return '';
-        const repliedMessage = messages.find((msg) => msg.id === reply.id);
+        const repliedMessage = messageById.get(reply.id);
         const repliedFile = repliedMessage?.file;
         const fileMime = (repliedFile?.mimeType || '').toLowerCase();
         const fallbackText = (reply.text || '').trim();
@@ -886,9 +905,15 @@ export function ChatRoom({
             try {
                 const stats = await apiFetch(`/chats/${encodeURIComponent(chatId)}/stats`);
                 if (!cancelled) {
-                    setChatStats({
+                    setChatStats((prev) => {
+                        const next = {
                         totalMembers: Number(stats?.totalMembers || 0),
                         onlineMembers: Number(stats?.onlineMembers || 0),
+                        };
+                        if (prev && prev.totalMembers === next.totalMembers && prev.onlineMembers === next.onlineMembers) {
+                            return prev;
+                        }
+                        return next;
                     });
                 }
             } catch {
@@ -1113,7 +1138,7 @@ export function ChatRoom({
             const next = { ...prev };
             let changed = false;
             Object.keys(prev).forEach((messageId) => {
-                const msg = messages.find((m) => m.id === messageId);
+                const msg = messageById.get(messageId);
                 if (!msg) {
                     delete next[messageId];
                     changed = true;
@@ -1121,14 +1146,14 @@ export function ChatRoom({
                 }
                 const serverReactions = (msg.reactions as ReactionEntry[] | undefined) ?? [];
                 const optimistic = prev[messageId] ?? [];
-                if (JSON.stringify(serverReactions) === JSON.stringify(optimistic)) {
+                if (areReactionsEqual(serverReactions, optimistic)) {
                     delete next[messageId];
                     changed = true;
                 }
             });
             return changed ? next : prev;
         });
-    }, [messages]);
+    }, [messageById]);
 
     const handleForwardMessage = async (sourceChatId: string, messageId: string, targetChatId: string) => {
         if (forwardingInFlightRef.current) return;

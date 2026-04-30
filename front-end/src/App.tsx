@@ -188,9 +188,13 @@ export function App() {
     const dragHoverPendingChatIdRef = useRef<string | null>(null);
 
     const chatsRef = useRef<Chat[]>([]);
+    const messagesRef = useRef<Record<string, Message[]>>({});
     useEffect(() => {
         chatsRef.current = chats;
     }, [chats]);
+    useEffect(() => {
+        messagesRef.current = messages;
+    }, [messages]);
 
     // Keep a ref to activeChatId and view so WebSocket callbacks always read the latest values
     // without needing to be re-created (avoids stale closure bug on unread badge).
@@ -1267,7 +1271,7 @@ export function App() {
 
         setChats(prev => prev.map(c => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
 
-        const inMemory = messages[chatId] || [];
+        const inMemory = messagesRef.current[chatId] || [];
         const cached = inMemory.length > 0 ? inMemory : readCachedMessages(chatId, currentUser?.chatId || null);
         const hasImmediateMessages = cached.length > 0;
 
@@ -1312,7 +1316,7 @@ export function App() {
         }
 
         loadChats(false);
-    }, [loadChats, sendSeen, messagesLoadedOnce, currentUser, navigate, fetchPagedMessages, messages]);
+    }, [loadChats, sendSeen, messagesLoadedOnce, currentUser, navigate, fetchPagedMessages]);
 
     const handleDragHoverChat = useCallback((chatId: string) => {
         if (!chatId) return;
@@ -1500,7 +1504,7 @@ export function App() {
         const makeClientId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const pushOptimisticMessage = (targetChatId: string, clientId: string) => {
             const now = Date.now();
-            const sourceMessages = messages[targetChatId] || [];
+            const sourceMessages = messagesRef.current[targetChatId] || [];
             const replySrc = payload.replyToId ? sourceMessages.find((m) => m.id === payload.replyToId) : null;
             const optimistic: Message = {
                 id: clientId,
@@ -1622,7 +1626,7 @@ export function App() {
             console.warn('WebSocket not connected');
             removeOptimisticMessage(activeChatId, clientId);
         }
-    }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, navigate, chats, isUserBlocked, messages]);
+    }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, navigate, chats, isUserBlocked]);
 
     const handleDeleteMessage = useCallback((messageId: string) => {
         if (!activeChatId) return;
@@ -1630,7 +1634,7 @@ export function App() {
     }, [activeChatId, deleteViaWS]);
 
     const handleForwardMessage = useCallback(async (sourceChatId: string, messageId: string, targetChatId: string) => {
-        const sourceChatMessage = (messages[sourceChatId] || []).find((m) => m.id === messageId);
+        const sourceChatMessage = (messagesRef.current[sourceChatId] || []).find((m) => m.id === messageId);
         const sourceAIMessageExact = (aiMessagesByChat[sourceChatId] || []).find((m) => m.id === messageId);
         const sourceAIMessageFallback = sourceAIMessageExact
             ? null
@@ -1708,7 +1712,7 @@ export function App() {
             }));
         }
         loadChats(false);
-    }, [playChatSound, loadChats, messages, aiMessagesByChat, authToken, currentUser, chats, activeChatId, fetchPagedMessages]);
+    }, [playChatSound, loadChats, aiMessagesByChat, authToken, currentUser, chats, activeChatId, fetchPagedMessages]);
 
     const handleSetPendingForwardDraft = useCallback((targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => {
         if (!targetChatId || !draft?.sourceChatId || !draft?.messageId) return;
