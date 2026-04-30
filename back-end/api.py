@@ -124,6 +124,13 @@ MAX_PINNED_CHATS = 20
 MAX_CHAT_MESSAGE_LENGTH = 6000
 MAX_AI_MESSAGE_LENGTH = 3000
 MAX_AI_MESSAGES_PER_CHAT = 30
+OFFICIAL_CHANNEL_CHAT_ID = "official-channel"
+OFFICIAL_CHANNEL_NAME = "کانال نواروم"
+OFFICIAL_CHANNEL_AVATAR = "/favicon.png"
+
+
+def is_official_channel_chat(chat_id: str) -> bool:
+    return str(chat_id or "").strip() == OFFICIAL_CHANNEL_CHAT_ID
 AI_PRO_DAILY_LIMIT = 10
 TEHRAN_TZ = timezone(timedelta(hours=3, minutes=30))
 WS_IDLE_TIMEOUT_SEC = 95
@@ -2050,12 +2057,54 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
             }
         )
 
+    official_last_msg_doc = (
+        await cl_messages.find({"chatId": OFFICIAL_CHANNEL_CHAT_ID})
+        .sort("timestamp", -1)
+        .limit(1)
+        .to_list(1)
+    )
+    official_last_msg = None
+    if official_last_msg_doc:
+        doc = official_last_msg_doc[0]
+        official_last_msg = {
+            "id": str(doc["_id"]),
+            "text": decrypt_with_fallback(
+                doc.get("text", ""), session_token, f"chat:{OFFICIAL_CHANNEL_CHAT_ID}"
+            ),
+            "senderId": doc.get("senderId"),
+            "timestamp": dt_to_epoch_ms(doc.get("timestamp")),
+            "file": doc.get("file"),
+        }
+    result.append(
+        {
+            "id": OFFICIAL_CHANNEL_CHAT_ID,
+            "participantIds": [OFFICIAL_CHANNEL_CHAT_ID],
+            "chatType": "group",
+            "otherUser": {
+                "chatId": OFFICIAL_CHANNEL_CHAT_ID,
+                "name": OFFICIAL_CHANNEL_NAME,
+                "avatar": OFFICIAL_CHANNEL_AVATAR,
+                "username": OFFICIAL_CHANNEL_CHAT_ID,
+                "bio": "official_channel",
+                "online": False,
+                "verified": True,
+                "registrationDate": None,
+                "isGroup": True,
+            },
+            "lastMessage": official_last_msg,
+            "unreadCount": 0,
+        }
+    )
+
     return result
 
 
 @app.get("/chats/{chat_id}/stats")
 async def get_chat_stats(chat_id: str, current_user: dict = Depends(get_current_user)):
     my_id = current_user["chatId"]
+    if is_official_channel_chat(chat_id):
+        total_members = await cl_users.count_documents({})
+        return {"totalMembers": int(total_members), "onlineMembers": 0}
     chat = await cl_chats.find_one({"_id": chat_id})
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -2303,10 +2352,14 @@ async def get_messages(
             },
         }
 
-    chat_doc = await cl_chats.find_one({"_id": chat_id}, {"participants": 1})
-    participants: List[str] = chat_doc.get("participants", []) if chat_doc else []
-    if current_user_id not in participants:
-        raise HTTPException(status_code=403, detail="Not allowed")
+    participants: List[str] = []
+    if is_official_channel_chat(chat_id):
+        participants = [current_user_id]
+    else:
+        chat_doc = await cl_chats.find_one({"_id": chat_id}, {"participants": 1})
+        participants = chat_doc.get("participants", []) if chat_doc else []
+        if current_user_id not in participants:
+            raise HTTPException(status_code=403, detail="Not allowed")
 
     # Mark messages as seen by the current user.
     await cl_messages.update_many(
@@ -3349,8 +3402,13 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 # Check if this is saved messages
                 saved_chat_id = get_saved_messages_id(chat_id)
                 is_saved = chat_id_target == saved_chat_id
+                is_official = is_official_channel_chat(chat_id_target)
 
-                if not is_saved:
+                if is_official and not bool(user.get("verified", False)):
+                    await websocket.send_json({"type": "error", "error": "Only verified users can send in official channel"})
+                    continue
+
+                if not is_saved and not is_official:
                     chat_doc = await cl_chats.find_one(
                         {"_id": chat_id_target}, {"participants": 1, "chatType": 1}
                     )
@@ -3425,8 +3483,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         {"$set": {"lastMessage": last_msg, "updatedAt": utc_now()}},
                     )
 
-                participants = [chat_id] if is_saved else []
-                if not is_saved:
+                participants = [chat_id] if (is_saved or is_official) else []
+                if not is_saved and not is_official:
                     participants_doc = await cl_chats.find_one(
                         {"_id": chat_id_target}, {"participants": 1}
                     )
@@ -3518,8 +3576,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         },
                     )
 
-                participants = [chat_id] if is_saved else []
-                if not is_saved:
+                participants = [chat_id] if (is_saved or is_official) else []
+                if not is_saved and not is_official:
                     participants_doc = await cl_chats.find_one(
                         {"_id": chat_id_target}, {"participants": 1}
                     )
@@ -3607,8 +3665,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         {"$set": {"lastMessage": last_msg, "updatedAt": utc_now()}},
                     )
 
-                participants = [chat_id] if is_saved else []
-                if not is_saved:
+                participants = [chat_id] if (is_saved or is_official) else []
+                if not is_saved and not is_official:
                     participants_doc = await cl_chats.find_one(
                         {"_id": chat_id_target}, {"participants": 1}
                     )
@@ -3640,7 +3698,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 if chat_id_target:
                     # Skip seen logic for saved messages
                     saved_chat_id = get_saved_messages_id(chat_id)
-                    if chat_id_target == saved_chat_id:
+                    if chat_id_target == saved_chat_id or is_official_channel_chat(chat_id_target):
                         continue
 
                     chat_doc = await cl_chats.find_one(
@@ -3673,7 +3731,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 # Ignore saved messages typing indicator.
                 saved_chat_id = get_saved_messages_id(chat_id)
-                if chat_id_target == saved_chat_id:
+                if chat_id_target == saved_chat_id or is_official_channel_chat(chat_id_target):
                     continue
 
                 chat_doc = await cl_chats.find_one(
@@ -3705,7 +3763,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 # Ignore saved messages upload indicator.
                 saved_chat_id = get_saved_messages_id(chat_id)
-                if chat_id_target == saved_chat_id:
+                if chat_id_target == saved_chat_id or is_official_channel_chat(chat_id_target):
                     continue
 
                 chat_doc = await cl_chats.find_one(

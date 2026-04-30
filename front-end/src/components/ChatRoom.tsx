@@ -384,9 +384,11 @@ export function ChatRoom({
         () => chats.find((c) => c.id === chatId) || null,
         [chats, chatId]
     );
-    const isGroupChat = currentChat?.chatType === 'group';
+    const isOfficialChannel = chatId === 'official-channel';
+    const isGroupChat = isOfficialChannel || currentChat?.chatType === 'group';
     const isDirectChat = !isGroupChat;
     const isVerifiedUser = resolveVerified(currentUser?.verified);
+    const canSendInOfficialChannel = !isOfficialChannel || isVerifiedUser;
     const blockedByOther = Boolean((contact as any)?.blockedByOther);
     const isContactBlocked = isDirectChat && !chatId.startsWith('saved_messages_') && (blockedByOther || Boolean(isUserBlocked?.(contact)));
 
@@ -1690,7 +1692,7 @@ export function ChatRoom({
     );
 
     const typingStatusLabel = useMemo(() => {
-        if (isContactBlocked) return '';
+        if (isContactBlocked || isOfficialChannel) return '';
         if (otherTypingUserIds.length === 0) return '';
         if (!isGroupChat) return 'درحال تایپ...';
         if (otherTypingUserIds.length === 1) {
@@ -1702,7 +1704,7 @@ export function ChatRoom({
     }, [otherTypingUserIds, isGroupChat, groupMembers, isContactBlocked]);
 
     const uploadingStatusLabel = useMemo(() => {
-        if (isContactBlocked) return '';
+        if (isContactBlocked || isOfficialChannel) return '';
         if (otherUploadingUserIds.length === 0) return '';
         if (!isGroupChat) return 'درحال آپلود فایل...';
         if (otherUploadingUserIds.length === 1) {
@@ -1750,7 +1752,7 @@ export function ChatRoom({
     };
 
     const submit = () => {
-        if (isContactBlocked) return;
+        if (isContactBlocked || !canSendInOfficialChannel) return;
         const t = text.trim();
         if (t.length > MAX_CHAT_MESSAGE_LENGTH) {
             alert(`حداکثر طول پیام ${MAX_CHAT_MESSAGE_LENGTH} کاراکتر است`);
@@ -2232,7 +2234,7 @@ export function ChatRoom({
                 <button
                     className="chat-room__header-clickable chat-room__header-clickable--full"
                     onClick={() => {
-                        if (isSavedMessages) return;
+                        if (isSavedMessages || isOfficialChannel) return;
                         maybeSaveScroll(chatId);
                         // For unsent direct chats opened from NewChatModal we use a temporary
                         // chatId = "pending". Navigating to /chat/pending breaks the pending
@@ -2263,7 +2265,9 @@ export function ChatRoom({
                         </div>
                         {!isSavedMessages && (
                             <div className={(!isGroupChat && !isContactBlocked && contact.online) ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
-                                {headerActivityLabel ? (
+                                {isOfficialChannel ? (
+                                    <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(chatStats?.totalMembers ?? 0)} عضو</span>
+                                ) : headerActivityLabel ? (
                                     <span className="status-online-text">{headerActivityLabel}</span>
                                 ) : (isGroupChat ? (
                                     <span style={{ direction: 'rtl', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -2277,7 +2281,7 @@ export function ChatRoom({
                     </div>
                 </button>
 
-                {!isSavedMessages && (
+                {!isSavedMessages && !isOfficialChannel && (
                     <div className="chat-room__header-actions" ref={menuRef}>
                         <button
                             className="icon-btn"
@@ -2648,7 +2652,7 @@ export function ChatRoom({
                 if (!activeMsg) return null;
                 const activeMsgIsMine = activeMsg.senderId === currentUserId;
                 const canDeleteActiveMsg = activeMsgIsMine || (isGroupChat && isVerifiedUser);
-                const showSeenByAction = isGroupChat && activeMsgIsMine;
+                const showSeenByAction = isGroupChat && activeMsgIsMine && !isOfficialChannel;
 
                 return (
                     <div ref={msgMenuRef} className="popover popover--mini"
@@ -2772,7 +2776,7 @@ export function ChatRoom({
                             onClose={() => setReactionMenu(null)}
                         />
 
-                        {isGroupChat && reactionUsersList.length > 0 && (
+                        {isGroupChat && !isOfficialChannel && reactionUsersList.length > 0 && (
                             <div style={{ marginTop: 6, background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 12, overflow: 'hidden', minWidth: 220, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
                                 <div style={{ padding: '7px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)', fontFamily: 'Vazir, sans-serif' }}>
                                     واکنش‌ها
@@ -2915,6 +2919,8 @@ export function ChatRoom({
                         <div className="chat-room__blocked-box">
                             {blockedByOther ? 'این کاربر شما را بلاک کرده است.' : 'شما این کاربر را بلاک کرده‌اید.'}
                         </div>
+                    ) : !canSendInOfficialChannel ? (
+                        <div className="chat-room__blocked-box">فقط کاربران تاییدشده می‌توانند در این کانال پیام ارسال کنند.</div>
                     ) : (
                         <>
                             <FileUpload
@@ -2945,7 +2951,7 @@ export function ChatRoom({
                                     }
                                 }}
                                 onPaste={(e) => {
-                                    if (isContactBlocked) return;
+                                    if (isContactBlocked || !canSendInOfficialChannel) return;
                                     const items = Array.from(e.clipboardData?.items || []);
                                     const imageItem = items.find((item) => item.kind === 'file' && item.type.startsWith('image/'));
                                     const pastedFile = imageItem?.getAsFile();

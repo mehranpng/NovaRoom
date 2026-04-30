@@ -1258,7 +1258,9 @@ export function App() {
         setView('chatRoom');
         if (shouldNavigate) {
             const savedMessagesId = currentUser ? `saved_messages_${currentUser.chatId}` : '';
-            if (savedMessagesId && chatId === savedMessagesId) {
+            if (chatId === 'official-channel') {
+                navigate('/official-channel');
+            } else if (savedMessagesId && chatId === savedMessagesId) {
                 navigate('/save-message');
             } else {
                 navigate(`/chat/${encodeURIComponent(chatId)}`);
@@ -1414,6 +1416,13 @@ export function App() {
             setPendingUser(null);
             setShowAIChat(true);
             setView('chatRoom');
+            return;
+        }
+
+        if (pathname === '/official-channel') {
+            if (activeChatId !== 'official-channel' || view !== 'chatRoom') {
+                handleSelectChat('official-channel', { navigateToRoute: false });
+            }
             return;
         }
 
