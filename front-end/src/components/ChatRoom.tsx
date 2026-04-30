@@ -1,4 +1,4 @@
-import { memo, startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, Copy, Eye, AlignJustify, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload } from 'lucide-react';
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
@@ -507,6 +507,7 @@ export function ChatRoom({
     const consumedInitialUnreadRef = useRef(false);
     const typingActiveRef = useRef(false);
     const typingTimeoutRef = useRef<number | null>(null);
+    const lastTypingEmitAtRef = useRef(0);
 
     const clearTypingTimeout = () => {
         if (typingTimeoutRef.current) {
@@ -528,7 +529,7 @@ export function ChatRoom({
         emitTyping(false);
     };
 
-    const refreshTyping = (nextValue: string) => {
+    const refreshTyping = useCallback((nextValue: string) => {
         if (!onTypingChange) return;
         const hasAnyChar = nextValue.length > 0;
         if (!hasAnyChar) {
@@ -536,15 +537,24 @@ export function ChatRoom({
             return;
         }
 
-        typingActiveRef.current = true;
-        emitTyping(true);
+        const now = Date.now();
+        if (!typingActiveRef.current || (now - lastTypingEmitAtRef.current) >= 300) {
+            typingActiveRef.current = true;
+            emitTyping(true);
+            lastTypingEmitAtRef.current = now;
+        }
         clearTypingTimeout();
         typingTimeoutRef.current = window.setTimeout(() => {
             typingActiveRef.current = false;
             emitTyping(false);
             typingTimeoutRef.current = null;
         }, 1000);
-    };
+    }, [emitTyping, onTypingChange, stopTyping]);
+
+    const handleTextInputChange = useCallback((nextValue: string) => {
+        startTransition(() => setText(nextValue));
+        refreshTyping(nextValue);
+    }, [refreshTyping]);
 
     useEffect(() => {
         if (!onUploadStatusChange) return;
@@ -2906,9 +2916,7 @@ export function ChatRoom({
                             <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
                                 value={text}
                                 onChange={(e) => {
-                                    const nextValue = e.target.value;
-                                    setText(nextValue);
-                                    refreshTyping(nextValue);
+                                    handleTextInputChange(e.target.value);
                                 }}
                                 onFocus={() => { setTimeout(() => { if (computeNearBottom()) scrollToBottom(false); }, 80); }}
                                 onKeyDown={(e) => {
