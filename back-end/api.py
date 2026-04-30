@@ -126,7 +126,7 @@ MAX_AI_MESSAGE_LENGTH = 3000
 MAX_AI_MESSAGES_PER_CHAT = 30
 OFFICIAL_CHANNEL_CHAT_ID = "official-channel"
 OFFICIAL_CHANNEL_NAME = "کانال نواروم"
-OFFICIAL_CHANNEL_AVATAR = "/favicon.png"
+OFFICIAL_CHANNEL_AVATAR = "/avatars/ch.png"
 
 
 def is_official_channel_chat(chat_id: str) -> bool:
@@ -2823,6 +2823,8 @@ async def forward_message(
         # For saved messages, only the owner can forward
         if original_chat_id == saved_chat_id:
             pass  # User can forward their own saved messages
+        elif is_official_channel_chat(original_chat_id):
+            pass  # Everyone can read/forward from official channel
         else:
             # For regular chats, check if user is a participant
             chat_doc = await cl_chats.find_one({"_id": original_chat_id})
@@ -2943,16 +2945,23 @@ async def forward_message(
             }
         else:
             original_sender_id = original_msg.get("senderId")
-            original_sender = await cl_users.find_one({"chatId": original_sender_id})
-            forwarded_from_info = {
-                "originalSenderId": original_sender_id,
-                "name": (
-                    original_sender["profile"]["name"] if original_sender else "Unknown"
-                ),
-                "username": (
-                    original_sender["profile"]["username"] if original_sender else ""
-                ),
-            }
+            if is_official_channel_chat(str(original_msg.get("chatId") or "")):
+                forwarded_from_info = {
+                    "originalSenderId": OFFICIAL_CHANNEL_CHAT_ID,
+                    "name": OFFICIAL_CHANNEL_NAME,
+                    "username": OFFICIAL_CHANNEL_CHAT_ID,
+                }
+            else:
+                original_sender = await cl_users.find_one({"chatId": original_sender_id})
+                forwarded_from_info = {
+                    "originalSenderId": original_sender_id,
+                    "name": (
+                        original_sender["profile"]["name"] if original_sender else "Unknown"
+                    ),
+                    "username": (
+                        original_sender["profile"]["username"] if original_sender else ""
+                    ),
+                }
         source_chat_for_file = str(original_msg.get("chatId") or "")
         source_chat_scope = f"chat:{source_chat_for_file}"
         message_text = decrypt_with_fallback(

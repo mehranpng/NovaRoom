@@ -882,6 +882,11 @@ export function ChatRoom({
             onOpenAIChat?.();
             return;
         }
+        if (sourceId === 'official-channel') {
+            maybeSaveScroll(chatId);
+            onSelectChat?.('official-channel');
+            return;
+        }
 
         const sourceChat = chats.find((c) => c.chatType === 'direct' && c.otherUser?.chatId === sourceId);
         const sourceUser: User = sourceChat?.otherUser || {
