@@ -904,7 +904,7 @@ export function ChatList({
                                     className="chat-list__item-name"
                                     style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                                 >
-                                    NovaRoom AI
+                                    Nova AI
                                     <VerifiedBadge size={14} />
                                 </span>
                             </div>
