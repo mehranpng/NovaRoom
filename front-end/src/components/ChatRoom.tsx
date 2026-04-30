@@ -2653,6 +2653,7 @@ export function ChatRoom({
                 const activeMsgIsMine = activeMsg.senderId === currentUserId;
                 const canDeleteActiveMsg = activeMsgIsMine || (isGroupChat && isVerifiedUser);
                 const showSeenByAction = isGroupChat && activeMsgIsMine && !isOfficialChannel;
+                const canReplyInMessageMenu = !(isOfficialChannel && !isVerifiedUser);
 
                 return (
                     <div ref={msgMenuRef} className="popover popover--mini"
@@ -2669,7 +2670,9 @@ export function ChatRoom({
                         <button className="popover__item" onClick={() => { const el = messageElsRef.current.get(activeMsg.id); if (el) openReactionMenu(activeMsg.id, el, { top: msgMenu.top, left: msgMenu.left }); }} type="button">
                             <Smile size={16} />واکنش
                         </button>
-                        <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><CornerUpRight size={16} />پاسخ</button>
+                        {canReplyInMessageMenu && (
+                            <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><CornerUpRight size={16} />پاسخ</button>
+                        )}
                         <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><CornerUpLeft size={16} />فوروارد</button>
                         {activeMsg.senderId === currentUserId && !activeMsg.forwardedFrom && (
                             <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
@@ -2974,7 +2977,7 @@ export function ChatRoom({
                 </div>
             </div>
 
-            <ForwardModal isOpen={forwardModalOpen} chats={chats} currentUserId={currentUserId}
+            <ForwardModal isOpen={forwardModalOpen} chats={chats} currentUserId={currentUserId} currentUserVerified={isVerifiedUser}
                 onClose={() => setForwardModalOpen(false)} onSelectTargetChat={handleForwardFromModal} onSelectChat={onSelectChat} />
 
             {dragUploadActive && (

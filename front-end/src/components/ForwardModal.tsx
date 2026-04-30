@@ -9,13 +9,14 @@ interface ForwardModalProps {
     isOpen: boolean;
     chats: Chat[];
     currentUserId: string;
+    currentUserVerified?: boolean;
     onClose: () => void;
     onForward?: (chatId: string) => void;
     onSelectTargetChat?: (chatId: string) => void;
     onSelectChat?: (chatId: string) => void;
 }
 
-export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward, onSelectTargetChat, onSelectChat }: ForwardModalProps) {
+export function ForwardModal({ isOpen, chats, currentUserId, currentUserVerified = false, onClose, onForward, onSelectTargetChat, onSelectChat }: ForwardModalProps) {
     const [searchQuery, setSearchQuery] = useState('');
 
     const handlePickChat = (chatId: string) => {
@@ -41,6 +42,7 @@ export function ForwardModal({ isOpen, chats, currentUserId, onClose, onForward,
     // Filter out saved messages from regular chats (in case it exists)
     const availableChats = chats.filter(chat => {
         if (chat.id.startsWith('saved_messages_')) return false;
+        if (chat.id === 'official-channel' && !currentUserVerified) return false;
         if (!chat.otherUser) return false;
         return true;
     });

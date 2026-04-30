@@ -2835,7 +2835,10 @@ async def forward_message(
 
     # Check if target chat exists or is saved messages or official channel
     is_target_saved = target_chat_id == get_saved_messages_id(user_id)
-    if not is_target_saved:
+    is_target_official = is_official_channel_chat(target_chat_id)
+    if is_target_official and not bool(current_user.get("verified", False)):
+        raise HTTPException(status_code=403, detail="Only verified users can send in official channel")
+    if not is_target_saved and not is_target_official:
         target_chat = await cl_chats.find_one({"_id": target_chat_id})
         if not target_chat:
             raise HTTPException(status_code=404, detail="Target chat not found")
@@ -3024,7 +3027,7 @@ async def forward_message(
     }
 
     # Update chat document (only for non-saved chats)
-    if not is_target_saved:
+    if not is_target_saved and not is_target_official:
         await cl_chats.update_one(
             {"_id": target_chat_id},
             {"$set": {"lastMessage": last_msg, "updatedAt": utc_now()}},
@@ -3032,7 +3035,9 @@ async def forward_message(
 
     # Broadcast to participants
     participants_to_notify = [user_id] if is_target_saved else []
-    if not is_target_saved:
+    if is_target_official:
+        participants_to_notify = await cl_users.distinct("chatId", {})
+    elif not is_target_saved:
         target_chat_doc = await cl_chats.find_one(
             {"_id": target_chat_id}, {"participants": 1}
         )
