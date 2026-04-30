@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, Copy, Eye, AlignJustify, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload } from 'lucide-react';
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
@@ -198,6 +198,21 @@ type GroupMember = {
     online?: boolean;
 };
 
+
+
+const MemoMarkdown = memo(function MemoMarkdown({
+    text,
+    components,
+}: {
+    text: string;
+    components: Components;
+}) {
+    return (
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
+            {text}
+        </ReactMarkdown>
+    );
+});
 type SeenByUser = {
     chatId: string;
     name: string;
@@ -1647,7 +1662,7 @@ export function ChatRoom({
             const dayBreak = !prev || !sameDay(prev.timestamp, m.timestamp);
             return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender) };
         });
-    }, [chatContentReady, messages, messages.length, currentUserId]);
+    }, [chatContentReady, messages, currentUserId]);
 
     const otherTypingUserIds = useMemo(
         () => (typingUserIds || []).filter((uid) => uid && uid !== currentUserId),
@@ -2546,24 +2561,14 @@ export function ChatRoom({
                                                     ? <div className="message-text">{m.text}</div>
                                                     : (
                                                         <div className="message-text message-text--markdown">
-                                                            <ReactMarkdown
-                                                                remarkPlugins={[remarkGfm, remarkBreaks]}
-                                                                components={markdownComponents}
-                                                            >
-                                                                {m.text}
-                                                            </ReactMarkdown>
+                                                            <MemoMarkdown text={m.text} components={markdownComponents} />
                                                         </div>
                                                     )
                                             )}
                                             {m.text && Boolean(m.reasoningEnabled && m.reasoningContent) && (
                                                 <div className="ai-reasoning-answer" style={{ marginTop: 0 }}>
                                                     <div className="message-text message-text--markdown">
-                                                        <ReactMarkdown
-                                                            remarkPlugins={[remarkGfm, remarkBreaks]}
-                                                            components={markdownComponents}
-                                                        >
-                                                            {m.text}
-                                                        </ReactMarkdown>
+                                                        <MemoMarkdown text={m.text} components={markdownComponents} />
                                                     </div>
                                                 </div>
                                             )}
