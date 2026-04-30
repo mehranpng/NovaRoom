@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { X, Search, MessageCircle, Bookmark } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Chat } from '../types';
@@ -39,18 +39,28 @@ export function ForwardModal({ isOpen, chats, currentUserId, currentUserVerified
         verified: false,
     };
 
-    // Filter out saved messages from regular chats (in case it exists)
-    const availableChats = chats.filter(chat => {
+    const sortedChats = useMemo(() => {
+        return [...chats].sort((a, b) => {
+            const aTime = a.lastMessage?.timestamp ? new Date(a.lastMessage.timestamp).getTime() : 0;
+            const bTime = b.lastMessage?.timestamp ? new Date(b.lastMessage.timestamp).getTime() : 0;
+            return bTime - aTime;
+        });
+    }, [chats]);
+
+    // Keep same order behavior as ChatList and hide stale chats with no lastMessage.
+    const availableChats = sortedChats.filter((chat) => {
         if (chat.id.startsWith('saved_messages_')) return false;
         if (chat.id === 'official-channel' && !currentUserVerified) return false;
         if (!chat.otherUser) return false;
+        if (!chat.lastMessage) return false;
         return true;
     });
 
+    const normalizedQuery = searchQuery.toLowerCase();
     const filteredChats = searchQuery
-        ? availableChats.filter(chat =>
-            chat.otherUser?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            chat.otherUser?.username?.toLowerCase().includes(searchQuery.toLowerCase())
+        ? availableChats.filter((chat) =>
+            chat.otherUser?.name?.toLowerCase().includes(normalizedQuery) ||
+            chat.otherUser?.username?.toLowerCase().includes(normalizedQuery)
         )
         : availableChats;
 
@@ -127,7 +137,12 @@ export function ForwardModal({ isOpen, chats, currentUserId, currentUserVerified
                                             onClick={() => handlePickChat(chat.id)}
                                             type="button"
                                         >
-                                            <Avatar name={user.name || user.username} size="md" online={user.online} src={user.avatar} />
+                                            <Avatar
+                                                name={user.name || user.username}
+                                                size="md"
+                                                online={user.online}
+                                                src={chat.id === 'official-channel' ? '/avatars/ch.png' : user.avatar}
+                                            />
                                             <div className="user-item-info">
                                                 <div className="user-name" style={{ fontFamily: "'Vazir', sans-serif", display: 'flex', alignItems: 'center', gap: 4 }}>
                                                     {user.name}

@@ -1705,7 +1705,6 @@ export function App() {
                     console.warn('Failed to sync forwarded messages immediately', syncErr);
                 }
             }
-            playChatSound('send');
             // Do not force a full replace right away; eventual consistency can briefly
             // hide optimistic forwarded messages. We keep optimistic row visible until
             // websocket/new sync confirms server copy.
@@ -1717,7 +1716,7 @@ export function App() {
             }));
         }
         loadChats(false);
-    }, [playChatSound, loadChats, messages, aiMessagesByChat, authToken, currentUser, chats, activeChatId, fetchPagedMessages]);
+    }, [loadChats, messages, aiMessagesByChat, authToken, currentUser, chats, activeChatId, fetchPagedMessages]);
 
     const handleSetPendingForwardDraft = useCallback((targetChatId: string, draft: { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }) => {
         if (!targetChatId || !draft?.sourceChatId || !draft?.messageId) return;

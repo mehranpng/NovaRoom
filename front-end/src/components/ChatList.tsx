@@ -1059,7 +1059,7 @@ export function ChatList({
                                     name={contact.name}
                                     size="md"
                                     online={group || blockedRelation ? undefined : contact.online}
-                                    src={contact.avatar}
+                                    src={isOfficial ? '/avatars/ch.png' : contact.avatar}
                                 />
 
                                 <div className="chat-list__item-content">
