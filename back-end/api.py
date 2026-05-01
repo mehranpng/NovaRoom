@@ -12,6 +12,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import Response
+from starlette.websockets import WebSocketState
 from pydantic import BaseModel
 from datetime import datetime, timedelta, timezone
 import jwt
@@ -2079,6 +2080,14 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
             "timestamp": dt_to_epoch_ms(doc.get("timestamp")),
             "file": doc.get("file"),
         }
+    official_unread_count = await cl_messages.count_documents(
+        {
+            "chatId": OFFICIAL_CHANNEL_CHAT_ID,
+            "senderId": {"$ne": my_id},
+            "seenBy": {"$ne": my_id},
+        }
+    )
+
     result.append(
         {
             "id": OFFICIAL_CHANNEL_CHAT_ID,
@@ -2096,7 +2105,7 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                 "isGroup": True,
             },
             "lastMessage": official_last_msg,
-            "unreadCount": 0,
+            "unreadCount": int(official_unread_count or 0),
         }
     )
 
@@ -4181,6 +4190,13 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
         if chat_id and chat_id in active_connections:
             if websocket in active_connections[chat_id]:
                 active_connections[chat_id].remove(websocket)
+
+            alive_connections = [
+                ws
+                for ws in active_connections.get(chat_id, [])
+                if ws.client_state == WebSocketState.CONNECTED
+            ]
+            active_connections[chat_id] = alive_connections
 
             if not active_connections[chat_id]:
                 del active_connections[chat_id]

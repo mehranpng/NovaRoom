@@ -2640,7 +2640,13 @@ export function ChatRoom({
                                                 {isOfficialChannel && (
                                                     <span className="message-edited-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                                         <span>{toPersianDigits(messageSeenCount)}</span>
-                                                        <Eye size={12} style={{ fill: 'currentColor' }} />
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden>
+                                                            <path
+                                                                d="M1.5 12s3.8-6.5 10.5-6.5S22.5 12 22.5 12s-3.8 6.5-10.5 6.5S1.5 12 1.5 12Z"
+                                                                fill="currentColor"
+                                                            />
+                                                            <circle cx="12" cy="12" r="2.6" fill="var(--bg-secondary)" />
+                                                        </svg>
                                                     </span>
                                                 )}
                                                 <span className="message-time">{formatMessageTime(m.timestamp)}</span>
