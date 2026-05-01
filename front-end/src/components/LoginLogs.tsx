@@ -1,4 +1,4 @@
-import { ArrowLeft, Laptop } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 interface LoginEvent {
   tokenHash: string;
@@ -6,6 +6,7 @@ interface LoginEvent {
   ipAddress?: string;
   createdAt: number;
   isCurrentDevice: boolean;
+  unseenForCurrent?: boolean;
 }
 
 const toPersianDigits = (value: string | number): string => String(value).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)] ?? d);
@@ -30,11 +31,10 @@ export function LoginLogs({ onBack, events }: { onBack: () => void; events: Logi
           <div key={`${event.tokenHash}-${event.createdAt}`} className="profile__chat-id-card">
             <div className="profile__chat-id-row" style={{ alignItems: 'center', justifyContent: 'space-between', direction: 'rtl', textAlign: 'right', minHeight: 62 }}>
               <div style={{ display: 'grid', gap: 3 }}>
-                <p className="profile__chat-id-value" style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'Vazir, sans-serif' }}>
-                  <Laptop size={16} /> {event.deviceName || 'نامشخص'} {event.isCurrentDevice && <span style={{ fontSize: 12, opacity: 0.8 }}>(این دستگاه)</span>}
+                <p className="profile__field-label" style={{ fontSize: 14, lineHeight: 1.8, position: 'relative', paddingRight: 16 }}>
+                  دستگاه {toPersianDigits(event.deviceName || 'نامشخص')} با آی‌پی {toPersianDigits(event.ipAddress || '-')} در ساعت و تاریخ {toPersianDigits(toJalaliTehran(event.createdAt))} ورود کرد {event.isCurrentDevice ? '(این دستگاه)' : ''}
+                  {event.unseenForCurrent && <span style={{ position: 'absolute', right: 0, top: 8, width: 8, height: 8, borderRadius: 99, background: 'var(--accent-primary)' }} />}
                 </p>
-                <p className="profile__field-label">آی‌پی: {toPersianDigits(event.ipAddress || '-')}</p>
-                <p className="profile__field-label">زمان ورود: {toPersianDigits(toJalaliTehran(event.createdAt))}</p>
               </div>
             </div>
           </div>

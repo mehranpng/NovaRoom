@@ -755,6 +755,11 @@ def _normalize_login_events(user_doc: dict) -> List[dict]:
                 "deviceName": normalize_device_name(item.get("deviceName")),
                 "ipAddress": normalize_ip_address(item.get("ipAddress")),
                 "createdAt": created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc),
+                "seenBy": [
+                    str(h).strip()
+                    for h in (item.get("seenBy") or [])
+                    if str(h).strip()
+                ],
             }
         )
     normalized.sort(key=lambda e: dt_to_epoch_ms(e.get("createdAt")), reverse=True)
@@ -801,17 +806,26 @@ async def attach_session_to_user(
     login_events = _normalize_login_events(user)
     login_events.insert(
         0,
-        {"tokenHash": current_hash, "deviceName": normalize_device_name(device_name), "ipAddress": normalize_ip_address(ip_address), "createdAt": now},
+        {"tokenHash": current_hash, "deviceName": normalize_device_name(device_name), "ipAddress": normalize_ip_address(ip_address), "createdAt": now, "seenBy": [current_hash]},
     )
     login_events = login_events[:MAX_LOGIN_EVENTS]
-    unseen_hashes = [h for h in set(existing_hashes) if h and h != current_hash]
+    seen_by_existing = list({current_hash, *[h for h in existing_hashes if h]})
+    for evt in login_events[1:]:
+        evt_seen = set(evt.get("seenBy") or [])
+        evt_seen.update(seen_by_existing)
+        evt["seenBy"] = list(evt_seen)
     await cl_users.update_one(
         {"chatId": chat_id},
         {
             "$set": {
                 "login.sessions": deduped,
-                "login.loginEvents": login_events,
-                "login.loginEventsUnseenBy": unseen_hashes,
+                "login.loginEvents": [
+                    {
+                        **evt,
+                        "seenBy": list(set(evt.get("seenBy") or [])),
+                    }
+                    for evt in login_events
+                ],
             },
             "$unset": {"login.token": ""},
         },
@@ -985,20 +999,25 @@ async def list_login_events(current_user: dict = Depends(get_current_user)):
     token = str(current_user.get("_session_token") or "")
     my_hash = hash_access_token(token) if token else ""
     events = _normalize_login_events(current_user)
-    unseen_by = (current_user.get("login") or {}).get("loginEventsUnseenBy") or []
-    unseen_set = {str(h).strip() for h in unseen_by if str(h).strip()}
-    unseen_count = len([e for e in events if str(e.get("tokenHash") or "") in unseen_set])
-    return {
-        "events": [
+    unseen_count = 0
+    serialized_events = []
+    for e in events:
+        seen_by = {str(h).strip() for h in (e.get("seenBy") or []) if str(h).strip()}
+        unseen_for_current = bool(my_hash) and (my_hash not in seen_by)
+        if unseen_for_current:
+            unseen_count += 1
+        serialized_events.append(
             {
                 "tokenHash": str(e.get("tokenHash") or ""),
                 "deviceName": normalize_device_name(e.get("deviceName")) or None,
                 "ipAddress": normalize_ip_address(e.get("ipAddress")) or None,
                 "createdAt": dt_to_epoch_ms(e.get("createdAt")),
                 "isCurrentDevice": bool(my_hash and str(e.get("tokenHash") or "") == my_hash),
+                "unseenForCurrent": unseen_for_current,
             }
-            for e in events
-        ],
+        )
+    return {
+        "events": serialized_events,
         "unseenCount": unseen_count,
     }
 
@@ -1007,11 +1026,16 @@ async def list_login_events(current_user: dict = Depends(get_current_user)):
 async def mark_login_events_seen(current_user: dict = Depends(get_current_user)):
     token = str(current_user.get("_session_token") or "")
     my_hash = hash_access_token(token) if token else ""
-    unseen_by = (current_user.get("login") or {}).get("loginEventsUnseenBy") or []
-    next_unseen = [str(h).strip() for h in unseen_by if str(h).strip() and str(h).strip() != my_hash]
+    events = _normalize_login_events(current_user)
+    next_events = []
+    for e in events:
+        seen_by = {str(h).strip() for h in (e.get("seenBy") or []) if str(h).strip()}
+        if my_hash:
+            seen_by.add(my_hash)
+        next_events.append({**e, "seenBy": list(seen_by)})
     await cl_users.update_one(
         {"chatId": current_user["chatId"]},
-        {"$set": {"login.loginEventsUnseenBy": next_unseen}},
+        {"$set": {"login.loginEvents": next_events}},
     )
     return {"ok": True}
 

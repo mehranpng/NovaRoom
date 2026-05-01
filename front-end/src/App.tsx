@@ -1427,7 +1427,7 @@ export function App() {
             setView('settingsTheme');
             return;
         }
-        if (pathname === '/settings/logs') {
+        if (pathname === '/settings/devices/logs') {
             setView('settingsLogs');
             return;
         }
@@ -2221,7 +2221,7 @@ export function App() {
 
     useEffect(() => {
         if (!isAuthenticated) return;
-        if (location.pathname !== '/settings/logs') return;
+        if (location.pathname !== '/settings/devices/logs') return;
         apiFetch('/auth/login-events/mark-seen', { method: 'POST' }).then(() => setUnseenLoginCount(0)).catch(() => {});
     }, [isAuthenticated, location.pathname]);
 
@@ -2326,7 +2326,7 @@ export function App() {
                         <Settings
                             section={view === 'settingsDevices' ? 'devices' : view === 'settingsTheme' ? 'theme' : view === 'settingsLogs' ? 'logs' : 'menu'}
                             onBack={handleBack}
-                            onOpenSection={(section) => navigate(`/settings/${section}`)}
+                            onOpenSection={(section) => navigate(section === 'logs' ? '/settings/devices/logs' : `/settings/${section}`)}
                             onBackToMenu={() => navigate('/settings')}
                             loginEvents={loginEvents}
                             hasUnseenLoginLogs={unseenLoginCount > 0}

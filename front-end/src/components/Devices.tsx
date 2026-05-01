@@ -1,4 +1,4 @@
-import { ArrowLeft, Laptop, ShieldOff } from 'lucide-react';
+import { ArrowLeft, Laptop, ShieldOff, FileText } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '../config/api';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -129,7 +129,11 @@ export function Devices({ onBack, onOpenLogs, hasUnseenLoginLogs }: DevicesProps
             <div className="profile__header" style={{ direction: 'ltr' }}>
                 <button onClick={onBack} className="profile__header-back"><ArrowLeft size={22} /></button>
                 <h1 className="profile__header-title">دستگاه‌ها</h1>
-                <button onClick={onOpenLogs} className="profile__header-back" style={{ position: 'relative' }}><Laptop size={20} />{hasUnseenLoginLogs && <span style={{ position: 'absolute', top: 4, right: 3, width: 8, height: 8, borderRadius: 99, background: 'var(--accent-primary)' }} />}</button>
+                <button onClick={onOpenLogs} className="profile__header-back" style={{ position: 'relative', marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <FileText size={18} />
+                    <span style={{ fontSize: 13 }}>لاگ</span>
+                    {hasUnseenLoginLogs && <span style={{ position: 'absolute', top: 3, right: 2, width: 8, height: 8, borderRadius: 99, background: 'var(--accent-primary)' }} />}
+                </button>
             </div>
 
             <div className="profile__content" style={{ gap: 8, paddingInline: 14, paddingTop: 12 }}>
