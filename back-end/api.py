@@ -802,10 +802,11 @@ async def attach_session_to_user(
         deduped.append(item)
         if len(deduped) >= MAX_ACTIVE_SESSIONS:
             break
+    device_marker = f"dev:{normalize_device_name(device_name)}" if normalize_device_name(device_name) else ""
     login_events = _normalize_login_events(user)
     login_events.insert(
         0,
-        {"tokenHash": current_hash, "deviceName": normalize_device_name(device_name), "ipAddress": normalize_ip_address(ip_address), "createdAt": now, "seenBy": [current_hash]},
+        {"tokenHash": current_hash, "deviceName": normalize_device_name(device_name), "ipAddress": normalize_ip_address(ip_address), "createdAt": now, "seenBy": [x for x in [current_hash, device_marker] if x]},
     )
     login_events = login_events[:MAX_LOGIN_EVENTS]
     await cl_users.update_one(
@@ -992,12 +993,15 @@ async def revoke_other_sessions(current_user: dict = Depends(get_current_user)):
 async def list_login_events(current_user: dict = Depends(get_current_user)):
     token = str(current_user.get("_session_token") or "")
     my_hash = hash_access_token(token) if token else ""
+    sessions = _normalize_session_list(current_user)
+    my_session = next((s for s in sessions if str(s.get("tokenHash") or "") == my_hash), None)
+    my_device_marker = f"dev:{normalize_device_name((my_session or {}).get('deviceName'))}" if my_session else ""
     events = _normalize_login_events(current_user)
     unseen_count = 0
     serialized_events = []
     for e in events:
         seen_by = {str(h).strip() for h in (e.get("seenBy") or []) if str(h).strip()}
-        unseen_for_current = bool(my_hash) and (my_hash not in seen_by)
+        unseen_for_current = bool(my_hash) and (my_hash not in seen_by) and (not my_device_marker or my_device_marker not in seen_by)
         if unseen_for_current:
             unseen_count += 1
         serialized_events.append(
@@ -1020,12 +1024,17 @@ async def list_login_events(current_user: dict = Depends(get_current_user)):
 async def mark_login_events_seen(current_user: dict = Depends(get_current_user)):
     token = str(current_user.get("_session_token") or "")
     my_hash = hash_access_token(token) if token else ""
+    sessions = _normalize_session_list(current_user)
+    my_session = next((s for s in sessions if str(s.get("tokenHash") or "") == my_hash), None)
+    my_device_marker = f"dev:{normalize_device_name((my_session or {}).get('deviceName'))}" if my_session else ""
     events = _normalize_login_events(current_user)
     next_events = []
     for e in events:
         seen_by = {str(h).strip() for h in (e.get("seenBy") or []) if str(h).strip()}
         if my_hash:
             seen_by.add(my_hash)
+        if my_device_marker:
+            seen_by.add(my_device_marker)
         next_events.append({**e, "seenBy": list(seen_by)})
     await cl_users.update_one(
         {"chatId": current_user["chatId"]},
