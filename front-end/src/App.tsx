@@ -2211,6 +2211,20 @@ export function App() {
         };
     };
 
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        apiFetch('/auth/login-events').then((r: any) => {
+            setLoginEvents(Array.isArray(r?.events) ? r.events : []);
+            setUnseenLoginCount(Number(r?.unseenCount || 0));
+        }).catch(() => {});
+    }, [isAuthenticated, location.pathname]);
+
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        if (location.pathname !== '/settings/logs') return;
+        apiFetch('/auth/login-events/mark-seen', { method: 'POST' }).then(() => setUnseenLoginCount(0)).catch(() => {});
+    }, [isAuthenticated, location.pathname]);
+
     if (isAuthChecking) {
         return null;
     }
@@ -2265,17 +2279,6 @@ export function App() {
 
     const currentSearchParams = new URLSearchParams(location.search);
     const isInfoRouteActive = currentSearchParams.get('panel') === 'info' && view !== 'profile';
-    useEffect(() => {
-        if (!isAuthenticated) return;
-        apiFetch('/auth/login-events').then((r: any) => {
-            setLoginEvents(Array.isArray(r?.events) ? r.events : []);
-            setUnseenLoginCount(Number(r?.unseenCount || 0));
-        }).catch(() => {});
-    }, [isAuthenticated, location.pathname]);
-    useEffect(() => {
-        if (location.pathname !== '/settings/logs') return;
-        apiFetch('/auth/login-events/mark-seen', { method: 'POST' }).then(() => setUnseenLoginCount(0)).catch(() => {});
-    }, [location.pathname]);
 
     return (
         <MusicPlayerProvider>
