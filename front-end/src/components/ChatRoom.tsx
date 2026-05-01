@@ -2594,13 +2594,9 @@ export function ChatRoom({
                                                 </div>
                                             )}
                                             {m.text && !Boolean(m.reasoningEnabled && m.reasoningContent) && (
-                                                /\n\n/.test(m.text)
-                                                    ? <div className="message-text">{m.text}</div>
-                                                    : (
-                                                        <div className="message-text message-text--markdown">
-                                                            <MemoMarkdown text={m.text} components={markdownComponents} />
-                                                        </div>
-                                                    )
+                                                <div className="message-text message-text--markdown">
+                                                    <MemoMarkdown text={m.text} components={markdownComponents} />
+                                                </div>
                                             )}
                                             {m.text && Boolean(m.reasoningEnabled && m.reasoningContent) && (
                                                 <div className="ai-reasoning-answer" style={{ marginTop: 0 }}>
