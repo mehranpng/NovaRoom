@@ -781,7 +781,6 @@ async def attach_session_to_user(
     sessions = _normalize_session_list(user)
     current_hash = hash_access_token(token)
     now = utc_now()
-    existing_hashes = [str(item.get("tokenHash") or "") for item in sessions]
     sessions.insert(
         0,
         {
@@ -809,11 +808,6 @@ async def attach_session_to_user(
         {"tokenHash": current_hash, "deviceName": normalize_device_name(device_name), "ipAddress": normalize_ip_address(ip_address), "createdAt": now, "seenBy": [current_hash]},
     )
     login_events = login_events[:MAX_LOGIN_EVENTS]
-    seen_by_existing = list({current_hash, *[h for h in existing_hashes if h]})
-    for evt in login_events[1:]:
-        evt_seen = set(evt.get("seenBy") or [])
-        evt_seen.update(seen_by_existing)
-        evt["seenBy"] = list(evt_seen)
     await cl_users.update_one(
         {"chatId": chat_id},
         {
