@@ -29,10 +29,10 @@ export function LoginLogs({ onBack, events }: { onBack: () => void; events: Logi
       <div className="profile__content" style={{ gap: 8, paddingInline: 14, paddingTop: 12 }}>
         {events.length === 0 ? <div style={{ textAlign: 'center', direction: 'rtl', opacity: 0.8, fontSize: 13, padding: '14px 0' }}>لاگ ورودی وجود ندارد.</div> : events.map((event) => (
           <div key={`${event.tokenHash}-${event.createdAt}`} className="profile__chat-id-card">
-            <div className="profile__chat-id-row" style={{ alignItems: 'center', justifyContent: 'space-between', direction: 'rtl', textAlign: 'right', minHeight: 62 }}>
+            <div className="profile__chat-id-row" style={{ alignItems: 'center', justifyContent: 'space-between', direction: 'rtl', textAlign: 'right', minHeight: 44, paddingBlock: 6 }}>
               <div style={{ display: 'grid', gap: 3 }}>
-                <p className="profile__field-label" style={{ fontSize: 14, lineHeight: 1.8, position: 'relative', paddingRight: 16 }}>
-                  دستگاه {toPersianDigits(event.deviceName || 'نامشخص')} با آی‌پی {toPersianDigits(event.ipAddress || '-')} در ساعت و تاریخ {toPersianDigits(toJalaliTehran(event.createdAt))} ورود کرد {event.isCurrentDevice ? '(این دستگاه)' : ''}
+                <p className="profile__field-label" style={{ fontSize: 12.5, lineHeight: 1.6, position: 'relative', paddingRight: 16, fontFamily: 'Vazir, sans-serif' }}>
+                  دستگاه {toPersianDigits(event.deviceName || 'نامشخص')} با آی‌پی {toPersianDigits(event.ipAddress || '-')} در ساعت و تاریخ {toPersianDigits(toJalaliTehran(event.createdAt))} ورود کرد{event.isCurrentDevice ? ' (این دستگاه)' : ''}.
                   {event.unseenForCurrent && <span style={{ position: 'absolute', right: 0, top: 8, width: 8, height: 8, borderRadius: 99, background: 'var(--accent-primary)' }} />}
                 </p>
               </div>

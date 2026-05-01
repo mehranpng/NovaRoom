@@ -129,9 +129,9 @@ export function Devices({ onBack, onOpenLogs, hasUnseenLoginLogs }: DevicesProps
             <div className="profile__header" style={{ direction: 'ltr' }}>
                 <button onClick={onBack} className="profile__header-back"><ArrowLeft size={22} /></button>
                 <h1 className="profile__header-title">دستگاه‌ها</h1>
-                <button onClick={onOpenLogs} className="profile__header-back" style={{ position: 'relative', marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <button onClick={onOpenLogs} className="profile__header-back" style={{ position: 'relative', marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid var(--border-primary)', background: 'color-mix(in srgb, var(--bg-secondary) 88%, transparent)', borderRadius: 10, padding: '6px 10px', fontFamily: 'Vazir, sans-serif' }}>
+                    <span style={{ fontSize: 13, fontFamily: 'Vazir, sans-serif' }}>لاگ</span>
                     <FileText size={18} />
-                    <span style={{ fontSize: 13 }}>لاگ</span>
                     {hasUnseenLoginLogs && <span style={{ position: 'absolute', top: 3, right: 2, width: 8, height: 8, borderRadius: 99, background: 'var(--accent-primary)' }} />}
                 </button>
             </div>
