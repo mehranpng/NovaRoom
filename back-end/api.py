@@ -78,9 +78,10 @@ else:
     SECRET_KEY = _raw_secret
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_DAYS = 30
-SESSION_INACTIVITY_EXPIRE_DAYS = 14
+ACCESS_TOKEN_EXPIRE_DAYS = 180
+SESSION_INACTIVITY_EXPIRE_DAYS = 90
 MAX_ACTIVE_SESSIONS = 20
+MAX_LOGIN_EVENTS = 10
 
 client = AsyncIOMotorClient(os.getenv("MONGO_DB"))
 db = client["Messenger2"]
@@ -735,6 +736,31 @@ def _normalize_session_list(user_doc: dict) -> List[dict]:
     return valid_sessions[:MAX_ACTIVE_SESSIONS]
 
 
+def _normalize_login_events(user_doc: dict) -> List[dict]:
+    login = (user_doc or {}).get("login") or {}
+    events = login.get("loginEvents") or []
+    if not isinstance(events, list):
+        events = []
+    normalized: List[dict] = []
+    for item in events:
+        if not isinstance(item, dict):
+            continue
+        token_hash = str(item.get("tokenHash") or "").strip()
+        created_at = item.get("createdAt")
+        if not token_hash or not isinstance(created_at, datetime):
+            continue
+        normalized.append(
+            {
+                "tokenHash": token_hash,
+                "deviceName": normalize_device_name(item.get("deviceName")),
+                "ipAddress": normalize_ip_address(item.get("ipAddress")),
+                "createdAt": created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc),
+            }
+        )
+    normalized.sort(key=lambda e: dt_to_epoch_ms(e.get("createdAt")), reverse=True)
+    return normalized[:MAX_LOGIN_EVENTS]
+
+
 async def attach_session_to_user(
     chat_id: str, token: str, device_name: str = "", ip_address: str = ""
 ):
@@ -748,12 +774,15 @@ async def attach_session_to_user(
     else:
         expires_at = utc_now() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
     sessions = _normalize_session_list(user)
+    current_hash = hash_access_token(token)
+    now = utc_now()
+    existing_hashes = [str(item.get("tokenHash") or "") for item in sessions]
     sessions.insert(
         0,
         {
-            "tokenHash": hash_access_token(token),
-            "createdAt": utc_now(),
-            "lastUsedAt": utc_now(),
+            "tokenHash": current_hash,
+            "createdAt": now,
+            "lastUsedAt": now,
             "expiresAt": expires_at,
             "deviceName": normalize_device_name(device_name),
             "ipAddress": normalize_ip_address(ip_address),
@@ -769,9 +798,23 @@ async def attach_session_to_user(
         deduped.append(item)
         if len(deduped) >= MAX_ACTIVE_SESSIONS:
             break
+    login_events = _normalize_login_events(user)
+    login_events.insert(
+        0,
+        {"tokenHash": current_hash, "deviceName": normalize_device_name(device_name), "ipAddress": normalize_ip_address(ip_address), "createdAt": now},
+    )
+    login_events = login_events[:MAX_LOGIN_EVENTS]
+    unseen_hashes = [h for h in set(existing_hashes) if h and h != current_hash]
     await cl_users.update_one(
         {"chatId": chat_id},
-        {"$set": {"login.sessions": deduped}, "$unset": {"login.token": ""}},
+        {
+            "$set": {
+                "login.sessions": deduped,
+                "login.loginEvents": login_events,
+                "login.loginEventsUnseenBy": unseen_hashes,
+            },
+            "$unset": {"login.token": ""},
+        },
     )
 
 
@@ -933,6 +976,42 @@ async def revoke_other_sessions(current_user: dict = Depends(get_current_user)):
     await cl_users.update_one(
         {"chatId": current_user["chatId"]},
         {"$set": {"login.sessions": keep}, "$unset": {"login.token": ""}},
+    )
+    return {"ok": True}
+
+
+@app.get("/auth/login-events")
+async def list_login_events(current_user: dict = Depends(get_current_user)):
+    token = str(current_user.get("_session_token") or "")
+    my_hash = hash_access_token(token) if token else ""
+    events = _normalize_login_events(current_user)
+    unseen_by = (current_user.get("login") or {}).get("loginEventsUnseenBy") or []
+    unseen_set = {str(h).strip() for h in unseen_by if str(h).strip()}
+    unseen_count = len([e for e in events if str(e.get("tokenHash") or "") in unseen_set])
+    return {
+        "events": [
+            {
+                "tokenHash": str(e.get("tokenHash") or ""),
+                "deviceName": normalize_device_name(e.get("deviceName")) or None,
+                "ipAddress": normalize_ip_address(e.get("ipAddress")) or None,
+                "createdAt": dt_to_epoch_ms(e.get("createdAt")),
+                "isCurrentDevice": bool(my_hash and str(e.get("tokenHash") or "") == my_hash),
+            }
+            for e in events
+        ],
+        "unseenCount": unseen_count,
+    }
+
+
+@app.post("/auth/login-events/mark-seen")
+async def mark_login_events_seen(current_user: dict = Depends(get_current_user)):
+    token = str(current_user.get("_session_token") or "")
+    my_hash = hash_access_token(token) if token else ""
+    unseen_by = (current_user.get("login") or {}).get("loginEventsUnseenBy") or []
+    next_unseen = [str(h).strip() for h in unseen_by if str(h).strip() and str(h).strip() != my_hash]
+    await cl_users.update_one(
+        {"chatId": current_user["chatId"]},
+        {"$set": {"login.loginEventsUnseenBy": next_unseen}},
     )
     return {"ok": True}
 

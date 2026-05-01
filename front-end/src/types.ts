@@ -89,4 +89,4 @@ export interface AIChatSummary {
 
 export type AIModelKey = 'nova-flash' | 'nova-pro';
 
-export type View = 'chatList' | 'chatRoom' | 'profile' | 'settings' | 'settingsDevices' | 'settingsTheme';
+export type View = 'chatList' | 'chatRoom' | 'profile' | 'settings' | 'settingsDevices' | 'settingsTheme' | 'settingsLogs';

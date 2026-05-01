@@ -146,6 +146,8 @@ export function App() {
         }
     });
     const [isResizingDesktopLayout, setIsResizingDesktopLayout] = useState(false);
+    const [loginEvents, setLoginEvents] = useState<any[]>([]);
+    const [unseenLoginCount, setUnseenLoginCount] = useState(0);
 
     const consumeOpenChatUnread = useCallback((id: string) => {
         setOpenChatUnread((prev) => {
@@ -1425,6 +1427,10 @@ export function App() {
             setView('settingsTheme');
             return;
         }
+        if (pathname === '/settings/logs') {
+            setView('settingsLogs');
+            return;
+        }
 
         if (pathname === '/ai') {
             setActiveChatId(null);
@@ -2259,6 +2265,17 @@ export function App() {
 
     const currentSearchParams = new URLSearchParams(location.search);
     const isInfoRouteActive = currentSearchParams.get('panel') === 'info' && view !== 'profile';
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        apiFetch('/auth/login-events').then((r: any) => {
+            setLoginEvents(Array.isArray(r?.events) ? r.events : []);
+            setUnseenLoginCount(Number(r?.unseenCount || 0));
+        }).catch(() => {});
+    }, [isAuthenticated, location.pathname]);
+    useEffect(() => {
+        if (location.pathname !== '/settings/logs') return;
+        apiFetch('/auth/login-events/mark-seen', { method: 'POST' }).then(() => setUnseenLoginCount(0)).catch(() => {});
+    }, [location.pathname]);
 
     return (
         <MusicPlayerProvider>
@@ -2283,6 +2300,7 @@ export function App() {
                             onReconnectNow={reconnectNow}
                             onDragHoverChat={handleDragHoverChat}
                             loading={isInitialChatsLoad}
+                            hasUnseenLoginLogs={unseenLoginCount > 0}
                         />
                     </div>
                 )}
@@ -2303,10 +2321,12 @@ export function App() {
                 {String(view).startsWith('settings') && (
                     <div className="app__main app__main--full">
                         <Settings
-                            section={view === 'settingsDevices' ? 'devices' : view === 'settingsTheme' ? 'theme' : 'menu'}
+                            section={view === 'settingsDevices' ? 'devices' : view === 'settingsTheme' ? 'theme' : view === 'settingsLogs' ? 'logs' : 'menu'}
                             onBack={handleBack}
                             onOpenSection={(section) => navigate(`/settings/${section}`)}
                             onBackToMenu={() => navigate('/settings')}
+                            loginEvents={loginEvents}
+                            hasUnseenLoginLogs={unseenLoginCount > 0}
                         />
                     </div>
                 )}

@@ -1,4 +1,4 @@
-import { ArrowLeft, Laptop, ShieldOff } from 'lucide-react';
+import { ArrowLeft, Laptop, ShieldOff, Logs } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '../config/api';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -14,6 +14,8 @@ interface DeviceSession {
 
 interface DevicesProps {
     onBack: () => void;
+    onOpenLogs: () => void;
+    hasUnseenLoginLogs?: boolean;
 }
 
 type ConfirmAction = null | { kind: 'one'; session: DeviceSession } | { kind: 'others' };
@@ -26,7 +28,7 @@ const toJalaliTehran = (timestamp: number): string => {
     return `${date} • ${time}`;
 };
 
-export function Devices({ onBack }: DevicesProps) {
+export function Devices({ onBack, onOpenLogs, hasUnseenLoginLogs }: DevicesProps) {
     const [sessions, setSessions] = useState<DeviceSession[]>([]);
     const [loading, setLoading] = useState(true);
     const [busyHash, setBusyHash] = useState<string | null>(null);
@@ -127,7 +129,7 @@ export function Devices({ onBack }: DevicesProps) {
             <div className="profile__header" style={{ direction: 'ltr' }}>
                 <button onClick={onBack} className="profile__header-back"><ArrowLeft size={22} /></button>
                 <h1 className="profile__header-title">دستگاه‌ها</h1>
-                <div className="profile__header-spacer" />
+                <button onClick={onOpenLogs} className="profile__header-back" style={{ position: 'relative' }}><Logs size={20} />{hasUnseenLoginLogs && <span style={{ position: 'absolute', top: 4, right: 3, width: 8, height: 8, borderRadius: 99, background: 'var(--accent-primary)' }} />}</button>
             </div>
 
             <div className="profile__content" style={{ gap: 8, paddingInline: 14, paddingTop: 12 }}>

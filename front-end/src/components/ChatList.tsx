@@ -26,6 +26,7 @@ interface ChatListProps {
     onReconnectNow: () => void;
     onDragHoverChat?: (chatId: string) => void;
     loading?: boolean;
+    hasUnseenLoginLogs?: boolean;
 }
 
 type IconProps = {
@@ -390,6 +391,7 @@ export function ChatList({
     onReconnectNow,
     onDragHoverChat,
     loading = false,
+    hasUnseenLoginLogs = false,
 }: ChatListProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const [menuOpen, setMenuOpen] = useState(false);
@@ -855,8 +857,10 @@ export function ChatList({
                             onClick={() => setMenuOpen(v => !v)}
                             aria-label="Menu"
                             type="button"
+                            style={{ position: 'relative' }}
                         >
                             <Menu size={20} />
+                            {hasUnseenLoginLogs && <span style={{ position: 'absolute', top: 5, right: 5, width: 8, height: 8, borderRadius: 99, background: 'var(--accent-primary)' }} />}
                         </button>
 
                         {menuOpen && (
@@ -869,9 +873,10 @@ export function ChatList({
                                     <Bookmark size={16} />
                                     پیام‌های ذخیره شده
                                 </button>
-                                <button className="popover__item" onClick={() => { setMenuOpen(false); onOpenSettings(); }} type="button">
+                                <button className="popover__item" onClick={() => { setMenuOpen(false); onOpenSettings(); }} type="button" style={{ position: 'relative' }}>
                                     <SettingsIcon size={16} />
                                     تنظیمات
+                                    {hasUnseenLoginLogs && <span style={{ marginInlineStart: 'auto', width: 8, height: 8, borderRadius: 99, background: 'var(--accent-primary)' }} />}
                                 </button>
                                 <button className="popover__item popover__item--danger" onClick={() => { setMenuOpen(false); requestLogout(); }} type="button">
                                     <LogOut size={16} />
