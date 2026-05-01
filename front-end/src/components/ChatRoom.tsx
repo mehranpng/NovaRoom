@@ -389,6 +389,7 @@ export function ChatRoom({
     const isDirectChat = !isGroupChat;
     const isVerifiedUser = resolveVerified(currentUser?.verified);
     const canSendInOfficialChannel = !isOfficialChannel || isVerifiedUser;
+    const canSwipeToReply = !(isOfficialChannel && !isVerifiedUser);
     const blockedByOther = Boolean((contact as any)?.blockedByOther);
     const isContactBlocked = isDirectChat && !chatId.startsWith('saved_messages_') && (blockedByOther || Boolean(isUserBlocked?.(contact)));
 
@@ -2377,6 +2378,8 @@ export function ChatRoom({
                             const isSeenForUi = Boolean(
                                 m.seen || (isGroupChat && isMine && seenByCountForMessage > 0)
                             );
+                            const messageSeenByRaw = Array.isArray((m as any).seenBy) ? (m as any).seenBy.length : 0;
+                            const messageSeenCount = Math.max(1, seenByCountForMessage, messageSeenByRaw);
 
                             // FIX: use optimistic reactions if available, fallback to server data
                             const effectiveReactions = optimisticReactions[m.id] ?? m.reactions;
@@ -2402,10 +2405,12 @@ export function ChatRoom({
                                     <div
                                         className={isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`}
                                         onPointerDown={(e) => {
+                                            if (!canSwipeToReply) return;
                                             if (e.pointerType !== 'mouse' || e.button !== 0) return;
                                             swipeRef.current = { id: m.id, startX: e.clientX, startY: e.clientY, active: true, captured: false, pointerId: e.pointerId, blockClickUntil: swipeRef.current.blockClickUntil };
                                         }}
                                         onPointerMove={(e) => {
+                                            if (!canSwipeToReply) return;
                                             if (e.pointerType !== 'mouse' || !swipeRef.current.active || swipeRef.current.id !== m.id) return;
                                             const dx = e.clientX - swipeRef.current.startX;
                                             const dy = e.clientY - swipeRef.current.startY;
@@ -2420,6 +2425,7 @@ export function ChatRoom({
                                             setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
                                         }}
                                         onPointerUp={(e) => {
+                                            if (!canSwipeToReply) return;
                                             if (e.pointerType !== 'mouse' || !swipeRef.current.active || swipeRef.current.id !== m.id) return;
                                             const dx = e.clientX - swipeRef.current.startX;
                                             const dy = e.clientY - swipeRef.current.startY;
@@ -2429,15 +2435,18 @@ export function ChatRoom({
                                             swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
                                         }}
                                         onPointerCancel={(e) => {
+                                            if (!canSwipeToReply) return;
                                             if (e.pointerType !== 'mouse' || swipeRef.current.id !== m.id) return;
                                             resetDrag(m.id);
                                             swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
                                         }}
                                         onTouchStart={(e) => {
+                                            if (!canSwipeToReply) return;
                                             const t = e.touches[0];
                                             swipeRef.current = { id: m.id, startX: t.clientX, startY: t.clientY, active: true, captured: false, pointerId: null, blockClickUntil: swipeRef.current.blockClickUntil };
                                         }}
                                         onTouchMove={(e) => {
+                                            if (!canSwipeToReply) return;
                                             if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
                                             const t = e.touches[0];
                                             const dx = t.clientX - swipeRef.current.startX;
@@ -2452,6 +2461,7 @@ export function ChatRoom({
                                             setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
                                         }}
                                         onTouchEnd={(e) => {
+                                            if (!canSwipeToReply) return;
                                             if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
                                             const t = e.changedTouches[0];
                                             const dx = t.clientX - swipeRef.current.startX;
@@ -2462,6 +2472,7 @@ export function ChatRoom({
                                             swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
                                         }}
                                         onTouchCancel={() => {
+                                            if (!canSwipeToReply) return;
                                             if (swipeRef.current.id !== m.id) return;
                                             resetDrag(m.id);
                                             swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
@@ -2625,6 +2636,12 @@ export function ChatRoom({
                                             <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
                                                 {m.edited && <span className="message-edited-label">ویرایش شده</span>}
                                                 {m.aiModelName && <span className="message-ai-model-label">{m.aiModelName}</span>}
+                                                {isOfficialChannel && (
+                                                    <span className="message-edited-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                        <Eye size={12} />
+                                                        <span>{toPersianDigits(messageSeenCount)}</span>
+                                                    </span>
+                                                )}
                                                 <span className="message-time">{formatMessageTime(m.timestamp)}</span>
                                                 {isMine && (
                                                     m.deliveryStatus === 'sending'
