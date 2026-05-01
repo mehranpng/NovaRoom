@@ -813,7 +813,22 @@ export function App() {
         }));
     }, []);
 
-    const handleMessagesSeen = useCallback((chatId: string) => {
+    const handleMessagesSeen = useCallback((chatId: string, byUserId?: string) => {
+        if (chatId === 'official-channel' && byUserId) {
+            setMessages(prev => {
+                if (!prev[chatId]) return prev;
+                return {
+                    ...prev,
+                    [chatId]: prev[chatId].map((m: any) => {
+                        const existing = Array.isArray(m.seenBy) ? m.seenBy : [];
+                        if (String(m.senderId || '') === byUserId || existing.includes(byUserId)) return m;
+                        const nextSeenBy = [...existing, byUserId];
+                        return { ...m, seenBy: nextSeenBy, seenCount: Math.max(1, nextSeenBy.length) };
+                    })
+                };
+            });
+            return;
+        }
         setMessages(prev => {
             if (!prev[chatId]) return prev;
             return {

@@ -73,9 +73,9 @@ function FilledBotIcon({ size = 14, className, style, title }: IconProps) {
             <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
                 <rect x="4" y="7" width="16" height="12" rx="5" fill="currentColor" />
                 <rect x="10.8" y="3" width="2.4" height="4" rx="1.2" fill="currentColor" />
-                <circle cx="9.2" cy="12.6" r="1.45" fill="none" stroke="currentColor" strokeOpacity="0.28" strokeWidth="1.35" />
-                <circle cx="14.8" cy="12.6" r="1.45" fill="none" stroke="currentColor" strokeOpacity="0.28" strokeWidth="1.35" />
-                <rect x="8.5" y="15.3" width="7" height="1.6" rx=".8" fill="currentColor" fillOpacity="0.28" />
+                <circle cx="9.2" cy="12.6" r="1.45" fill="none" stroke="var(--bg-primary)" strokeWidth="1.35" />
+                <circle cx="14.8" cy="12.6" r="1.45" fill="none" stroke="var(--bg-primary)" strokeWidth="1.35" />
+                <rect x="8.5" y="15.3" width="7" height="1.6" rx=".8" fill="var(--bg-primary)" />
             </svg>
         </span>
     );

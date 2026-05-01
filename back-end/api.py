@@ -2310,6 +2310,8 @@ async def get_messages(
                 ),
                 "timestamp": dt_to_epoch_ms(m.get("timestamp")),
                 "seen": True,
+                "seenCount": max(1, len(m.get("seenBy", []) or [])),
+                "seenBy": list(m.get("seenBy", []) or []),
                 "replyTo": (
                     {
                         **m.get("replyTo"),
@@ -2434,6 +2436,8 @@ async def get_messages(
             "text": decrypt_with_fallback(m.get("text", ""), session_token, chat_scope),
             "timestamp": dt_to_epoch_ms(m.get("timestamp")),
             "seen": compute_seen(m),
+            "seenCount": max(1, len(m.get("seenBy", []) or [])),
+            "seenBy": list(m.get("seenBy", []) or []),
             "replyTo": (
                 {
                     **m.get("replyTo"),
@@ -3750,7 +3754,24 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 if chat_id_target:
                     # Skip seen logic for saved messages
                     saved_chat_id = get_saved_messages_id(chat_id)
-                    if chat_id_target == saved_chat_id or is_official_channel_chat(chat_id_target):
+                    if chat_id_target == saved_chat_id:
+                        continue
+
+                    if is_official_channel_chat(chat_id_target):
+                        await cl_messages.update_many(
+                            {"chatId": chat_id_target, "seenBy": {"$ne": chat_id}},
+                            {"$addToSet": {"seenBy": chat_id}},
+                        )
+                        user_ids = await cl_users.distinct("chatId", {"chatId": {"$ne": chat_id}})
+                        if user_ids:
+                            await broadcast(
+                                user_ids,
+                                {
+                                    "type": "messages_seen",
+                                    "chatId": chat_id_target,
+                                    "byUserId": chat_id,
+                                },
+                            )
                         continue
 
                     chat_doc = await cl_chats.find_one(

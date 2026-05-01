@@ -2379,7 +2379,8 @@ export function ChatRoom({
                                 m.seen || (isGroupChat && isMine && seenByCountForMessage > 0)
                             );
                             const messageSeenByRaw = Array.isArray((m as any).seenBy) ? (m as any).seenBy.length : 0;
-                            const messageSeenCount = Math.max(1, seenByCountForMessage, messageSeenByRaw);
+                            const messageSeenCountRaw = Number((m as any).seenCount || 0);
+                            const messageSeenCount = Math.max(1, seenByCountForMessage, messageSeenByRaw, messageSeenCountRaw);
 
                             // FIX: use optimistic reactions if available, fallback to server data
                             const effectiveReactions = optimisticReactions[m.id] ?? m.reactions;
@@ -2638,8 +2639,8 @@ export function ChatRoom({
                                                 {m.aiModelName && <span className="message-ai-model-label">{m.aiModelName}</span>}
                                                 {isOfficialChannel && (
                                                     <span className="message-edited-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                                        <Eye size={12} />
                                                         <span>{toPersianDigits(messageSeenCount)}</span>
+                                                        <Eye size={12} style={{ fill: 'currentColor' }} />
                                                     </span>
                                                 )}
                                                 <span className="message-time">{formatMessageTime(m.timestamp)}</span>

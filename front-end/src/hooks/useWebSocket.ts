@@ -10,7 +10,7 @@ interface UseWebSocketProps {
     onMessageEdited?: (chatId: string, message: any) => void;
     onMessageDeleted?: (chatId: string, messageId: string, lastMessage?: any) => void;
     onUserStatusChange?: (userId: string, online: boolean) => void;
-    onMessagesSeen?: (chatId: string) => void;
+    onMessagesSeen?: (chatId: string, byUserId?: string) => void;
     onReactionUpdated?: (chatId: string, messageId: string, reactions: any[]) => void;
     onTypingStatus?: (chatId: string, userId: string, isTyping: boolean) => void;
     onUploadStatus?: (chatId: string, userId: string, isUploading: boolean) => void;
@@ -262,7 +262,8 @@ export function useWebSocket({
                     }
                 } else if (dataType === 'messages_seen') {
                     const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
-                    if (resolvedChatId) onMessagesSeenRef.current?.(resolvedChatId);
+                    const byUserId = String(data?.byUserId || data?.by_user_id || data?.payload?.byUserId || '').trim();
+                    if (resolvedChatId) onMessagesSeenRef.current?.(resolvedChatId, byUserId || undefined);
                 } else if (dataType === 'reaction_updated') {
                     const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
                     const resolvedMessageId = String(data?.messageId || data?.message_id || data?.payload?.messageId || data?.payload?.message_id || data?.message?.id || '').trim();
