@@ -207,9 +207,9 @@ const MemoMarkdown = memo(function MemoMarkdown({
     text: string;
     components: Components;
 }) {
-    const normalizedText = text.replace(/\n{2,}/g, (block) => {
-        const blankLines = Math.max(1, block.length - 1);
-        return `\n${'\u200B\n'.repeat(blankLines)}`;
+    const normalizedText = text.replace(/\n{3,}/g, (block) => {
+        const extraBlankLines = Math.max(0, block.length - 3);
+        return `\n\n${'\u200B\n'.repeat(extraBlankLines)}`;
     });
     return (
         <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
