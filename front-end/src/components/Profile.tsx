@@ -73,7 +73,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
 
         if (trimmed.length < 3) {
             setUsernameStatus('invalid');
-            setUsernameHint('نام کاربری باید حداقل 3 کاراکتر باشد.');
+            setUsernameHint('نام کاربری باید حداقل ۳ کاراکتر باشد.');
             return;
         }
 

@@ -25,7 +25,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
             prevMode === 'system' ? 'light' : prevMode === 'light' ? 'dark' : 'system'
         );
     };
-    
+
     // Determine step from URL path
     const getStepFromPath = (): Step => {
         if (location.pathname.includes('/verify')) return 'code';
@@ -51,7 +51,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
     useEffect(() => {
         const newStep = getStepFromPath();
         setStepState(newStep);
-        
+
         // Restore email from sessionStorage if on code or details step
         const savedEmail = sessionStorage.getItem('register_email');
         if (savedEmail && (newStep === 'code' || newStep === 'details')) {
@@ -77,7 +77,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
 
         if (trimmed.length < 3) {
             setUsernameStatus('invalid');
-            setUsernameHint('نام کاربری باید حداقل 3 کاراکتر باشد');
+            setUsernameHint('نام کاربری باید حداقل ۳ کاراکتر باشد');
             return;
         }
 
@@ -108,13 +108,13 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                         },
                     }
                 );
-                
+
                 if (!response.ok) {
                     setUsernameStatus('invalid');
                     setUsernameHint('بررسی نام کاربری ممکن نشد');
                     return;
                 }
-                
+
                 const res = await response.json();
                 if (res?.available) {
                     setUsernameStatus('available');
@@ -149,7 +149,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
     // Farsi error messages
     const getErrorMessage = (err: any): string => {
         const message = err.message || '';
-        
+
         if (message.includes('409') || message.includes('already exists') || message.includes('already registered')) {
             return 'این ایمیل قبلاً ثبت شده است';
         }
@@ -174,7 +174,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
         if (message.includes('500')) {
             return 'خطای سرور. لطفاً بعداً تلاش کنید';
         }
-        
+
         return 'خطای نامشخص. لطفاً دوباره تلاش کنید';
     };
 
@@ -276,7 +276,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
 
             // Clear sessionStorage
             sessionStorage.removeItem('register_email');
-            
+
             localStorage.setItem('token', data.token);
             onRegisterSuccess(data.user, data.token);
         } catch (err: any) {
@@ -317,7 +317,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
             <div className="login-page__dark-toggle">
                 <DarkModeToggle themeMode={themeMode} onToggle={handleToggleTheme} />
             </div>
-            
+
             <div className="login-container">
                 <div className="login-header">
                     <UserPlus size={48} strokeWidth={1.5} className="login-header-icon" />
@@ -466,7 +466,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                             {!!usernameHint && (
                                 <small style={{
                                     color: usernameStatus === 'available' ? 'var(--accent-hover)' :
-                                           usernameStatus === 'taken' || usernameStatus === 'invalid' ? '#dc2626' : '#6b7280',
+                                        usernameStatus === 'taken' || usernameStatus === 'invalid' ? '#dc2626' : '#6b7280',
                                     fontSize: '12px',
                                     marginTop: '5px',
                                     display: 'block',
@@ -512,9 +512,9 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
 
                         {error && <div className="error-message">{error}</div>}
 
-                        <button 
-                            type="submit" 
-                            className="login-btn" 
+                        <button
+                            type="submit"
+                            className="login-btn"
                             disabled={loading || usernameStatus !== 'available'}
                         >
                             {loading ? 'در حال ثبت نام...' : 'ثبت نام'}
