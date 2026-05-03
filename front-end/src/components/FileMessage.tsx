@@ -1,6 +1,6 @@
 import type { FileMetadata } from '../types';
 import { formatFileSize, getFileIcon, isImageFile } from '../utils/fileUtils';
-import { Download, Play, Pause } from 'lucide-react';
+import { Play, Pause } from 'lucide-react';
 import { API_BASE_URL } from '../config/api';
 import { useState, useEffect, useRef } from 'react';
 import { useMusicPlayer } from '../contexts/MusicPlayerContext';
@@ -272,11 +272,6 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
                             onLoad={onMediaLoad}
                         />
                     )}
-                    <div className="file-image-overlay">
-                        <button onClick={handleDownload} className="file-download-btn" disabled={downloadInProgress} type="button">
-                            <Download size={20} />
-                        </button>
-                    </div>
                 </div>
             ) : isVideo ? (
                 <div className="file-video-card">
@@ -365,9 +360,6 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
                             </div>
                         )}
                     </div>
-                    <button onClick={handleDownload} className="file-download-btn" type="button" disabled={downloadInProgress}>
-                        <Download size={18} />
-                    </button>
                 </div>
             ) : (
                 <div className="file-attachment" onClick={() => { if (!downloadInProgress) void handleDownload(); }}>
@@ -376,9 +368,6 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
                         <div className="file-name">{file.fileName}</div>
                         <div className="file-size">{formatFileSize(file.fileSize)}</div>
                     </div>
-                    <button className="file-download-btn" type="button" disabled={downloadInProgress}>
-                        <Download size={18} />
-                    </button>
                 </div>
             )}
         </div>

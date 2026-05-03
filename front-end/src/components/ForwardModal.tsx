@@ -52,6 +52,7 @@ export function ForwardModal({ isOpen, chats, currentUserId, currentUserVerified
         if (chat.id.startsWith('saved_messages_')) return false;
         if (chat.id === 'official-channel' && !currentUserVerified) return false;
         if (!chat.otherUser) return false;
+        if (chat.id === 'official-channel') return true;
         if (!chat.lastMessage) return false;
         return true;
     });

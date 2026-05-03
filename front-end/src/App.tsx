@@ -88,8 +88,6 @@ export function App() {
     const navigate = useNavigate();
     const location = useLocation();
     const [authToken, setAuthToken] = useState<string | null>(() => {
-        const fromStorage = localStorage.getItem('token');
-        if (fromStorage) return fromStorage;
         const fromCookie = typeof document !== 'undefined'
             ? document.cookie.split('; ').find((row) => row.startsWith('auth_token='))?.split('=')[1]
             : null;
@@ -1089,11 +1087,14 @@ export function App() {
                 setCurrentUser({ ...user, bio: decryptedBio });
                 setIsAuthenticated(true);
             })
-            .catch(() => {
-                localStorage.removeItem('token');
-                setAuthToken(null);
-                setIsAuthenticated(false);
-                setCurrentUser(null);
+            .catch((error: any) => {
+                if (Number(error?.status) === 401) {
+                    localStorage.removeItem('token');
+                    document.cookie = 'auth_token=; path=/; max-age=0; samesite=lax';
+                    setAuthToken(null);
+                    setIsAuthenticated(false);
+                    setCurrentUser(null);
+                }
             })
             .finally(() => {
                 setIsAuthChecking(false);

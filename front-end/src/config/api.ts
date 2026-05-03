@@ -13,11 +13,10 @@ export const getHeaders = (includeAuth = true) => {
     };
 
     if (includeAuth) {
-        const tokenFromStorage = localStorage.getItem('token');
         const tokenFromCookie = (typeof document !== 'undefined'
             ? document.cookie.split('; ').find((row) => row.startsWith('auth_token='))?.split('=')[1]
             : null);
-        const token = tokenFromStorage || (tokenFromCookie ? decodeURIComponent(tokenFromCookie) : null);
+        const token = tokenFromCookie ? decodeURIComponent(tokenFromCookie) : null;
         if (token) headers.Authorization = `Bearer ${token}`;
     }
 
@@ -42,7 +41,9 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.detail || 'API Error');
+        const err: any = new Error(error.detail || 'API Error');
+        err.status = response.status;
+        throw err;
     }
 
     return response.json();

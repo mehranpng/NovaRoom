@@ -1,5 +1,5 @@
 import { memo, startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, Copy, Eye, AlignJustify, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Copy, Eye, AlignJustify, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload, Download } from 'lucide-react';
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -207,9 +207,13 @@ const MemoMarkdown = memo(function MemoMarkdown({
     text: string;
     components: Components;
 }) {
+    const normalizedText = text.replace(/\n{3,}/g, (block) => {
+        const extraLines = '\n\u200B'.repeat(Math.max(0, block.length - 2));
+        return `\n\n${extraLines}`;
+    });
     return (
         <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
-            {text}
+            {normalizedText}
         </ReactMarkdown>
     );
 });
@@ -1063,6 +1067,32 @@ export function ChatRoom({
             highlightRafRef.current = requestAnimationFrame(check);
         };
         highlightRafRef.current = requestAnimationFrame(check);
+    };
+
+
+
+    const doDownloadMessageFile = async (m: Message) => {
+        if (!m.file?.fileId) return;
+        try {
+            const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(m.file.fileId)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) throw new Error('Download failed');
+            const encryptedBytes = new Uint8Array(await response.arrayBuffer());
+            const plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, chatId);
+            const blob = new Blob([plainBytes], { type: m.file.mimeType || 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = m.file.fileName || 'file';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch {
+            alert('خطا در دانلود فایل');
+        }
+        setMsgMenu(null);
     };
 
     const doCopyMessage = async (m: Message) => {
@@ -2678,6 +2708,9 @@ export function ChatRoom({
                 const canDeleteActiveMsg = activeMsgIsMine || (isGroupChat && isVerifiedUser);
                 const showSeenByAction = isGroupChat && activeMsgIsMine && !isOfficialChannel;
                 const canReplyInMessageMenu = !(isOfficialChannel && !isVerifiedUser);
+                const hasCaption = Boolean((activeMsg.text || '').trim());
+                const showCopyAction = !activeMsg.file || hasCaption;
+                const showDownloadAction = Boolean(activeMsg.file?.fileId);
 
                 return (
                     <div ref={msgMenuRef} className="popover popover--mini"
@@ -2701,7 +2734,8 @@ export function ChatRoom({
                         {activeMsg.senderId === currentUserId && !activeMsg.forwardedFrom && (
                             <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
                         )}
-                        <button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><Copy size={16} />کپی</button>
+                        {showCopyAction && (<button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><Copy size={16} />کپی</button>)}
+                        {showDownloadAction && (<button className="popover__item" onClick={() => doDownloadMessageFile(activeMsg)} type="button"><Download size={16} />دانلود</button>)}
                         {canDeleteActiveMsg && (
                             <button className="popover__item popover__item--danger" onClick={() => doDeleteMessage(activeMsg.id)} type="button">
                                 <Trash2 size={16} />حذف
