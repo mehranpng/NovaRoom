@@ -1258,6 +1258,7 @@ export function AIChatRoom({
                 isOpen={forwardModalOpen}
                 chats={chats}
                 currentUserId={currentUserId}
+                currentUserVerified={chats.some((c) => c.id === 'official-channel')}
                 onClose={() => setForwardModalOpen(false)}
                 onSelectTargetChat={handleForwardFromModal}
                 onSelectChat={onSelectChat}

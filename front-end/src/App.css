@@ -1471,7 +1471,7 @@ body,
 }
 
 .message-text--markdown .md-p {
-    margin: 0.25em 0;
+    margin: 0;
     white-space: pre-wrap;
 }
 

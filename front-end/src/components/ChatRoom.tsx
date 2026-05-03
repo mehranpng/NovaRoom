@@ -207,10 +207,10 @@ const MemoMarkdown = memo(function MemoMarkdown({
     text: string;
     components: Components;
 }) {
-    const normalizedText = text.replace(/\n{3,}/g, (block) => {
-        const extraLines = '\n\u200B'.repeat(Math.max(0, block.length - 2));
-        return `\n\n${extraLines}`;
-    });
+    const normalizedText = text
+        .split('\n')
+        .map((line, idx, arr) => (line === '' && arr[idx - 1] === '' ? '\u200B' : line))
+        .join('\n');
     return (
         <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
             {normalizedText}
@@ -762,13 +762,6 @@ export function ChatRoom({
     const applyInitialScroll = () => {
         const mem = scrollMemoryRef.current[chatId];
 
-        // Only restore exact scrollTop if user actually scrolled in this chat.
-        // (Otherwise a stale "top=0" can cause "always open from first message".)
-        if (mem && mem.userInteracted && !mem.atBottom) {
-            restoreScroll(chatId);
-            return;
-        }
-
         // If opened with unread, jump to first unread (Telegram-like).
         if (displayUnreadCount > 0) {
             const anchor = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
@@ -786,6 +779,13 @@ export function ChatRoom({
 
                 return;
             }
+        }
+
+        // Only restore exact scrollTop if user actually scrolled in this chat
+        // and there is no unread jump candidate.
+        if (mem && mem.userInteracted && !mem.atBottom) {
+            restoreScroll(chatId);
+            return;
         }
 
         // If we have memory and it was at bottom, keep bottom.
