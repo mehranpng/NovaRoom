@@ -2396,6 +2396,7 @@ export function App() {
                                 onRenameAIChat={handleRenameAIChat}
                                 respondingAIChatId={aiRespondingChatId}
                                 temporaryMode={temporaryAIChat}
+                                currentUserVerified={Boolean((currentUser as any)?.verified)}
                             />
                         ) : view === 'chatRoom' && (activeChat || pendingUser || isSavedMessagesActive) ? (
                             <ChatRoom

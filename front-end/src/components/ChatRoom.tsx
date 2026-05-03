@@ -207,10 +207,10 @@ const MemoMarkdown = memo(function MemoMarkdown({
     text: string;
     components: Components;
 }) {
-    const normalizedText = text
-        .split('\n')
-        .map((line, idx, arr) => (line === '' && arr[idx - 1] === '' ? '\u200B' : line))
-        .join('\n');
+    const normalizedText = text.replace(/\n{2,}/g, (block) => {
+        const blankLines = Math.max(1, block.length - 1);
+        return `\n${'\u200B\n'.repeat(blankLines)}`;
+    });
     return (
         <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
             {normalizedText}
@@ -1410,6 +1410,31 @@ export function ChatRoom({
         settleToBottomIfNeeded();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId, loading, messages.length, displayUnreadCount, chatContentReady]);
+
+    useEffect(() => {
+        if (!chatContentReady || loading || messages.length === 0) return;
+        const stabilize = () => {
+            const c = messagesContainerRef.current;
+            if (!c) return;
+            if (userHasScrolledRef.current) return;
+            if (c.scrollTop > 24) return;
+            if (displayUnreadCount > 0) {
+                const anchor = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
+                if (anchor) {
+                    scrollToMessageTop(anchor);
+                    return;
+                }
+            }
+            scrollToBottom(false);
+        };
+        const t1 = window.setTimeout(stabilize, 220);
+        const t2 = window.setTimeout(stabilize, 520);
+        return () => {
+            window.clearTimeout(t1);
+            window.clearTimeout(t2);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [chatId, chatContentReady, loading, messages.length, displayUnreadCount, unreadAnchorId]);
 
     // Restore scroll after coming back from ContactInfo / forward-source info / member info / members list.
     useEffect(() => {
