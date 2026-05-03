@@ -330,6 +330,10 @@ const markdownComponents: Components = {
     ),
 };
 
+function hasMarkdownSyntax(text: string): boolean {
+    return /(^|\n)\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>\s)|(```|`[^`]+`|\[[^\]]+\]\([^\)]+\)|\*\*[^*]+\*\*|__[^_]+__)/m.test(text);
+}
+
 /** ویبره خیلی کوتاه — فقط اگر دستگاه پشتیبانی کند */
 function triggerHaptic() {
     try { navigator.vibrate?.(18); } catch { /* ignore */ }
@@ -1808,14 +1812,15 @@ export function ChatRoom({
 
     const submit = () => {
         if (isContactBlocked || !canSendInOfficialChannel) return;
-        const t = text.trim();
-        if (t.length > MAX_CHAT_MESSAGE_LENGTH) {
+        const rawText = text;
+        const trimmedText = rawText.trim();
+        if (rawText.length > MAX_CHAT_MESSAGE_LENGTH) {
             alert(`حداکثر طول پیام ${MAX_CHAT_MESSAGE_LENGTH} کاراکتر است`);
             return;
         }
-        if (!t && !uploadedFile && (!pendingForwardDraft || Boolean(editingId))) return;
-        if (t || uploadedFile) {
-            onSendMessage({ text: t || '', replyToId: replyTo?.id, editMessageId: editingId ?? undefined, file: uploadedFile ?? undefined });
+        if (!trimmedText && !uploadedFile && (!pendingForwardDraft || Boolean(editingId))) return;
+        if (trimmedText || uploadedFile) {
+            onSendMessage({ text: rawText || '', replyToId: replyTo?.id, editMessageId: editingId ?? undefined, file: uploadedFile ?? undefined });
         }
         if (pendingForwardDraft && !editingId) {
             void handleForwardMessage(pendingForwardDraft.sourceChatId, pendingForwardDraft.messageId, chatId);
@@ -2643,15 +2648,23 @@ export function ChatRoom({
                                                 </div>
                                             )}
                                             {m.text && !Boolean(m.reasoningEnabled && m.reasoningContent) && (
-                                                <div className="message-text message-text--markdown">
-                                                    <MemoMarkdown text={m.text} components={markdownComponents} />
-                                                </div>
-                                            )}
-                                            {m.text && Boolean(m.reasoningEnabled && m.reasoningContent) && (
-                                                <div className="ai-reasoning-answer" style={{ marginTop: 0 }}>
+                                                hasMarkdownSyntax(m.text) ? (
                                                     <div className="message-text message-text--markdown">
                                                         <MemoMarkdown text={m.text} components={markdownComponents} />
                                                     </div>
+                                                ) : (
+                                                    <div className="message-text">{m.text}</div>
+                                                )
+                                            )}
+                                            {m.text && Boolean(m.reasoningEnabled && m.reasoningContent) && (
+                                                <div className="ai-reasoning-answer" style={{ marginTop: 0 }}>
+                                                    {hasMarkdownSyntax(m.text) ? (
+                                                        <div className="message-text message-text--markdown">
+                                                            <MemoMarkdown text={m.text} components={markdownComponents} />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="message-text">{m.text}</div>
+                                                    )}
                                                 </div>
                                             )}
 
