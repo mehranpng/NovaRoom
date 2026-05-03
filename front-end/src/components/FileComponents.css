@@ -537,6 +537,15 @@
     backdrop-filter: blur(6px);
 }
 
+
+.image-media-viewer__controls {
+    transition: opacity 0.22s ease;
+}
+
+.image-media-viewer__controls--hidden {
+    opacity: 0;
+}
+
 .image-media-viewer__image {
     max-width: 100%;
     max-height: 100%;

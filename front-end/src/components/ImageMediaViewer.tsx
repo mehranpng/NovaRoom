@@ -24,6 +24,7 @@ export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token = '', 
     const dragStartRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
     const stageRef = useRef<HTMLDivElement | null>(null);
     const imageRef = useRef<HTMLImageElement | null>(null);
+    const [controlsVisible, setControlsVisible] = useState(true);
 
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
@@ -114,7 +115,10 @@ export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token = '', 
             <div
                 ref={stageRef}
                 className="image-media-viewer__stage"
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    setControlsVisible((prev) => !prev);
+                }}
                 onMouseMove={(e) => {
                     if (!dragStartRef.current || scale <= 1) return;
                     const dx = e.clientX - dragStartRef.current.x;
@@ -169,7 +173,10 @@ export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token = '', 
                     dragStartRef.current = null;
                 }}
             >
-                <div className="image-media-viewer__controls" onClick={(e) => e.stopPropagation()}>
+                <div
+                    className={`image-media-viewer__controls ${controlsVisible ? '' : 'image-media-viewer__controls--hidden'}`.trim()}
+                    onClick={(e) => e.stopPropagation()}
+                >
                     <button type="button" className="image-media-viewer__btn" onClick={downloadImage} aria-label="Download image">
                         <Download size={18} />
                     </button>

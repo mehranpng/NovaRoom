@@ -1,4 +1,5 @@
 import { memo, startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowDown, ArrowLeft, Copy, Eye, AlignJustify, Pencil, SendHorizontal, Smile, Trash2, X, Users, Search, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload, Download } from 'lucide-react';
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
@@ -508,6 +509,42 @@ export function ChatRoom({
     const [displayUnreadCount, setDisplayUnreadCount] = useState<number>(initialUnreadCount);
     const [openedImage, setOpenedImage] = useState<{ url: string; file: FileMetadata | null } | null>(null);
     const [openedVideo, setOpenedVideo] = useState<{ url: string; file: FileMetadata | null } | null>(null);
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    const openImageViewer = (imageUrl: string, file: FileMetadata | null) => {
+        const params = new URLSearchParams(location.search);
+        params.set('media', 'image');
+        navigate({ pathname: location.pathname, search: `?${params.toString()}` });
+        setOpenedVideo(null);
+        setOpenedImage({ url: imageUrl, file });
+    };
+
+    const openVideoViewer = (videoUrl: string, file: FileMetadata | null) => {
+        const params = new URLSearchParams(location.search);
+        params.set('media', 'video');
+        navigate({ pathname: location.pathname, search: `?${params.toString()}` });
+        setOpenedImage(null);
+        setOpenedVideo({ url: videoUrl, file });
+    };
+
+    const closeMediaViewer = () => {
+        setOpenedImage(null);
+        setOpenedVideo(null);
+        const params = new URLSearchParams(location.search);
+        params.delete('media');
+        const nextSearch = params.toString();
+        navigate({ pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : '' }, { replace: true });
+    };
+
+    useEffect(() => {
+        const mediaType = new URLSearchParams(location.search).get('media');
+        if (mediaType === 'image' || mediaType === 'video') return;
+        if (openedImage || openedVideo) {
+            setOpenedImage(null);
+            setOpenedVideo(null);
+        }
+    }, [location.search, openedImage, openedVideo]);
     const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId: string; fileName: string } | null>(null);
     const openedGroupAvatarObjectUrlRef = useRef<string | null>(null);
 
@@ -2610,8 +2647,8 @@ export function ChatRoom({
                                                     token={token}
                                                     chatId={chatId}
                                                     onMediaLoad={() => handleInitialMediaReady(m.id)}
-                                                    onImageClick={(imageUrl, file) => setOpenedImage({ url: imageUrl, file })}
-                                                    onVideoClick={(videoUrl, file) => setOpenedVideo({ url: videoUrl, file })}
+                                                    onImageClick={(imageUrl, file) => openImageViewer(imageUrl, file)}
+                                                    onVideoClick={(videoUrl, file) => openVideoViewer(videoUrl, file)}
                                                 />
                                             )}
                                             {Boolean(m.reasoningEnabled && m.reasoningContent) && (
@@ -2819,7 +2856,7 @@ export function ChatRoom({
                     downloadFile={openedImage.file}
                     token={token}
                     chatId={chatId}
-                    onClose={() => setOpenedImage(null)}
+                    onClose={closeMediaViewer}
                 />
             )}
             {openedVideo && (
@@ -2828,7 +2865,7 @@ export function ChatRoom({
                     downloadFile={openedVideo.file}
                     token={token}
                     chatId={chatId}
-                    onClose={() => setOpenedVideo(null)}
+                    onClose={closeMediaViewer}
                 />
             )}
 
