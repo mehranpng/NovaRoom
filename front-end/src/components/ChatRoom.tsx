@@ -2383,7 +2383,7 @@ export function ChatRoom({
                             const messageSeenCount = Math.max(1, seenByCountForMessage, messageSeenByRaw, messageSeenCountRaw);
 
                             // FIX: use optimistic reactions if available, fallback to server data
-                            const effectiveReactions = optimisticReactions[m.id] ?? m.reactions;
+                            const effectiveReactions = (optimisticReactions[m.id] ?? m.reactions ?? []).slice().sort((a: any, b: any) => Number(b?.count || 0) - Number(a?.count || 0));
 
                             return (
                                 <div key={m.id}>
@@ -2631,21 +2631,23 @@ export function ChatRoom({
                                             )}
 
                                             <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
+                                                <span className="message-time">{formatMessageTime(m.timestamp)}</span>
                                                 {m.edited && <span className="message-edited-label">ویرایش شده</span>}
                                                 {m.aiModelName && <span className="message-ai-model-label">{m.aiModelName}</span>}
                                                 {isOfficialChannel && (
-                                                    <span className="message-edited-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                    <span className="message-edited-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
                                                         <span>{toPersianDigits(messageSeenCount)}</span>
                                                         <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden>
                                                             <path
                                                                 d="M1.5 12s3.8-6.5 10.5-6.5S22.5 12 22.5 12s-3.8 6.5-10.5 6.5S1.5 12 1.5 12Z"
-                                                                fill="currentColor"
+                                                                fill="none"
+                                                                stroke="currentColor"
+                                                                strokeWidth="1.8"
                                                             />
-                                                            <circle cx="12" cy="12" r="2.6" fill="var(--bg-secondary)" />
+                                                            <circle cx="12" cy="12" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.8" />
                                                         </svg>
                                                     </span>
                                                 )}
-                                                <span className="message-time">{formatMessageTime(m.timestamp)}</span>
                                                 {isMine && (
                                                     m.deliveryStatus === 'sending'
                                                         ? <span className="message-pending-indicator" aria-label="در حال ارسال">◷</span>

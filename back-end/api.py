@@ -4120,15 +4120,16 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     continue
 
                 if model_key == "nova-pro":
-                    quota = await consume_pro_quota(chat_id)
+                    quota = await consume_quota(chat_id, model_key)
                     if not quota.get("allowed"):
                         await safe_send_ai(
                             chat_id,
                             {
                                 "type": "ai_error",
-                                "code": "ai_pro_daily_limit_reached",
+                                "code": "ai_daily_limit_reached",
+                                "modelKey": model_key,
                                 "remaining": quota.get("remaining", 0),
-                                "message": "سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Flash استفاده کنید.",
+                                "message": ("سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Flash استفاده کنید." if model_key == "nova-pro" else "سقف ۵۰ پیام روزانه Nova Flash شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Pro استفاده کنید."),
                             },
                         )
                         continue
@@ -4329,41 +4330,62 @@ async def ensure_ai_chat(user_id: str, ai_chat_id: str) -> dict:
     return chat
 
 
+AI_FLASH_DAILY_LIMIT = 50
+
 def tehran_day_key(now: Optional[datetime] = None) -> str:
     base = now or datetime.now(TEHRAN_TZ)
     return base.astimezone(TEHRAN_TZ).strftime("%Y-%m-%d")
 
 
-async def get_pro_usage_status(user_id: str) -> Dict[str, Any]:
+async def get_usage_status(user_id: str) -> Dict[str, Any]:
     day_key = tehran_day_key()
     row = await cl_ai_usage.find_one({"userId": user_id, "dateKey": day_key})
-    used = int(row.get("proCount", 0)) if isinstance(row, dict) else 0
-    used = max(0, min(AI_PRO_DAILY_LIMIT, used))
+    pro_used = int(row.get("proCount", 0)) if isinstance(row, dict) else 0
+    flash_used = int(row.get("flashCount", 0)) if isinstance(row, dict) else 0
+    pro_used = max(0, min(AI_PRO_DAILY_LIMIT, pro_used))
+    flash_used = max(0, min(AI_FLASH_DAILY_LIMIT, flash_used))
     return {
         "dateKey": day_key,
-        "used": used,
-        "remaining": max(0, AI_PRO_DAILY_LIMIT - used),
-        "limit": AI_PRO_DAILY_LIMIT,
+        "pro": {"used": pro_used, "remaining": max(0, AI_PRO_DAILY_LIMIT - pro_used), "limit": AI_PRO_DAILY_LIMIT},
+        "flash": {"used": flash_used, "remaining": max(0, AI_FLASH_DAILY_LIMIT - flash_used), "limit": AI_FLASH_DAILY_LIMIT},
     }
 
 
-async def consume_pro_quota(user_id: str) -> Dict[str, Any]:
-    status = await get_pro_usage_status(user_id)
-    if status["used"] >= AI_PRO_DAILY_LIMIT:
-        return {**status, "allowed": False}
+async def consume_quota(user_id: str, model_key: str) -> Dict[str, Any]:
+    status = await get_usage_status(user_id)
+    quota_key = "pro" if model_key == "nova-pro" else "flash"
+    field = "proCount" if quota_key == "pro" else "flashCount"
+    limit = AI_PRO_DAILY_LIMIT if quota_key == "pro" else AI_FLASH_DAILY_LIMIT
+    used = status[quota_key]["used"]
+    if used >= limit:
+        return {**status[quota_key], "allowed": False, "modelKey": model_key, "dateKey": status["dateKey"]}
 
     day_key = status["dateKey"]
     await cl_ai_usage.update_one(
         {"userId": user_id, "dateKey": day_key},
         {
-            "$inc": {"proCount": 1},
+            "$inc": {field: 1},
             "$set": {"updatedAt": utc_now()},
             "$setOnInsert": {"createdAt": utc_now()},
         },
         upsert=True,
     )
-    next_status = await get_pro_usage_status(user_id)
-    return {**next_status, "allowed": True}
+    next_status = await get_usage_status(user_id)
+    return {**next_status[quota_key], "allowed": True, "modelKey": model_key, "dateKey": day_key}
+
+
+@app.get("/ai/pro-usage-status")
+async def get_ai_pro_usage_status(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["chatId"]
+    status = await get_usage_status(user_id)
+    return {
+        "dateKey": status["dateKey"],
+        "pro": status["pro"],
+        "flash": status["flash"],
+        "limit": status["pro"]["limit"],
+        "used": status["pro"]["used"],
+        "remaining": status["pro"]["remaining"],
+    }
 
 
 @app.get("/ai/chats")
@@ -4729,15 +4751,16 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                     continue
 
                 if model_key == "nova-pro":
-                    quota = await consume_pro_quota(user_id)
+                    quota = await consume_quota(user_id, model_key)
                     if not quota.get("allowed"):
                         await safe_send_ai(
                             user_id,
                             {
                                 "type": "ai_error",
-                                "code": "ai_pro_daily_limit_reached",
+                                "code": "ai_daily_limit_reached",
+                                "modelKey": model_key,
                                 "remaining": quota.get("remaining", 0),
-                                "message": "سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Flash استفاده کنید.",
+                                "message": ("سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Flash استفاده کنید." if model_key == "nova-pro" else "سقف ۵۰ پیام روزانه Nova Flash شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Pro استفاده کنید."),
                             },
                         )
                         continue

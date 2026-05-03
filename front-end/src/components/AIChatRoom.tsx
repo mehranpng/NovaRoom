@@ -17,6 +17,7 @@ interface AIChatRoomProps {
     selectedModel: AIModelKey;
     onSelectModel: (modelKey: AIModelKey) => void;
     proRemainingToday: number;
+    flashRemainingToday: number;
     onStopGenerating?: () => void;
     onDeleteMessage: (messageId: string) => void;
     onBack: () => void;
@@ -187,6 +188,7 @@ export function AIChatRoom({
     selectedModel,
     onSelectModel,
     proRemainingToday,
+    flashRemainingToday,
     onStopGenerating,
     onBack,
     loading = false,
@@ -668,11 +670,16 @@ export function AIChatRoom({
         });
     };
     const isProDisabled = proRemainingToday <= 0;
+    const isFlashDisabled = flashRemainingToday <= 0;
     const selectedModelLabel = selectedModel === 'nova-pro' ? 'Nova Pro' : 'Nova Flash';
 
     const handleSelectModel = (modelKey: AIModelKey) => {
         if (modelKey === 'nova-pro' && isProDisabled) {
             notify({ message: 'سهمیه روزانه Nova Pro شما تمام شده است. این مدل بعد از ۰۰:۰۰ دوباره فعال می‌شود.', type: 'info' });
+            return;
+        }
+        if (modelKey === 'nova-flash' && isFlashDisabled) {
+            notify({ message: 'سهمیه روزانه Nova Flash شما تمام شده است. این مدل بعد از ۰۰:۰۰ دوباره فعال می‌شود.', type: 'info' });
             return;
         }
         onSelectModel(modelKey);
@@ -797,7 +804,7 @@ export function AIChatRoom({
                                     exit={{ opacity: 0, y: -6 }}
                                     transition={{ duration: 0.16 }}
                                 >
-                                    <button type="button" className={selectedModel === 'nova-flash' ? 'ai-model-option ai-model-option--active' : 'ai-model-option'} onClick={() => handleSelectModel('nova-flash')}>
+                                    <button type="button" className={`${selectedModel === 'nova-flash' ? 'ai-model-option ai-model-option--active' : 'ai-model-option'}${isFlashDisabled ? ' ai-model-option--disabled' : ''}`} onClick={() => handleSelectModel('nova-flash')}>
                                         <div className="ai-model-option__title">Nova Flash</div>
                                         <div className="ai-model-option__desc">سریع و سبک برای گفتگوهای روزانه، سوال‌های کوتاه و پاسخ‌ فوری</div>
                                     </button>

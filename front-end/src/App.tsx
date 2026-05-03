@@ -170,6 +170,7 @@ export function App() {
     const [temporaryAIChat, setTemporaryAIChat] = useState(false);
     const [selectedAIModel, setSelectedAIModel] = useState<AIModelKey>('nova-flash');
     const [aiProRemaining, setAIProRemaining] = useState<number>(10);
+    const [aiFlashRemaining, setAIFlashRemaining] = useState<number>(50);
 
     // Track if this is the initial load (show skeleton only once)
     const [isInitialChatsLoad, setIsInitialChatsLoad] = useState(true);
@@ -391,8 +392,10 @@ export function App() {
         const loadProStatus = async () => {
             try {
                 const status = await apiFetch('/ai/pro-usage-status');
-                const remaining = Number(status?.remaining ?? 10);
-                setAIProRemaining(Number.isFinite(remaining) ? Math.max(0, remaining) : 10);
+                const proRemaining = Number(status?.pro?.remaining ?? status?.remaining ?? 10);
+                const flashRemaining = Number(status?.flash?.remaining ?? 50);
+                setAIProRemaining(Number.isFinite(proRemaining) ? Math.max(0, proRemaining) : 10);
+                setAIFlashRemaining(Number.isFinite(flashRemaining) ? Math.max(0, flashRemaining) : 50);
             } catch (error) {
                 console.error('Failed to load AI pro usage status:', error);
             }
@@ -2131,6 +2134,11 @@ export function App() {
                 setSelectedAIModel('nova-flash');
                 return false;
             }
+            if (modelKey === 'nova-flash' && aiFlashRemaining <= 0) {
+                notify({ message: 'سقف ۵۰ پیام روزانه Nova Flash تکمیل شده است. تا ۰۰:۰۰ صبر کنید یا از Nova Pro استفاده کنید.', type: 'info' });
+                setSelectedAIModel('nova-pro');
+                return false;
+            }
 
             const success = sendAIMessage(text, finalChatId, clientId, useReasoner, modelKey);
             if (!success) {
@@ -2146,14 +2154,13 @@ export function App() {
                 notify({ message: 'ارتباط با سرویس هوش مصنوعی برقرار نیست. لطفاً دوباره تلاش کنید.', type: 'error' });
                 return false;
             }
-            if (modelKey === 'nova-pro') {
-                setAIProRemaining((prev) => Math.max(0, prev - 1));
-            }
+            if (modelKey === 'nova-pro') setAIProRemaining((prev) => Math.max(0, prev - 1));
+            if (modelKey === 'nova-flash') setAIFlashRemaining((prev) => Math.max(0, prev - 1));
             return true;
         } finally {
             aiSendInFlightRef.current = false;
         }
-    }, [currentUser, activeAIChatId, aiMessagesByChat, sendAIMessage, aiResponding, aiRespondingChatId, aiChats, aiProRemaining]);
+    }, [currentUser, activeAIChatId, aiMessagesByChat, sendAIMessage, aiResponding, aiRespondingChatId, aiChats, aiProRemaining, aiFlashRemaining]);
 
     const handleStopAIResponse = useCallback(() => {
         const success = stopAIGeneration();
@@ -2357,6 +2364,7 @@ export function App() {
                                 selectedModel={selectedAIModel}
                                 onSelectModel={setSelectedAIModel}
                                 proRemainingToday={aiProRemaining}
+                                flashRemainingToday={aiFlashRemaining}
                                 onStopGenerating={handleStopAIResponse}
                                 onDeleteMessage={handleDeleteAIMessage}
                                 onBack={handleBack}
