@@ -4119,20 +4119,19 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 if len(text) > MAX_AI_MESSAGE_LENGTH:
                     continue
 
-                if model_key == "nova-pro":
-                    quota = await consume_quota(chat_id, model_key)
-                    if not quota.get("allowed"):
-                        await safe_send_ai(
-                            chat_id,
-                            {
-                                "type": "ai_error",
-                                "code": "ai_daily_limit_reached",
-                                "modelKey": model_key,
-                                "remaining": quota.get("remaining", 0),
-                                "message": ("سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Flash استفاده کنید." if model_key == "nova-pro" else "سقف ۵۰ پیام روزانه Nova Flash شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Pro استفاده کنید."),
-                            },
-                        )
-                        continue
+                quota = await consume_quota(chat_id, model_key)
+                if not quota.get("allowed"):
+                    await safe_send_ai(
+                        chat_id,
+                        {
+                            "type": "ai_error",
+                            "code": "ai_daily_limit_reached",
+                            "modelKey": model_key,
+                            "remaining": quota.get("remaining", 0),
+                            "message": ("سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Flash استفاده کنید." if model_key == "nova-pro" else "سقف ۵۰ پیام روزانه Nova Flash شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Pro استفاده کنید."),
+                        },
+                    )
+                    continue
 
                 try:
                     ai_chat = await ensure_ai_chat(chat_id, ai_chat_id)
@@ -4422,18 +4421,6 @@ async def get_ai_chats(current_user: dict = Depends(get_current_user)):
         }
         for row in rows
     ]
-
-
-@app.get("/ai/pro-usage-status")
-async def get_ai_pro_usage_status(current_user: dict = Depends(get_current_user)):
-    user_id = current_user["chatId"]
-    status = await get_pro_usage_status(user_id)
-    return {
-        "limit": status["limit"],
-        "used": status["used"],
-        "remaining": status["remaining"],
-        "dateKey": status["dateKey"],
-    }
 
 
 class AICreateChatRequest(BaseModel):
@@ -4750,20 +4737,19 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                 if len(text) > MAX_AI_MESSAGE_LENGTH:
                     continue
 
-                if model_key == "nova-pro":
-                    quota = await consume_quota(user_id, model_key)
-                    if not quota.get("allowed"):
-                        await safe_send_ai(
-                            user_id,
-                            {
-                                "type": "ai_error",
-                                "code": "ai_daily_limit_reached",
-                                "modelKey": model_key,
-                                "remaining": quota.get("remaining", 0),
-                                "message": ("سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Flash استفاده کنید." if model_key == "nova-pro" else "سقف ۵۰ پیام روزانه Nova Flash شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Pro استفاده کنید."),
-                            },
-                        )
-                        continue
+                quota = await consume_quota(user_id, model_key)
+                if not quota.get("allowed"):
+                    await safe_send_ai(
+                        user_id,
+                        {
+                            "type": "ai_error",
+                            "code": "ai_daily_limit_reached",
+                            "modelKey": model_key,
+                            "remaining": quota.get("remaining", 0),
+                            "message": ("سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Flash استفاده کنید." if model_key == "nova-pro" else "سقف ۵۰ پیام روزانه Nova Flash شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Pro استفاده کنید."),
+                        },
+                    )
+                    continue
 
                 try:
                     ai_chat = await ensure_ai_chat(user_id, ai_chat_id)

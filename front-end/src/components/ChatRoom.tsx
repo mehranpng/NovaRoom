@@ -752,7 +752,6 @@ export function ChatRoom({
         const message = messages.find((m) => m.id === messageId);
         if (!message) return false;
         if (message.senderId === currentUserId) return false;
-        if ((message as any).seen === true) return false;
         return true;
     };
 
@@ -2640,11 +2639,9 @@ export function ChatRoom({
                                                         <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden>
                                                             <path
                                                                 d="M1.5 12s3.8-6.5 10.5-6.5S22.5 12 22.5 12s-3.8 6.5-10.5 6.5S1.5 12 1.5 12Z"
-                                                                fill="none"
-                                                                stroke="currentColor"
-                                                                strokeWidth="1.8"
+                                                                fill="currentColor"
                                                             />
-                                                            <circle cx="12" cy="12" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.8" />
+                                                            <circle cx="12" cy="12" r="2.5" fill="none" stroke="var(--bg-primary)" strokeWidth="1.8" />
                                                         </svg>
                                                     </span>
                                                 )}

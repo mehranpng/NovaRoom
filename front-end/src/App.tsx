@@ -87,7 +87,14 @@ export function App() {
     const DESKTOP_SIDEBAR_KEY = 'desktopLayout:chatListWidth';
     const navigate = useNavigate();
     const location = useLocation();
-    const [authToken, setAuthToken] = useState<string | null>(() => localStorage.getItem('token'));
+    const [authToken, setAuthToken] = useState<string | null>(() => {
+        const fromStorage = localStorage.getItem('token');
+        if (fromStorage) return fromStorage;
+        const fromCookie = typeof document !== 'undefined'
+            ? document.cookie.split('; ').find((row) => row.startsWith('auth_token='))?.split('=')[1]
+            : null;
+        return fromCookie ? decodeURIComponent(fromCookie) : null;
+    });
     const [isAuthChecking, setIsAuthChecking] = useState(true);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -508,6 +515,7 @@ export function App() {
     const handleLogout = useCallback(() => {
         const finalizeLogout = () => {
             localStorage.removeItem('token');
+            document.cookie = 'auth_token=; path=/; max-age=0; samesite=lax';
             setAuthToken(null);
             setIsAuthenticated(false);
             setCurrentUser(null);
@@ -1094,6 +1102,7 @@ export function App() {
 
     const handleLoginSuccess = (user: User, token: string) => {
         localStorage.setItem('token', token);
+        document.cookie = `auth_token=${encodeURIComponent(token)}; path=/; max-age=${60 * 60 * 24 * 180}; samesite=lax`;
         setAuthToken(token);
         setCurrentUser(user);
         setIsAuthenticated(true);
@@ -1102,6 +1111,7 @@ export function App() {
 
     const handleRegisterSuccess = (user: User, token: string) => {
         localStorage.setItem('token', token);
+        document.cookie = `auth_token=${encodeURIComponent(token)}; path=/; max-age=${60 * 60 * 24 * 180}; samesite=lax`;
         setAuthToken(token);
         setCurrentUser(user);
         setIsAuthenticated(true);
