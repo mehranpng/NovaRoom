@@ -207,12 +207,9 @@ const MemoMarkdown = memo(function MemoMarkdown({
     text: string;
     components: Components;
 }) {
-    // Preserve exact user-entered line breaks while keeping markdown enabled.
-    // "two spaces + newline" is markdown hard-break syntax.
-    const normalizedText = text.replace(/\n/g, '  \n');
     return (
         <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
-            {normalizedText}
+            {text}
         </ReactMarkdown>
     );
 });
