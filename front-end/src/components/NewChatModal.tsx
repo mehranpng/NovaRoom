@@ -83,7 +83,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
 
         const q = query.trim().replace(/^@+/, '');
 
-        if (!q || q.length < 2) {
+        if (!q || q.length < 3) {
             setResults([]);
             return;
         }
@@ -238,7 +238,7 @@ export function NewChatModal({ isOpen, onClose, onUserSelected, onCreateGroup, o
                         <div className="results">
                             {loading ? (
                                 <p className="loading">در حال جستجو...</p>
-                            ) : results.length === 0 && query.trim().replace(/^@+/, '').length >= 2 ? (
+                            ) : results.length === 0 && query.trim().replace(/^@+/, '').length >= 3 ? (
                                 <p className="no-results">کاربری یافت نشد</p>
                             ) : (
                                 results.map((user) => (

@@ -511,7 +511,7 @@ def normalize_username(value: Optional[str]) -> str:
 def validate_username(value: str) -> bool:
     if not value:
         return False
-    if len(value) > 32:
+    if len(value) < 3 or len(value) > 32:
         return False
     return bool(re.fullmatch(r"[A-Za-z0-9_]+", value))
 
@@ -1698,7 +1698,7 @@ async def set_presence_offline(current_user: dict = Depends(get_current_user)):
 
 @app.get("/users/username-available")
 async def username_available(
-    username: str = Query(..., min_length=1, max_length=32),
+    username: str = Query(..., min_length=3, max_length=32),
     current_user: dict = Depends(get_current_user),
 ):
     desired = normalize_username(username)
@@ -1722,7 +1722,7 @@ async def username_available(
 
 @app.get("/auth/username-available")
 async def public_username_available(
-    username: str = Query(..., min_length=1, max_length=32),
+    username: str = Query(..., min_length=3, max_length=32),
 ):
     """Public endpoint for checking username availability during registration"""
     desired = normalize_username(username)
