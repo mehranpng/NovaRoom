@@ -134,8 +134,8 @@ const fromBase64Url = (value: string): Uint8Array => {
 
 const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
     const view = bytes as Uint8Array<ArrayBufferLike>;
-    if (view.buffer instanceof ArrayBuffer) {
-        return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
+    if (view.buffer instanceof ArrayBuffer && view.byteOffset === 0 && view.byteLength === view.buffer.byteLength) {
+        return view.buffer;
     }
     const out = new Uint8Array(view.byteLength);
     out.set(view);
@@ -307,12 +307,22 @@ const hasMagic = (raw: Uint8Array, magic: Uint8Array): boolean => {
     return true;
 };
 
+const fileAesKeyCache = new Map<string, Promise<CryptoKey>>();
+
 const deriveFileAesKey = async (chatId: string): Promise<CryptoKey> => {
     if (typeof crypto === 'undefined' || !crypto.subtle) {
         throw new Error('WebCrypto subtle API is unavailable');
     }
-    const keyBytes = await deriveKey(buildSharedMaterial(`chat:${chatId}`));
-    return crypto.subtle.importKey('raw', toArrayBuffer(keyBytes), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+    const scope = `chat:${chatId}`;
+    let cached = fileAesKeyCache.get(scope);
+    if (!cached) {
+        cached = (async () => {
+            const keyBytes = await deriveKey(buildSharedMaterial(scope));
+            return crypto.subtle.importKey('raw', toArrayBuffer(keyBytes), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+        })();
+        fileAesKeyCache.set(scope, cached);
+    }
+    return cached;
 };
 
 const encryptFileBytesLegacyV1 = async (plain: Uint8Array, chatId: string): Promise<Uint8Array> => {
