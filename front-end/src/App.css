@@ -1618,9 +1618,14 @@ body,
     word-break: break-all;
 }
 
+.message-text--markdown .md-link:any-link {
+    color: inherit;
+}
+
 .message-text--markdown .md-link:hover,
 .message-text--markdown .md-link:active,
-.message-text--markdown .md-link:visited {
+.message-text--markdown .md-link:visited,
+.message-text--markdown .md-link:focus {
     color: inherit;
 }
 

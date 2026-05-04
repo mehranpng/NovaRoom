@@ -797,9 +797,16 @@ export function ChatRoom({
 
     const getUnseenIncomingMessages = () => messages.filter((m: any) => m.senderId !== currentUserId && m.seen === false);
 
-    const computeUnreadAnchorId = (_unreadCount: number): string | null => {
+    const computeUnreadAnchorId = (unreadCount: number): string | null => {
         const firstUnseen = getUnseenIncomingMessages()[0];
-        return firstUnseen?.id || null;
+        if (firstUnseen?.id) return firstUnseen.id;
+
+        const cnt = Number(unreadCount || 0);
+        if (!Number.isFinite(cnt) || cnt <= 0) return null;
+
+        const incoming = messages.filter((m: any) => m.senderId !== currentUserId);
+        const anchor = incoming[Math.max(0, incoming.length - cnt)];
+        return anchor?.id || incoming[0]?.id || null;
     };
 
     const isUnreadAnchorValid = (messageId: string | null): boolean => {
@@ -807,7 +814,7 @@ export function ChatRoom({
         const message = messages.find((m) => m.id === messageId);
         if (!message) return false;
         if (message.senderId === currentUserId) return false;
-        return message.seen === false;
+        return true;
     };
 
     const applyInitialScroll = () => {
@@ -2480,8 +2487,8 @@ export function ChatRoom({
                                 const isHighlighted = highlightId === m.id;
                                 const dragX = dragState.id === m.id ? dragState.x : 0;
                                 const dragActive = dragState.id === m.id ? dragState.active : false;
-                                const showUnreadSeparator = Boolean(unreadAnchorId && unreadAnchorId === m.id && m.senderId !== currentUserId && m.seen === false);
-                                const unreadCountForUi = getUnseenIncomingMessages().length;
+                                const showUnreadSeparator = Boolean(unreadAnchorId && unreadAnchorId === m.id && m.senderId !== currentUserId);
+                                const unreadCountForUi = Math.max(getUnseenIncomingMessages().length, displayUnreadCount);
 
                                 const isMenuActive = Boolean(msgMenu && msgMenu.id === m.id);
                                 const seenByCountForMessage = seenByUsersByMessage[m.id]?.length ?? 0;
