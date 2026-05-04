@@ -1668,8 +1668,13 @@ body,
     background: rgba(255, 255, 255, 0.05);
 }
 
-.dark-mode .message-text--markdown .md-link {
-    color: var(--accent-soft-text);
+.dark-mode .message-text--markdown .md-link,
+.dark-mode .message-text--markdown .md-link:any-link,
+.dark-mode .message-text--markdown .md-link:hover,
+.dark-mode .message-text--markdown .md-link:active,
+.dark-mode .message-text--markdown .md-link:visited,
+.dark-mode .message-text--markdown .md-link:focus {
+    color: inherit;
 }
 
 /* Mine bubble markdown overrides */
