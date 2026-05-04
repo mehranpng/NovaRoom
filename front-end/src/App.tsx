@@ -2300,7 +2300,6 @@ export function App() {
 
     return (
         <MusicPlayerProvider>
-            <MiniMusicPlayer />
             <NotificationCenter />
             <div className={cx('app', 'app--resizable-desktop')} style={desktopSidebarWidth != null ? ({ ['--desktop-sidebar-width' as string]: `${desktopSidebarWidth}px` }) : undefined}>
                 {view !== 'profile' && !String(view).startsWith('settings') && (
@@ -2417,15 +2416,15 @@ export function App() {
                                 onOpenDirectChat={(user) => handleUserSelectedFromModal(user)}
                                 onOpenProfile={handleOpenProfile}
                                 onOpenAIChat={handleOpenAIChat}
-                                onOpenContactInfo={(targetChatId) => navigate(`/chat/${encodeURIComponent(targetChatId)}?panel=info`, { replace: true })}
+                                onOpenContactInfo={(targetChatId) => navigate(`/chat/${encodeURIComponent(targetChatId)}?panel=info`)}
                                 forceContactInfoOpen={isInfoRouteActive}
                                 onCloseForcedContactInfo={(currentChatId) => {
-                                    const backChatId = currentChatId || activeChatId;
-                                    if (backChatId && backChatId !== 'pending') {
-                                        navigate(`/chat/${encodeURIComponent(backChatId)}`, { replace: true });
+                                    if (location.search.includes('panel=info')) {
+                                        navigate(-1);
                                         return;
                                     }
-                                    navigate('/', { replace: true });
+                                    const backChatId = currentChatId || activeChatId;
+                                    navigate(backChatId && backChatId !== 'pending' ? `/chat/${encodeURIComponent(backChatId)}` : '/');
                                 }}
                                 initialUnreadCount={initialUnreadCount}
                                 onConsumeInitialUnread={consumeOpenChatUnread}
@@ -2462,6 +2461,7 @@ export function App() {
                     currentUser={currentUser}
                 />
             </div>
+            <MiniMusicPlayer />
         </MusicPlayerProvider>
     );
 }

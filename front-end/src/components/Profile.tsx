@@ -1,6 +1,7 @@
 import { ArrowLeft, Copy, Check, Pencil, X, Save, Calendar, Upload, Trash2, Link2, Users } from 'lucide-react';
 import { motion, type Variants } from "framer-motion";
 import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { User } from '../types';
 import { Avatar, getAvatarDisplayUrl } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -34,6 +35,8 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
     const [updatingAvatar, setUpdatingAvatar] = useState(false);
     const [ownedGroups, setOwnedGroups] = useState<OwnedGroup[]>([]);
     const [openedProfileImage, setOpenedProfileImage] = useState<{ url: string; fileId: string } | null>(null);
+    const navigate = useNavigate();
+    const location = useLocation();
 
     const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
     const [usernameHint, setUsernameHint] = useState<string>('');
@@ -199,10 +202,18 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
             const cachedUrl = await getAvatarDisplayUrl(fileId);
             if (!cachedUrl) return;
             setOpenedProfileImage({ url: cachedUrl, fileId });
+            const params = new URLSearchParams(location.search);
+            params.set('avatar', '1');
+            navigate({ pathname: location.pathname, search: `?${params.toString()}` });
         } catch (error) {
             console.debug('Profile avatar preview skipped:', error);
         }
     };
+    useEffect(() => {
+        const hasAvatarRoute = new URLSearchParams(location.search).get('avatar') === '1';
+        if (hasAvatarRoute || !openedProfileImage) return;
+        setOpenedProfileImage(null);
+    }, [location.search, openedProfileImage]);
 
     const handleCancel = () => {
         setName(user.name);
@@ -475,7 +486,11 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                     imageUrl={openedProfileImage.url}
                     token={localStorage.getItem('token') || ''}
                     downloadFile={{ fileId: openedProfileImage.fileId, fileName: `${user.name || 'profile'}.jpg` }}
-                    onClose={() => setOpenedProfileImage(null)}
+                    onClose={() => {
+                        const params = new URLSearchParams(location.search);
+                        if (params.has('avatar')) return void navigate(-1);
+                        setOpenedProfileImage(null);
+                    }}
                 />
             )}
         </motion.div >

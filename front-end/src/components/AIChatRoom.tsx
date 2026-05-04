@@ -1654,7 +1654,7 @@ export function AIChatRoom({
                     40% { transform: scale(1.2); opacity: 1; }
                 }
                 .ai-chat-drawer__pin {
-                    color: #2f80ed;
+                    color: var(--accent-primary);
                     flex-shrink: 0;
                 }
                 .ai-chat-drawer__new-chat-row {

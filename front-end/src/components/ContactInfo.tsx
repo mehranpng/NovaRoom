@@ -1,6 +1,7 @@
 import { ArrowLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Save, Image as ImageIcon, Trash2, RotateCcw, Ban } from 'lucide-react';
 import { motion, type Variants } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { User } from '../types';
 import { Avatar, getAvatarDisplayUrl } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -68,6 +69,8 @@ export function ContactInfo({
     const [resolvedRegistrationDate, setResolvedRegistrationDate] = useState<string>(String(user.registrationDate ?? '').trim());
     const [registrationLoading, setRegistrationLoading] = useState(false);
     const [openedProfileImage, setOpenedProfileImage] = useState<{ url: string; fileId: string } | null>(null);
+    const navigate = useNavigate();
+    const location = useLocation();
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
@@ -250,11 +253,20 @@ export function ContactInfo({
             const cachedUrl = await getAvatarDisplayUrl(rawAvatar);
             if (!cachedUrl) return;
             setOpenedProfileImage({ url: cachedUrl, fileId });
+            const params = new URLSearchParams(location.search);
+            params.set('avatar', '1');
+            navigate({ pathname: location.pathname, search: `?${params.toString()}` });
         } catch (e) {
             console.error(e);
             // اگر تصویر پروفایل معتبر نبود یا قابل دریافت نبود، سکوت کن.
         }
     };
+
+    useEffect(() => {
+        const hasAvatarRoute = new URLSearchParams(location.search).get('avatar') === '1';
+        if (hasAvatarRoute || !openedProfileImage) return;
+        setOpenedProfileImage(null);
+    }, [location.search, openedProfileImage]);
 
     const saveGroup = async () => {
         if (!user.chatId) return;
@@ -650,7 +662,11 @@ export function ContactInfo({
                     imageUrl={openedProfileImage.url}
                     token={localStorage.getItem('token') || ''}
                     downloadFile={{ fileId: openedProfileImage.fileId, fileName: `${user.name || 'profile'}.jpg` }}
-                    onClose={() => setOpenedProfileImage(null)}
+                    onClose={() => {
+                        const params = new URLSearchParams(location.search);
+                        if (params.has('avatar')) return void navigate(-1);
+                        setOpenedProfileImage(null);
+                    }}
                 />
             )}
         </motion.div>

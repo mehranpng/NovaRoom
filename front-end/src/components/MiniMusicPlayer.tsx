@@ -25,7 +25,7 @@ export const MiniMusicPlayer: React.FC = () => {
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
   const title = track.title?.trim() || track.fileName;
-  const artist = track.title?.trim() ? (track.artist?.trim() || 'unknown') : (track.artist?.trim() || 'unknown');
+  const artist = (track.artist?.trim() || 'Unknown');
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!progressRef.current || duration === 0) return;
@@ -44,7 +44,7 @@ export const MiniMusicPlayer: React.FC = () => {
       top: 0,
       left: 0,
       right: 0,
-      zIndex: 9999,
+      zIndex: 1500,
       background: 'var(--bg-primary, #fff)',
       borderBottom: '1px solid var(--border-primary, #e5e7eb)',
       boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
@@ -58,7 +58,7 @@ export const MiniMusicPlayer: React.FC = () => {
         <div style={{
           width: 40, height: 40,
           borderRadius: 10,
-          background: 'linear-gradient(135deg, #2F80ED, #56CCF2)',
+          background: 'linear-gradient(135deg, var(--accent-primary), color-mix(in srgb, var(--accent-primary) 60%, white))',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexShrink: 0,
           fontSize: 16,
@@ -93,7 +93,7 @@ export const MiniMusicPlayer: React.FC = () => {
         <button onClick={handleSkipBack} style={btnStyle} title="-10s">
           <SkipBack size={16} />
         </button>
-        <button onClick={togglePlay} style={{ ...btnStyle, background: '#2F80ED', color: '#fff', borderRadius: '50%', width: 32, height: 32 }}>
+        <button onClick={togglePlay} style={{ ...btnStyle, background: 'var(--accent-primary)', color: '#fff', borderRadius: '50%', width: 32, height: 32 }}>
           {isPlaying ? <Pause size={16} /> : <Play size={16} />}
         </button>
         <button onClick={handleSkipForward} style={btnStyle} title="+10s">
@@ -120,7 +120,7 @@ export const MiniMusicPlayer: React.FC = () => {
         <div style={{
           height: '100%',
           width: `${progress}%`,
-          background: '#2F80ED',
+          background: 'var(--accent-primary)',
           borderRadius: 2,
           transition: 'width 0.1s linear',
         }} />

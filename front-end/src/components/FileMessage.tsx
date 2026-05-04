@@ -49,10 +49,11 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     const isVideo = (file.mimeType || '').startsWith('video/');
     const isCurrentTrack = musicPlayer.track?.fileId === file.fileId;
     const isThisPlaying = isCurrentTrack && musicPlayer.isPlaying;
-    const audioTitle = (file.title || '').trim();
-    const audioArtist = (file.artist || '').trim() || 'unknown';
-    const displayAudioTitle = audioTitle || file.fileName;
-    const audioSubtitle = audioTitle ? audioArtist : ((file.artist || '').trim() || 'unknown');
+    const rawTitle = String(file.title || (file as any)?.meta?.title || (file as any)?.metadata?.title || '').trim();
+    const rawArtist = String(file.artist || (file as any)?.meta?.artist || (file as any)?.metadata?.artist || '').trim();
+    const displayAudioTitle = rawTitle || file.fileName;
+    const audioArtist = rawArtist || 'Unknown';
+    const audioSubtitle = audioArtist;
     const rawCoverFileId = (file as any).coverArtFileId || (file as any)?.meta?.coverArtFileId || (file as any)?.metadata?.coverArtFileId;
     const rawCoverUrl = (file.coverArtUrl || (file as any).coverUrl || (file as any)?.meta?.coverArtUrl || (file as any)?.metadata?.coverArtUrl || '').trim();
     const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
@@ -323,7 +324,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
                                     fileName: file.fileName,
                                     audioUrl,
                                     mimeType: file.mimeType,
-                                    title: audioTitle || undefined,
+                                    title: rawTitle || undefined,
                                     artist: audioArtist || undefined,
                                     coverArtUrl: coverUrl || undefined,
                                 });
@@ -333,18 +334,18 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
                         style={{
                             width: 40, height: 40,
                             borderRadius: '50%',
-                            background: isThisPlaying ? '#2F80ED' : 'rgba(47,128,237,0.12)',
+                            background: isThisPlaying ? 'var(--accent-primary)' : 'color-mix(in srgb, var(--accent-primary) 16%, transparent)',
                             border: 'none',
                             cursor: (audioLoading || audioError || !audioUrl) ? 'default' : 'pointer',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: isThisPlaying ? '#fff' : '#2F80ED',
+                            color: isThisPlaying ? '#fff' : 'var(--accent-primary)',
                             flexShrink: 0,
                             transition: 'background 0.2s',
                         }}
                         type="button"
                     >
                         {audioLoading ? (
-                            <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #2F80ED', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
+                            <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid var(--accent-primary)', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
                         ) : isThisPlaying ? <Pause size={18} /> : <Play size={18} />}
                     </button>
                     <div className="file-audio-cover" aria-hidden="true">
@@ -354,11 +355,9 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
                         <div className="file-audio-title">{displayAudioTitle}</div>
                         <div className="file-audio-artist">{audioSubtitle}</div>
                         {audioError && <div style={{ fontSize: 11, color: '#e55' }}>پخش ممکن نشد</div>}
-                        {isCurrentTrack && musicPlayer.duration > 0 && (
-                            <div style={{ fontSize: 11, color: '#888' }}>
-                                {Math.floor(musicPlayer.currentTime / 60)}:{Math.floor(musicPlayer.currentTime % 60).toString().padStart(2, '0')} / {Math.floor(musicPlayer.duration / 60)}:{Math.floor(musicPlayer.duration % 60).toString().padStart(2, '0')}
-                            </div>
-                        )}
+                        <div style={{ fontSize: 11, color: '#888' }}>
+                            {isCurrentTrack ? `${formatDuration(musicPlayer.currentTime)} / ` : ''}{formatDuration(musicPlayer.duration || Number((file as any)?.duration || 0))}
+                        </div>
                     </div>
                 </div>
             ) : (
