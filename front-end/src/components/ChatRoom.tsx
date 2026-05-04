@@ -18,7 +18,7 @@ import { FileMessage } from './FileMessage';
 import { ImageMediaViewer } from './ImageMediaViewer';
 import { VideoMediaViewer } from './VideoMediaViewer';
 import { decryptAvatarBytesClientSide, decryptFileBytesClientSide } from '../utils/e2ee';
-import { cacheTextValue, deleteCachedBlob, getCachedTextValue, getOrCacheBlob } from '../utils/mediaCache';
+import { cacheTextValue, deleteCachedBlob, deleteCachedText, getCachedTextValue, getOrCacheBlob } from '../utils/mediaCache';
 import './FileComponents.css';
 
 const pendingUploadedFileByChat: Record<string, FileMetadata | null> = {};
@@ -2082,7 +2082,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
     };
 
     const confirmDeleteMessage = () => {
-        if (confirmDeleteMsg) { const msg = messages.find((m) => m.id === confirmDeleteMsg); onDeleteMessage(confirmDeleteMsg); void deleteCachedBlob(`chat:${chatId}:message:${confirmDeleteMsg}:text`); if (msg?.file?.fileId) void deleteCachedBlob(`chat:${chatId}:file:${msg.file.fileId}`); setConfirmDeleteMsg(null); }
+        if (confirmDeleteMsg) { const msg = messages.find((m) => m.id === confirmDeleteMsg); onDeleteMessage(confirmDeleteMsg); void deleteCachedText(`chat:${chatId}:message:${confirmDeleteMsg}:text`); if (msg?.file?.fileId) void deleteCachedBlob(`chat:${chatId}:file:${msg.file.fileId}`); setConfirmDeleteMsg(null); }
     };
 
     if (showContactInfo) {
