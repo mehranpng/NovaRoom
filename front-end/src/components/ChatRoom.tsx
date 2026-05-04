@@ -335,6 +335,20 @@ function hasMarkdownSyntax(text: string): boolean {
     return /(^|\n)\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>\s)|(```|`[^`]+`|\[[^\]]+\]\([^\)]+\)|\*\*[^*]+\*\*|__[^_]+__)/m.test(text);
 }
 
+function renderTextWithLinks(text: string): React.ReactNode {
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+    const isUrl = (value: string) => /^(https?:\/\/[^\s]+|www\.[^\s]+)$/i.test(value);
+    const parts = text.split(urlRegex);
+    return parts.map((part, idx) => {
+        if (!part) return null;
+        if (isUrl(part)) {
+            const href = part.startsWith('http') ? part : `https://${part}`;
+            return <a key={`${part}-${idx}`} className="md-link" href={href} target="_blank" rel="noopener noreferrer">{part}</a>;
+        }
+        return <React.Fragment key={`${idx}-${part.slice(0, 8)}`}>{part}</React.Fragment>;
+    });
+}
+
 /** ویبره خیلی کوتاه — فقط اگر دستگاه پشتیبانی کند */
 function triggerHaptic() {
     try { navigator.vibrate?.(18); } catch { /* ignore */ }
@@ -492,12 +506,20 @@ export function ChatRoom({
     // Scroll memory: keep per-chat scroll position in memory until refresh.
     // IMPORTANT: only restore exact scrollTop if user actually scrolled in that chat (prevents "always open at top").
     const scrollMemoryRef = useRef<Record<string, { top: number; atBottom: boolean; userInteracted: boolean }>>({});
+    const forceInfoRouteActiveRef = useRef(false);
 
     useEffect(() => {
-        if (!forceContactInfoOpen) return;
-        restoringFromInfoRef.current = true;
-        setOpenGroupEditorFromMembers(false);
-        setShowContactInfo(true);
+        if (forceContactInfoOpen) {
+            forceInfoRouteActiveRef.current = true;
+            restoringFromInfoRef.current = true;
+            setOpenGroupEditorFromMembers(false);
+            setShowContactInfo(true);
+            return;
+        }
+        if (forceInfoRouteActiveRef.current) {
+            forceInfoRouteActiveRef.current = false;
+            setShowContactInfo(false);
+        }
     }, [forceContactInfoOpen, chatId]);
 
     const userHasScrolledRef = useRef(false);
@@ -2697,7 +2719,7 @@ export function ChatRoom({
                                                             <MemoMarkdown text={m.text} components={markdownComponents} />
                                                         </div>
                                                     ) : (
-                                                        <div className="message-text">{m.text}</div>
+                                                        <div className="message-text">{renderTextWithLinks(m.text)}</div>
                                                     )
                                                 )}
                                                 {m.text && Boolean(m.reasoningEnabled && m.reasoningContent) && (
@@ -2707,7 +2729,7 @@ export function ChatRoom({
                                                                 <MemoMarkdown text={m.text} components={markdownComponents} />
                                                             </div>
                                                         ) : (
-                                                            <div className="message-text">{m.text}</div>
+                                                            <div className="message-text">{renderTextWithLinks(m.text)}</div>
                                                         )}
                                                     </div>
                                                 )}
