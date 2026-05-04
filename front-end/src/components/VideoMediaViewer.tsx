@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronsLeft, ChevronsRight, Download, Maximize, Minimize, Pause, Play, X } from 'lucide-react';
-import { API_BASE_URL } from '../config/api';
 import type { FileMetadata } from '../types';
-import { decryptFileBytesClientSide } from '../utils/e2ee';
+import { getOrCacheBlob } from '../utils/mediaCache';
 
 interface VideoMediaViewerProps {
     videoUrl: string;
@@ -128,20 +127,17 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '', 
 
     const handleDownload = async () => {
         try {
-            // Prefer already-decrypted media URL to avoid re-fetch/decrypt freeze.
-            const directResponse = await fetch(videoUrl);
-            if (!directResponse.ok) throw new Error('Download failed');
-            let blob = await directResponse.blob();
-            if (downloadFile?.fileId && chatId && !String(videoUrl).startsWith('blob:')) {
-                const encryptedResponse = await fetch(`${API_BASE_URL}/files/${downloadFile.fileId}`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                if (!encryptedResponse.ok) throw new Error('Download failed');
-                const encryptedBytes = new Uint8Array(await encryptedResponse.arrayBuffer());
-                const plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, chatId);
-                const normalizedBytes = new Uint8Array(plainBytes);
-                blob = new Blob([normalizedBytes], { type: blob.type || encryptedResponse.headers.get('content-type') || 'application/octet-stream' });
-            }
+            const fileId = downloadFile?.fileId;
+            const blob = fileId
+                ? await getOrCacheBlob({
+                    cacheKey: `chat:${chatId}:file:${fileId}`,
+                    loadBlob: async () => {
+                        const directResponse = await fetch(videoUrl);
+                        if (!directResponse.ok) throw new Error('Download failed');
+                        return directResponse.blob();
+                    },
+                })
+                : await (await fetch(videoUrl)).blob();
             const extension = blob.type.split('/')[1] || 'mp4';
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');

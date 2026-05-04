@@ -5,6 +5,7 @@ import type { FileMetadata } from '../types';
 import { API_BASE_URL } from '../config/api';
 import { validateFileSize } from '../utils/fileUtils';
 import { encryptFileBytesClientSide } from '../utils/e2ee';
+import { saveBlobToCache } from '../utils/mediaCache';
 
 interface FileUploadProps {
     token: string;
@@ -272,6 +273,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                             fileSize: file.size,
                             mimeType: file.type || response.file.mimeType,
                         };
+                        void saveBlobToCache(`chat:${chatId}:file:${result.fileId}`, file);
                         task.status = 'done';
                         task.uploadProgress = 100;
                         task.encryptionProgress = 100;

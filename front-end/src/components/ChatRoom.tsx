@@ -18,7 +18,7 @@ import { FileMessage } from './FileMessage';
 import { ImageMediaViewer } from './ImageMediaViewer';
 import { VideoMediaViewer } from './VideoMediaViewer';
 import { decryptAvatarBytesClientSide, decryptFileBytesClientSide } from '../utils/e2ee';
-import { getOrCacheBlob } from '../utils/mediaCache';
+import { cacheTextValue, deleteCachedBlob, getCachedTextValue, getOrCacheBlob } from '../utils/mediaCache';
 import './FileComponents.css';
 
 const pendingUploadedFileByChat: Record<string, FileMetadata | null> = {};
@@ -571,7 +571,9 @@ export function ChatRoom({
             setOpenedVideo(null);
         }
     }, [location.search, openedImage, openedVideo]);
-    const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId: string; fileName: string } | null>(null);
+    
+    const [cachedTextByMessageId, setCachedTextByMessageId] = useState<Record<string, string>>({});
+const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId: string; fileName: string } | null>(null);
     const openedGroupAvatarObjectUrlRef = useRef<string | null>(null);
 
     // Auto-jump bookkeeping to avoid saving an automatic scroll position as user's scroll memory.
@@ -1132,15 +1134,17 @@ export function ChatRoom({
     const doDownloadMessageFile = async (m: Message) => {
         if (!m.file?.fileId) return;
         try {
-            const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(m.file.fileId)}`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!response.ok) throw new Error('Download failed');
-            const encryptedBytes = new Uint8Array(await response.arrayBuffer());
-            const plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, chatId);
-            const safeBytes = new Uint8Array(plainBytes);
-            const blob = new Blob([safeBytes.buffer.slice(0)], {
-                type: m.file.mimeType || 'application/octet-stream'
+            const blob = await getOrCacheBlob({
+                cacheKey: `chat:${chatId}:file:${m.file.fileId}`,
+                loadBlob: async () => {
+                    const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(m.file!.fileId)}`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (!response.ok) throw new Error('Download failed');
+                    const encryptedBytes = new Uint8Array(await response.arrayBuffer());
+                    const plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, chatId);
+                    return new Blob([new Uint8Array(plainBytes)], { type: m.file?.mimeType || 'application/octet-stream' });
+                },
             });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -1327,6 +1331,27 @@ export function ChatRoom({
             // ignore cleanup failures
         }
     };
+
+
+    useEffect(() => {
+        let cancelled = false;
+        const hydrateAndStore = async () => {
+            const next: Record<string, string> = {};
+            for (const m of messages) {
+                const cacheKey = `chat:${chatId}:message:${m.id}:text`;
+                if (typeof m.text === 'string' && m.text.length > 0) {
+                    next[m.id] = m.text;
+                    void cacheTextValue(cacheKey, m.text);
+                } else {
+                    const cached = await getCachedTextValue(cacheKey);
+                    if (cached != null) next[m.id] = cached;
+                }
+            }
+            if (!cancelled) setCachedTextByMessageId(next);
+        };
+        void hydrateAndStore();
+        return () => { cancelled = true; };
+    }, [chatId, messages]);
 
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
@@ -2038,7 +2063,7 @@ export function ChatRoom({
     };
 
     const beginReply = (m: Message, withHaptic = false) => {
-        setReplyTo({ id: m.id, senderId: m.senderId, text: m.text });
+        setReplyTo({ id: m.id, senderId: m.senderId, text: cachedTextByMessageId[m.id] ?? m.text });
         setEditingId(null); setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
         if (withHaptic) triggerHaptic();
         setTimeout(() => textareaRef.current?.focus(), 0);
@@ -2046,7 +2071,7 @@ export function ChatRoom({
 
     const beginEdit = (m: Message) => {
         pendingEditFocusToEndRef.current = true;
-        setEditingId(m.id); setReplyTo(null); setText(m.text);
+        setEditingId(m.id); setReplyTo(null); setText(cachedTextByMessageId[m.id] ?? m.text);
         setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
         setTimeout(() => textareaRef.current?.focus(), 0);
     };
@@ -2057,7 +2082,7 @@ export function ChatRoom({
     };
 
     const confirmDeleteMessage = () => {
-        if (confirmDeleteMsg) { onDeleteMessage(confirmDeleteMsg); setConfirmDeleteMsg(null); }
+        if (confirmDeleteMsg) { const msg = messages.find((m) => m.id === confirmDeleteMsg); onDeleteMessage(confirmDeleteMsg); void deleteCachedBlob(`chat:${chatId}:message:${confirmDeleteMsg}:text`); if (msg?.file?.fileId) void deleteCachedBlob(`chat:${chatId}:file:${msg.file.fileId}`); setConfirmDeleteMsg(null); }
     };
 
     if (showContactInfo) {
@@ -2713,7 +2738,7 @@ export function ChatRoom({
                                                 {m.text && !Boolean(m.reasoningEnabled && m.reasoningContent) && (
                                                     hasMarkdownSyntax(m.text) ? (
                                                         <div className="message-text message-text--markdown">
-                                                            <MemoMarkdown text={m.text} components={markdownComponents} />
+                                                            <MemoMarkdown text={cachedTextByMessageId[m.id] ?? m.text} components={markdownComponents} />
                                                         </div>
                                                     ) : (
                                                         <div className="message-text">{renderTextWithLinks(m.text)}</div>
@@ -2723,7 +2748,7 @@ export function ChatRoom({
                                                     <div className="ai-reasoning-answer" style={{ marginTop: 0 }}>
                                                         {hasMarkdownSyntax(m.text) ? (
                                                             <div className="message-text message-text--markdown">
-                                                                <MemoMarkdown text={m.text} components={markdownComponents} />
+                                                                <MemoMarkdown text={cachedTextByMessageId[m.id] ?? m.text} components={markdownComponents} />
                                                             </div>
                                                         ) : (
                                                             <div className="message-text">{renderTextWithLinks(m.text)}</div>

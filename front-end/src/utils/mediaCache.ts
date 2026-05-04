@@ -87,3 +87,37 @@ export const getOrCacheBlob = async ({ cacheKey, loadBlob }: GetOrCacheBlobParam
     void saveToCache(cacheKey, blob);
     return blob;
 };
+
+
+const deleteCacheKey = async (cacheKey: string): Promise<void> => {
+    const db = await openDb();
+    if (!db) return;
+    await new Promise<void>((resolve) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.delete(cacheKey);
+        req.onsuccess = () => resolve();
+        req.onerror = () => resolve();
+    });
+};
+
+export const deleteCachedBlob = async (cacheKey: string): Promise<void> => deleteCacheKey(cacheKey);
+
+export const cacheTextValue = async (cacheKey: string, text: string): Promise<void> => {
+    const db = await openDb();
+    if (!db) return;
+    const utf8 = new TextEncoder().encode(text);    const payload = new Blob([utf8], { type: 'text/plain;charset=utf-8' });
+    await saveToCache(cacheKey, payload);
+};
+
+export const getCachedTextValue = async (cacheKey: string): Promise<string | null> => {
+    const blob = await readFromCache(cacheKey);
+    if (!blob) return null;
+    try {
+        return await blob.text();
+    } catch {
+        return null;
+    }
+};
+
+export const saveBlobToCache = async (cacheKey: string, blob: Blob): Promise<void> => saveToCache(cacheKey, blob);
