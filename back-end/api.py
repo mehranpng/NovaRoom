@@ -29,6 +29,7 @@ import hashlib
 import secrets
 import base64
 import hmac
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from bson import ObjectId
 import re
 import uuid
@@ -139,8 +140,10 @@ WS_IDLE_TIMEOUT_SEC = 95
 ENC_PREFIX = "enc:v1:"
 ENC_NONCE_SIZE = 16
 ENC_TAG_SIZE = 16
-FILE_MAGIC = b"NCF1"
+FILE_MAGIC_V1 = b"NCF1"
+FILE_MAGIC_V2 = b"NCF2"
 FILE_TEXT_PREFIX = "ncf:v1:"
+FILE_AES_GCM_NONCE_SIZE = 12
 LEGACY_BOOTSTRAP_TOKEN = "__bootstrap_migration__"
 
 
@@ -307,8 +310,8 @@ def _base64url_decode_bytes(value: str) -> bytes:
 def _try_unpack_client_file_packet(raw: bytes) -> Optional[bytes]:
     if not raw:
         return None
-    if raw.startswith(FILE_MAGIC):
-        return raw[len(FILE_MAGIC) :]
+    if raw.startswith(FILE_MAGIC_V1):
+        return raw[len(FILE_MAGIC_V1) :]
     try:
         text = raw.decode("utf-8")
     except Exception:
@@ -322,6 +325,17 @@ def _try_unpack_client_file_packet(raw: bytes) -> Optional[bytes]:
 
 
 def decrypt_client_file_bytes(raw: bytes, chat_scope: str) -> Optional[bytes]:
+    if raw.startswith(FILE_MAGIC_V2):
+        if len(raw) < len(FILE_MAGIC_V2) + FILE_AES_GCM_NONCE_SIZE + ENC_TAG_SIZE:
+            return None
+        nonce = raw[len(FILE_MAGIC_V2) : len(FILE_MAGIC_V2) + FILE_AES_GCM_NONCE_SIZE]
+        cipher = raw[len(FILE_MAGIC_V2) + FILE_AES_GCM_NONCE_SIZE :]
+        key = _derive_client_shared_key(chat_scope)
+        try:
+            return AESGCM(key).decrypt(nonce, cipher, None)
+        except Exception:
+            return None
+
     packed = _try_unpack_client_file_packet(raw)
     if not packed:
         return None
@@ -341,10 +355,9 @@ def encrypt_client_file_bytes(plain: bytes, chat_scope: str) -> bytes:
     if not plain:
         return plain
     key = _derive_client_shared_key(chat_scope)
-    nonce = secrets.token_bytes(ENC_NONCE_SIZE)
-    encrypted = _xor_stream(plain, key, nonce)
-    tag = hmac.new(key, nonce + encrypted, hashlib.sha256).digest()[:ENC_TAG_SIZE]
-    return FILE_MAGIC + nonce + encrypted + tag
+    nonce = secrets.token_bytes(FILE_AES_GCM_NONCE_SIZE)
+    encrypted = AESGCM(key).encrypt(nonce, plain, None)
+    return FILE_MAGIC_V2 + nonce + encrypted
 
 
 async def _remap_forward_file_to_target_chat(

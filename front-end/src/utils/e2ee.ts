@@ -1,8 +1,10 @@
 const ENC_PREFIX = 'enc:v1:';
 const ENC_NONCE_SIZE = 16;
 const ENC_TAG_SIZE = 16;
-const FILE_MAGIC = new Uint8Array([0x4e, 0x43, 0x46, 0x31]); // NCF1
+const FILE_MAGIC_V1 = new Uint8Array([0x4e, 0x43, 0x46, 0x31]); // NCF1
+const FILE_MAGIC_V2 = new Uint8Array([0x4e, 0x43, 0x46, 0x32]); // NCF2
 const FILE_TEXT_PREFIX = 'ncf:v1:';
+const FILE_AES_GCM_IV_SIZE = 12;
 const AVATAR_MAGIC = new Uint8Array([0x4e, 0x43, 0x41, 0x31]); // NCA1
 const AVATAR_TEXT_PREFIX = 'nca:v1:';
 
@@ -297,30 +299,29 @@ export const decryptBioClientSide = async (bio: string, token: string, chatId: s
     return decryptClientText(bio, token, `user-bio:${chatId}`);
 };
 
-const hasFileMagic = (raw: Uint8Array): boolean => {
-    if (raw.length < FILE_MAGIC.length) return false;
-    for (let i = 0; i < FILE_MAGIC.length; i += 1) {
-        if (raw[i] !== FILE_MAGIC[i]) return false;
+const hasMagic = (raw: Uint8Array, magic: Uint8Array): boolean => {
+    if (raw.length < magic.length) return false;
+    for (let i = 0; i < magic.length; i += 1) {
+        if (raw[i] !== magic[i]) return false;
     }
     return true;
+};
+
+const deriveFileAesKey = async (chatId: string): Promise<CryptoKey> => {
+    const keyBytes = await deriveKey(buildSharedMaterial(`chat:${chatId}`));
+    return crypto.subtle.importKey('raw', toArrayBuffer(keyBytes), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
 };
 
 export const encryptFileBytesClientSide = async (plain: Uint8Array, _token: string, chatId: string): Promise<Uint8Array> => {
     if (!plain.length) return plain;
     try {
-        const scope = `chat:${chatId}`;
-        const key = await deriveKey(buildSharedMaterial(scope));
-        const nonce = randomBytes(ENC_NONCE_SIZE);
-        const encrypted = await xorStream(plain, key, nonce);
-        const nonceAndEncrypted = new Uint8Array(nonce.length + encrypted.length);
-        nonceAndEncrypted.set(nonce, 0);
-        nonceAndEncrypted.set(encrypted, nonce.length);
-        const tag = await hmacTag(key, nonceAndEncrypted);
-        const full = new Uint8Array(FILE_MAGIC.length + nonce.length + encrypted.length + tag.length);
-        full.set(FILE_MAGIC, 0);
-        full.set(nonce, FILE_MAGIC.length);
-        full.set(encrypted, FILE_MAGIC.length + nonce.length);
-        full.set(tag, FILE_MAGIC.length + nonce.length + encrypted.length);
+        const key = await deriveFileAesKey(chatId);
+        const iv = randomBytes(FILE_AES_GCM_IV_SIZE);
+        const encrypted = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, toArrayBuffer(plain)));
+        const full = new Uint8Array(FILE_MAGIC_V2.length + iv.length + encrypted.length);
+        full.set(FILE_MAGIC_V2, 0);
+        full.set(iv, FILE_MAGIC_V2.length);
+        full.set(encrypted, FILE_MAGIC_V2.length + iv.length);
         return full;
     } catch {
         return plain;
@@ -329,9 +330,23 @@ export const encryptFileBytesClientSide = async (plain: Uint8Array, _token: stri
 
 export const decryptFileBytesClientSide = async (raw: Uint8Array, _token: string, chatId: string): Promise<Uint8Array> => {
     if (!raw.length) return raw;
+
+    try {
+        if (hasMagic(raw, FILE_MAGIC_V2)) {
+            if (raw.length < FILE_MAGIC_V2.length + FILE_AES_GCM_IV_SIZE + ENC_TAG_SIZE) return raw;
+            const iv = raw.slice(FILE_MAGIC_V2.length, FILE_MAGIC_V2.length + FILE_AES_GCM_IV_SIZE);
+            const body = raw.slice(FILE_MAGIC_V2.length + FILE_AES_GCM_IV_SIZE);
+            const key = await deriveFileAesKey(chatId);
+            const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, toArrayBuffer(body));
+            return new Uint8Array(plain);
+        }
+    } catch {
+        return raw;
+    }
+
     let packed: Uint8Array | null = null;
-    if (hasFileMagic(raw)) {
-        packed = raw.slice(FILE_MAGIC.length);
+    if (hasMagic(raw, FILE_MAGIC_V1)) {
+        packed = raw.slice(FILE_MAGIC_V1.length);
     } else {
         try {
             const maybeText = textDecoder.decode(raw);
