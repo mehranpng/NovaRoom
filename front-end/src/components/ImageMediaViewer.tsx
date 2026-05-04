@@ -15,7 +15,7 @@ const MIN_SCALE = 1;
 const MAX_SCALE = 4;
 const TOGGLE_ZOOM_SCALE = 2;
 
-export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token = '', chatId = '' }: ImageMediaViewerProps) {
+export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token: _token = '', chatId = '' }: ImageMediaViewerProps) {
     const [scale, setScale] = useState(1);
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const pinchDistanceRef = useRef<number | null>(null);

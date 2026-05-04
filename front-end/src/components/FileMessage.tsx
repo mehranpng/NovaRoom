@@ -40,7 +40,6 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     const [videoError, setVideoError] = useState(false);
     const [videoDuration, setVideoDuration] = useState(0);
     const [coverUrl, setCoverUrl] = useState<string | null>(null);
-    const [downloadInProgress, setDownloadInProgress] = useState(false);
     const videoRef = useRef<HTMLVideoElement | null>(null);
 
     const musicPlayer = useMusicPlayer();
@@ -208,45 +207,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
         };
     }, [chatId, file.fileId, file.mimeType, isVideo, token]);
 
-    const handleDownload = async () => {
-        try {
-            if (downloadInProgress) return;
-            setDownloadInProgress(true);
-            const readyUrl = isImage ? imageUrl : (isVideo ? videoUrl : (isAudio ? audioUrl : null));
-            if (readyUrl) {
-                const readyResponse = await fetch(readyUrl);
-                if (!readyResponse.ok) throw new Error('Download failed');
-                const readyBlob = await readyResponse.blob();
-                const readyObjectUrl = window.URL.createObjectURL(readyBlob);
-                const readyAnchor = document.createElement('a');
-                readyAnchor.href = readyObjectUrl;
-                readyAnchor.download = file.fileName;
-                document.body.appendChild(readyAnchor);
-                readyAnchor.click();
-                window.URL.revokeObjectURL(readyObjectUrl);
-                document.body.removeChild(readyAnchor);
-                return;
-            }
-            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-            const blob = await getOrCacheBlob({
-                cacheKey: `chat:${chatId}:file:${file.fileId}`,
-                loadBlob: async () => fetchAndDecryptBlob(file.fileId, file.mimeType),
-            });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = file.fileName;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-        } catch (error) {
-            console.error('Error downloading file:', error);
-            alert('خطا در دانلود فایل');
-        } finally {
-            setDownloadInProgress(false);
-        }
-    };
+
 
     return (
         <div className="file-message">

@@ -21,7 +21,7 @@ function formatDuration(seconds: number): string {
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token = '', chatId = '' }: VideoMediaViewerProps) {
+export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token: _token = '', chatId = '' }: VideoMediaViewerProps) {
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const clickTimeoutRef = useRef<number | null>(null);
