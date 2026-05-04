@@ -308,8 +308,28 @@ const hasMagic = (raw: Uint8Array, magic: Uint8Array): boolean => {
 };
 
 const deriveFileAesKey = async (chatId: string): Promise<CryptoKey> => {
+    if (typeof crypto === 'undefined' || !crypto.subtle) {
+        throw new Error('WebCrypto subtle API is unavailable');
+    }
     const keyBytes = await deriveKey(buildSharedMaterial(`chat:${chatId}`));
     return crypto.subtle.importKey('raw', toArrayBuffer(keyBytes), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+};
+
+const encryptFileBytesLegacyV1 = async (plain: Uint8Array, chatId: string): Promise<Uint8Array> => {
+    const scope = `chat:${chatId}`;
+    const key = await deriveKey(buildSharedMaterial(scope));
+    const nonce = randomBytes(ENC_NONCE_SIZE);
+    const encrypted = await xorStream(plain, key, nonce);
+    const nonceAndEncrypted = new Uint8Array(nonce.length + encrypted.length);
+    nonceAndEncrypted.set(nonce, 0);
+    nonceAndEncrypted.set(encrypted, nonce.length);
+    const tag = await hmacTag(key, nonceAndEncrypted);
+    const full = new Uint8Array(FILE_MAGIC_V1.length + nonce.length + encrypted.length + tag.length);
+    full.set(FILE_MAGIC_V1, 0);
+    full.set(nonce, FILE_MAGIC_V1.length);
+    full.set(encrypted, FILE_MAGIC_V1.length + nonce.length);
+    full.set(tag, FILE_MAGIC_V1.length + nonce.length + encrypted.length);
+    return full;
 };
 
 export const encryptFileBytesClientSide = async (plain: Uint8Array, _token: string, chatId: string): Promise<Uint8Array> => {
@@ -324,7 +344,11 @@ export const encryptFileBytesClientSide = async (plain: Uint8Array, _token: stri
         full.set(encrypted, FILE_MAGIC_V2.length + iv.length);
         return full;
     } catch {
-        return plain;
+        try {
+            return await encryptFileBytesLegacyV1(plain, chatId);
+        } catch {
+            return plain;
+        }
     }
 };
 
