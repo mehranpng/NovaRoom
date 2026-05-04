@@ -368,8 +368,8 @@ export const decryptFileBytesClientSide = async (raw: Uint8Array, _token: string
     try {
         if (hasMagic(raw, FILE_MAGIC_V2)) {
             if (raw.length < FILE_MAGIC_V2.length + FILE_AES_GCM_IV_SIZE + ENC_TAG_SIZE) return raw;
-            const iv = raw.slice(FILE_MAGIC_V2.length, FILE_MAGIC_V2.length + FILE_AES_GCM_IV_SIZE);
-            const body = raw.slice(FILE_MAGIC_V2.length + FILE_AES_GCM_IV_SIZE);
+            const iv = raw.subarray(FILE_MAGIC_V2.length, FILE_MAGIC_V2.length + FILE_AES_GCM_IV_SIZE);
+            const body = raw.subarray(FILE_MAGIC_V2.length + FILE_AES_GCM_IV_SIZE);
             const key = await deriveFileAesKey(chatId);
             const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, toArrayBuffer(body));
             return new Uint8Array(plain);
@@ -380,7 +380,7 @@ export const decryptFileBytesClientSide = async (raw: Uint8Array, _token: string
 
     let packed: Uint8Array | null = null;
     if (hasMagic(raw, FILE_MAGIC_V1)) {
-        packed = raw.slice(FILE_MAGIC_V1.length);
+        packed = raw.subarray(FILE_MAGIC_V1.length);
     } else {
         try {
             const maybeText = textDecoder.decode(raw);
@@ -395,9 +395,9 @@ export const decryptFileBytesClientSide = async (raw: Uint8Array, _token: string
     if (packed.length < ENC_NONCE_SIZE + ENC_TAG_SIZE) return raw;
 
     try {
-        const nonce = packed.slice(0, ENC_NONCE_SIZE);
-        const body = packed.slice(ENC_NONCE_SIZE, packed.length - ENC_TAG_SIZE);
-        const tag = packed.slice(packed.length - ENC_TAG_SIZE);
+        const nonce = packed.subarray(0, ENC_NONCE_SIZE);
+        const body = packed.subarray(ENC_NONCE_SIZE, packed.length - ENC_TAG_SIZE);
+        const tag = packed.subarray(packed.length - ENC_TAG_SIZE);
         const nonceAndBody = new Uint8Array(nonce.length + body.length);
         nonceAndBody.set(nonce, 0);
         nonceAndBody.set(body, nonce.length);
