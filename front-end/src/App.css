@@ -1613,9 +1613,15 @@ body,
 }
 
 .message-text--markdown .md-link {
-    color: var(--accent-hover);
+    color: inherit;
     text-decoration: underline;
     word-break: break-all;
+}
+
+.message-text--markdown .md-link:hover,
+.message-text--markdown .md-link:active,
+.message-text--markdown .md-link:visited {
+    color: inherit;
 }
 
 /* Dark mode overrides for markdown */
@@ -1707,7 +1713,7 @@ body,
 }
 
 .message-bubble--mine .message-text--markdown .md-link {
-    color: var(--message-mine-text);
+    color: inherit;
 }
 
 .message-bubble--mine .message-text--markdown .md-h1 {

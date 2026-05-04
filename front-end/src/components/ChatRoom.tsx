@@ -795,22 +795,11 @@ export function ChatRoom({
         isAtBottomRef.current = computeNearBottom();
     };
 
-    const computeUnreadAnchorId = (unreadCount: number): string | null => {
-        // Prefer explicit per-message seen flag if present.
-        const firstUnseen = messages.find((m: any) => m.senderId !== currentUserId && m.seen === false);
-        if (firstUnseen?.id) return firstUnseen.id;
+    const getUnseenIncomingMessages = () => messages.filter((m: any) => m.senderId !== currentUserId && m.seen === false);
 
-        const cnt = Number(unreadCount || 0);
-        if (!Number.isFinite(cnt) || cnt <= 0) return null;
-
-        let remaining = cnt;
-        for (let i = messages.length - 1; i >= 0; i--) {
-            const m = messages[i];
-            if (m.senderId === currentUserId) continue;
-            remaining -= 1;
-            if (remaining === 0) return m.id;
-        }
-        return messages[0]?.id || null;
+    const computeUnreadAnchorId = (_unreadCount: number): string | null => {
+        const firstUnseen = getUnseenIncomingMessages()[0];
+        return firstUnseen?.id || null;
     };
 
     const isUnreadAnchorValid = (messageId: string | null): boolean => {
@@ -818,7 +807,7 @@ export function ChatRoom({
         const message = messages.find((m) => m.id === messageId);
         if (!message) return false;
         if (message.senderId === currentUserId) return false;
-        return true;
+        return message.seen === false;
     };
 
     const applyInitialScroll = () => {
@@ -2491,7 +2480,8 @@ export function ChatRoom({
                                 const isHighlighted = highlightId === m.id;
                                 const dragX = dragState.id === m.id ? dragState.x : 0;
                                 const dragActive = dragState.id === m.id ? dragState.active : false;
-                                const showUnreadSeparator = Boolean(unreadAnchorId && unreadAnchorId === m.id);
+                                const showUnreadSeparator = Boolean(unreadAnchorId && unreadAnchorId === m.id && m.senderId !== currentUserId && m.seen === false);
+                                const unreadCountForUi = getUnseenIncomingMessages().length;
 
                                 const isMenuActive = Boolean(msgMenu && msgMenu.id === m.id);
                                 const seenByCountForMessage = seenByUsersByMessage[m.id]?.length ?? 0;
@@ -2517,7 +2507,7 @@ export function ChatRoom({
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', justifyContent: 'center' }}>
                                                 <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
                                                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 999, padding: '6px 10px', fontFamily: 'Vazir, sans-serif' }}>
-                                                    پیام‌های خوانده نشده{displayUnreadCount > 0 ? ` (${toPersianDigits(displayUnreadCount)})` : ''}
+                                                    پیام‌های خوانده نشده{unreadCountForUi > 0 ? ` (${toPersianDigits(unreadCountForUi)})` : ''}
                                                 </div>
                                                 <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
                                             </div>
