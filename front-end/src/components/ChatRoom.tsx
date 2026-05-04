@@ -345,7 +345,7 @@ function renderTextWithLinks(text: string): React.ReactNode {
             const href = part.startsWith('http') ? part : `https://${part}`;
             return <a key={`${part}-${idx}`} className="md-link" href={href} target="_blank" rel="noopener noreferrer">{part}</a>;
         }
-        return <React.Fragment key={`${idx}-${part.slice(0, 8)}`}>{part}</React.Fragment>;
+        return <span key={`${idx}-${part.slice(0, 8)}`}>{part}</span>;
     });
 }
 
