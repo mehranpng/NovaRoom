@@ -137,6 +137,9 @@ const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
     if (view.buffer instanceof ArrayBuffer && view.byteOffset === 0 && view.byteLength === view.buffer.byteLength) {
         return view.buffer;
     }
+    if (view.buffer instanceof ArrayBuffer) {
+        return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
+    }
     const out = new Uint8Array(view.byteLength);
     out.set(view);
     return out.buffer;
@@ -368,7 +371,7 @@ export const decryptFileBytesClientSide = async (raw: Uint8Array, _token: string
     try {
         if (hasMagic(raw, FILE_MAGIC_V2)) {
             if (raw.length < FILE_MAGIC_V2.length + FILE_AES_GCM_IV_SIZE + ENC_TAG_SIZE) return raw;
-            const iv = raw.subarray(FILE_MAGIC_V2.length, FILE_MAGIC_V2.length + FILE_AES_GCM_IV_SIZE);
+            const iv = raw.slice(FILE_MAGIC_V2.length, FILE_MAGIC_V2.length + FILE_AES_GCM_IV_SIZE);
             const body = raw.subarray(FILE_MAGIC_V2.length + FILE_AES_GCM_IV_SIZE);
             const key = await deriveFileAesKey(chatId);
             const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, toArrayBuffer(body));
