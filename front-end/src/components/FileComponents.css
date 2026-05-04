@@ -261,7 +261,7 @@
 }
 
 .message-bubble--mine .file-name {
-    color: rgba(255, 255, 255, 0.95);
+    color: color-mix(in srgb, var(--message-mine-text) 96%, transparent);
 }
 
 .file-size {
@@ -270,7 +270,7 @@
 }
 
 .message-bubble--mine .file-size {
-    color: rgba(255, 255, 255, 0.7);
+    color: color-mix(in srgb, var(--message-mine-text) 74%, transparent);
 }
 
 .file-download-btn {
@@ -361,7 +361,7 @@
 }
 
 .message-bubble--mine .file-audio-card {
-    background: rgba(255, 255, 255, 0.15);
+    background: color-mix(in srgb, var(--message-mine-text) 16%, transparent);
 }
 
 .file-audio-title {
@@ -387,7 +387,7 @@
     height: 44px;
     border-radius: 10px;
     flex-shrink: 0;
-    background: linear-gradient(135deg, #2F80ED, #56CCF2);
+    background: linear-gradient(135deg, var(--accent-primary), color-mix(in srgb, var(--accent-primary) 60%, white));
     color: #fff;
     display: inline-flex;
     align-items: center;
@@ -402,11 +402,11 @@
 }
 
 .message-bubble--mine .file-audio-title {
-    color: rgba(255, 255, 255, 0.95);
+    color: color-mix(in srgb, var(--message-mine-text) 96%, transparent);
 }
 
 .message-bubble--mine .file-audio-artist {
-    color: rgba(255, 255, 255, 0.75);
+    color: color-mix(in srgb, var(--message-mine-text) 76%, transparent);
 }
 
 .file-audio-player {
@@ -486,7 +486,7 @@
 .image-media-viewer {
     position: fixed;
     inset: 0;
-    z-index: 1200;
+    z-index: 4000;
     background: rgba(0, 0, 0, 0.88);
 }
 
@@ -560,7 +560,7 @@
 .video-media-viewer {
     position: fixed;
     inset: 0;
-    z-index: 1250;
+    z-index: 4100;
     background: rgba(0, 0, 0, 0.93);
 }
 

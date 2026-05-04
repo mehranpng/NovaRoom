@@ -2052,7 +2052,7 @@ export function ChatRoom({
                 onToggleBlock={!isGroupChat ? onToggleBlockUser : undefined}
                 onBack={() => {
                     setShowContactInfo(false);
-                    if (onCloseForcedContactInfo) {
+                    if (forceContactInfoOpen && onCloseForcedContactInfo) {
                         onCloseForcedContactInfo(chatId);
                         return;
                     }

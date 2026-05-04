@@ -355,13 +355,13 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
                         <div className="file-audio-title">{displayAudioTitle}</div>
                         <div className="file-audio-artist">{audioSubtitle}</div>
                         {audioError && <div style={{ fontSize: 11, color: '#e55' }}>پخش ممکن نشد</div>}
-                        <div style={{ fontSize: 11, color: '#888' }}>
+                        <div style={{ fontSize: 11, color: 'inherit', opacity: 0.78 }}>
                             {isCurrentTrack ? `${formatDuration(musicPlayer.currentTime)} / ` : ''}{formatDuration(musicPlayer.duration || Number((file as any)?.duration || 0))}
                         </div>
                     </div>
                 </div>
             ) : (
-                <div className="file-attachment" onClick={() => { if (!downloadInProgress) void handleDownload(); }}>
+                <div className="file-attachment">
                     <div className="file-icon">{getFileIcon(file.mimeType)}</div>
                     <div className="file-info">
                         <div className="file-name">{file.fileName}</div>
