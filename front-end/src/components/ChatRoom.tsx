@@ -532,6 +532,10 @@ export function ChatRoom({
         setOpenedImage(null);
         setOpenedVideo(null);
         const params = new URLSearchParams(location.search);
+        if (params.has('media')) {
+            navigate(-1);
+            return;
+        }
         params.delete('media');
         const nextSearch = params.toString();
         navigate({ pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : '' }, { replace: true });
@@ -2741,10 +2745,11 @@ export function ChatRoom({
                                                             <span>{toPersianDigits(messageSeenCount)}</span>
                                                             <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden>
                                                                 <path
-                                                                    d="M1.5 12s3.8-6.5 10.5-6.5S22.5 12 22.5 12s-3.8 6.5-10.5 6.5S1.5 12 1.5 12Z"
+                                                                    fillRule="evenodd"
+                                                                    clipRule="evenodd"
+                                                                    d="M12 5.5C5.3 5.5 1.5 12 1.5 12s3.8 6.5 10.5 6.5S22.5 12 22.5 12 18.7 5.5 12 5.5Zm0 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"
                                                                     fill="currentColor"
                                                                 />
-                                                                <circle cx="12" cy="12" r="2.5" fill="none" stroke="var(--bg-primary)" strokeWidth="1.8" />
                                                             </svg>
                                                         </span>
                                                     )}

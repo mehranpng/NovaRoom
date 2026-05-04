@@ -1521,18 +1521,6 @@ export function App() {
     }, [isAuthenticated, location.pathname, navigate]);
 
     useEffect(() => {
-        if (!isAuthenticated) return;
-        if (!location.pathname.startsWith('/settings')) return;
-
-        const handleSettingsBack = () => {
-            navigate('/', { replace: true });
-        };
-
-        window.addEventListener('popstate', handleSettingsBack);
-        return () => window.removeEventListener('popstate', handleSettingsBack);
-    }, [isAuthenticated, location.pathname, navigate]);
-
-    useEffect(() => {
         if (!activeChatId || !currentUser) return;
         if (view !== 'chatRoom') return;
         if (activeChatId === `saved_messages_${currentUser.chatId}`) return;
@@ -2356,8 +2344,8 @@ export function App() {
                         <Settings
                             section={view === 'settingsDevices' ? 'devices' : view === 'settingsTheme' ? 'theme' : view === 'settingsLogs' ? 'logs' : 'menu'}
                             onBack={handleBack}
-                            onOpenSection={(section) => navigate(section === 'logs' ? '/settings/devices/logs' : `/settings/${section}`, { replace: true })}
-                            onBackToMenu={() => navigate('/settings', { replace: true })}
+                            onOpenSection={(section) => navigate(section === 'logs' ? '/settings/devices/logs' : `/settings/${section}`)}
+                            onBackToMenu={() => navigate('/settings')}
                             loginEvents={loginEvents}
                             hasUnseenLoginLogs={unseenLoginCount > 0}
                         />
