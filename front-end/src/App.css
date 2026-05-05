@@ -73,7 +73,7 @@ body,
     --accent-soft: #dbeafe;
     --accent-soft-text: #1e40af;
     --message-mine-text: #ffffff;
-    --message-link-color-mine: color-mix(in srgb, var(--accent-primary) 8%, var(--message-mine-text));
+    --message-link-color-mine: var(--message-mine-text);
     --message-link-color-theirs: color-mix(in srgb, var(--accent-primary) 10%, var(--message-theirs-text));
     --status-online-color: var(--accent-soft-text);
 
@@ -122,7 +122,7 @@ body,
     --accent-soft: rgba(96, 165, 250, 0.18);
     --accent-soft-text: #bfdbfe;
     --message-mine-text: #ffffff;
-    --message-link-color-mine: color-mix(in srgb, var(--accent-primary) 9%, var(--message-mine-text));
+    --message-link-color-mine: var(--message-mine-text);
     --message-link-color-theirs: color-mix(in srgb, var(--accent-primary) 11%, var(--message-theirs-text));
     --status-online-color: var(--accent-soft-text);
 }
@@ -1619,20 +1619,22 @@ body,
 }
 
 .message-text--markdown .md-link {
-    color: var(--message-link-color, inherit);
-    text-decoration: underline;
     word-break: break-all;
 }
 
-.message-text--markdown .md-link:any-link {
-    color: var(--message-link-color, inherit);
-}
-
-.message-text--markdown .md-link:hover,
-.message-text--markdown .md-link:active,
-.message-text--markdown .md-link:visited,
-.message-text--markdown .md-link:focus {
-    color: var(--message-link-color, inherit);
+.message-text .md-link,
+.message-text .md-link:any-link,
+.message-text .md-link:hover,
+.message-text .md-link:active,
+.message-text .md-link:visited,
+.message-text .md-link:focus {
+    color: var(--message-link-color, currentColor) !important;
+    text-decoration: underline;
+    text-decoration-color: currentColor;
+    word-break: break-all;
+    background: transparent;
+    outline: none;
+    box-shadow: none;
 }
 
 /* Dark mode overrides for markdown */
