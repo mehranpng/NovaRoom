@@ -133,6 +133,8 @@ OFFICIAL_CHANNEL_AVATAR = "/avatars/ch.png"
 
 def is_official_channel_chat(chat_id: str) -> bool:
     return str(chat_id or "").strip() == OFFICIAL_CHANNEL_CHAT_ID
+
+
 AI_PRO_DAILY_LIMIT = 10
 TEHRAN_TZ = timezone(timedelta(hours=3, minutes=30))
 WS_IDLE_TIMEOUT_SEC = 95
@@ -754,11 +756,13 @@ def _normalize_login_events(user_doc: dict) -> List[dict]:
                 "tokenHash": token_hash,
                 "deviceName": normalize_device_name(item.get("deviceName")),
                 "ipAddress": normalize_ip_address(item.get("ipAddress")),
-                "createdAt": created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc),
+                "createdAt": (
+                    created_at
+                    if created_at.tzinfo
+                    else created_at.replace(tzinfo=timezone.utc)
+                ),
                 "seenBy": [
-                    str(h).strip()
-                    for h in (item.get("seenBy") or [])
-                    if str(h).strip()
+                    str(h).strip() for h in (item.get("seenBy") or []) if str(h).strip()
                 ],
             }
         )
@@ -805,7 +809,13 @@ async def attach_session_to_user(
     login_events = _normalize_login_events(user)
     login_events.insert(
         0,
-        {"tokenHash": current_hash, "deviceName": normalize_device_name(device_name), "ipAddress": normalize_ip_address(ip_address), "createdAt": now, "seenBy": [current_hash]},
+        {
+            "tokenHash": current_hash,
+            "deviceName": normalize_device_name(device_name),
+            "ipAddress": normalize_ip_address(ip_address),
+            "createdAt": now,
+            "seenBy": [current_hash],
+        },
     )
     login_events = login_events[:MAX_LOGIN_EVENTS]
     await cl_users.update_one(
@@ -1006,7 +1016,9 @@ async def list_login_events(current_user: dict = Depends(get_current_user)):
                 "deviceName": normalize_device_name(e.get("deviceName")) or None,
                 "ipAddress": normalize_ip_address(e.get("ipAddress")) or None,
                 "createdAt": dt_to_epoch_ms(e.get("createdAt")),
-                "isCurrentDevice": bool(my_hash and str(e.get("tokenHash") or "") == my_hash),
+                "isCurrentDevice": bool(
+                    my_hash and str(e.get("tokenHash") or "") == my_hash
+                ),
                 "unseenForCurrent": unseen_for_current,
             }
         )
@@ -1252,7 +1264,9 @@ async def pin_chat(chat_id: str, current_user: dict = Depends(get_current_user))
         raise HTTPException(status_code=400, detail="Invalid chatId")
 
     # Ensure user can access chat (except saved messages)
-    if chat_id != get_saved_messages_id(user_id) and not is_official_channel_chat(chat_id):
+    if chat_id != get_saved_messages_id(user_id) and not is_official_channel_chat(
+        chat_id
+    ):
         chat = await cl_chats.find_one({"_id": chat_id}, {"participants": 1})
         if not chat:
             raise HTTPException(status_code=404, detail="Chat not found")
@@ -2242,9 +2256,15 @@ async def get_chat_members(
 ):
     my_id = current_user["chatId"]
     if is_official_channel_chat(chat_id):
-        sender_ids = await cl_messages.distinct("senderId", {"chatId": OFFICIAL_CHANNEL_CHAT_ID})
-        unique_sender_ids = [str(uid).strip() for uid in sender_ids if str(uid or "").strip()]
-        users = await cl_users.find({"chatId": {"$in": unique_sender_ids}}).to_list(len(unique_sender_ids) or 1)
+        sender_ids = await cl_messages.distinct(
+            "senderId", {"chatId": OFFICIAL_CHANNEL_CHAT_ID}
+        )
+        unique_sender_ids = [
+            str(uid).strip() for uid in sender_ids if str(uid or "").strip()
+        ]
+        users = await cl_users.find({"chatId": {"$in": unique_sender_ids}}).to_list(
+            len(unique_sender_ids) or 1
+        )
         users_by_id = {str(u.get("chatId", "")).strip(): u for u in users}
         result = []
         for uid in unique_sender_ids:
@@ -2258,7 +2278,9 @@ async def get_chat_members(
                     "name": profile.get("name") or profile.get("username") or uid,
                     "username": profile.get("username", ""),
                     "avatar": profile.get("avatar", ""),
-                    "bio": decrypt_user_bio(u, str(current_user.get("_session_token") or "")),
+                    "bio": decrypt_user_bio(
+                        u, str(current_user.get("_session_token") or "")
+                    ),
                     "verified": bool(u.get("verified", False)),
                     "online": resolve_user_online_state(u),
                 }
@@ -2949,7 +2971,9 @@ async def forward_message(
     is_target_saved = target_chat_id == get_saved_messages_id(user_id)
     is_target_official = is_official_channel_chat(target_chat_id)
     if is_target_official and not bool(current_user.get("verified", False)):
-        raise HTTPException(status_code=403, detail="Only verified users can send in official channel")
+        raise HTTPException(
+            status_code=403, detail="Only verified users can send in official channel"
+        )
     if not is_target_saved and not is_target_official:
         target_chat = await cl_chats.find_one({"_id": target_chat_id})
         if not target_chat:
@@ -3062,14 +3086,20 @@ async def forward_message(
                     "username": OFFICIAL_CHANNEL_CHAT_ID,
                 }
             else:
-                original_sender = await cl_users.find_one({"chatId": original_sender_id})
+                original_sender = await cl_users.find_one(
+                    {"chatId": original_sender_id}
+                )
                 forwarded_from_info = {
                     "originalSenderId": original_sender_id,
                     "name": (
-                        original_sender["profile"]["name"] if original_sender else "Unknown"
+                        original_sender["profile"]["name"]
+                        if original_sender
+                        else "Unknown"
                     ),
                     "username": (
-                        original_sender["profile"]["username"] if original_sender else ""
+                        original_sender["profile"]["username"]
+                        if original_sender
+                        else ""
                     ),
                 }
         source_chat_for_file = str(original_msg.get("chatId") or "")
@@ -3557,7 +3587,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 is_official = is_official_channel_chat(chat_id_target)
 
                 if is_official and not bool(user.get("verified", False)):
-                    await websocket.send_json({"type": "error", "error": "Only verified users can send in official channel"})
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "error": "Only verified users can send in official channel",
+                        }
+                    )
                     continue
 
                 if not is_saved and not is_official:
@@ -3868,7 +3903,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             {"chatId": chat_id_target, "seenBy": {"$ne": chat_id}},
                             {"$addToSet": {"seenBy": chat_id}},
                         )
-                        user_ids = await cl_users.distinct("chatId", {"chatId": {"$ne": chat_id}})
+                        user_ids = await cl_users.distinct(
+                            "chatId", {"chatId": {"$ne": chat_id}}
+                        )
                         if user_ids:
                             await broadcast(
                                 user_ids,
@@ -3910,7 +3947,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 # Ignore saved messages typing indicator.
                 saved_chat_id = get_saved_messages_id(chat_id)
-                if chat_id_target == saved_chat_id or is_official_channel_chat(chat_id_target):
+                if chat_id_target == saved_chat_id or is_official_channel_chat(
+                    chat_id_target
+                ):
                     continue
 
                 chat_doc = await cl_chats.find_one(
@@ -3942,7 +3981,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 # Ignore saved messages upload indicator.
                 saved_chat_id = get_saved_messages_id(chat_id)
-                if chat_id_target == saved_chat_id or is_official_channel_chat(chat_id_target):
+                if chat_id_target == saved_chat_id or is_official_channel_chat(
+                    chat_id_target
+                ):
                     continue
 
                 chat_doc = await cl_chats.find_one(
@@ -4128,7 +4169,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "code": "ai_daily_limit_reached",
                             "modelKey": model_key,
                             "remaining": quota.get("remaining", 0),
-                            "message": ("سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Flash استفاده کنید." if model_key == "nova-pro" else "سقف ۵۰ پیام روزانه Nova Flash شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Pro استفاده کنید."),
+                            "message": (
+                                "سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Flash استفاده کنید."
+                                if model_key == "nova-pro"
+                                else "سقف ۵۰ پیام روزانه Nova Flash شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Pro استفاده کنید."
+                            ),
                         },
                     )
                     continue
@@ -4331,6 +4376,7 @@ async def ensure_ai_chat(user_id: str, ai_chat_id: str) -> dict:
 
 AI_FLASH_DAILY_LIMIT = 50
 
+
 def tehran_day_key(now: Optional[datetime] = None) -> str:
     base = now or datetime.now(TEHRAN_TZ)
     return base.astimezone(TEHRAN_TZ).strftime("%Y-%m-%d")
@@ -4345,8 +4391,16 @@ async def get_usage_status(user_id: str) -> Dict[str, Any]:
     flash_used = max(0, min(AI_FLASH_DAILY_LIMIT, flash_used))
     return {
         "dateKey": day_key,
-        "pro": {"used": pro_used, "remaining": max(0, AI_PRO_DAILY_LIMIT - pro_used), "limit": AI_PRO_DAILY_LIMIT},
-        "flash": {"used": flash_used, "remaining": max(0, AI_FLASH_DAILY_LIMIT - flash_used), "limit": AI_FLASH_DAILY_LIMIT},
+        "pro": {
+            "used": pro_used,
+            "remaining": max(0, AI_PRO_DAILY_LIMIT - pro_used),
+            "limit": AI_PRO_DAILY_LIMIT,
+        },
+        "flash": {
+            "used": flash_used,
+            "remaining": max(0, AI_FLASH_DAILY_LIMIT - flash_used),
+            "limit": AI_FLASH_DAILY_LIMIT,
+        },
     }
 
 
@@ -4357,7 +4411,12 @@ async def consume_quota(user_id: str, model_key: str) -> Dict[str, Any]:
     limit = AI_PRO_DAILY_LIMIT if quota_key == "pro" else AI_FLASH_DAILY_LIMIT
     used = status[quota_key]["used"]
     if used >= limit:
-        return {**status[quota_key], "allowed": False, "modelKey": model_key, "dateKey": status["dateKey"]}
+        return {
+            **status[quota_key],
+            "allowed": False,
+            "modelKey": model_key,
+            "dateKey": status["dateKey"],
+        }
 
     day_key = status["dateKey"]
     await cl_ai_usage.update_one(
@@ -4370,7 +4429,12 @@ async def consume_quota(user_id: str, model_key: str) -> Dict[str, Any]:
         upsert=True,
     )
     next_status = await get_usage_status(user_id)
-    return {**next_status[quota_key], "allowed": True, "modelKey": model_key, "dateKey": day_key}
+    return {
+        **next_status[quota_key],
+        "allowed": True,
+        "modelKey": model_key,
+        "dateKey": day_key,
+    }
 
 
 @app.get("/ai/pro-usage-status")
@@ -4746,7 +4810,11 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "code": "ai_daily_limit_reached",
                             "modelKey": model_key,
                             "remaining": quota.get("remaining", 0),
-                            "message": ("سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Flash استفاده کنید." if model_key == "nova-pro" else "سقف ۵۰ پیام روزانه Nova Flash شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Pro استفاده کنید."),
+                            "message": (
+                                "سقف ۱۰ پیام روزانه Nova Pro شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Flash استفاده کنید."
+                                if model_key == "nova-pro"
+                                else "سقف ۵۰ پیام روزانه Nova Flash شما به پایان رسیده است. لطفاً تا ۰۰:۰۰ صبر کنید یا از Nova Pro استفاده کنید."
+                            ),
                         },
                     )
                     continue
