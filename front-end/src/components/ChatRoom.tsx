@@ -456,6 +456,7 @@ export function ChatRoom({
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
     const messageElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+    const unreadSeparatorRef = useRef<HTMLDivElement | null>(null);
     const [highlightId, setHighlightId] = useState<string | null>(null);
     const highlightTimeoutRef = useRef<number | null>(null);
     const highlightRafRef = useRef<number | null>(null);
@@ -519,6 +520,9 @@ export function ChatRoom({
         if (forceInfoRouteActiveRef.current) {
             forceInfoRouteActiveRef.current = false;
             setShowContactInfo(false);
+            setShowMembersList(false);
+            setViewingMemberId(null);
+            setOpenGroupEditorFromMembers(false);
         }
     }, [forceContactInfoOpen, chatId]);
 
@@ -680,7 +684,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                 if (displayUnreadCount > 0) {
                     const anchor = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
                     if (anchor) {
-                        scrollToMessageTop(anchor);
+                        scrollToUnreadAnchor(anchor);
                         return;
                     }
                 }
@@ -697,6 +701,16 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
             }
         };
     }, []);
+
+    useEffect(() => {
+        const hasAvatarRoute = new URLSearchParams(location.search).get('avatar') === '1';
+        if (hasAvatarRoute || !openedGroupAvatar) return;
+        setOpenedGroupAvatar(null);
+        if (openedGroupAvatarObjectUrlRef.current) {
+            URL.revokeObjectURL(openedGroupAvatarObjectUrlRef.current);
+            openedGroupAvatarObjectUrlRef.current = null;
+        }
+    }, [location.search, openedGroupAvatar]);
 
     const openGroupAvatarViewer = async () => {
         const rawAvatar = String(contact.avatar || '').trim();
@@ -731,6 +745,9 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                 fileId: extractFileIdFromAvatar(rawAvatar),
                 fileName: `${contact.name || 'group'}.jpg`,
             });
+            const params = new URLSearchParams(location.search);
+            params.set('avatar', '1');
+            navigate({ pathname: location.pathname, search: `?${params.toString()}` });
         } catch (error) {
             console.error(error);
             alert('نمایش تصویر گروه ممکن نبود');
@@ -785,8 +802,10 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         return true;
     };
 
-    const scrollToMessageTop = (messageId: string, topOffset = 84) => {
-        const el = messageElsRef.current.get(messageId);
+    const scrollToMessageTop = (messageId: string, topOffset = 84, preferUnreadSeparator = false) => {
+        const el = preferUnreadSeparator && unreadAnchorId === messageId && unreadSeparatorRef.current
+            ? unreadSeparatorRef.current
+            : messageElsRef.current.get(messageId);
         const container = messagesContainerRef.current;
         if (!el || !container) return;
         const cr = container.getBoundingClientRect();
@@ -796,6 +815,8 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         container.scrollTop = Math.max(0, container.scrollTop + delta - topOffset);
         isAtBottomRef.current = computeNearBottom();
     };
+
+    const scrollToUnreadAnchor = (messageId: string) => scrollToMessageTop(messageId, 12, true);
 
     const getUnseenIncomingMessages = () => messages.filter((m: any) => m.senderId !== currentUserId && m.seen === false);
 
@@ -829,7 +850,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                 autoJumpedToUnreadRef.current = true;
                 userScrolledAfterAutoJumpRef.current = false;
 
-                scrollToMessageTop(anchor);
+                scrollToUnreadAnchor(anchor);
 
                 if (!consumedInitialUnreadRef.current) {
                     consumedInitialUnreadRef.current = true;
@@ -1507,7 +1528,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
             if (displayUnreadCount > 0) {
                 const anchor = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
                 if (anchor) {
-                    scrollToMessageTop(anchor);
+                    scrollToUnreadAnchor(anchor);
                     return;
                 }
             }
@@ -2316,6 +2337,11 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                         token={token}
                         downloadFile={{ fileId: openedGroupAvatar.fileId, fileName: openedGroupAvatar.fileName }}
                         onClose={() => {
+                            const params = new URLSearchParams(location.search);
+                            if (params.has('avatar')) {
+                                navigate(-1);
+                                return;
+                            }
                             setOpenedGroupAvatar(null);
                             if (openedGroupAvatarObjectUrlRef.current) {
                                 URL.revokeObjectURL(openedGroupAvatarObjectUrlRef.current);
@@ -2536,7 +2562,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                         )}
 
                                         {showUnreadSeparator && (
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', justifyContent: 'center' }}>
+                                            <div ref={unreadSeparatorRef} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', justifyContent: 'center' }}>
                                                 <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
                                                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 999, padding: '6px 10px', fontFamily: 'Vazir, sans-serif' }}>
                                                     پیام‌های خوانده نشده{unreadCountForUi > 0 ? ` (${toPersianDigits(unreadCountForUi)})` : ''}
