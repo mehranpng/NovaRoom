@@ -35,6 +35,8 @@ DANGEROUS_EXTENSIONS = {
     ".msi",
 }
 FILE_MAGIC = b"NRF1"
+CLIENT_FILE_MAGIC_V1 = b"NCF1"
+CLIENT_FILE_MAGIC_V2 = b"NCF2"
 FILE_NONCE_SIZE = 16
 FILE_TAG_SIZE = 16
 
@@ -174,6 +176,11 @@ async def read_file_content(file_id: str) -> Optional[bytes]:
     # Legacy compatibility: old files were encrypted server-side with NRF1.
     if raw.startswith(FILE_MAGIC):
         return decrypt_file_bytes(raw)
+
+    # Client-side encryption (NCF1 legacy XOR+HMAC, NCF2 AES-GCM) must stay opaque on server.
+    if raw.startswith(CLIENT_FILE_MAGIC_V1) or raw.startswith(CLIENT_FILE_MAGIC_V2):
+        return raw
+
     return raw
 
 
