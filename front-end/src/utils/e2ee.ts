@@ -326,20 +326,20 @@ const importAesKey = async (keyBytes: Uint8Array): Promise<CryptoKey> => {
     const cacheKey = toBase64Url(keyBytes);
     const cached = aesKeyCache.get(cacheKey);
     if (cached) return cached;
-    const next = crypto.subtle.importKey('raw', toArrayBuffer(keyBytes), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+    const next = crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
     aesKeyCache.set(cacheKey, next);
     return next;
 };
 
 const aesGcmEncrypt = async (plain: Uint8Array, keyBytes: Uint8Array, nonce: Uint8Array): Promise<Uint8Array> => {
     const key = await importAesKey(keyBytes);
-    const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce, tagLength: 128 }, key, toArrayBuffer(plain));
+    const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce, tagLength: 128 }, key, plain);
     return new Uint8Array(cipher);
 };
 
 const aesGcmDecrypt = async (packed: Uint8Array, keyBytes: Uint8Array, nonce: Uint8Array): Promise<Uint8Array> => {
     const key = await importAesKey(keyBytes);
-    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce, tagLength: 128 }, key, toArrayBuffer(packed));
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce, tagLength: 128 }, key, packed);
     return new Uint8Array(plain);
 };
 const hasMagic = (raw: Uint8Array, magic: Uint8Array): boolean => {
