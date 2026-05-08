@@ -55,17 +55,10 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     const audioSubtitle = audioArtist;
     const rawCoverFileId = (file as any).coverArtFileId || (file as any)?.meta?.coverArtFileId || (file as any)?.metadata?.coverArtFileId;
     const rawCoverUrl = (file.coverArtUrl || (file as any).coverUrl || (file as any)?.meta?.coverArtUrl || (file as any)?.metadata?.coverArtUrl || '').trim();
-    const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
-        const copy = new Uint8Array(bytes.byteLength);
-        copy.set(bytes);
-        return copy.buffer;
-    };
-
     const decodeResponseBlob = async (response: Response, preferredType?: string): Promise<Blob> => {
         const encryptedBytes = new Uint8Array(await response.arrayBuffer());
         const plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, chatId);
-        const plainBuffer = toArrayBuffer(plainBytes);
-        return new Blob([plainBuffer], { type: preferredType || response.headers.get('content-type') || 'application/octet-stream' });
+        return new Blob([plainBytes], { type: preferredType || response.headers.get('content-type') || 'application/octet-stream' });
     };
 
     const fetchAndDecryptBlob = async (fileId: string, preferredType?: string): Promise<Blob> => {

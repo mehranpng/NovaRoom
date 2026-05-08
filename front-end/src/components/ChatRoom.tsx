@@ -2354,6 +2354,31 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         );
     }
 
+
+    const normalizeIncomingSharedFile = (input: File, explicitType?: string): File => {
+        const mimeType = (explicitType || input.type || '').trim();
+        const originalName = (input.name || '').trim();
+        const hasName = originalName.length > 0;
+
+        if (hasName && (!explicitType || explicitType === input.type)) return input;
+
+        const extFromType = mimeType.startsWith('image/') ? `.${mimeType.split('/')[1] || 'png'}`
+            : mimeType.startsWith('video/') ? `.${mimeType.split('/')[1] || 'mp4'}`
+            : mimeType.startsWith('audio/') ? `.${mimeType.split('/')[1] || 'mp3'}`
+            : '';
+        const safeExt = extFromType.replace(/[^a-zA-Z0-9.]/g, '') || '';
+        const fallbackBase = mimeType.startsWith('image/') ? 'pasted-image'
+            : mimeType.startsWith('video/') ? 'shared-video'
+            : mimeType.startsWith('audio/') ? 'shared-audio'
+            : 'shared-file';
+        const fileName = hasName ? originalName : `${fallbackBase}-${Date.now()}${safeExt}`;
+
+        return new File([input], fileName, {
+            type: mimeType || input.type || 'application/octet-stream',
+            lastModified: input.lastModified || Date.now(),
+        });
+    };
+
     const toastVariants: Variants = {
         hidden: { opacity: 0 },
         visible: { opacity: 1, transition: { duration: 0.22, ease: 'easeOut' } },
@@ -2387,7 +2412,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                 e.preventDefault();
                 setDragUploadActive(false);
                 const file = e.dataTransfer?.files?.[0];
-                if (file) externalFileUploadHandler(file);
+                if (file) externalFileUploadHandler(normalizeIncomingSharedFile(file));
             }}
             onPasteCapture={(e) => {
                 if (isContactBlocked || !externalFileUploadHandler) return;
@@ -2396,7 +2421,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                 const pastedFile = imageItem?.getAsFile();
                 if (pastedFile) {
                     e.preventDefault();
-                    externalFileUploadHandler(pastedFile);
+                    externalFileUploadHandler(normalizeIncomingSharedFile(pastedFile, imageItem?.type));
                 }
             }}
         >
@@ -3168,7 +3193,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                     const pastedFile = imageItem?.getAsFile();
                                     if (pastedFile && externalFileUploadHandler) {
                                         e.preventDefault();
-                                        externalFileUploadHandler(pastedFile);
+                                        externalFileUploadHandler(normalizeIncomingSharedFile(pastedFile, imageItem?.type));
                                     }
                                 }}
                                 rows={1}
