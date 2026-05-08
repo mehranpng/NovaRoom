@@ -1,4 +1,5 @@
 const ENC_PREFIX = 'enc:v1:';
+const ENC_PREFIX_V2 = 'enc:v2:';
 const ENC_NONCE_SIZE = 16;
 const ENC_TAG_SIZE = 16;
 const FILE_MAGIC = new Uint8Array([0x4e, 0x43, 0x46, 0x32]); // NCF2 (AES-GCM)
@@ -150,8 +151,15 @@ const sha256 = async (bytes: Uint8Array): Promise<Uint8Array> => {
     return sha256Fallback(bytes);
 };
 
+const derivedKeyCache = new Map<string, Promise<Uint8Array>>();
+const aesKeyCache = new Map<string, Promise<CryptoKey>>();
+
 const deriveKey = async (material: string): Promise<Uint8Array> => {
-    return sha256(toUtf8(material));
+    const cached = derivedKeyCache.get(material);
+    if (cached) return cached;
+    const next = sha256(toUtf8(material));
+    derivedKeyCache.set(material, next);
+    return next;
 };
 
 const xorStream = async (data: Uint8Array, key: Uint8Array, nonce: Uint8Array): Promise<Uint8Array> => {
@@ -213,21 +221,28 @@ export const encryptClientText = async (plain: string, token: string, scope: str
     try {
         const material = mode === 'shared' ? buildSharedMaterial(scope) : buildLegacyMaterial(token, scope);
         const key = await deriveKey(material);
+
+        if (typeof crypto !== 'undefined' && crypto.subtle) {
+            const nonce = randomBytes(AES_GCM_NONCE_SIZE);
+            const encrypted = await aesGcmEncrypt(toUtf8(text), key, nonce);
+            const full = new Uint8Array(nonce.length + encrypted.length);
+            full.set(nonce, 0);
+            full.set(encrypted, nonce.length);
+            return `${ENC_PREFIX_V2}${toBase64Url(full)}`;
+        }
+
         const nonce = randomBytes(ENC_NONCE_SIZE);
         const encrypted = await xorStream(toUtf8(text), key, nonce);
         const nonceAndEncrypted = new Uint8Array(nonce.length + encrypted.length);
         nonceAndEncrypted.set(nonce, 0);
         nonceAndEncrypted.set(encrypted, nonce.length);
-
         const tag = await hmacTag(key, nonceAndEncrypted);
         const full = new Uint8Array(nonce.length + encrypted.length + tag.length);
         full.set(nonce, 0);
         full.set(encrypted, nonce.length);
         full.set(tag, nonce.length + encrypted.length);
-
         return `${ENC_PREFIX}${toBase64Url(full)}`;
     } catch {
-        // Never block message/profile flows if browser crypto is unavailable.
         return text;
     }
 };
@@ -235,25 +250,30 @@ export const encryptClientText = async (plain: string, token: string, scope: str
 export const decryptClientText = async (cipher: string, token: string, scope: string): Promise<string> => {
     const value = String(cipher || '');
     if (!value) return '';
-    if (!value.startsWith(ENC_PREFIX)) return value;
 
     try {
+        if (value.startsWith(ENC_PREFIX_V2)) {
+            const raw = fromBase64Url(value.slice(ENC_PREFIX_V2.length));
+            if (raw.length < AES_GCM_NONCE_SIZE + ENC_TAG_SIZE) return '';
+            const nonce = raw.slice(0, AES_GCM_NONCE_SIZE);
+            const bodyAndTag = raw.slice(AES_GCM_NONCE_SIZE);
+            const material = buildSharedMaterial(scope);
+            const key = await deriveKey(material);
+            const plainBytes = await aesGcmDecrypt(bodyAndTag, key, nonce);
+            return textDecoder.decode(plainBytes);
+        }
+
+        if (!value.startsWith(ENC_PREFIX)) return value;
         const raw = fromBase64Url(value.slice(ENC_PREFIX.length));
         if (raw.length < ENC_NONCE_SIZE + ENC_TAG_SIZE) return '';
-
         const nonce = raw.slice(0, ENC_NONCE_SIZE);
         const body = raw.slice(ENC_NONCE_SIZE, raw.length - ENC_TAG_SIZE);
         const tag = raw.slice(raw.length - ENC_TAG_SIZE);
-
         const nonceAndBody = new Uint8Array(nonce.length + body.length);
         nonceAndBody.set(nonce, 0);
         nonceAndBody.set(body, nonce.length);
 
-        const candidateMaterials = [
-            buildSharedMaterial(scope),       // current (shared per chat/bio scope)
-            buildLegacyMaterial(token, scope), // previous broken rollout compatibility
-        ];
-
+        const candidateMaterials = [buildSharedMaterial(scope), buildLegacyMaterial(token, scope)];
         for (const material of candidateMaterials) {
             const key = await deriveKey(material);
             const expectedTag = await hmacTag(key, nonceAndBody);
@@ -303,7 +323,12 @@ export const decryptBioClientSide = async (bio: string, token: string, chatId: s
 const AES_GCM_NONCE_SIZE = 12;
 
 const importAesKey = async (keyBytes: Uint8Array): Promise<CryptoKey> => {
-    return crypto.subtle.importKey('raw', toArrayBuffer(keyBytes), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+    const cacheKey = toBase64Url(keyBytes);
+    const cached = aesKeyCache.get(cacheKey);
+    if (cached) return cached;
+    const next = crypto.subtle.importKey('raw', toArrayBuffer(keyBytes), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+    aesKeyCache.set(cacheKey, next);
+    return next;
 };
 
 const aesGcmEncrypt = async (plain: Uint8Array, keyBytes: Uint8Array, nonce: Uint8Array): Promise<Uint8Array> => {
