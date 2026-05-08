@@ -255,8 +255,8 @@ export const decryptClientText = async (cipher: string, token: string, scope: st
         if (value.startsWith(ENC_PREFIX_V2)) {
             const raw = fromBase64Url(value.slice(ENC_PREFIX_V2.length));
             if (raw.length < AES_GCM_NONCE_SIZE + ENC_TAG_SIZE) return '';
-            const nonce = raw.slice(0, AES_GCM_NONCE_SIZE);
-            const bodyAndTag = raw.slice(AES_GCM_NONCE_SIZE);
+            const nonce = raw.subarray(0, AES_GCM_NONCE_SIZE);
+            const bodyAndTag = raw.subarray(AES_GCM_NONCE_SIZE);
             const material = buildSharedMaterial(scope);
             const key = await deriveKey(material);
             const plainBytes = await aesGcmDecrypt(bodyAndTag, key, nonce);
@@ -266,9 +266,9 @@ export const decryptClientText = async (cipher: string, token: string, scope: st
         if (!value.startsWith(ENC_PREFIX)) return value;
         const raw = fromBase64Url(value.slice(ENC_PREFIX.length));
         if (raw.length < ENC_NONCE_SIZE + ENC_TAG_SIZE) return '';
-        const nonce = raw.slice(0, ENC_NONCE_SIZE);
-        const body = raw.slice(ENC_NONCE_SIZE, raw.length - ENC_TAG_SIZE);
-        const tag = raw.slice(raw.length - ENC_TAG_SIZE);
+        const nonce = raw.subarray(0, ENC_NONCE_SIZE);
+        const body = raw.subarray(ENC_NONCE_SIZE, raw.length - ENC_TAG_SIZE);
+        const tag = raw.subarray(raw.length - ENC_TAG_SIZE);
         const nonceAndBody = new Uint8Array(nonce.length + body.length);
         nonceAndBody.set(nonce, 0);
         nonceAndBody.set(body, nonce.length);
