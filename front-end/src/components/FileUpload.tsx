@@ -273,7 +273,8 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                             fileSize: file.size,
                             mimeType: file.type || response.file.mimeType,
                         };
-                        void saveBlobToCache(`chat:${chatId}:file:${result.fileId}`, file);
+                        const displayBlob = new Blob([plainBytes], { type: file.type || result.mimeType || 'application/octet-stream' });
+                        void saveBlobToCache(`chat:${chatId}:file:${result.fileId}`, displayBlob);
                         task.status = 'done';
                         task.uploadProgress = 100;
                         task.encryptionProgress = 100;
