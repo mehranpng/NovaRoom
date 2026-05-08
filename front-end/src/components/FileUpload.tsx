@@ -154,7 +154,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         return () => {
             onRegisterUploadFile(null);
         };
-    }, [onRegisterUploadFile]);
+    }, [onRegisterUploadFile, startUploadFromFile, chatId, token]);
 
     useEffect(() => {
         if (!pickerMenuOpen) return;
