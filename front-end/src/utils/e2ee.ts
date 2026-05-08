@@ -389,10 +389,10 @@ export const decryptFileBytesClientSide = async (raw: Uint8Array, _token: string
     let isAesV2 = false;
 
     if (hasMagic(raw, FILE_MAGIC)) {
-        packed = raw.slice(FILE_MAGIC.length);
+        packed = raw.subarray(FILE_MAGIC.length);
         isAesV2 = true;
     } else if (hasMagic(raw, FILE_MAGIC_LEGACY)) {
-        packed = raw.slice(FILE_MAGIC_LEGACY.length);
+        packed = raw.subarray(FILE_MAGIC_LEGACY.length);
     } else {
         try {
             const maybeText = textDecoder.decode(raw);
@@ -411,15 +411,15 @@ export const decryptFileBytesClientSide = async (raw: Uint8Array, _token: string
 
         if (isAesV2) {
             if (packed.length < AES_GCM_NONCE_SIZE + ENC_TAG_SIZE) return raw;
-            const nonce = packed.slice(0, AES_GCM_NONCE_SIZE);
-            const bodyAndTag = packed.slice(AES_GCM_NONCE_SIZE);
+            const nonce = packed.subarray(0, AES_GCM_NONCE_SIZE);
+            const bodyAndTag = packed.subarray(AES_GCM_NONCE_SIZE);
             return await aesGcmDecrypt(bodyAndTag, key, nonce);
         }
 
         if (packed.length < ENC_NONCE_SIZE + ENC_TAG_SIZE) return raw;
-        const nonce = packed.slice(0, ENC_NONCE_SIZE);
-        const body = packed.slice(ENC_NONCE_SIZE, packed.length - ENC_TAG_SIZE);
-        const tag = packed.slice(packed.length - ENC_TAG_SIZE);
+        const nonce = packed.subarray(0, ENC_NONCE_SIZE);
+        const body = packed.subarray(ENC_NONCE_SIZE, packed.length - ENC_TAG_SIZE);
+        const tag = packed.subarray(packed.length - ENC_TAG_SIZE);
         const nonceAndBody = new Uint8Array(nonce.length + body.length);
         nonceAndBody.set(nonce, 0);
         nonceAndBody.set(body, nonce.length);
@@ -469,10 +469,10 @@ export const decryptAvatarBytesClientSide = async (raw: Uint8Array, _token: stri
     let packed: Uint8Array | null = null;
     let isAesV2 = false;
     if (hasMagic(raw, AVATAR_MAGIC)) {
-        packed = raw.slice(AVATAR_MAGIC.length);
+        packed = raw.subarray(AVATAR_MAGIC.length);
         isAesV2 = true;
     } else if (hasMagic(raw, AVATAR_MAGIC_LEGACY)) {
-        packed = raw.slice(AVATAR_MAGIC_LEGACY.length);
+        packed = raw.subarray(AVATAR_MAGIC_LEGACY.length);
     } else {
         try {
             const maybeText = textDecoder.decode(raw);
@@ -489,15 +489,15 @@ export const decryptAvatarBytesClientSide = async (raw: Uint8Array, _token: stri
 
         if (isAesV2) {
             if (packed.length < AES_GCM_NONCE_SIZE + ENC_TAG_SIZE) return raw;
-            const nonce = packed.slice(0, AES_GCM_NONCE_SIZE);
-            const bodyAndTag = packed.slice(AES_GCM_NONCE_SIZE);
+            const nonce = packed.subarray(0, AES_GCM_NONCE_SIZE);
+            const bodyAndTag = packed.subarray(AES_GCM_NONCE_SIZE);
             return await aesGcmDecrypt(bodyAndTag, key, nonce);
         }
 
         if (packed.length < ENC_NONCE_SIZE + ENC_TAG_SIZE) return raw;
-        const nonce = packed.slice(0, ENC_NONCE_SIZE);
-        const body = packed.slice(ENC_NONCE_SIZE, packed.length - ENC_TAG_SIZE);
-        const tag = packed.slice(packed.length - ENC_TAG_SIZE);
+        const nonce = packed.subarray(0, ENC_NONCE_SIZE);
+        const body = packed.subarray(ENC_NONCE_SIZE, packed.length - ENC_TAG_SIZE);
+        const tag = packed.subarray(packed.length - ENC_TAG_SIZE);
         const nonceAndBody = new Uint8Array(nonce.length + body.length);
         nonceAndBody.set(nonce, 0);
         nonceAndBody.set(body, nonce.length);
