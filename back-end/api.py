@@ -79,8 +79,8 @@ else:
     SECRET_KEY = _raw_secret
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_DAYS = 180
-SESSION_INACTIVITY_EXPIRE_DAYS = 90
+ACCESS_TOKEN_EXPIRE_DAYS = 30
+SESSION_INACTIVITY_EXPIRE_DAYS = 10
 MAX_ACTIVE_SESSIONS = 20
 MAX_LOGIN_EVENTS = 20
 
@@ -2671,7 +2671,8 @@ async def upload_file(
             preview_content = await preview.read()
             if preview_content:
                 preview_meta = await save_uploaded_file(
-                    preview_content, preview.filename or f"preview-{file.filename or 'image'}.jpg"
+                    preview_content,
+                    preview.filename or f"preview-{file.filename or 'image'}.jpg",
                 )
                 file_metadata["previewFileId"] = preview_meta.get("fileId")
                 if preview_meta.get("fileId"):
