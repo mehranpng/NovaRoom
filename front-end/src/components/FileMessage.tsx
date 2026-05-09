@@ -86,7 +86,14 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     if (!isImage || !previewDirectUrl) return;
     let cancelled = false;
     const absolutePreviewUrl = previewDirectUrl.startsWith('http') ? previewDirectUrl : `${API_BASE_URL}${previewDirectUrl}`;
-    fetch(absolutePreviewUrl, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.blob()).then((blob) => {
+    getOrCacheBlob({
+      cacheKey: `chat:${chatId}:preview:${file.fileId}`,
+      loadBlob: async () => {
+        const res = await fetch(absolutePreviewUrl, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) throw new Error('preview load failed');
+        return await res.blob();
+      },
+    }).then((blob) => {
       if (cancelled) return;
       const nextUrl = URL.createObjectURL(blob);
       setPreviewUrl(nextUrl);
