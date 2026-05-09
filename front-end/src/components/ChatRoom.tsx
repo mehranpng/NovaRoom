@@ -655,7 +655,19 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         messages
             .filter((m) => {
                 const mt = (m.file?.mimeType || '').toLowerCase();
-                return Boolean(m.file && (mt.startsWith('image/') || mt.startsWith('video/')));
+                if (!m.file || (!mt.startsWith('image/') && !mt.startsWith('video/'))) return false;
+                // Don't block initial skeleton on self-sent media that can stay manual-download.
+                if (m.senderId === currentUserId) return false;
+                // Only wait for media that has fast visual source (preview) on open.
+                if (mt.startsWith('image/')) {
+                    const hasPreview = Boolean(
+                        (m.file as any).previewUrl
+                        || (m.file as any).thumbUrl
+                        || (m.file as any).imagePreviewUrl
+                    );
+                    return hasPreview;
+                }
+                return true;
             })
             .map((m) => m.id)
     );
