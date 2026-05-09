@@ -495,6 +495,7 @@ export function ChatRoom({
     const initialScrollDoneRef = useRef(false);
     const initialMediaPendingIdsRef = useRef<Set<string>>(new Set());
     const initialMediaFollowupDoneRef = useRef(false);
+    const initialMediaReadyTimeoutRef = useRef<number | null>(null);
     const unreadConsumedInSessionRef = useRef(false);
     const restoringFromInfoRef = useRef(false);
     const restoreTopAfterInfoRef = useRef<number | null>(null);
@@ -680,6 +681,10 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         initialMediaPendingIdsRef.current.delete(messageId);
         if (initialMediaPendingIdsRef.current.size === 0) {
             initialMediaFollowupDoneRef.current = true;
+            if (initialMediaReadyTimeoutRef.current != null) {
+                window.clearTimeout(initialMediaReadyTimeoutRef.current);
+                initialMediaReadyTimeoutRef.current = null;
+            }
             setChatContentReady(true);
             requestAnimationFrame(() => {
                 if (displayUnreadCount > 0) {
@@ -1424,11 +1429,22 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
 
     useEffect(() => {
         setChatContentReady(false);
+        if (initialMediaReadyTimeoutRef.current != null) {
+            window.clearTimeout(initialMediaReadyTimeoutRef.current);
+            initialMediaReadyTimeoutRef.current = null;
+        }
         let secondRaf = 0;
         const firstRaf = requestAnimationFrame(() => {
             secondRaf = requestAnimationFrame(() => {
                 if (initialMediaPendingIdsRef.current.size === 0) {
                     setChatContentReady(true);
+                } else {
+                    initialMediaReadyTimeoutRef.current = window.setTimeout(() => {
+                        initialMediaFollowupDoneRef.current = true;
+                        initialMediaPendingIdsRef.current.clear();
+                        setChatContentReady(true);
+                        initialMediaReadyTimeoutRef.current = null;
+                    }, 1400);
                 }
             });
         });
@@ -1479,6 +1495,10 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         return () => {
             cancelAnimationFrame(firstRaf);
             if (secondRaf) cancelAnimationFrame(secondRaf);
+            if (initialMediaReadyTimeoutRef.current != null) {
+                window.clearTimeout(initialMediaReadyTimeoutRef.current);
+                initialMediaReadyTimeoutRef.current = null;
+            }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId]);
