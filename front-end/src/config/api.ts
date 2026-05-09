@@ -4,8 +4,19 @@ export const API_BASE_URL = isDev
     ? import.meta.env.VITE_DEV_API_URL
     : import.meta.env.VITE_PROD_API_URL;
 
-// WebSocket URL (convert http/https to ws/wss)
-export const API_WS_URL = API_BASE_URL?.replace(/^http/, 'ws') || '';
+const toWebSocketBaseUrl = (url?: string) => {
+    if (!url) return '';
+
+    try {
+        const parsedUrl = new URL(url);
+        parsedUrl.protocol = parsedUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+        return parsedUrl.toString().replace(/\/$/, '');
+    } catch {
+        return url.replace(/^https:/i, 'wss:').replace(/^http:/i, 'ws:').replace(/\/$/, '');
+    }
+};
+
+export const API_WS_URL = toWebSocketBaseUrl(API_BASE_URL);
 
 export const getHeaders = (includeAuth = true) => {
     const headers: Record<string, string> = {

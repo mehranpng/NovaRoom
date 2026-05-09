@@ -1,6 +1,6 @@
 // useWebSocket.ts
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { API_BASE_URL } from '../config/api';
+import { API_WS_URL } from '../config/api';
 import type { FileMetadata } from '../types';
 import { decryptMessageClientSide, encryptChatTextClientSide } from '../utils/e2ee';
 
@@ -188,7 +188,7 @@ export function useWebSocket({
         clearReconnectTimer();
         setConnectionState('connecting');
 
-        const wsUrl = `${API_BASE_URL.replace('http', 'ws')}/ws?token=${encodeURIComponent(token)}`;
+        const wsUrl = `${API_WS_URL}/ws?token=${encodeURIComponent(token)}`;
         const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
