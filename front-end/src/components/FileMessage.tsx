@@ -15,6 +15,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewAspectRatio, setPreviewAspectRatio] = useState<number | null>(null);
   const [downloadState, setDownloadState] = useState<DownloadState>('idle');
+  const [downloadProgress, setDownloadProgress] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const musicPlayer = useMusicPlayer();
   const isImage = isImageFile(file.mimeType); const isAudio = (file.mimeType || '').startsWith('audio/'); const isVideo = (file.mimeType || '').startsWith('video/');
@@ -40,15 +41,22 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     if (downloadState === 'decrypting' || downloadState === 'downloading') return;
     abortRef.current = new AbortController();
     setDownloadState('downloading');
+    setDownloadProgress(6);
+    const progressTimer = window.setInterval(() => {
+      setDownloadProgress((prev) => Math.min(92, prev + 4));
+    }, 180);
     try {
       const res = await fetch(`${API_BASE_URL}/files/${file.fileId}`, { headers: { Authorization: `Bearer ${token}` }, signal: abortRef.current.signal });
       if (!res.ok) throw new Error('download failed');
+      window.clearInterval(progressTimer);
+      setDownloadProgress(100);
       setDownloadState('decrypting');
       const blob = await decodeResponseBlob(res);
       const cached = await getOrCacheBlob({ cacheKey, loadBlob: async () => blob });
       const object = URL.createObjectURL(cached);
       setMediaUrl(object); setDownloadState('done'); onMediaLoad?.();
     } catch {
+      window.clearInterval(progressTimer);
       if (abortRef.current?.signal.aborted) setDownloadState('idle'); else setDownloadState('error');
     }
   };
@@ -67,7 +75,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     if (!isImage || !previewDirectUrl) return;
     let cancelled = false;
     const absolutePreviewUrl = previewDirectUrl.startsWith('http') ? previewDirectUrl : `${API_BASE_URL}${previewDirectUrl}`;
-    fetch(absolutePreviewUrl).then(r => r.blob()).then((blob) => {
+    fetch(absolutePreviewUrl, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.blob()).then((blob) => {
       if (cancelled) return;
       const nextUrl = URL.createObjectURL(blob);
       setPreviewUrl(nextUrl);
@@ -81,7 +89,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
       onMediaLoad?.();
     }).catch(() => undefined);
     return () => { cancelled = true; };
-  }, [isImage, previewDirectUrl]);
+  }, [isImage, previewDirectUrl, token]);
 
   const actionIcon = downloadState === 'downloading' ? <X size={16} /> : downloadState === 'decrypting' ? <LockOpen size={16} /> : <Download size={16} />;
 
@@ -90,6 +98,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     setPreviewUrl(null);
     setPreviewAspectRatio(null);
     setDownloadState('idle');
+    setDownloadProgress(0);
   }, [file.fileId]);
 
   return <div className="file-message">
@@ -98,8 +107,8 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
         {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><div style={{ minHeight: 180, background: '#000' }} /><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
           (<>
             {isImage && previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)' }} /> : <div style={{ minHeight: 180, background: '#000' }} />}
-            <div className="manual-download-wrap">
-              <button type="button" className="manual-download-btn" onClick={downloadState === 'downloading' ? cancelDownload : startDownload} disabled={downloadState === 'decrypting'}>{actionIcon}</button>
+            <div className={`manual-download-wrap ${isImage ? 'manual-download-wrap--center' : ''}`}>
+              <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%` }} onClick={downloadState === 'downloading' ? cancelDownload : startDownload} disabled={downloadState === 'decrypting'}>{actionIcon}</button>
               <div className="manual-download-size">{formatFileSize(file.fileSize)}</div>
             </div>
           </>)}
