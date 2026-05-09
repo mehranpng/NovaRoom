@@ -37,6 +37,8 @@ export interface FileMetadata {
     artist?: string;
     coverArtUrl?: string;
     coverArtFileId?: string;
+    previewUrl?: string;
+    previewFileId?: string;
 }
 
 export interface Message {

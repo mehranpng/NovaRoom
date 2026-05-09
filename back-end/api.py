@@ -2635,6 +2635,7 @@ async def get_messages(
 @app.post("/files/upload")
 async def upload_file(
     file: UploadFile = FastAPIFile(...),
+    preview: Optional[UploadFile] = FastAPIFile(None),
     current_user: dict = Depends(get_current_user),
 ):
     file_content = await file.read()
@@ -2652,6 +2653,15 @@ async def upload_file(
             file_content, file.filename or "unnamed"
         )
         file_metadata["uploadedBy"] = current_user["chatId"]
+        if preview is not None:
+            preview_content = await preview.read()
+            if preview_content:
+                preview_meta = await save_uploaded_file(
+                    preview_content, preview.filename or f"preview-{file.filename or 'image'}.jpg"
+                )
+                file_metadata["previewFileId"] = preview_meta.get("fileId")
+                if preview_meta.get("fileId"):
+                    file_metadata["previewUrl"] = f"/files/{preview_meta.get('fileId')}"
 
         return {"success": True, "file": file_metadata}
     except ValueError as e:

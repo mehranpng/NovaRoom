@@ -14,12 +14,12 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [downloadState, setDownloadState] = useState<DownloadState>('idle');
-  const [progress, setProgress] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const musicPlayer = useMusicPlayer();
   const isImage = isImageFile(file.mimeType); const isAudio = (file.mimeType || '').startsWith('audio/'); const isVideo = (file.mimeType || '').startsWith('video/');
   const cacheKey = `chat:${chatId}:file:${file.fileId}`;
-  const previewDirectUrl = String((file as any).previewUrl || (file as any).thumbUrl || '').trim();
+  const previewDirectUrl = String((file as any).previewUrl || (file as any).thumbUrl || (file as any).imagePreviewUrl || '').trim();
+  const hasPreview = Boolean(previewDirectUrl);
 
   const decodeResponseBlob = async (response: Response): Promise<Blob> => {
     const encryptedBytes = new Uint8Array(await response.arrayBuffer());
@@ -38,13 +38,12 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   const startDownload = async () => {
     if (downloadState === 'decrypting' || downloadState === 'downloading') return;
     abortRef.current = new AbortController();
-    setDownloadState('downloading'); setProgress(0);
+    setDownloadState('downloading');
     try {
       const res = await fetch(`${API_BASE_URL}/files/${file.fileId}`, { headers: { Authorization: `Bearer ${token}` }, signal: abortRef.current.signal });
       if (!res.ok) throw new Error('download failed');
-      setProgress(20); setDownloadState('decrypting');
+      setDownloadState('decrypting');
       const blob = await decodeResponseBlob(res);
-      setProgress(100);
       const cached = await getOrCacheBlob({ cacheKey, loadBlob: async () => blob });
       const object = URL.createObjectURL(cached);
       setMediaUrl(object); setDownloadState('done'); onMediaLoad?.();
@@ -53,9 +52,15 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     }
   };
 
-  const cancelDownload = () => { abortRef.current?.abort(); setProgress(0); };
+  const cancelDownload = () => { abortRef.current?.abort(); };
 
-  useEffect(() => { void ensureObjectUrl(); }, [cacheKey]);
+  useEffect(() => {
+    void ensureObjectUrl().then((cached) => {
+      if (!cached && isImage && !hasPreview) {
+        void startDownload();
+      }
+    });
+  }, [cacheKey, isImage, hasPreview]);
 
   useEffect(() => {
     if (!isImage || !previewDirectUrl) return;
@@ -89,6 +94,6 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
       <div style={{ flex: 1 }}><div className="file-audio-title">{file.fileName}</div><div className="file-audio-artist">{formatFileSize(file.fileSize)}</div></div>
     </div>}
 
-    {!isImage && !isVideo && !isAudio && <div className="file-attachment"><div className="file-icon">{getFileIcon(file.mimeType)}</div><div className="file-info"><div className="file-name">{file.fileName}</div><div className="file-size">{formatFileSize(file.fileSize)}</div></div><button type="button" className="manual-download-btn" onClick={downloadState === 'downloading' ? cancelDownload : startDownload} disabled={downloadState === 'decrypting'}>{actionIcon}</button></div>}
+    {!isImage && !isVideo && !isAudio && <div className="file-attachment"><div className="file-icon">{getFileIcon(file.mimeType)}</div><div className="file-info"><div className="file-name">{file.fileName}</div><div className="file-size">{formatFileSize(file.fileSize)}</div></div></div>}
   </div>;
 }
