@@ -17,6 +17,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   const [downloadState, setDownloadState] = useState<DownloadState>('idle');
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [cacheResolved, setCacheResolved] = useState(false);
+  const [resolvedAudioDuration, setResolvedAudioDuration] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const musicPlayer = useMusicPlayer();
   const isImage = isImageFile(file.mimeType); const isAudio = (file.mimeType || '').startsWith('audio/'); const isVideo = (file.mimeType || '').startsWith('video/');
@@ -30,6 +31,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     return `${m}:${String(r).padStart(2, '0')}`;
   };
   const mediaDuration = Number((file as any).duration || (file as any)?.meta?.duration || (file as any)?.metadata?.duration || 0);
+  const audioTotalDuration = resolvedAudioDuration > 0 ? resolvedAudioDuration : mediaDuration;
 
   const decodeResponseBlob = async (response: Response): Promise<Blob> => {
     const encryptedBytes = new Uint8Array(await response.arrayBuffer());
@@ -109,6 +111,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     setDownloadState('idle');
     setDownloadProgress(0);
     setCacheResolved(false);
+    setResolvedAudioDuration(0);
   }, [file.fileId]);
 
   const effectiveAspectRatio = Math.max(0.62, previewAspectRatio || 0.75);
@@ -137,7 +140,18 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
         }
         musicPlayer.playTrack({ fileId: file.fileId, fileName: file.fileName, audioUrl: mediaUrl, mimeType: file.mimeType });
       }}>{mediaUrl ? (musicPlayer.isPlaying && musicPlayer.track?.fileId === file.fileId ? <Pause size={16} /> : <Play size={16} />) : actionIcon}</button>
-      <div style={{ flex: 1 }}><div className="file-audio-title">{file.fileName}</div><div className="file-audio-artist">{mediaUrl ? formatDuration(mediaDuration) : `${formatFileSize(file.fileSize)} • ${formatDuration(mediaDuration)}`}</div></div>
+      <div style={{ flex: 1 }}><div className="file-audio-title">{file.fileName}</div><div className="file-audio-artist">{mediaUrl ? formatDuration(audioTotalDuration) : `${formatFileSize(file.fileSize)} • ${formatDuration(audioTotalDuration)}`}</div></div>
+      {mediaUrl && (
+        <audio
+          src={mediaUrl}
+          preload="metadata"
+          style={{ display: 'none' }}
+          onLoadedMetadata={(e) => {
+            const d = Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0;
+            if (d > 0) setResolvedAudioDuration(d);
+          }}
+        />
+      )}
     </div>}
 
     {!isImage && !isVideo && !isAudio && <div className="file-attachment"><div className="file-icon">{getFileIcon(file.mimeType)}</div><div className="file-info"><div className="file-name">{file.fileName}</div><div className="file-size">{formatFileSize(file.fileSize)}</div></div></div>}
