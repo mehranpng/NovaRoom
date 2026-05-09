@@ -16,7 +16,6 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   const [previewAspectRatio, setPreviewAspectRatio] = useState<number | null>(null);
   const [downloadState, setDownloadState] = useState<DownloadState>('idle');
   const [downloadProgress, setDownloadProgress] = useState(0);
-  const [cacheResolved, setCacheResolved] = useState(false);
   const [resolvedAudioDuration, setResolvedAudioDuration] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const musicPlayer = useMusicPlayer();
@@ -36,7 +35,10 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   const decodeResponseBlob = async (response: Response): Promise<Blob> => {
     const encryptedBytes = new Uint8Array(await response.arrayBuffer());
     const plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, chatId);
-    return new Blob([plainBytes], { type: file.mimeType || response.headers.get('content-type') || 'application/octet-stream' });
+    const normalizedBytes = plainBytes.buffer instanceof ArrayBuffer
+      ? plainBytes
+      : new Uint8Array(plainBytes);
+    return new Blob([normalizedBytes], { type: file.mimeType || response.headers.get('content-type') || 'application/octet-stream' });
   };
 
   const ensureObjectUrl = async () => {
@@ -75,7 +77,6 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
 
   useEffect(() => {
     void ensureObjectUrl().then((cached) => {
-      setCacheResolved(true);
       if (!cached && isImage && !hasPreview) {
         void startDownload();
       }
@@ -117,7 +118,6 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     setPreviewAspectRatio(null);
     setDownloadState('idle');
     setDownloadProgress(0);
-    setCacheResolved(false);
     setResolvedAudioDuration(0);
   }, [file.fileId]);
 

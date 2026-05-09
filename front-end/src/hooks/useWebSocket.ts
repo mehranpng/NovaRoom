@@ -1,6 +1,6 @@
 // useWebSocket.ts
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { API_WS_URL } from '../config/api';
+import { API_BASE_URL, API_WS_URL } from '../config/api';
 import type { FileMetadata } from '../types';
 import { decryptMessageClientSide, encryptChatTextClientSide } from '../utils/e2ee';
 
