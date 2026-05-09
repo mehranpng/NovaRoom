@@ -314,6 +314,7 @@
 .file-image-preview {
     position: relative;
     max-width: 280px;
+    max-height: 440px;
     border-radius: 12px;
     overflow: hidden;
     cursor: pointer;
@@ -322,8 +323,7 @@
 .file-image-preview img {
     display: block;
     width: 100%;
-    height: auto;
-    max-height: 400px;
+    height: 100%;
     object-fit: cover;
 }
 

@@ -16,6 +16,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   const [previewAspectRatio, setPreviewAspectRatio] = useState<number | null>(null);
   const [downloadState, setDownloadState] = useState<DownloadState>('idle');
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [cacheResolved, setCacheResolved] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const musicPlayer = useMusicPlayer();
   const isImage = isImageFile(file.mimeType); const isAudio = (file.mimeType || '').startsWith('audio/'); const isVideo = (file.mimeType || '').startsWith('video/');
@@ -65,6 +66,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
 
   useEffect(() => {
     void ensureObjectUrl().then((cached) => {
+      setCacheResolved(true);
       if (!cached && isImage && !hasPreview) {
         void startDownload();
       }
@@ -99,17 +101,20 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     setPreviewAspectRatio(null);
     setDownloadState('idle');
     setDownloadProgress(0);
+    setCacheResolved(false);
   }, [file.fileId]);
+
+  const effectiveAspectRatio = Math.max(0.62, previewAspectRatio || 0.75);
 
   return <div className="file-message">
     {(isImage || isVideo) && (
-      <div className="file-image-preview" style={{ background: isVideo ? '#000' : undefined, width: isImage ? 280 : undefined, aspectRatio: isImage ? (previewAspectRatio || (mediaUrl ? undefined : 4 / 3)) : undefined }}>
+      <div className="file-image-preview" style={{ background: isVideo ? '#000' : undefined, width: isImage ? 280 : undefined, aspectRatio: isImage ? effectiveAspectRatio : undefined }} onClick={(e) => e.stopPropagation()}>
         {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><div style={{ minHeight: 180, background: '#000' }} /><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
           (<>
-            {isImage && previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)' }} /> : <div style={{ minHeight: 180, background: '#000' }} />}
+            {isImage && previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)' }} /> : !cacheResolved ? <div className="skeleton" style={{ width: '100%', height: '100%' }} /> : <div style={{ minHeight: 180, background: '#000' }} />}
             <div className={`manual-download-wrap ${isImage ? 'manual-download-wrap--center' : ''}`}>
-              <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%` }} onClick={downloadState === 'downloading' ? cancelDownload : startDownload} disabled={downloadState === 'decrypting'}>{actionIcon}</button>
-              <div className="manual-download-size">{formatFileSize(file.fileSize)}</div>
+              <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%` }} onClick={(e) => { e.stopPropagation(); if (downloadState === 'downloading') cancelDownload(); else startDownload(); }} disabled={downloadState === 'decrypting'}>{actionIcon}</button>
+              <div className="manual-download-size">{downloadState === 'decrypting' ? 'رمزگشایی' : formatFileSize(file.fileSize)}</div>
             </div>
           </>)}
       </div>
