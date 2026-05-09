@@ -680,6 +680,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         initialMediaPendingIdsRef.current.delete(messageId);
         if (initialMediaPendingIdsRef.current.size === 0) {
             initialMediaFollowupDoneRef.current = true;
+            setChatContentReady(true);
             requestAnimationFrame(() => {
                 if (displayUnreadCount > 0) {
                     const anchor = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
@@ -1348,6 +1349,9 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         if (!file?.fileId) return;
         try {
             await apiFetch(`/files/${encodeURIComponent(file.fileId)}`, { method: 'DELETE' });
+            if (file.previewFileId) {
+                await apiFetch(`/files/${encodeURIComponent(file.previewFileId)}`, { method: 'DELETE' });
+            }
         } catch {
             // ignore cleanup failures
         }
@@ -1422,7 +1426,11 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         setChatContentReady(false);
         let secondRaf = 0;
         const firstRaf = requestAnimationFrame(() => {
-            secondRaf = requestAnimationFrame(() => setChatContentReady(true));
+            secondRaf = requestAnimationFrame(() => {
+                if (initialMediaPendingIdsRef.current.size === 0) {
+                    setChatContentReady(true);
+                }
+            });
         });
         const mem = scrollMemoryRef.current[chatId];
         openedAtRef.current = Date.now();

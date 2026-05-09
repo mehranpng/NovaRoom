@@ -484,16 +484,26 @@ async function createBlurredPreview(file: File): Promise<Blob | null> {
     try {
         const bitmap = await createImageBitmap(file);
         const maxWidth = 480;
-        const ratio = Math.min(1, maxWidth / bitmap.width);
-        const width = Math.max(1, Math.round(bitmap.width * ratio));
-        const height = Math.max(1, Math.round(bitmap.height * ratio));
+        const minAspect = 0.62; // aligns with chat message height limit
+        const maxAspect = 1.8;
+        const srcAspect = bitmap.width / bitmap.height;
+        const targetAspect = Math.min(maxAspect, Math.max(minAspect, srcAspect));
+        let cropW = bitmap.width;
+        let cropH = bitmap.height;
+        if (srcAspect > targetAspect) cropW = Math.round(bitmap.height * targetAspect);
+        else if (srcAspect < targetAspect) cropH = Math.round(bitmap.width / targetAspect);
+        const cropX = Math.max(0, Math.floor((bitmap.width - cropW) / 2));
+        const cropY = Math.max(0, Math.floor((bitmap.height - cropH) / 2));
+        const ratio = Math.min(1, maxWidth / cropW);
+        const width = Math.max(1, Math.round(cropW * ratio));
+        const height = Math.max(1, Math.round(cropH * ratio));
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (!ctx) return null;
         ctx.filter = 'blur(8px)';
-        ctx.drawImage(bitmap, 0, 0, width, height);
+        ctx.drawImage(bitmap, cropX, cropY, cropW, cropH, 0, 0, width, height);
         return await new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.72));
     } catch {
         return null;

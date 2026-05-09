@@ -133,7 +133,8 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     )}
 
     {isAudio && <div className="file-audio-card">
-      <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%` }} onClick={() => {
+      <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%` }} onClick={(e) => {
+        e.stopPropagation();
         if (!mediaUrl) {
           if (downloadState === 'downloading') cancelDownload(); else startDownload();
           return;
