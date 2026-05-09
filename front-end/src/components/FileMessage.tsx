@@ -29,7 +29,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     const r = s % 60;
     return `${m}:${String(r).padStart(2, '0')}`;
   };
-  const mediaDuration = Number((file as any).duration || 0);
+  const mediaDuration = Number((file as any).duration || (file as any)?.meta?.duration || (file as any)?.metadata?.duration || 0);
 
   const decodeResponseBlob = async (response: Response): Promise<Blob> => {
     const encryptedBytes = new Uint8Array(await response.arrayBuffer());
@@ -120,18 +120,24 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
           (<>
             {isImage && previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)' }} /> : <div style={{ width: '100%', height: '100%', background: '#000' }} />}
             {isVideo && <button type="button" className="file-video-center-play" onClick={(e) => { e.stopPropagation(); startDownload(); }}><Play size={20} fill="currentColor" /></button>}
-            {isVideo && <span className="file-video-duration file-video-duration--top">{formatDuration(mediaDuration)}</span>}
+            {isVideo && <span className="file-video-duration file-video-duration--top">{formatDuration(mediaDuration || 0)}</span>}
             <div className={`manual-download-wrap ${isImage ? 'manual-download-wrap--center' : ''} ${isVideo ? 'manual-download-wrap--video' : ''}`}>
               <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%` }} onClick={(e) => { e.stopPropagation(); if (downloadState === 'downloading') cancelDownload(); else startDownload(); }} disabled={downloadState === 'decrypting'}>{actionIcon}</button>
-              <div className="manual-download-size manual-download-size-box">{isVideo ? formatFileSize(file.fileSize) : (downloadState === 'decrypting' ? 'رمزگشایی' : formatFileSize(file.fileSize))}</div>
+              <div className="manual-download-size manual-download-size-box">{isVideo ? (downloadState === 'decrypting' ? '...' : formatFileSize(file.fileSize)) : (downloadState === 'decrypting' ? 'رمزگشایی' : formatFileSize(file.fileSize))}</div>
             </div>
           </>)}
       </div>
     )}
 
     {isAudio && <div className="file-audio-card">
-      {mediaUrl ? <button onClick={() => musicPlayer.playTrack({ fileId: file.fileId, fileName: file.fileName, audioUrl: mediaUrl, mimeType: file.mimeType })} type="button" style={{ width: 40, height: 40, borderRadius: '50%' }}>{musicPlayer.isPlaying && musicPlayer.track?.fileId === file.fileId ? <Pause size={18} /> : <Play size={18} />}</button> : <button type="button" className="manual-download-btn" onClick={downloadState === 'downloading' ? cancelDownload : startDownload} disabled={downloadState === 'decrypting'}>{actionIcon}</button>}
-      <div style={{ flex: 1 }}><div className="file-audio-title">{file.fileName}</div><div className="file-audio-artist">{formatFileSize(file.fileSize)}</div></div>
+      <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%` }} onClick={() => {
+        if (!mediaUrl) {
+          if (downloadState === 'downloading') cancelDownload(); else startDownload();
+          return;
+        }
+        musicPlayer.playTrack({ fileId: file.fileId, fileName: file.fileName, audioUrl: mediaUrl, mimeType: file.mimeType });
+      }}>{mediaUrl ? (musicPlayer.isPlaying && musicPlayer.track?.fileId === file.fileId ? <Pause size={16} /> : <Play size={16} />) : actionIcon}</button>
+      <div style={{ flex: 1 }}><div className="file-audio-title">{file.fileName}</div><div className="file-audio-artist">{mediaUrl ? formatDuration(mediaDuration) : `${formatFileSize(file.fileSize)} • ${formatDuration(mediaDuration)}`}</div></div>
     </div>}
 
     {!isImage && !isVideo && !isAudio && <div className="file-attachment"><div className="file-icon">{getFileIcon(file.mimeType)}</div><div className="file-info"><div className="file-name">{file.fileName}</div><div className="file-size">{formatFileSize(file.fileSize)}</div></div></div>}
