@@ -768,3 +768,6 @@
     width: 100%;
     accent-color: #2f80ed;
 }
+.manual-download-wrap { position: absolute; top: 10px; right: 10px; display:flex; flex-direction:column; align-items:center; gap:6px; z-index:3; }
+.manual-download-btn { width:36px; height:36px; border-radius:50%; border:2px solid rgba(255,255,255,.9); background:rgba(0,0,0,.45); color:#fff; display:flex; align-items:center; justify-content:center; }
+.manual-download-size { font-size:11px; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.8); }

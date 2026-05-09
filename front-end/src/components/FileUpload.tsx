@@ -224,6 +224,10 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
 
         let encryptionPulse: number | null = null;
         try {
+            let imagePreviewBlob: Blob | null = null;
+            if ((file.type || '').startsWith('image/')) {
+                imagePreviewBlob = await createBlurredPreview(file);
+            }
             task.encryptionProgress = 10;
             pushTaskUpdate(task);
             encryptionPulse = window.setInterval(() => {
@@ -249,6 +253,9 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
 
             const formData = new FormData();
             formData.append('file', encryptedFile);
+            if (imagePreviewBlob) {
+                formData.append('preview', new window.File([imagePreviewBlob], `preview-${file.name}.jpg`, { type: 'image/jpeg' }));
+            }
 
             const xhr = new XMLHttpRequest();
             xhrRef.current = xhr;
@@ -451,4 +458,24 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             </div>
         </>
     );
+}
+
+async function createBlurredPreview(file: File): Promise<Blob | null> {
+    try {
+        const bitmap = await createImageBitmap(file);
+        const maxWidth = 480;
+        const ratio = Math.min(1, maxWidth / bitmap.width);
+        const width = Math.max(1, Math.round(bitmap.width * ratio));
+        const height = Math.max(1, Math.round(bitmap.height * ratio));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        ctx.filter = 'blur(8px)';
+        ctx.drawImage(bitmap, 0, 0, width, height);
+        return await new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.72));
+    } catch {
+        return null;
+    }
 }

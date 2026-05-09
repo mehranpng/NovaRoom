@@ -172,6 +172,8 @@ export const getOrCacheBlob = async ({ cacheKey, loadBlob }: GetOrCacheBlobParam
     return blob;
 };
 
+export const getCachedBlob = async (cacheKey: string): Promise<Blob | null> => readBlobFromCache(cacheKey);
+
 export const saveBlobToCache = async (cacheKey: string, blob: Blob): Promise<void> => saveBlobCache(cacheKey, blob);
 export const deleteCachedBlob = async (cacheKey: string): Promise<void> => deleteMediaCacheKey(cacheKey);
 
