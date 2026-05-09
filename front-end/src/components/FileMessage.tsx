@@ -13,6 +13,7 @@ type DownloadState = 'idle' | 'downloading' | 'decrypting' | 'done' | 'error';
 export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, onVideoClick }: FileMessageProps) {
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewAspectRatio, setPreviewAspectRatio] = useState<number | null>(null);
   const [downloadState, setDownloadState] = useState<DownloadState>('idle');
   const abortRef = useRef<AbortController | null>(null);
   const musicPlayer = useMusicPlayer();
@@ -65,9 +66,18 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   useEffect(() => {
     if (!isImage || !previewDirectUrl) return;
     let cancelled = false;
-    fetch(previewDirectUrl).then(r => r.blob()).then((blob) => {
+    const absolutePreviewUrl = previewDirectUrl.startsWith('http') ? previewDirectUrl : `${API_BASE_URL}${previewDirectUrl}`;
+    fetch(absolutePreviewUrl).then(r => r.blob()).then((blob) => {
       if (cancelled) return;
-      setPreviewUrl(URL.createObjectURL(blob));
+      const nextUrl = URL.createObjectURL(blob);
+      setPreviewUrl(nextUrl);
+      const img = new Image();
+      img.onload = () => {
+        if (!cancelled && img.naturalWidth > 0 && img.naturalHeight > 0) {
+          setPreviewAspectRatio(img.naturalWidth / img.naturalHeight);
+        }
+      };
+      img.src = nextUrl;
       onMediaLoad?.();
     }).catch(() => undefined);
     return () => { cancelled = true; };
@@ -75,9 +85,16 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
 
   const actionIcon = downloadState === 'downloading' ? <X size={16} /> : downloadState === 'decrypting' ? <LockOpen size={16} /> : <Download size={16} />;
 
+  useEffect(() => {
+    setMediaUrl(null);
+    setPreviewUrl(null);
+    setPreviewAspectRatio(null);
+    setDownloadState('idle');
+  }, [file.fileId]);
+
   return <div className="file-message">
     {(isImage || isVideo) && (
-      <div className="file-image-preview" style={{ background: isVideo ? '#000' : undefined }}>
+      <div className="file-image-preview" style={{ background: isVideo ? '#000' : undefined, width: isImage ? 280 : undefined, aspectRatio: isImage ? (previewAspectRatio || (mediaUrl ? undefined : 4 / 3)) : undefined }}>
         {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><div style={{ minHeight: 180, background: '#000' }} /><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
           (<>
             {isImage && previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)' }} /> : <div style={{ minHeight: 180, background: '#000' }} />}
