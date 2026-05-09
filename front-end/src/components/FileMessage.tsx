@@ -23,6 +23,13 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   const cacheKey = `chat:${chatId}:file:${file.fileId}`;
   const previewDirectUrl = String((file as any).previewUrl || (file as any).thumbUrl || (file as any).imagePreviewUrl || '').trim();
   const hasPreview = Boolean(previewDirectUrl);
+  const formatDuration = (seconds: number): string => {
+    const s = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return `${m}:${String(r).padStart(2, '0')}`;
+  };
+  const mediaDuration = Number((file as any).duration || 0);
 
   const decodeResponseBlob = async (response: Response): Promise<Blob> => {
     const encryptedBytes = new Uint8Array(await response.arrayBuffer());
@@ -108,13 +115,15 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
 
   return <div className="file-message">
     {(isImage || isVideo) && (
-      <div className="file-image-preview" style={{ background: isVideo ? '#000' : undefined, width: isImage ? 280 : undefined, aspectRatio: isImage ? effectiveAspectRatio : undefined }} onClick={(e) => e.stopPropagation()}>
-        {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><div style={{ minHeight: 180, background: '#000' }} /><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
+      <div className="file-image-preview" style={{ background: isVideo ? '#000' : undefined, width: isImage || isVideo ? 280 : undefined, aspectRatio: isImage ? effectiveAspectRatio : (isVideo ? 16 / 9 : undefined) }} onClick={(e) => e.stopPropagation()}>
+        {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><div style={{ width: '100%', height: '100%', background: '#000' }} /><span className="file-video-duration">{formatDuration(mediaDuration)}</span><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
           (<>
-            {isImage && previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)' }} /> : !cacheResolved ? <div className="skeleton" style={{ width: '100%', height: '100%' }} /> : <div style={{ minHeight: 180, background: '#000' }} />}
-            <div className={`manual-download-wrap ${isImage ? 'manual-download-wrap--center' : ''}`}>
+            {isImage && previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)' }} /> : <div style={{ width: '100%', height: '100%', background: '#000' }} />}
+            {isVideo && <button type="button" className="file-video-center-play" onClick={(e) => { e.stopPropagation(); startDownload(); }}><Play size={20} fill="currentColor" /></button>}
+            {isVideo && <span className="file-video-duration file-video-duration--top">{formatDuration(mediaDuration)}</span>}
+            <div className={`manual-download-wrap ${isImage ? 'manual-download-wrap--center' : ''} ${isVideo ? 'manual-download-wrap--video' : ''}`}>
               <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%` }} onClick={(e) => { e.stopPropagation(); if (downloadState === 'downloading') cancelDownload(); else startDownload(); }} disabled={downloadState === 'decrypting'}>{actionIcon}</button>
-              <div className="manual-download-size">{downloadState === 'decrypting' ? 'رمزگشایی' : formatFileSize(file.fileSize)}</div>
+              <div className="manual-download-size manual-download-size-box">{isVideo ? formatFileSize(file.fileSize) : (downloadState === 'decrypting' ? 'رمزگشایی' : formatFileSize(file.fileSize))}</div>
             </div>
           </>)}
       </div>
