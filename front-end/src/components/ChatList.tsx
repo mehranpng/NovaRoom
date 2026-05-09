@@ -183,7 +183,7 @@ function getFilePreviewLabel(file: any): string {
 
     if (mimeType.startsWith('image/') || fileType.includes('image') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'heic'].includes(ext)) return '🖼️ تصویر';
     if (mimeType.startsWith('video/') || fileType.includes('video') || ['mp4', 'mov', 'mkv', 'avi', 'webm', 'm4v'].includes(ext)) return '🎥 ویدیو';
-    if (mimeType.startsWith('audio/') || fileType.includes('audio') || fileType.includes('voice') || ['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac'].includes(ext)) return '🎵 صوت';
+    if (mimeType.startsWith('audio/') || fileType.includes('audio') || fileType.includes('voice') || ['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac'].includes(ext)) return '🎵 آهنگ';
     return '📎 فایل';
 }
 
@@ -264,14 +264,14 @@ function getLastMessagePreview(lastMessage: any, fallback: string): string {
     ).toLowerCase();
     if (messageType.includes('image')) return text ? `🖼️ تصویر • ${text}` : '🖼️ تصویر';
     if (messageType.includes('video')) return text ? `🎥 ویدیو • ${text}` : '🎥 ویدیو';
-    if (messageType.includes('audio') || messageType.includes('voice')) return text ? `🎵 صوت • ${text}` : '🎵 صوت';
+    if (messageType.includes('audio') || messageType.includes('voice')) return text ? `🎵 آهنگ • ${text}` : '🎵 آهنگ';
     if (messageType.includes('file') || messageType.includes('document') || messageType.includes('attachment')) return text ? `📎 فایل • ${text}` : '📎 فایل';
 
     const normalizedText = text.toLowerCase();
     if (['[file]', 'file', 'attachment'].includes(normalizedText)) return '📎 فایل';
     if (['[image]', 'image', 'photo'].includes(normalizedText)) return '🖼️ تصویر';
     if (['[video]', 'video'].includes(normalizedText)) return '🎥 ویدیو';
-    if (['[audio]', 'audio', 'voice'].includes(normalizedText)) return '🎵 صوت';
+    if (['[audio]', 'audio', 'voice'].includes(normalizedText)) return '🎵 آهنگ';
     return text || fallback;
 }
 

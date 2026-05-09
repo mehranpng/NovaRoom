@@ -952,7 +952,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         let prefix = '📎 فایل';
         if (fileMime.startsWith('image/')) prefix = '🖼️ تصویر';
         else if (fileMime.startsWith('video/')) prefix = '🎥 ویدیو';
-        else if (fileMime.startsWith('audio/')) prefix = '🎵 صوت';
+        else if (fileMime.startsWith('audio/')) prefix = '🎵 آهنگ';
 
         return fallbackText ? `${prefix} • ${fallbackText}` : prefix;
     };
@@ -967,7 +967,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         let prefix = '📎 فایل';
         if (fileMime.startsWith('image/')) prefix = '🖼️ تصویر';
         else if (fileMime.startsWith('video/')) prefix = '🎥 ویدیو';
-        else if (fileMime.startsWith('audio/')) prefix = '🎵 صوت';
+        else if (fileMime.startsWith('audio/')) prefix = '🎵 آهنگ';
 
         return fallbackText ? `${prefix} • ${fallbackText}` : prefix;
     };
