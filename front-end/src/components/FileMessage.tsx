@@ -123,14 +123,14 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
             {isVideo && <span className="file-video-duration file-video-duration--top">{formatDuration(mediaDuration || 0)}</span>}
             <div className={`manual-download-wrap ${isImage ? 'manual-download-wrap--center' : ''} ${isVideo ? 'manual-download-wrap--video' : ''}`}>
               <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%` }} onClick={(e) => { e.stopPropagation(); if (downloadState === 'downloading') cancelDownload(); else startDownload(); }} disabled={downloadState === 'decrypting'}>{actionIcon}</button>
-              <div className="manual-download-size manual-download-size-box">{isVideo ? (downloadState === 'decrypting' ? '...' : formatFileSize(file.fileSize)) : (downloadState === 'decrypting' ? 'رمزگشایی' : formatFileSize(file.fileSize))}</div>
+              <div className="manual-download-size manual-download-size-box">{isVideo ? (downloadState === 'decrypting' ? 'رمزگشایی' : formatFileSize(file.fileSize)) : (downloadState === 'decrypting' ? 'رمزگشایی' : formatFileSize(file.fileSize))}</div>
             </div>
           </>)}
       </div>
     )}
 
     {isAudio && <div className="file-audio-card">
-      <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%` }} onClick={() => {
+      <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%` }} onClick={() => {
         if (!mediaUrl) {
           if (downloadState === 'downloading') cancelDownload(); else startDownload();
           return;

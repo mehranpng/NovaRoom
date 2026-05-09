@@ -224,6 +224,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
 
         let encryptionPulse: number | null = null;
         try {
+            const mediaDuration = await readMediaDuration(file);
             let imagePreviewBlob: Blob | null = null;
             if ((file.type || '').startsWith('image/')) {
                 imagePreviewBlob = await createBlurredPreview(file);
@@ -253,6 +254,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
 
             const formData = new FormData();
             formData.append('file', encryptedFile);
+            if (mediaDuration > 0) formData.append('duration', String(mediaDuration));
             if (imagePreviewBlob) {
                 formData.append('preview', new window.File([imagePreviewBlob], `preview-${file.name}.jpg`, { type: 'image/jpeg' }));
             }
@@ -458,6 +460,24 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             </div>
         </>
     );
+}
+
+async function readMediaDuration(file: File): Promise<number> {
+    if (!(file.type.startsWith('audio/') || file.type.startsWith('video/'))) return 0;
+    try {
+        const objectUrl = URL.createObjectURL(file);
+        const duration = await new Promise<number>((resolve) => {
+            const media = document.createElement(file.type.startsWith('audio/') ? 'audio' : 'video');
+            media.preload = 'metadata';
+            media.onloadedmetadata = () => resolve(Number.isFinite(media.duration) ? media.duration : 0);
+            media.onerror = () => resolve(0);
+            media.src = objectUrl;
+        });
+        URL.revokeObjectURL(objectUrl);
+        return duration;
+    } catch {
+        return 0;
+    }
 }
 
 async function createBlurredPreview(file: File): Promise<Blob | null> {

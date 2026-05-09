@@ -3,6 +3,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
     Depends,
+    Form,
     HTTPException,
     Query,
     Request,
@@ -2646,6 +2647,7 @@ async def get_messages(
 async def upload_file(
     file: UploadFile = FastAPIFile(...),
     preview: Optional[UploadFile] = FastAPIFile(None),
+    duration: Optional[float] = Form(None),
     current_user: dict = Depends(get_current_user),
 ):
     file_content = await file.read()
@@ -2663,6 +2665,8 @@ async def upload_file(
             file_content, file.filename or "unnamed"
         )
         file_metadata["uploadedBy"] = current_user["chatId"]
+        if duration is not None and duration > 0:
+            file_metadata["duration"] = float(duration)
         if preview is not None:
             preview_content = await preview.read()
             if preview_content:
