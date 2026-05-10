@@ -15,6 +15,7 @@ type DownloadTask = {
   state: DownloadState;
   progress: number;
   promise: Promise<void> | null;
+  blob?: Blob | null;
 };
 const fileDownloadTasks = new Map<string, DownloadTask>();
 
@@ -64,7 +65,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     const notify = (task: DownloadTask) => task.subscribers.forEach((fn) => fn(task.state, task.progress));
     let task = fileDownloadTasks.get(taskKey);
     if (!task) {
-      task = { subscribers: new Set(), state: 'idle', progress: 0, promise: null };
+      task = { subscribers: new Set(), state: 'idle', progress: 0, promise: null, blob: null };
       fileDownloadTasks.set(taskKey, task);
     }
     task.subscribers.add(subscriber);
@@ -81,6 +82,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
           window.clearInterval(progressTimer);
           task!.progress = 100; task!.state = 'decrypting'; notify(task!);
           const blob = await decodeResponseBlob(res);
+          task!.blob = blob;
           await getOrCacheBlob({ cacheKey, loadBlob: async () => blob });
           task!.state = 'done'; notify(task!);
         } catch {
@@ -92,9 +94,9 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
       })();
     }
     await task.promise;
-    const cached = await getCachedBlob(cacheKey);
-    if (cached) {
-      const object = URL.createObjectURL(cached);
+    const finalBlob = task.blob || await getCachedBlob(cacheKey);
+    if (finalBlob) {
+      const object = URL.createObjectURL(finalBlob);
       setMediaUrl(object); setDownloadState('done'); onMediaLoad?.();
       if (pendingOpenAfterDownloadRef.current && isImage) {
         pendingOpenAfterDownloadRef.current = false;

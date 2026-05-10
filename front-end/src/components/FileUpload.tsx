@@ -233,12 +233,12 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                 imagePreviewBlob = await createBlurredPreview(file);
             }
             task.phase = 'upload';
-            task.uploadProgress = Math.max(task.uploadProgress, 4);
+            task.uploadProgress = Math.max(task.uploadProgress, 0);
             pushTaskUpdate(task);
             uploadWarmupTimer = window.setInterval(() => {
-                task.uploadProgress = Math.min(14, task.uploadProgress + 1);
+                task.uploadProgress = Math.min(8, task.uploadProgress + 1);
                 pushTaskUpdate(task);
-            }, 160);
+            }, 210);
             const plainBytes = new Uint8Array(await file.arrayBuffer());
             const encryptedBytes = await encryptFileBytesClientSide(plainBytes, token, chatId);
             if (encryptCancelRef.current) {
