@@ -25,6 +25,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   const [downloadState, setDownloadState] = useState<DownloadState>('idle');
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [resolvedAudioDuration, setResolvedAudioDuration] = useState(0);
+  const pendingOpenAfterDownloadRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const musicPlayer = useMusicPlayer();
   const isImage = isImageFile(file.mimeType); const isAudio = (file.mimeType || '').startsWith('audio/'); const isVideo = (file.mimeType || '').startsWith('video/');
@@ -55,8 +56,9 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     return true;
   };
 
-  const startDownload = async () => {
+  const startDownload = async (openAfterDownload = false) => {
     if (downloadState === 'decrypting' || downloadState === 'downloading') return;
+    if (openAfterDownload && isImage) pendingOpenAfterDownloadRef.current = true;
     const taskKey = `${chatId}:${file.fileId}`;
     const subscriber: DownloadSubscriber = (state, progress) => { setDownloadState(state); setDownloadProgress(progress); };
     const notify = (task: DownloadTask) => task.subscribers.forEach((fn) => fn(task.state, task.progress));
@@ -94,6 +96,10 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     if (cached) {
       const object = URL.createObjectURL(cached);
       setMediaUrl(object); setDownloadState('done'); onMediaLoad?.();
+      if (pendingOpenAfterDownloadRef.current && isImage) {
+        pendingOpenAfterDownloadRef.current = false;
+        onImageClick?.(object, file);
+      }
     }
   };
 
@@ -143,14 +149,18 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     setResolvedAudioDuration(0);
   }, [file.fileId]);
 
-  const effectiveAspectRatio = Math.max(0.62, previewAspectRatio || 0.75);
+  const metadataWidth = Number((file as any)?.meta?.width || (file as any)?.metadata?.width || (file as any)?.width || 0);
+  const metadataHeight = Number((file as any)?.meta?.height || (file as any)?.metadata?.height || (file as any)?.height || 0);
+  const metadataAspectRatio = metadataWidth > 0 && metadataHeight > 0 ? (metadataWidth / metadataHeight) : null;
+  const effectiveAspectRatio = Math.max(0.35, Math.min(2.4, previewAspectRatio || metadataAspectRatio || 0.75));
+  const shouldContain = effectiveAspectRatio < 0.5 || effectiveAspectRatio > 2.05;
 
   return <div className="file-message">
     {(isImage || isVideo) && (
-      <div className="file-image-preview" style={{ background: '#000', width: isImage || isVideo ? 280 : undefined, aspectRatio: isImage ? effectiveAspectRatio : (isVideo ? 16 / 9 : undefined) }} onClick={(e) => { e.stopPropagation(); if (!mediaUrl && downloadState !== 'decrypting' && downloadState !== 'downloading') void startDownload(); }}>
-        {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><div style={{ width: '100%', height: '100%', background: '#000' }} /><span className="file-video-duration">{formatDuration(mediaDuration)}</span><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
+      <div className="file-image-preview" style={{ background: '#000', width: isImage || isVideo ? 280 : undefined, aspectRatio: isImage ? effectiveAspectRatio : (isVideo ? 16 / 9 : undefined) }} onClick={(e) => { e.stopPropagation(); if (!mediaUrl && downloadState !== 'decrypting' && downloadState !== 'downloading') void startDownload(isImage); }}>
+        {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} style={{ objectFit: shouldContain ? 'contain' : 'cover' }} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><div style={{ width: '100%', height: '100%', background: '#000' }} /><span className="file-video-duration">{formatDuration(mediaDuration)}</span><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
           (<>
-            {isImage && previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)' }} /> : <div style={{ width: '100%', height: '100%', background: '#000' }} />}
+            {isImage && previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)', objectFit: shouldContain ? 'contain' : 'cover' }} /> : <div style={{ width: '100%', height: '100%', background: '#000' }} />}
             {isVideo && <button type="button" className="file-video-center-play" onClick={(e) => { e.stopPropagation(); startDownload(); }}><Play size={20} fill="currentColor" /></button>}
             {isVideo && <span className="file-video-duration file-video-duration--top">{formatDuration(mediaDuration || 0)}</span>}
             <div className={`manual-download-wrap ${isImage ? 'manual-download-wrap--center' : ''} ${isVideo ? 'manual-download-wrap--video' : ''}`}>

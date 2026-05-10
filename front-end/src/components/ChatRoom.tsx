@@ -413,10 +413,11 @@ export function ChatRoom({
 
     const [text, setText] = useState('');
     const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
-    const [uploadComposerState, setUploadComposerState] = useState<{ isUploading: boolean; progress: number; fileName: string | null }>({
+    const [uploadComposerState, setUploadComposerState] = useState<{ isUploading: boolean; progress: number; fileName: string | null; phase: 'preview' | 'upload' | 'encrypt' }>({
         isUploading: false,
         progress: 0,
         fileName: null,
+        phase: 'upload',
     });
     const uploadCancelRef = useRef<(() => void) | null>(null);
     const [chatMenuOpen, setChatMenuOpen] = useState(false);
@@ -3084,7 +3085,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                 {uploadComposerState.isUploading && (
                     <div className="chat-room__upload-progress-box">
                         <div
-                            className="chat-room__upload-progress-track"
+                            className={`chat-room__upload-progress-track ${uploadComposerState.phase === 'preview' || uploadComposerState.phase === 'encrypt' ? 'chat-room__upload-progress-track--indeterminate' : ''}`}
                             role="progressbar"
                             aria-label={`Uploading ${uploadComposerState.progress}%`}
                             aria-valuemin={0}
@@ -3092,7 +3093,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                             aria-valuenow={uploadComposerState.progress}
                         >
                             <div
-                                className="chat-room__upload-progress-fill"
+                                className={`chat-room__upload-progress-fill ${uploadComposerState.phase === 'preview' || uploadComposerState.phase === 'encrypt' ? 'chat-room__upload-progress-fill--indeterminate' : ''}`}
                                 style={{ width: `${uploadComposerState.progress}%` }}
                             />
                         </div>
@@ -3175,8 +3176,8 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                 chatId={chatId}
                                 onFileUploaded={handleFileUploaded}
                                 fileAttached={Boolean(uploadedFile)}
-                                onUploadStateChange={({ isUploading, progress, fileName, cancelUpload }) => {
-                                    setUploadComposerState({ isUploading, progress, fileName });
+                                onUploadStateChange={({ isUploading, progress, fileName, cancelUpload, phase }) => {
+                                    setUploadComposerState({ isUploading, progress, fileName, phase: phase || 'upload' });
                                     uploadCancelRef.current = cancelUpload ?? null;
                                 }}
                                 onRegisterUploadFile={(handler) => {

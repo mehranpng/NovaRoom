@@ -13,7 +13,7 @@ interface FileUploadProps {
     onFileUploaded: (file: FileMetadata) => void;
     fileAttached?: boolean;
     onRegisterUploadFile?: (handler: ((file: File) => void) | null) => void;
-    onUploadStateChange?: (payload: { isUploading: boolean; progress: number; fileName: string | null; cancelUpload?: () => void }) => void;
+    onUploadStateChange?: (payload: { isUploading: boolean; progress: number; fileName: string | null; cancelUpload?: () => void; phase?: 'preview' | 'upload' | 'encrypt' }) => void;
 }
 
 type UploadTask = {
@@ -24,6 +24,7 @@ type UploadTask = {
     result?: FileMetadata;
     delivered?: boolean;
     listeners: Set<(task: UploadTask) => void>;
+    phase?: 'preview' | 'upload' | 'encrypt';
 };
 
 const uploadTasksByChat = new Map<string, UploadTask>();
@@ -82,14 +83,14 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             progress: getCombinedProgress(task),
             fileName: task.fileName,
             cancelUpload: cancelUpload,
+            phase: task.phase || 'upload',
         });
     };
 
     const getCombinedProgress = (task: Pick<UploadTask, 'status' | 'uploadProgress' | 'encryptionProgress'>) => {
         if (task.status === 'done') return 100;
         const safeUpload = Math.max(0, Math.min(100, task.uploadProgress || 0));
-        const safeEncryption = Math.max(0, Math.min(100, task.encryptionProgress || 0));
-        return Math.round((safeEncryption * 0.5) + (safeUpload * 0.5));
+        return safeUpload;
     };
 
     useEffect(() => {
@@ -106,6 +107,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                 progress: getCombinedProgress(task),
                 fileName: task.fileName,
                 cancelUpload,
+                phase: task.phase || 'upload',
             });
             if (task.status === 'done' && task.result && !task.delivered) {
                 task.delivered = true;
@@ -219,6 +221,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             uploadProgress: 0,
             encryptionProgress: 0,
             listeners: new Set(),
+            phase: (file.type || '').startsWith('image/') ? 'preview' : 'encrypt',
         };
         uploadTasksByChat.set(chatId, task);
 
@@ -229,6 +232,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             if ((file.type || '').startsWith('image/')) {
                 imagePreviewBlob = await createBlurredPreview(file);
             }
+            task.phase = 'encrypt';
             task.encryptionProgress = 10;
             pushTaskUpdate(task);
             encryptionPulse = window.setInterval(() => {
@@ -261,6 +265,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
 
             const xhr = new XMLHttpRequest();
             xhrRef.current = xhr;
+            task.phase = 'upload';
 
             // Track upload progress
             xhr.upload.addEventListener('progress', (e) => {
@@ -286,6 +291,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                         task.status = 'done';
                         task.uploadProgress = 100;
                         task.encryptionProgress = 100;
+                        task.phase = 'encrypt';
                         task.result = result;
                         pushTaskUpdate(task);
                     } else {
