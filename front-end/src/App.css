@@ -1954,17 +1954,17 @@ body,
 }
 
 .chat-room__upload-progress-track--indeterminate .chat-room__upload-progress-fill {
-    width: 34% !important;
+    width: 24% !important;
     background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
     inset-inline-start: auto;
     inset-inline-end: 0;
     transform-origin: right center;
-    animation: chat-upload-indeterminate 1.05s linear infinite;
+    animation: chat-upload-indeterminate 1.25s linear infinite;
 }
 
 @keyframes chat-upload-indeterminate {
-    0% { transform: translateX(0%); }
-    100% { transform: translateX(-300%); }
+    0% { transform: translateX(100%); }
+    100% { transform: translateX(-420%); }
 }
 
 .chat-room__upload-progress-cancel {
