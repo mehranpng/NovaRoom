@@ -9,6 +9,14 @@ import { getCachedBlob, getOrCacheBlob } from '../utils/mediaCache';
 
 interface FileMessageProps { file: FileMetadata; token: string; chatId: string; onMediaLoad?: () => void; onImageClick?: (imageUrl: string, file: FileMetadata) => void; onVideoClick?: (videoUrl: string, file: FileMetadata) => void; }
 type DownloadState = 'idle' | 'downloading' | 'decrypting' | 'done' | 'error';
+type DownloadSubscriber = (state: DownloadState, progress: number) => void;
+type DownloadTask = {
+  subscribers: Set<DownloadSubscriber>;
+  state: DownloadState;
+  progress: number;
+  promise: Promise<void> | null;
+};
+const fileDownloadTasks = new Map<string, DownloadTask>();
 
 export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, onVideoClick }: FileMessageProps) {
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
@@ -49,25 +57,43 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
 
   const startDownload = async () => {
     if (downloadState === 'decrypting' || downloadState === 'downloading') return;
-    abortRef.current = new AbortController();
-    setDownloadState('downloading');
-    setDownloadProgress(6);
-    const progressTimer = window.setInterval(() => {
-      setDownloadProgress((prev) => Math.min(92, prev + 4));
-    }, 180);
-    try {
-      const res = await fetch(`${API_BASE_URL}/files/${file.fileId}`, { headers: { Authorization: `Bearer ${token}` }, signal: abortRef.current.signal });
-      if (!res.ok) throw new Error('download failed');
-      window.clearInterval(progressTimer);
-      setDownloadProgress(100);
-      setDownloadState('decrypting');
-      const blob = await decodeResponseBlob(res);
-      const cached = await getOrCacheBlob({ cacheKey, loadBlob: async () => blob });
+    const taskKey = `${chatId}:${file.fileId}`;
+    const subscriber: DownloadSubscriber = (state, progress) => { setDownloadState(state); setDownloadProgress(progress); };
+    const notify = (task: DownloadTask) => task.subscribers.forEach((fn) => fn(task.state, task.progress));
+    let task = fileDownloadTasks.get(taskKey);
+    if (!task) {
+      task = { subscribers: new Set(), state: 'idle', progress: 0, promise: null };
+      fileDownloadTasks.set(taskKey, task);
+    }
+    task.subscribers.add(subscriber);
+    if (!task.promise) {
+      abortRef.current = new AbortController();
+      task.state = 'downloading'; task.progress = 6; notify(task);
+      task.promise = (async () => {
+        const progressTimer = window.setInterval(() => {
+          task!.progress = Math.min(92, task!.progress + 4); notify(task!);
+        }, 180);
+        try {
+          const res = await fetch(`${API_BASE_URL}/files/${file.fileId}`, { headers: { Authorization: `Bearer ${token}` }, signal: abortRef.current?.signal });
+          if (!res.ok) throw new Error('download failed');
+          window.clearInterval(progressTimer);
+          task!.progress = 100; task!.state = 'decrypting'; notify(task!);
+          const blob = await decodeResponseBlob(res);
+          await getOrCacheBlob({ cacheKey, loadBlob: async () => blob });
+          task!.state = 'done'; notify(task!);
+        } catch {
+          window.clearInterval(progressTimer);
+          task!.state = abortRef.current?.signal.aborted ? 'idle' : 'error'; notify(task!);
+        } finally {
+          task!.promise = null;
+        }
+      })();
+    }
+    await task.promise;
+    const cached = await getCachedBlob(cacheKey);
+    if (cached) {
       const object = URL.createObjectURL(cached);
       setMediaUrl(object); setDownloadState('done'); onMediaLoad?.();
-    } catch {
-      window.clearInterval(progressTimer);
-      if (abortRef.current?.signal.aborted) setDownloadState('idle'); else setDownloadState('error');
     }
   };
 
@@ -75,9 +101,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
 
   useEffect(() => {
     void ensureObjectUrl().then((cached) => {
-      if (!cached && isImage && !hasPreview) {
-        void startDownload();
-      }
+      if (!cached) setDownloadState('idle');
     });
   }, [cacheKey, isImage, hasPreview]);
 
@@ -123,7 +147,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
 
   return <div className="file-message">
     {(isImage || isVideo) && (
-      <div className="file-image-preview" style={{ background: isVideo ? '#000' : undefined, width: isImage || isVideo ? 280 : undefined, aspectRatio: isImage ? effectiveAspectRatio : (isVideo ? 16 / 9 : undefined) }} onClick={(e) => e.stopPropagation()}>
+      <div className="file-image-preview" style={{ background: '#000', width: isImage || isVideo ? 280 : undefined, aspectRatio: isImage ? effectiveAspectRatio : (isVideo ? 16 / 9 : undefined) }} onClick={(e) => { e.stopPropagation(); if (!mediaUrl && downloadState !== 'decrypting' && downloadState !== 'downloading') void startDownload(); }}>
         {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><div style={{ width: '100%', height: '100%', background: '#000' }} /><span className="file-video-duration">{formatDuration(mediaDuration)}</span><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
           (<>
             {isImage && previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)' }} /> : <div style={{ width: '100%', height: '100%', background: '#000' }} />}

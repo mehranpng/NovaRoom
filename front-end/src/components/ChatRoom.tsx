@@ -659,15 +659,12 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                 // Don't block initial skeleton on self-sent media that can stay manual-download.
                 if (m.senderId === currentUserId) return false;
                 // Only wait for media that has fast visual source (preview) on open.
-                if (mt.startsWith('image/')) {
-                    const hasPreview = Boolean(
-                        (m.file as any).previewUrl
-                        || (m.file as any).thumbUrl
-                        || (m.file as any).imagePreviewUrl
-                    );
-                    return hasPreview;
-                }
-                return true;
+                const hasPreview = Boolean(
+                    (m.file as any).previewUrl
+                    || (m.file as any).thumbUrl
+                    || (m.file as any).imagePreviewUrl
+                );
+                return hasPreview;
             })
             .map((m) => m.id)
     );
@@ -844,10 +841,9 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
 
         const cnt = Number(unreadCount || 0);
         if (!Number.isFinite(cnt) || cnt <= 0) return null;
-
         const incoming = messages.filter((m: any) => m.senderId !== currentUserId);
-        const anchor = incoming[Math.max(0, incoming.length - cnt)];
-        return anchor?.id || incoming[0]?.id || null;
+        const anchor = incoming.find((m: any) => m.seen === false);
+        return anchor?.id || null;
     };
 
     const isUnreadAnchorValid = (messageId: string | null): boolean => {
