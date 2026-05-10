@@ -225,20 +225,20 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         };
         uploadTasksByChat.set(chatId, task);
 
-        let encryptionPulse: number | null = null;
+        let uploadWarmupTimer: number | null = null;
         try {
             const mediaDuration = await readMediaDuration(file);
             let imagePreviewBlob: Blob | null = null;
             if ((file.type || '').startsWith('image/')) {
                 imagePreviewBlob = await createBlurredPreview(file);
             }
-            task.phase = 'encrypt';
-            task.encryptionProgress = 10;
+            task.phase = 'upload';
+            task.uploadProgress = Math.max(task.uploadProgress, 4);
             pushTaskUpdate(task);
-            encryptionPulse = window.setInterval(() => {
-                task.encryptionProgress = Math.min(95, task.encryptionProgress + 5);
+            uploadWarmupTimer = window.setInterval(() => {
+                task.uploadProgress = Math.min(14, task.uploadProgress + 1);
                 pushTaskUpdate(task);
-            }, 140);
+            }, 160);
             const plainBytes = new Uint8Array(await file.arrayBuffer());
             const encryptedBytes = await encryptFileBytesClientSide(plainBytes, token, chatId);
             if (encryptCancelRef.current) {
@@ -246,10 +246,10 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                 resetUpload();
                 return;
             }
-            window.clearInterval(encryptionPulse);
-            encryptionPulse = null;
-            task.encryptionProgress = 100;
-            pushTaskUpdate(task);
+            if (uploadWarmupTimer != null) {
+                window.clearInterval(uploadWarmupTimer);
+                uploadWarmupTimer = null;
+            }
             const encryptedBlob = new Blob([new Uint8Array(encryptedBytes)], { type: 'application/octet-stream' });
             const encryptedFile = new window.File([encryptedBlob], file.name, {
                 type: 'application/octet-stream',
@@ -271,7 +271,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             xhr.upload.addEventListener('progress', (e) => {
                 if (e.lengthComputable) {
                     const progress = Math.round((e.loaded / e.total) * 100);
-                    task.uploadProgress = progress;
+                    task.uploadProgress = Math.max(task.uploadProgress, progress);
                     pushTaskUpdate(task);
                 }
             });
@@ -288,12 +288,15 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                             mimeType: file.type || response.file.mimeType,
                         };
                         void saveBlobToCache(`chat:${chatId}:file:${result.fileId}`, file);
-                        task.status = 'done';
                         task.uploadProgress = 100;
-                        task.encryptionProgress = 100;
                         task.phase = 'encrypt';
-                        task.result = result;
                         pushTaskUpdate(task);
+                        window.setTimeout(() => {
+                            task.status = 'done';
+                            task.encryptionProgress = 100;
+                            task.result = result;
+                            pushTaskUpdate(task);
+                        }, 520);
                     } else {
                         console.error('Invalid upload response:', response);
                         alert('خطا در آپلود فایل');
@@ -337,8 +340,8 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             xhr.send(formData);
 
         } catch (error) {
-            if (encryptionPulse != null) {
-                window.clearInterval(encryptionPulse);
+            if (uploadWarmupTimer != null) {
+                window.clearInterval(uploadWarmupTimer);
             }
             console.error('Upload error:', error);
             alert('خطا در آپلود فایل');

@@ -1956,12 +1956,14 @@ body,
 .chat-room__upload-progress-track--indeterminate .chat-room__upload-progress-fill {
     width: 34% !important;
     background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
+    inset-inline-start: auto;
+    inset-inline-end: 0;
     animation: chat-upload-indeterminate 1.05s linear infinite;
 }
 
 @keyframes chat-upload-indeterminate {
-    0% { transform: translateX(-130%); }
-    100% { transform: translateX(330%); }
+    0% { transform: translateX(130%); }
+    100% { transform: translateX(-330%); }
 }
 
 .chat-room__upload-progress-cancel {
