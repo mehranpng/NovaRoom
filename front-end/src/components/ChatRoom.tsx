@@ -845,9 +845,9 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         const cnt = Number(unreadCount || 0);
         if (!Number.isFinite(cnt) || cnt <= 0) return null;
 
-        const incoming = messages.filter((m: any) => m.senderId !== currentUserId);
-        const anchor = incoming[Math.max(0, incoming.length - cnt)];
-        return anchor?.id || incoming[0]?.id || null;
+        const anchorIndex = Math.max(0, messages.length - cnt);
+        const anchor = messages[anchorIndex];
+        return anchor?.id || messages[0]?.id || null;
     };
 
     const isUnreadAnchorValid = (messageId: string | null): boolean => {
@@ -1456,7 +1456,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                         initialMediaPendingIdsRef.current.clear();
                         setChatContentReady(true);
                         initialMediaReadyTimeoutRef.current = null;
-                    }, 1400);
+                    }, 700);
                 }
             });
         });

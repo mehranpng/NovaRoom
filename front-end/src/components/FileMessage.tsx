@@ -10,6 +10,14 @@ import { getCachedBlob, getOrCacheBlob } from '../utils/mediaCache';
 interface FileMessageProps { file: FileMetadata; token: string; chatId: string; onMediaLoad?: () => void; onImageClick?: (imageUrl: string, file: FileMetadata) => void; onVideoClick?: (videoUrl: string, file: FileMetadata) => void; }
 type DownloadState = 'idle' | 'downloading' | 'decrypting' | 'done' | 'error';
 
+type DownloadTask = {
+  promise: Promise<Blob>;
+  controller: AbortController;
+  listeners: Set<(state: { status: DownloadState; progress?: number }) => void>;
+};
+
+const activeDownloadTasks = new Map<string, DownloadTask>();
+
 export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, onVideoClick }: FileMessageProps) {
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -49,25 +57,53 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
 
   const startDownload = async () => {
     if (downloadState === 'decrypting' || downloadState === 'downloading') return;
-    abortRef.current = new AbortController();
+
+    const existingTask = activeDownloadTasks.get(cacheKey);
+    if (existingTask) {
+      abortRef.current = existingTask.controller;
+      existingTask.listeners.add((state) => {
+        if (state.progress != null) setDownloadProgress(state.progress);
+        setDownloadState(state.status);
+      });
+      setDownloadState('downloading');
+      return;
+    }
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const listeners = new Set<(state: { status: DownloadState; progress?: number }) => void>();
+    const emit = (state: { status: DownloadState; progress?: number }) => listeners.forEach((l) => l(state));
+
     setDownloadState('downloading');
     setDownloadProgress(6);
     const progressTimer = window.setInterval(() => {
-      setDownloadProgress((prev) => Math.min(92, prev + 4));
+      setDownloadProgress((prev) => {
+        const next = Math.min(92, prev + 4);
+        emit({ status: 'downloading', progress: next });
+        return next;
+      });
     }, 180);
-    try {
-      const res = await fetch(`${API_BASE_URL}/files/${file.fileId}`, { headers: { Authorization: `Bearer ${token}` }, signal: abortRef.current.signal });
+
+    const taskPromise = (async () => {
+      const res = await fetch(`${API_BASE_URL}/files/${file.fileId}`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
       if (!res.ok) throw new Error('download failed');
-      window.clearInterval(progressTimer);
-      setDownloadProgress(100);
-      setDownloadState('decrypting');
+      emit({ status: 'decrypting', progress: 100 });
       const blob = await decodeResponseBlob(res);
-      const cached = await getOrCacheBlob({ cacheKey, loadBlob: async () => blob });
+      return await getOrCacheBlob({ cacheKey, loadBlob: async () => blob });
+    })();
+
+    activeDownloadTasks.set(cacheKey, { promise: taskPromise, controller, listeners });
+
+    try {
+      const cached = await taskPromise;
+      window.clearInterval(progressTimer);
+      activeDownloadTasks.delete(cacheKey);
       const object = URL.createObjectURL(cached);
-      setMediaUrl(object); setDownloadState('done'); onMediaLoad?.();
+      setMediaUrl(object); setDownloadState('done'); setDownloadProgress(100); onMediaLoad?.();
     } catch {
       window.clearInterval(progressTimer);
-      if (abortRef.current?.signal.aborted) setDownloadState('idle'); else setDownloadState('error');
+      activeDownloadTasks.delete(cacheKey);
+      if (controller.signal.aborted) setDownloadState('idle'); else setDownloadState('error');
     }
   };
 
@@ -111,6 +147,22 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   const actionIcon = downloadState === 'downloading' ? <X size={16} /> : downloadState === 'decrypting' ? <LockOpen size={16} /> : <Download size={16} />;
 
   useEffect(() => {
+    const runningTask = activeDownloadTasks.get(cacheKey);
+    if (runningTask) {
+      const listener = (state: { status: DownloadState; progress?: number }) => {
+        if (state.progress != null) setDownloadProgress(state.progress);
+        setDownloadState(state.status);
+      };
+      runningTask.listeners.add(listener);
+      void runningTask.promise.then(async () => {
+        const cached = await getCachedBlob(cacheKey);
+        if (!cached) return;
+        setMediaUrl(URL.createObjectURL(cached));
+        setDownloadState('done');
+      }).catch(() => undefined);
+      return () => { runningTask.listeners.delete(listener); };
+    }
+
     setMediaUrl(null);
     setPreviewUrl(null);
     setPreviewAspectRatio(null);
@@ -123,7 +175,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
 
   return <div className="file-message">
     {(isImage || isVideo) && (
-      <div className="file-image-preview" style={{ background: isVideo ? '#000' : undefined, width: isImage || isVideo ? 280 : undefined, aspectRatio: isImage ? effectiveAspectRatio : (isVideo ? 16 / 9 : undefined) }} onClick={(e) => e.stopPropagation()}>
+      <div className="file-image-preview" style={{ background: isVideo ? '#000' : undefined, width: isImage || isVideo ? 'min(280px, 100%)' : undefined, aspectRatio: isImage ? effectiveAspectRatio : (isVideo ? 16 / 9 : undefined) }} onClick={(e) => { e.stopPropagation(); if (!mediaUrl) void startDownload(); }}>
         {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><div style={{ width: '100%', height: '100%', background: '#000' }} /><span className="file-video-duration">{formatDuration(mediaDuration)}</span><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
           (<>
             {isImage && previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)' }} /> : <div style={{ width: '100%', height: '100%', background: '#000' }} />}
