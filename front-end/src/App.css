@@ -1962,8 +1962,8 @@ body,
 }
 
 @keyframes chat-upload-indeterminate {
-    0% { transform: translateX(0%); }
-    100% { transform: translateX(-294%); }
+    0% { transform: translateX(110%); }
+    100% { transform: translateX(-310%); }
 }
 
 .chat-room__upload-progress-cancel {

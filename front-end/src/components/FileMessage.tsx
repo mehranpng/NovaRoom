@@ -159,7 +159,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
 
   return <div className="file-message">
     {(isImage || isVideo) && (
-      <div className="file-image-preview" style={{ background: '#000', width: isImage || isVideo ? 280 : undefined, aspectRatio: isImage ? effectiveAspectRatio : (isVideo ? 16 / 9 : undefined) }} onClick={(e) => { e.stopPropagation(); if (!mediaUrl && downloadState !== 'decrypting' && downloadState !== 'downloading') void startDownload(isImage); }}>
+      <div className="file-image-preview" style={{ background: '#000', width: isImage || isVideo ? 280 : undefined, aspectRatio: isImage ? effectiveAspectRatio : (isVideo ? 16 / 9 : undefined) }} onClick={(e) => { e.stopPropagation(); if (!mediaUrl && downloadState !== 'decrypting' && downloadState !== 'downloading') void startDownload(false); }}>
         {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} style={{ objectFit: shouldContain ? 'contain' : 'cover' }} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><div style={{ width: '100%', height: '100%', background: '#000' }} /><span className="file-video-duration">{formatDuration(mediaDuration)}</span><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
           (<>
             {isImage && previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)', objectFit: shouldContain ? 'contain' : 'cover' }} /> : <div style={{ width: '100%', height: '100%', background: '#000' }} />}
