@@ -408,6 +408,13 @@ async def _remap_forward_file_to_target_chat(
                 else remapped_meta.get("coverArtUrl")
             )
 
+
+    # Image/video preview assets are not chat-scoped encrypted.
+    # Reuse original preview references so forwarded media keeps its cover.
+    for key in ("previewUrl", "thumbUrl", "imagePreviewUrl", "previewFileId"):
+        if key in file_meta and file_meta.get(key):
+            remapped_meta[key] = file_meta.get(key)
+
     for key in ("title", "artist"):
         if key in file_meta:
             remapped_meta[key] = file_meta.get(key)
