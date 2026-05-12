@@ -296,7 +296,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                             task.encryptionProgress = 100;
                             task.result = result;
                             pushTaskUpdate(task);
-                        }, 520);
+                        }, 1200);
                     } else {
                         console.error('Invalid upload response:', response);
                         alert('خطا در آپلود فایل');

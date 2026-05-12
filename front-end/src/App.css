@@ -1964,6 +1964,17 @@ body,
     animation: chat-upload-indeterminate 1.25s linear infinite;
 }
 
+.chat-room__upload-progress-fill--indeterminate {
+    width: 24% !important;
+    background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
+    inset-inline-start: auto;
+    inset-inline-end: auto;
+    right: -24%;
+    left: auto;
+    opacity: 0;
+    animation: chat-upload-indeterminate 1.25s linear infinite;
+}
+
 @keyframes chat-upload-indeterminate {
     0% {
         right: -24%;
