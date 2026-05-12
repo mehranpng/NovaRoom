@@ -32,8 +32,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   const isImage = isImageFile(file.mimeType); const isAudio = (file.mimeType || '').startsWith('audio/'); const isVideo = (file.mimeType || '').startsWith('video/');
   const cacheKey = `chat:${chatId}:file:${file.fileId}`;
   const previewDirectUrl = String((file as any).previewUrl || (file as any).thumbUrl || (file as any).imagePreviewUrl || '').trim();
-  const hasPreview = Boolean(previewDirectUrl);
-  const formatDuration = (seconds: number): string => {
+    const formatDuration = (seconds: number): string => {
     const s = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
     const m = Math.floor(s / 60);
     const r = s % 60;
@@ -117,7 +116,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     void ensureObjectUrl().then((cached) => {
       if (!cached) setDownloadState('idle');
     });
-  }, [cacheKey, isImage, hasPreview]);
+  }, [cacheKey]);
 
   useEffect(() => {
     const taskKey = `${chatId}:${file.fileId}`;
@@ -131,7 +130,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   }, [chatId, file.fileId]);
 
   useEffect(() => {
-    if (!isImage || !previewDirectUrl) return;
+    if (!(isImage || isVideo) || !previewDirectUrl) return;
     let cancelled = false;
     const absolutePreviewUrl = previewDirectUrl.startsWith('http') ? previewDirectUrl : `${API_BASE_URL}${previewDirectUrl}`;
     getOrCacheBlob({
@@ -155,7 +154,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
       onMediaLoad?.();
     }).catch(() => undefined);
     return () => { cancelled = true; };
-  }, [isImage, previewDirectUrl, token]);
+  }, [isImage, isVideo, previewDirectUrl, token, chatId, file.fileId]);
 
   const actionIcon = downloadState === 'downloading' ? <X size={16} /> : downloadState === 'decrypting' ? <LockOpen size={16} /> : <Download size={16} />;
 
@@ -169,15 +168,16 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   const metadataWidth = Number((file as any)?.meta?.width || (file as any)?.metadata?.width || (file as any)?.width || 0);
   const metadataHeight = Number((file as any)?.meta?.height || (file as any)?.metadata?.height || (file as any)?.height || 0);
   const metadataAspectRatio = metadataWidth > 0 && metadataHeight > 0 ? (metadataWidth / metadataHeight) : null;
-  const effectiveAspectRatio = Math.max(0.35, Math.min(2.4, previewAspectRatio || metadataAspectRatio || 0.75));
+  const fallbackRatio = isVideo ? (16 / 9) : 0.75;
+  const effectiveAspectRatio = Math.max(0.35, Math.min(2.4, previewAspectRatio || metadataAspectRatio || fallbackRatio));
   const shouldContain = effectiveAspectRatio < 0.5 || effectiveAspectRatio > 2.05;
 
   return <div className="file-message">
     {(isImage || isVideo) && (
-      <div className="file-image-preview" style={{ background: '#000', width: isImage ? undefined : '100%', maxWidth: '100%', aspectRatio: isImage ? effectiveAspectRatio : (isVideo ? 16 / 9 : undefined) }} onClick={(e) => { e.stopPropagation(); if (!mediaUrl && downloadState !== 'decrypting' && downloadState !== 'downloading') void startDownload(false); }}>
-        {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} style={{ objectFit: shouldContain ? 'contain' : 'cover' }} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><div style={{ width: '100%', height: '100%', background: '#000' }} /><span className="file-video-duration">{formatDuration(mediaDuration)}</span><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
+      <div className="file-image-preview" style={{ background: '#000', width: isImage ? undefined : '100%', maxWidth: '100%', aspectRatio: (isImage || isVideo) ? effectiveAspectRatio : undefined }} onClick={(e) => { e.stopPropagation(); if (!mediaUrl && downloadState !== 'decrypting' && downloadState !== 'downloading') void startDownload(false); }}>
+        {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} style={{ objectFit: shouldContain ? 'contain' : 'cover' }} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><video src={mediaUrl} preload="metadata" muted playsInline style={{ width: '100%', height: '100%', objectFit: shouldContain ? 'contain' : 'cover', background: '#000' }} /><span className="file-video-duration">{formatDuration(mediaDuration)}</span><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
           (<>
-            {isImage && previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)', objectFit: shouldContain ? 'contain' : 'cover' }} /> : <div style={{ width: '100%', height: '100%', background: '#000' }} />}
+            {previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)', objectFit: shouldContain ? 'contain' : 'cover' }} /> : <div style={{ width: '100%', height: '100%', background: '#000' }} />}
             {isVideo && <button type="button" className="file-video-center-play" onClick={(e) => { e.stopPropagation(); startDownload(); }}><Play size={20} fill="currentColor" /></button>}
             {isVideo && <span className="file-video-duration file-video-duration--top">{formatDuration(mediaDuration || 0)}</span>}
             <div className={`manual-download-wrap ${isImage ? 'manual-download-wrap--center' : ''} ${isVideo ? 'manual-download-wrap--video' : ''}`}>
