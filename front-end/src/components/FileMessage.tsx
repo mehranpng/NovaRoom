@@ -16,6 +16,7 @@ type DownloadTask = {
   progress: number;
   promise: Promise<void> | null;
   blob?: Blob | null;
+  abortController?: AbortController | null;
 };
 const fileDownloadTasks = new Map<string, DownloadTask>();
 
@@ -27,7 +28,6 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [resolvedAudioDuration, setResolvedAudioDuration] = useState(0);
   const pendingOpenAfterDownloadRef = useRef(false);
-  const abortRef = useRef<AbortController | null>(null);
   const musicPlayer = useMusicPlayer();
   const isImage = isImageFile(file.mimeType); const isAudio = (file.mimeType || '').startsWith('audio/'); const isVideo = (file.mimeType || '').startsWith('video/');
   const cacheKey = `chat:${chatId}:file:${file.fileId}`;
@@ -69,15 +69,17 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
       fileDownloadTasks.set(taskKey, task);
     }
     task.subscribers.add(subscriber);
+    setDownloadState(task.state);
+    setDownloadProgress(task.progress);
     if (!task.promise) {
-      abortRef.current = new AbortController();
+      task.abortController = new AbortController();
       task.state = 'downloading'; task.progress = 6; notify(task);
       task.promise = (async () => {
         const progressTimer = window.setInterval(() => {
           task!.progress = Math.min(92, task!.progress + 4); notify(task!);
         }, 180);
         try {
-          const res = await fetch(`${API_BASE_URL}/files/${file.fileId}`, { headers: { Authorization: `Bearer ${token}` }, signal: abortRef.current?.signal });
+          const res = await fetch(`${API_BASE_URL}/files/${file.fileId}`, { headers: { Authorization: `Bearer ${token}` }, signal: task!.abortController?.signal });
           if (!res.ok) throw new Error('download failed');
           window.clearInterval(progressTimer);
           task!.progress = 100; task!.state = 'decrypting'; notify(task!);
@@ -87,9 +89,10 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
           task!.state = 'done'; notify(task!);
         } catch {
           window.clearInterval(progressTimer);
-          task!.state = abortRef.current?.signal.aborted ? 'idle' : 'error'; notify(task!);
+          task!.state = task!.abortController?.signal.aborted ? 'idle' : 'error'; notify(task!);
         } finally {
           task!.promise = null;
+          task!.abortController = null;
         }
       })();
     }
@@ -105,13 +108,27 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     }
   };
 
-  const cancelDownload = () => { abortRef.current?.abort(); };
+  const cancelDownload = () => {
+    const task = fileDownloadTasks.get(`${chatId}:${file.fileId}`);
+    task?.abortController?.abort();
+  };
 
   useEffect(() => {
     void ensureObjectUrl().then((cached) => {
       if (!cached) setDownloadState('idle');
     });
   }, [cacheKey, isImage, hasPreview]);
+
+  useEffect(() => {
+    const taskKey = `${chatId}:${file.fileId}`;
+    const task = fileDownloadTasks.get(taskKey);
+    if (!task) return;
+    const subscriber: DownloadSubscriber = (state, progress) => { setDownloadState(state); setDownloadProgress(progress); };
+    task.subscribers.add(subscriber);
+    setDownloadState(task.state);
+    setDownloadProgress(task.progress);
+    return () => { task.subscribers.delete(subscriber); };
+  }, [chatId, file.fileId]);
 
   useEffect(() => {
     if (!isImage || !previewDirectUrl) return;
@@ -146,8 +163,6 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     setMediaUrl(null);
     setPreviewUrl(null);
     setPreviewAspectRatio(null);
-    setDownloadState('idle');
-    setDownloadProgress(0);
     setResolvedAudioDuration(0);
   }, [file.fileId]);
 
@@ -159,7 +174,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
 
   return <div className="file-message">
     {(isImage || isVideo) && (
-      <div className="file-image-preview" style={{ background: '#000', width: isImage || isVideo ? 280 : undefined, aspectRatio: isImage ? effectiveAspectRatio : (isVideo ? 16 / 9 : undefined) }} onClick={(e) => { e.stopPropagation(); if (!mediaUrl && downloadState !== 'decrypting' && downloadState !== 'downloading') void startDownload(false); }}>
+      <div className="file-image-preview" style={{ background: '#000', width: isImage ? undefined : '100%', maxWidth: '100%', aspectRatio: isImage ? effectiveAspectRatio : (isVideo ? 16 / 9 : undefined) }} onClick={(e) => { e.stopPropagation(); if (!mediaUrl && downloadState !== 'decrypting' && downloadState !== 'downloading') void startDownload(false); }}>
         {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} style={{ objectFit: shouldContain ? 'contain' : 'cover' }} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><div style={{ width: '100%', height: '100%', background: '#000' }} /><span className="file-video-duration">{formatDuration(mediaDuration)}</span><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
           (<>
             {isImage && previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)', objectFit: shouldContain ? 'contain' : 'cover' }} /> : <div style={{ width: '100%', height: '100%', background: '#000' }} />}

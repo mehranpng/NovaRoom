@@ -221,7 +221,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             uploadProgress: 0,
             encryptionProgress: 0,
             listeners: new Set(),
-            phase: (file.type || '').startsWith('image/') ? 'preview' : 'encrypt',
+            phase: (file.type || '').startsWith('image/') ? 'preview' : 'upload',
         };
         uploadTasksByChat.set(chatId, task);
 
