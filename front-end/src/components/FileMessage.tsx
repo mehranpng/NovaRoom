@@ -113,10 +113,24 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   };
 
   useEffect(() => {
+    const activeTask = fileDownloadTasks.get(file.fileId);
+    if (activeTask && (activeTask.state === 'downloading' || activeTask.state === 'decrypting')) {
+      setDownloadState(activeTask.state);
+      setDownloadProgress(activeTask.progress);
+      return;
+    }
     void ensureObjectUrl().then((cached) => {
-      if (!cached) setDownloadState('idle');
+      if (!cached) {
+        const latestTask = fileDownloadTasks.get(file.fileId);
+        if (latestTask && (latestTask.state === 'downloading' || latestTask.state === 'decrypting')) {
+          setDownloadState(latestTask.state);
+          setDownloadProgress(latestTask.progress);
+          return;
+        }
+        setDownloadState('idle');
+      }
     });
-  }, [cacheKey]);
+  }, [cacheKey, file.fileId]);
 
   useEffect(() => {
     const taskKey = file.fileId;
