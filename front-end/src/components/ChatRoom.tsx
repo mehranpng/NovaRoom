@@ -3087,14 +3087,14 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                         <div
                             className={`chat-room__upload-progress-track ${uploadComposerState.phase === 'preview' || uploadComposerState.phase === 'encrypt' ? 'chat-room__upload-progress-track--indeterminate' : ''}`}
                             role="progressbar"
-                            aria-label={`Uploading ${uploadComposerState.progress}%`}
-                            aria-valuemin={0}
-                            aria-valuemax={100}
-                            aria-valuenow={uploadComposerState.progress}
+                            aria-label={uploadComposerState.phase === 'encrypt' ? 'در حال رمزنگاری فایل' : `Uploading ${uploadComposerState.progress}%`}
+                            aria-valuemin={uploadComposerState.phase === 'upload' ? 0 : undefined}
+                            aria-valuemax={uploadComposerState.phase === 'upload' ? 100 : undefined}
+                            aria-valuenow={uploadComposerState.phase === 'upload' ? uploadComposerState.progress : undefined}
                         >
                             <div
                                 className={`chat-room__upload-progress-fill ${uploadComposerState.phase === 'preview' || uploadComposerState.phase === 'encrypt' ? 'chat-room__upload-progress-fill--indeterminate' : ''}`}
-                                style={{ width: `${uploadComposerState.progress}%` }}
+                                style={{ width: uploadComposerState.phase === 'upload' ? `${uploadComposerState.progress}%` : undefined }}
                             />
                         </div>
                         <button
