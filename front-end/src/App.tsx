@@ -212,6 +212,8 @@ export function App() {
     useEffect(() => { viewRef.current = view; }, [view]);
 
     useEffect(() => {
+        if (!isAuthenticated || isAuthChecking) return;
+
         sendSoundRef.current = new Audio('/sounds/send.mp3');
         receiveSoundRef.current = new Audio('/sounds/receive.mp3');
         sendSoundRef.current.preload = 'auto';
@@ -223,7 +225,7 @@ export function App() {
             sendSoundRef.current = null;
             receiveSoundRef.current = null;
         };
-    }, []);
+    }, [isAuthenticated, isAuthChecking]);
 
     useEffect(() => {
         if (desktopSidebarWidth == null) return;
@@ -2245,38 +2247,15 @@ export function App() {
 
     if (isAuthChecking) {
         return (
-            <MusicPlayerProvider>
-                <NotificationCenter />
-                <div className={cx('app', 'app--resizable-desktop')} style={desktopSidebarWidth != null ? ({ ['--desktop-sidebar-width' as string]: `${desktopSidebarWidth}px` }) : undefined}>
-                    <div className="app__sidebar">
-                        <ChatList
-                            chats={[]}
-                            currentUser={{ chatId: 'verifying', name: 'Connecting', username: 'connecting', bio: '', avatar: '', online: false, verified: false }}
-                            activeChatId={null}
-                            wsConnected={false}
-                            wsReconnectExhausted={false}
-                            onSelectChat={() => {}}
-                            onOpenProfile={() => {}}
-                            onNewChatClick={() => {}}
-                            onLogout={() => {}}
-                            onOpenAIChat={() => {}}
-                            onOpenSavedMessages={() => {}}
-                            onOpenSettings={() => {}}
-                            onReconnectNow={() => {}}
-                            onDragHoverChat={() => {}}
-                            loading={true}
-                            hasUnseenLoginLogs={false}
-                        />
+            <div className={cx('app', 'app--resizable-desktop')} style={desktopSidebarWidth != null ? ({ ['--desktop-sidebar-width' as string]: `${desktopSidebarWidth}px` }) : undefined}>
+                <aside className="app__sidebar app__sidebar--verifying" aria-hidden="true" />
+                <main className="app__main app__main--verifying" role="status" aria-live="polite">
+                    <div className="empty-state">
+                        <h3>Connecting...</h3>
+                        <p>در حال بررسی سشن شما هستیم. لطفاً چند لحظه صبر کنید.</p>
                     </div>
-                    <div className="app__main">
-                        <div className="empty-state">
-                            <h3>Connecting...</h3>
-                            <p>در حال بررسی سشن شما هستیم. لطفاً چند لحظه صبر کنید.</p>
-                        </div>
-                    </div>
-                </div>
-                <MiniMusicPlayer />
-            </MusicPlayerProvider>
+                </main>
+            </div>
         );
     }
 
