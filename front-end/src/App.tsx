@@ -2246,17 +2246,7 @@ export function App() {
     }, [isAuthenticated, location.pathname]);
 
     if (isAuthChecking) {
-        return (
-            <div className={cx('app', 'app--resizable-desktop')} style={desktopSidebarWidth != null ? ({ ['--desktop-sidebar-width' as string]: `${desktopSidebarWidth}px` }) : undefined}>
-                <aside className="app__sidebar app__sidebar--verifying" aria-hidden="true" />
-                <main className="app__main app__main--verifying" role="status" aria-live="polite">
-                    <div className="empty-state">
-                        <h3>Connecting...</h3>
-                        <p>در حال بررسی سشن شما هستیم. لطفاً چند لحظه صبر کنید.</p>
-                    </div>
-                </main>
-            </div>
-        );
+        return null;
     }
 
     // --- Unauthenticated routes ---

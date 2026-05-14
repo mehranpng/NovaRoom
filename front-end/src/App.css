@@ -3784,13 +3784,3 @@ body[data-music-player='active'] .app {
     border: none;
 }
 
-.app__sidebar--verifying {
-    background: var(--bg-secondary);
-}
-
-.app__main--verifying {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--bg-primary);
-}

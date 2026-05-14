@@ -618,8 +618,11 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
             return;
         }
 
-        typingActiveRef.current = true;
-        emitTyping(true);
+        if (!typingActiveRef.current) {
+            typingActiveRef.current = true;
+            emitTyping(true);
+        }
+
         clearTypingTimeout();
         typingTimeoutRef.current = window.setTimeout(() => {
             typingActiveRef.current = false;
