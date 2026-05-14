@@ -94,7 +94,7 @@ export function App() {
         return fromCookie ? decodeURIComponent(fromCookie) : null;
     });
     const [isAuthChecking, setIsAuthChecking] = useState(true);
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isAuthenticated, setIsAuthenticated] = useState(Boolean(authToken));
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [view, setView] = useState<View>('chatList');
     const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -2244,7 +2244,40 @@ export function App() {
     }, [isAuthenticated, location.pathname]);
 
     if (isAuthChecking) {
-        return null;
+        return (
+            <MusicPlayerProvider>
+                <NotificationCenter />
+                <div className={cx('app', 'app--resizable-desktop')} style={desktopSidebarWidth != null ? ({ ['--desktop-sidebar-width' as string]: `${desktopSidebarWidth}px` }) : undefined}>
+                    <div className="app__sidebar">
+                        <ChatList
+                            chats={[]}
+                            currentUser={{ chatId: 'verifying', name: 'Connecting', username: 'connecting', bio: '', avatar: '', online: false, verified: false }}
+                            activeChatId={null}
+                            wsConnected={false}
+                            wsReconnectExhausted={false}
+                            onSelectChat={() => {}}
+                            onOpenProfile={() => {}}
+                            onNewChatClick={() => {}}
+                            onLogout={() => {}}
+                            onOpenAIChat={() => {}}
+                            onOpenSavedMessages={() => {}}
+                            onOpenSettings={() => {}}
+                            onReconnectNow={() => {}}
+                            onDragHoverChat={() => {}}
+                            loading={true}
+                            hasUnseenLoginLogs={false}
+                        />
+                    </div>
+                    <div className="app__main">
+                        <div className="empty-state">
+                            <h3>Connecting...</h3>
+                            <p>در حال بررسی سشن شما هستیم. لطفاً چند لحظه صبر کنید.</p>
+                        </div>
+                    </div>
+                </div>
+                <MiniMusicPlayer />
+            </MusicPlayerProvider>
+        );
     }
 
     // --- Unauthenticated routes ---
