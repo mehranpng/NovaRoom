@@ -1538,10 +1538,10 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         prevLastMessageIdRef.current = messages[messages.length - 1]?.id || null;
     }, [chatId]);
 
-    // When opening a chat with unread messages, compute anchor once for this open session.
+    // Keep unread anchor in sync with actual unseen incoming messages for this session,
+    // even when unread count was already consumed/reset in upper layers.
     useEffect(() => {
         if (isUnreadAnchorValid(unreadAnchorId)) return;
-        if (!displayUnreadCount || displayUnreadCount <= 0) return;
         const id = computeUnreadAnchorId(displayUnreadCount);
         setUnreadAnchorId(id && isUnreadAnchorValid(id) ? id : null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
