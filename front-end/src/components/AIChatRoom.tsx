@@ -963,6 +963,12 @@ export function AIChatRoom({
                                             <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
                                                 {message.aiModelName && <span className="message-ai-model-label">{message.aiModelName}</span>}
                                                 <span className="message-time">{formatMessageTime(message.timestamp)}</span>
+                                                {isMine && (
+                                                    <span className="message-seen message-seen--double" aria-label="sent">
+                                                        <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--first" />
+                                                        <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--second" />
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     )}

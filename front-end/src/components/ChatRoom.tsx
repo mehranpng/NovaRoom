@@ -2473,7 +2473,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                     />
                     <div className="chat-room__header-info">
                         <div className="chat-room__contact-name" style={{ alignItems: 'center', gap: 6 }}>
-                            <p className='chat-room__contact-name-2'>{contact.name}</p>
+                            <p className='chat-room__contact-name-2 emoji-font'>{contact.name}</p>
                             {!isSavedMessages && resolveVerified(contact.verified) ? <VerifiedBadge size={14} /> : null}
                         </div>
                         {!isSavedMessages && (
@@ -2584,7 +2584,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                 const isMenuActive = Boolean(msgMenu && msgMenu.id === m.id);
                                 const seenByCountForMessage = seenByUsersByMessage[m.id]?.length ?? 0;
                                 const isSeenForUi = Boolean(
-                                    m.seen || (isGroupChat && isMine && seenByCountForMessage > 0)
+                                    m.seen || (isGroupChat && isMine && seenByCountForMessage > 0) || (isOfficialChannel && isMine)
                                 );
                                 const messageSeenByRaw = Array.isArray((m as any).seenBy) ? (m as any).seenBy.length : 0;
                                 const messageSeenCountRaw = Number((m as any).seenCount || 0);
@@ -2728,7 +2728,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                                     const colorIdx = m.senderId ? Math.abs(m.senderId.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % colors.length : 0;
                                                     return (
                                                         <div onClick={(e) => { e.stopPropagation(); openMember(m.senderId); }}
-                                                            style={{ fontSize: 13, fontWeight: 700, color: colors[colorIdx], marginBottom: 3, cursor: 'pointer', fontFamily: 'Vazir, sans-serif', lineHeight: '1.2' }}>
+                                                            style={{ fontSize: 13, fontWeight: 700, color: colors[colorIdx], marginBottom: 3, cursor: 'pointer', fontFamily: "'Vazir', 'AppleEmoji', sans-serif", lineHeight: '1.2' }}>
                                                             {senderName}
                                                         </div>
                                                     );
@@ -2867,8 +2867,9 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                                         m.deliveryStatus === 'sending'
                                                             ? <span className="message-pending-indicator" aria-label="در حال ارسال">◷</span>
                                                             : (
-                                                                <span className={isSeenForUi ? 'message-seen message-seen--double' : 'message-seen message-seen--single'}>
-                                                                    {isSeenForUi ? '✓✓' : '✓'}
+                                                                <span className={isSeenForUi ? 'message-seen message-seen--double' : 'message-seen message-seen--single'} aria-label={isSeenForUi ? 'seen' : 'sent'}>
+                                                                    <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--first" />
+                                                                    {isSeenForUi && <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--second" />}
                                                                 </span>
                                                             )
                                                     )}

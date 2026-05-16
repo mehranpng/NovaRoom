@@ -1789,11 +1789,23 @@ body,
 }
 
 .message-seen {
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: -0.02em;
     margin-left: 2px;
     order: 3;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 15px;
+    height: 12px;
+}
+
+.message-seen__check {
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+}
+
+.message-seen__check--second {
+    inset-inline-start: 4px;
 }
 
 .message-seen--single {
@@ -3786,3 +3798,7 @@ body[data-music-player='active'] .app {
     border: none;
 }
 
+
+.emoji-font {
+    font-family: 'Vazir', 'AppleEmoji', sans-serif;
+}
