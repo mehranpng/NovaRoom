@@ -19,6 +19,7 @@ import { cx } from './utils/cx';
 import { NotificationCenter } from './components/NotificationCenter';
 import { notify } from './utils/notificationBus';
 import { decryptBioClientSide, decryptMessageClientSide, encryptChatTextClientSide } from './utils/e2ee';
+import { useDarkMode } from './hooks/useDarkMode';
 import './App.css';
 
 
@@ -80,6 +81,7 @@ const mergeMessages = (base: Message[], incoming: Message[], mode: 'replace' | '
 };
 
 export function App() {
+    useDarkMode();
     const MESSAGE_PAGE_SIZE = 50;
     const DESKTOP_BREAKPOINT = 1024;
     const DESKTOP_SIDEBAR_MIN = 320;
@@ -2091,7 +2093,7 @@ export function App() {
 
     useEffect(() => {
         if (!isAuthenticated || !showAIChat) return;
-        if (location.pathname === '/ai/c/temporary' && !temporaryAIChat) return;
+        if (location.pathname.startsWith('/ai/c/')) return;
         const nextPath = getAIRoutePath(activeAIChatId, temporaryAIChat);
         if (location.pathname !== nextPath) {
             navigate(nextPath, { replace: true });
