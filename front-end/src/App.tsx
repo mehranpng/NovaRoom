@@ -1467,6 +1467,15 @@ export function App() {
             if (decodedAIChatId === 'temporary') {
                 return;
             }
+            if (decodedAIChatId === 'new') {
+                if (temporaryAIChat) {
+                    setTemporaryAIChat(false);
+                }
+                if (activeAIChatId !== null) {
+                    setActiveAIChatId(null);
+                }
+                return;
+            }
             if (temporaryAIChat) {
                 setTemporaryAIChat(false);
             }
@@ -2017,7 +2026,7 @@ export function App() {
     const getAIRoutePath = useCallback((chatId: string | null, temporary: boolean): string => {
         if (temporary) return '/ai/c/temporary';
         if (chatId) return `/ai/c/${encodeURIComponent(chatId)}`;
-        return '/ai';
+        return '/ai/c/new';
     }, []);
 
     const handleOpenAIChat = () => {
@@ -2032,7 +2041,7 @@ export function App() {
         } else {
             setActiveAIChatId(null);
             setTemporaryAIChat(false);
-            navigate('/ai');
+            navigate('/ai/c/new');
         }
     };
 
@@ -2042,7 +2051,7 @@ export function App() {
         }
         setTemporaryAIChat(false);
         setActiveAIChatId(null);
-        navigate('/ai/c/temporary');
+        navigate('/ai/c/new');
     }, [temporaryAIChat, activeAIChatId, aiResponding, cleanupTemporaryAIChat, navigate]);
 
     const handleCreateTemporaryAIChat = useCallback(async () => {
