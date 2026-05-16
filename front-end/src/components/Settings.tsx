@@ -56,7 +56,6 @@ export function Settings({ section, onBack, onOpenSection, onBackToMenu, loginEv
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textAlign: 'right' }}>
             <Palette size={18} /> تم
           </span>
-          {hasUnseenLoginLogs && <span style={{ position: 'absolute', top: 12, left: 12, width: 8, height: 8, borderRadius: 99, background: 'var(--accent-primary)' }} />}
           <ChevronLeft size={18} style={{ marginInlineStart: 8 }} />
         </button>
 

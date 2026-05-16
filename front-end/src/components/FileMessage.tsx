@@ -27,6 +27,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   const [previewAspectRatio, setPreviewAspectRatio] = useState<number | null>(null);
   const [downloadState, setDownloadState] = useState<DownloadState>('idle');
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [cacheChecked, setCacheChecked] = useState(false);
   const [resolvedAudioDuration, setResolvedAudioDuration] = useState(0);
   const pendingOpenAfterDownloadRef = useRef(false);
   const musicPlayer = useMusicPlayer();
@@ -114,10 +115,12 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   };
 
   useEffect(() => {
+    setCacheChecked(false);
     const activeTask = fileDownloadTasks.get(file.fileId);
     if (activeTask && (activeTask.state === 'downloading' || activeTask.state === 'decrypting')) {
       setDownloadState(activeTask.state);
       setDownloadProgress(activeTask.progress);
+      setCacheChecked(true);
       return;
     }
     void ensureObjectUrl().then((cached) => {
@@ -130,6 +133,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
         }
         setDownloadState('idle');
       }
+      setCacheChecked(true);
     });
   }, [cacheKey, file.fileId]);
 
@@ -145,12 +149,12 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   }, [chatId, file.fileId]);
 
   useEffect(() => {
-    if (mediaUrl || downloadState === 'downloading' || downloadState === 'decrypting' || downloadState === 'done') return;
+    if (!cacheChecked || mediaUrl || downloadState === 'downloading' || downloadState === 'decrypting' || downloadState === 'done') return;
     const shouldAutoDownload = (isImage && isAutoDownloadEnabled(autoDownloadCookieKeys.image))
       || (isVideo && isAutoDownloadEnabled(autoDownloadCookieKeys.video))
       || (isAudio && isAutoDownloadEnabled(autoDownloadCookieKeys.audio));
     if (shouldAutoDownload) void startDownload(false);
-  }, [mediaUrl, downloadState, isImage, isVideo, isAudio]);
+  }, [cacheChecked, mediaUrl, downloadState, isImage, isVideo, isAudio]);
 
   useEffect(() => {
     if (!(isImage || isVideo) || !previewDirectUrl) return;
@@ -200,7 +204,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
 
   return <div className="file-message">
     {(isImage || isVideo) && (
-      <div className="file-image-preview" style={{ background: isVideo ? '#000' : 'transparent', width: isImage ? undefined : '100%', minWidth: isVideo ? 220 : undefined, maxWidth: '100%', aspectRatio: (isImage || isVideo) ? effectiveAspectRatio : undefined }} onClick={(e) => { e.stopPropagation(); if (!mediaUrl && downloadState !== 'decrypting' && downloadState !== 'downloading') void startDownload(false); }}>
+      <div className="file-image-preview" style={{ background: isVideo ? '#000' : 'transparent', width: isImage ? undefined : '100%', minWidth: isVideo ? 220 : undefined, maxWidth: '100%', aspectRatio: (isImage || isVideo) ? effectiveAspectRatio : undefined }} onClick={(e) => { e.stopPropagation(); if (!mediaUrl && downloadState !== 'decrypting' && downloadState !== 'downloading') void startDownload(isImage); }}>
         {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} style={{ objectFit: shouldContain ? 'contain' : 'cover' }} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><video src={mediaUrl} preload="metadata" muted playsInline style={{ width: '100%', height: '100%', objectFit: shouldContain ? 'contain' : 'cover', background: '#000' }} /><span className="file-video-duration">{formatDuration(mediaDuration)}</span><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
           (<>
             {previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)', objectFit: shouldContain ? 'contain' : 'cover' }} /> : <div style={{ width: '100%', height: '100%', background: '#000' }} />}

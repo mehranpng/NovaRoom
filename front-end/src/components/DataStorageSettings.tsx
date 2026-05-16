@@ -3,14 +3,15 @@ import { ArrowLeft } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { clearAllMediaCache, getMediaCacheUsageBytes } from '../utils/mediaCache';
 import { autoDownloadCookieKeys, isAutoDownloadEnabled, setAutoDownloadCookie } from '../utils/autoDownloadPrefs';
+import { notify } from '../utils/notificationBus';
 
 const formatCacheSize = (bytes: number): string => {
   const kb = bytes / 1024;
   if (kb < 1024) return `${Math.max(0, Math.round(kb))} KB`;
   const mb = kb / 1024;
-  if (mb <= 1024) return `${Math.max(0, Math.round(mb))} MB`;
+  if (mb <= 1024) return `${Math.max(0, Math.round(mb * 10) / 10)} MB`;
   const gb = mb / 1024;
-  return `${Math.max(0, Math.round(gb))} GB`;
+  return `${Math.max(0, Math.round(gb * 10) / 10)} GB`;
 };
 
 interface Props {
@@ -57,6 +58,9 @@ export function DataStorageSettings({ onBack }: Props) {
   }, [showClearModal]);
 
   const onToggleAutoDownload = (kind: 'image' | 'video' | 'audio') => {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      navigator.vibrate(10);
+    }
     if (kind === 'image') {
       const next = !imageAutoDownload;
       setImageAutoDownload(next);
@@ -83,6 +87,7 @@ export function DataStorageSettings({ onBack }: Props) {
     await loadCacheUsage();
     setClearing(false);
     setShowClearModal(false);
+    notify({ type: 'success', message: 'کش رسانه با موفقیت پاک شد.' });
   };
 
   return <motion.div className="profile" style={{ fontFamily: 'Vazir, sans-serif' }} initial={{ opacity: 0, y: 8, scale: 0.995 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
