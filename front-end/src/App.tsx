@@ -2091,6 +2091,7 @@ export function App() {
 
     useEffect(() => {
         if (!isAuthenticated || !showAIChat) return;
+        if (location.pathname === '/ai/c/temporary' && !temporaryAIChat) return;
         const nextPath = getAIRoutePath(activeAIChatId, temporaryAIChat);
         if (location.pathname !== nextPath) {
             navigate(nextPath, { replace: true });

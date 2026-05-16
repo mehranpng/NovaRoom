@@ -13,8 +13,9 @@
 .notification {
   position: absolute;
   top: 0;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
+  margin-inline: auto;
   width: min(94vw, 430px);
   display: flex;
   flex-direction: row;
