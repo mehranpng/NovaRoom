@@ -1465,9 +1465,6 @@ export function App() {
             setShowAIChat(true);
             setView('chatRoom');
             if (decodedAIChatId === 'temporary') {
-                if (!temporaryAIChat) {
-                    void handleCreateTemporaryAIChat();
-                }
                 return;
             }
             if (temporaryAIChat) {
@@ -1532,7 +1529,6 @@ export function App() {
         navigate,
         temporaryAIChat,
         activeAIChatId,
-        handleCreateTemporaryAIChat,
     ]);
 
 
@@ -2061,6 +2057,14 @@ export function App() {
             notify({ message: 'ساخت گفتگوی موقت انجام نشد.', type: 'error' });
         }
     }, []);
+
+
+    useEffect(() => {
+        if (!isAuthenticated || !showAIChat) return;
+        if (location.pathname !== '/ai/c/temporary') return;
+        if (temporaryAIChat) return;
+        void handleCreateTemporaryAIChat();
+    }, [isAuthenticated, showAIChat, location.pathname, temporaryAIChat, handleCreateTemporaryAIChat]);
 
     const handleSelectAIChat = useCallback((chatId: string) => {
         if (temporaryAIChat && activeAIChatId && chatId !== activeAIChatId && !aiResponding) {
