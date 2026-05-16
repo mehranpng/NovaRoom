@@ -180,3 +180,41 @@ export const deleteCachedBlob = async (cacheKey: string): Promise<void> => delet
 export const cacheTextValue = async (cacheKey: string, text: string): Promise<void> => saveTextCache(cacheKey, text);
 export const getCachedTextValue = async (cacheKey: string): Promise<string | null> => readTextCache(cacheKey);
 export const deleteCachedText = async (cacheKey: string): Promise<void> => deleteTextCacheKey(cacheKey);
+
+export const getMediaCacheUsageBytes = async (): Promise<number> => {
+    const db = await openMediaDb();
+    if (!db) return 0;
+
+    return new Promise((resolve) => {
+        const tx = db.transaction(MEDIA_STORE_NAME, 'readonly');
+        const store = tx.objectStore(MEDIA_STORE_NAME);
+        const req = store.openCursor();
+        let total = 0;
+
+        req.onsuccess = () => {
+            const cursor = req.result;
+            if (!cursor) {
+                resolve(total);
+                return;
+            }
+            const value = cursor.value as CacheRecord | undefined;
+            const payload = value?.payload;
+            if (payload?.byteLength) total += payload.byteLength;
+            cursor.continue();
+        };
+        req.onerror = () => resolve(total);
+    });
+};
+
+export const clearAllMediaCache = async (): Promise<void> => {
+    const db = await openMediaDb();
+    if (!db) return;
+
+    await new Promise<void>((resolve) => {
+        const tx = db.transaction(MEDIA_STORE_NAME, 'readwrite');
+        const store = tx.objectStore(MEDIA_STORE_NAME);
+        const req = store.clear();
+        req.onsuccess = () => resolve();
+        req.onerror = () => resolve();
+    });
+};

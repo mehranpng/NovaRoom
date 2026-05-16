@@ -1,13 +1,14 @@
-import { ArrowLeft, ChevronLeft, Laptop, Palette } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, HardDrive, Laptop, Palette } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Devices } from './Devices';
 import { ThemeSettings } from './ThemeSettings';
 import { LoginLogs } from './LoginLogs';
+import { DataStorageSettings } from './DataStorageSettings';
 
 interface SettingsProps {
-  section: 'menu' | 'devices' | 'theme' | 'logs';
+  section: 'menu' | 'devices' | 'theme' | 'logs' | 'dataStorage';
   onBack: () => void;
-  onOpenSection: (section: 'devices' | 'theme' | 'logs') => void;
+  onOpenSection: (section: 'devices' | 'theme' | 'logs' | 'dataStorage') => void;
   onBackToMenu: () => void;
   loginEvents: any[];
   hasUnseenLoginLogs?: boolean;
@@ -33,6 +34,9 @@ export function Settings({ section, onBack, onOpenSection, onBackToMenu, loginEv
       </motion.div>
     );
   }
+  if (section === 'dataStorage') {
+    return <DataStorageSettings onBack={onBackToMenu} />;
+  }
 
   return (
     <div className="profile" style={{ fontFamily: 'Vazir, sans-serif' }}>
@@ -46,11 +50,11 @@ export function Settings({ section, onBack, onOpenSection, onBackToMenu, loginEv
         <button
           type="button"
           className="popover__item"
-          onClick={() => onOpenSection('devices')}
+          onClick={() => onOpenSection('theme')}
           style={{ border: '1px solid var(--border-primary)', borderRadius: 14, height: 60, justifyContent: 'space-between', direction: 'rtl', padding: '6px 15px', position: 'relative' }}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textAlign: 'right' }}>
-            <Laptop size={18} /> دستگاه‌ها
+            <Palette size={18} /> تم
           </span>
           {hasUnseenLoginLogs && <span style={{ position: 'absolute', top: 12, left: 12, width: 8, height: 8, borderRadius: 99, background: 'var(--accent-primary)' }} />}
           <ChevronLeft size={18} style={{ marginInlineStart: 8 }} />
@@ -59,12 +63,24 @@ export function Settings({ section, onBack, onOpenSection, onBackToMenu, loginEv
         <button
           type="button"
           className="popover__item"
-          onClick={() => onOpenSection('theme')}
+          onClick={() => onOpenSection('dataStorage')}
           style={{ border: '1px solid var(--border-primary)', borderRadius: 14, height: 60, justifyContent: 'space-between', direction: 'rtl', padding: '6px 15px' }}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textAlign: 'right' }}>
-            <Palette size={18} /> تم
+            <HardDrive size={18} /> داده ها و ذخیره سازی
           </span>
+          <ChevronLeft size={18} style={{ marginInlineStart: 8 }} />
+        </button>
+        <button
+          type="button"
+          className="popover__item"
+          onClick={() => onOpenSection('devices')}
+          style={{ border: '1px solid var(--border-primary)', borderRadius: 14, height: 60, justifyContent: 'space-between', direction: 'rtl', padding: '6px 15px', position: 'relative' }}
+        >
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textAlign: 'right' }}>
+            <Laptop size={18} /> دستگاه‌ها
+          </span>
+          {hasUnseenLoginLogs && <span style={{ position: 'absolute', top: 12, left: 12, width: 8, height: 8, borderRadius: 99, background: 'var(--accent-primary)' }} />}
           <ChevronLeft size={18} style={{ marginInlineStart: 8 }} />
         </button>
       </div>

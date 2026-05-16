@@ -1443,6 +1443,10 @@ export function App() {
             setView('settingsTheme');
             return;
         }
+        if (pathname === '/settings/data-storage') {
+            setView('settingsDataStorage');
+            return;
+        }
         if (pathname === '/settings/devices/logs') {
             setView('settingsLogs');
             return;
@@ -2402,9 +2406,9 @@ export function App() {
                 {String(view).startsWith('settings') && (
                     <div className="app__main app__main--full">
                         <Settings
-                            section={view === 'settingsDevices' ? 'devices' : view === 'settingsTheme' ? 'theme' : view === 'settingsLogs' ? 'logs' : 'menu'}
+                            section={view === 'settingsDevices' ? 'devices' : view === 'settingsTheme' ? 'theme' : view === 'settingsLogs' ? 'logs' : view === 'settingsDataStorage' ? 'dataStorage' : 'menu'}
                             onBack={handleBack}
-                            onOpenSection={(section) => navigate(section === 'logs' ? '/settings/devices/logs' : `/settings/${section}`)}
+                            onOpenSection={(section) => navigate(section === 'logs' ? '/settings/devices/logs' : section === 'dataStorage' ? '/settings/data-storage' : `/settings/${section}`)}
                             onBackToMenu={() => navigate('/settings')}
                             loginEvents={loginEvents}
                             hasUnseenLoginLogs={unseenLoginCount > 0}

@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useMusicPlayer } from '../contexts/MusicPlayerContext';
 import { decryptFileBytesClientSide } from '../utils/e2ee';
 import { getCachedBlob, getOrCacheBlob } from '../utils/mediaCache';
+import { autoDownloadCookieKeys, isAutoDownloadEnabled } from '../utils/autoDownloadPrefs';
 
 interface FileMessageProps { file: FileMetadata; token: string; chatId: string; onMediaLoad?: () => void; onImageClick?: (imageUrl: string, file: FileMetadata) => void; onVideoClick?: (videoUrl: string, file: FileMetadata) => void; }
 type DownloadState = 'idle' | 'downloading' | 'decrypting' | 'done' | 'error';
@@ -142,6 +143,14 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     setDownloadProgress(task.progress);
     return () => { task.subscribers.delete(subscriber); };
   }, [chatId, file.fileId]);
+
+  useEffect(() => {
+    if (mediaUrl || downloadState === 'downloading' || downloadState === 'decrypting' || downloadState === 'done') return;
+    const shouldAutoDownload = (isImage && isAutoDownloadEnabled(autoDownloadCookieKeys.image))
+      || (isVideo && isAutoDownloadEnabled(autoDownloadCookieKeys.video))
+      || (isAudio && isAutoDownloadEnabled(autoDownloadCookieKeys.audio));
+    if (shouldAutoDownload) void startDownload(false);
+  }, [mediaUrl, downloadState, isImage, isVideo, isAudio]);
 
   useEffect(() => {
     if (!(isImage || isVideo) || !previewDirectUrl) return;
