@@ -862,22 +862,20 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         const mem = scrollMemoryRef.current[chatId];
 
         // If opened with unread, jump to first unread (Telegram-like).
-        if (displayUnreadCount > 0) {
-            const anchor = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
-            if (anchor) {
-                autoJumpedToUnreadRef.current = true;
-                userScrolledAfterAutoJumpRef.current = false;
+        const unreadAnchor = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
+        if (unreadAnchor) {
+            autoJumpedToUnreadRef.current = true;
+            userScrolledAfterAutoJumpRef.current = false;
 
-                scrollToUnreadAnchor(anchor);
+            scrollToUnreadAnchor(unreadAnchor);
 
-                if (!consumedInitialUnreadRef.current) {
-                    consumedInitialUnreadRef.current = true;
-                    // Consume in App so next time you open this chat, it doesn't auto-jump again.
-                    window.setTimeout(() => onConsumeInitialUnread?.(chatId), 0);
-                }
-
-                return;
+            if (!consumedInitialUnreadRef.current) {
+                consumedInitialUnreadRef.current = true;
+                // Consume in App so next time you open this chat, it doesn't auto-jump again.
+                window.setTimeout(() => onConsumeInitialUnread?.(chatId), 0);
             }
+
+            return;
         }
 
         // Only restore exact scrollTop if user actually scrolled in this chat
@@ -897,7 +895,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         scrollToBottom(false);
         [70, 180, 360].forEach((delay) => {
             window.setTimeout(() => {
-                if (displayUnreadCount > 0) return;
+                if (unreadAnchorId) return;
                 if (shouldPreserveExactScroll()) return;
                 scrollToBottom(false);
             }, delay);
@@ -915,7 +913,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         if (userHasScrolledRef.current) return;
         if (shouldPreserveExactScroll()) return;
         // If chat has unread, initial logic will jump to unread.
-        if (displayUnreadCount > 0) return;
+        if (unreadAnchorId) return;
 
         const hasOverflow = (c.scrollHeight - c.clientHeight) > 300;
         if (!hasOverflow) return;
@@ -1676,7 +1674,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                         const c = messagesContainerRef.current;
                         if (!c) return;
                         if (userHasScrolledRef.current) return;
-                        if (displayUnreadCount > 0) return;
+                        if (unreadAnchorId) return;
                         const mem = scrollMemoryRef.current[chatId];
                         if (mem?.userInteracted && !mem.atBottom) return;
                         const hasOverflow = (c.scrollHeight - c.clientHeight) > 300;

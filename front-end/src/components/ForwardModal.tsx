@@ -114,7 +114,7 @@ export function ForwardModal({ isOpen, chats, currentUserId, currentUserVerified
                                 >
                                     <Avatar name="" size="md" online={false} savedMessages />
                                     <div className="user-item-info">
-                                        <div className="user-name" style={{ fontFamily: "'Vazir', sans-serif" }}>
+                                        <div className="user-name" style={{ fontFamily: "'Vazir', 'AppleEmoji', sans-serif" }}>
                                             {savedMessagesChat.name}
                                         </div>
                                     </div>
@@ -145,11 +145,11 @@ export function ForwardModal({ isOpen, chats, currentUserId, currentUserVerified
                                                 src={chat.id === 'official-channel' ? '/avatars/ch.png' : user.avatar}
                                             />
                                             <div className="user-item-info">
-                                                <div className="user-name" style={{ fontFamily: "'Vazir', sans-serif", display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                <div className="user-name" style={{ fontFamily: "'Vazir', 'AppleEmoji', sans-serif", display: 'flex', alignItems: 'center', gap: 4 }}>
                                                     {user.name}
                                                     {user.verified && <VerifiedBadge size={14} />}
                                                 </div>
-                                                <div className="user-username" style={{ fontFamily: "'Vazir', sans-serif" }}>@{user.username}</div>
+                                                <div className="user-username" style={{ fontFamily: "'Vazir', 'AppleEmoji', sans-serif" }}>@{user.username}</div>
                                             </div>
                                             <MessageCircle size={18} style={{ color: 'var(--text-tertiary)', marginLeft: 'auto' }} />
                                         </button>
