@@ -840,14 +840,19 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
     const getUnseenIncomingMessages = () => messages.filter((m: any) => m.senderId !== currentUserId && m.seen === false);
 
     const computeUnreadAnchorId = (unreadCount: number): string | null => {
-        const firstUnseen = getUnseenIncomingMessages()[0];
-        if (firstUnseen?.id) return firstUnseen.id;
-
-        const cnt = Number(unreadCount || 0);
-        if (!Number.isFinite(cnt) || cnt <= 0) return null;
         const incoming = messages.filter((m: any) => m.senderId !== currentUserId);
-        const anchor = incoming.find((m: any) => m.seen === false);
-        return anchor?.id || null;
+        if (incoming.length === 0) return null;
+
+        const firstUnseenByFlag = incoming.find((m: any) => m.seen === false);
+        const cnt = Number(unreadCount || 0);
+
+        if (Number.isFinite(cnt) && cnt > 0) {
+            const clamped = Math.min(incoming.length, Math.max(1, Math.floor(cnt)));
+            const byCount = incoming[incoming.length - clamped];
+            if (byCount?.id) return byCount.id;
+        }
+
+        return firstUnseenByFlag?.id || null;
     };
 
     const isUnreadAnchorValid = (messageId: string | null): boolean => {
@@ -2576,7 +2581,8 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                 const isHighlighted = highlightId === m.id;
                                 const dragX = dragState.id === m.id ? dragState.x : 0;
                                 const dragActive = dragState.id === m.id ? dragState.active : false;
-                                const showUnreadSeparator = Boolean(unreadAnchorId && unreadAnchorId === m.id && m.senderId !== currentUserId);
+                                const unreadAnchorForUi = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
+                                const showUnreadSeparator = Boolean(unreadAnchorForUi && unreadAnchorForUi === m.id && m.senderId !== currentUserId);
                                 const unreadCountForUi = Math.max(getUnseenIncomingMessages().length, displayUnreadCount);
 
                                 const isMenuActive = Boolean(msgMenu && msgMenu.id === m.id);
