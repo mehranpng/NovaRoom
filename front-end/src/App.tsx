@@ -1452,7 +1452,30 @@ export function App() {
             setActiveChatId(null);
             setPendingUser(null);
             setShowAIChat(true);
+            setTemporaryAIChat(false);
             setView('chatRoom');
+            return;
+        }
+
+        const aiChatMatch = pathname.match(/^\/ai\/c\/(.+)$/);
+        if (aiChatMatch?.[1]) {
+            const decodedAIChatId = decodeURIComponent(aiChatMatch[1]);
+            setActiveChatId(null);
+            setPendingUser(null);
+            setShowAIChat(true);
+            setView('chatRoom');
+            if (decodedAIChatId === 'temporary') {
+                if (!temporaryAIChat) {
+                    void handleCreateTemporaryAIChat();
+                }
+                return;
+            }
+            if (temporaryAIChat) {
+                setTemporaryAIChat(false);
+            }
+            if (activeAIChatId !== decodedAIChatId) {
+                setActiveAIChatId(decodedAIChatId);
+            }
             return;
         }
 
@@ -1507,6 +1530,9 @@ export function App() {
         pendingUser,
         handleSelectChat,
         navigate,
+        temporaryAIChat,
+        activeAIChatId,
+        handleCreateTemporaryAIChat,
     ]);
 
 
@@ -1992,6 +2018,12 @@ export function App() {
         loadChats(false);
     };
 
+    const getAIRoutePath = useCallback((chatId: string | null, temporary: boolean): string => {
+        if (temporary) return '/ai/c/temporary';
+        if (chatId) return `/ai/c/${encodeURIComponent(chatId)}`;
+        return '/ai';
+    }, []);
+
     const handleOpenAIChat = () => {
         setActiveChatId(null);
         setPendingUser(null);
@@ -1999,11 +2031,13 @@ export function App() {
         setView('chatRoom');
         if (aiResponding && aiRespondingChatId) {
             setActiveAIChatId(aiRespondingChatId);
+            setTemporaryAIChat(false);
+            navigate(`/ai/c/${encodeURIComponent(aiRespondingChatId)}`);
         } else {
             setActiveAIChatId(null);
             setTemporaryAIChat(false);
+            navigate('/ai');
         }
-        navigate('/ai');
     };
 
     const handleCreateAIChat = useCallback(() => {
@@ -2012,7 +2046,8 @@ export function App() {
         }
         setTemporaryAIChat(false);
         setActiveAIChatId(null);
-    }, [temporaryAIChat, activeAIChatId, aiResponding, cleanupTemporaryAIChat]);
+        navigate('/ai/c/temporary');
+    }, [temporaryAIChat, activeAIChatId, aiResponding, cleanupTemporaryAIChat, navigate]);
 
     const handleCreateTemporaryAIChat = useCallback(async () => {
         try {
@@ -2020,6 +2055,7 @@ export function App() {
             setAIMessagesByChat((prev) => ({ ...prev, [created.id]: [] }));
             setActiveAIChatId(created.id);
             setTemporaryAIChat(true);
+            navigate('/ai/c/temporary', { replace: true });
         } catch (error) {
             console.error('Failed to create temporary AI chat', error);
             notify({ message: 'ساخت گفتگوی موقت انجام نشد.', type: 'error' });
@@ -2032,7 +2068,17 @@ export function App() {
             setTemporaryAIChat(false);
         }
         setActiveAIChatId(chatId);
-    }, [temporaryAIChat, activeAIChatId, aiResponding, cleanupTemporaryAIChat]);
+        navigate(`/ai/c/${encodeURIComponent(chatId)}`);
+    }, [temporaryAIChat, activeAIChatId, aiResponding, cleanupTemporaryAIChat, navigate]);
+
+
+    useEffect(() => {
+        if (!isAuthenticated || !showAIChat) return;
+        const nextPath = getAIRoutePath(activeAIChatId, temporaryAIChat);
+        if (location.pathname !== nextPath) {
+            navigate(nextPath, { replace: true });
+        }
+    }, [isAuthenticated, showAIChat, activeAIChatId, temporaryAIChat, location.pathname, navigate, getAIRoutePath]);
 
     const handleDeleteAIChat = useCallback(async (chatId: string) => {
         try {
