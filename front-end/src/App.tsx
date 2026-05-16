@@ -2093,6 +2093,7 @@ export function App() {
 
     useEffect(() => {
         if (!isAuthenticated || !showAIChat) return;
+        if (location.pathname === '/' || location.pathname === '') return;
         if (location.pathname.startsWith('/ai/c/')) return;
         const nextPath = getAIRoutePath(activeAIChatId, temporaryAIChat);
         if (location.pathname !== nextPath) {
@@ -2114,12 +2115,15 @@ export function App() {
             setActiveAIChatId((prev) => (prev === chatId ? null : prev));
             if (activeAIChatId === chatId) {
                 setTemporaryAIChat(false);
+                navigate('/ai/c/new', { replace: true });
+            } else if (location.pathname === `/ai/c/${encodeURIComponent(chatId)}`) {
+                navigate('/ai/c/new', { replace: true });
             }
         } catch (error) {
             console.error('Failed to delete AI chat', error);
             alert('حذف گفتگو با خطا مواجه شد');
         }
-    }, [activeAIChatId]);
+    }, [activeAIChatId, location.pathname, navigate]);
 
     const handleRenameAIChat = useCallback(async (chatId: string, nextTitle: string): Promise<boolean> => {
         const trimmed = nextTitle.trim();
