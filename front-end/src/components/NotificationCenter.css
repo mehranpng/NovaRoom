@@ -1,10 +1,11 @@
 .notification-center {
   position: fixed;
   top: 12px;
-  left: 12px;
-  right: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(94vw, 430px);
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   direction: rtl;
   pointer-events: none;
   z-index: 1100;
@@ -13,7 +14,8 @@
 .notification {
   position: absolute;
   top: 0;
-  right: 0;
+  right: 50%;
+  transform: translateX(50%);
   width: min(94vw, 430px);
   display: flex;
   flex-direction: row;

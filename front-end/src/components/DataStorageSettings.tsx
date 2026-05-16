@@ -93,15 +93,15 @@ export function DataStorageSettings({ onBack }: Props) {
   return <motion.div className="profile" style={{ fontFamily: 'Vazir, sans-serif' }} initial={{ opacity: 0, y: 8, scale: 0.995 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
     <div className="profile__header" style={{ direction: 'ltr' }}>
       <button onClick={onBack} className="profile__header-back"><ArrowLeft size={22} /></button>
-      <h1 className="profile__header-title">داده ها و ذخیره سازی</h1>
+      <h1 className="profile__header-title">داده‌ ها و ذخیره‌سازی</h1>
       <div className="profile__header-spacer" />
     </div>
 
     <div className="profile__content" style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingInline: 14, paddingTop: 12, flex: '0 0 auto' }}>
       <div style={{ border: '1px solid var(--border-primary)', borderRadius: 14, overflow: 'hidden' }}>
         <button type="button" className="popover__item" onClick={() => setShowClearModal(true)} style={{ width: '100%', minHeight: 56, justifyContent: 'space-between', direction: 'rtl', padding: '10px 14px', borderRadius: 0 }}>
-          <span>رسانه های کش شده</span>
-          <span style={{ color: 'var(--accent-primary)', fontWeight: 700 }}>{humanSize}</span>
+          <span style={{ fontWeight: 800 }}>رسانه های کش شده</span>
+          <span style={{ color: 'var(--accent-primary)', fontWeight: 700, direction: 'ltr' }}>{humanSize}</span>
         </button>
       </div>
 
