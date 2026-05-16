@@ -3052,7 +3052,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                                 </span>
                                                 {ru.verified && <VerifiedBadge size={13} />}
                                             </div>
-                                            <span style={{ fontSize: 18, flexShrink: 0 }}>{ru.emoji}</span>
+                                            <span style={{ fontSize: 18, flexShrink: 0, fontFamily: "'AppleEmoji', 'Vazir', sans-serif" }}>{ru.emoji}</span>
                                         </div>
                                     ))}
                                 </div>

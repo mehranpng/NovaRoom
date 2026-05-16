@@ -3564,6 +3564,7 @@ body,
 }
 
 .reaction-picker__emoji {
+    font-family: 'AppleEmoji', 'Vazir', sans-serif;
     flex: 0 0 auto;
     display: flex;
     align-items: center;
@@ -3675,6 +3676,7 @@ body,
 }
 
 .message-reaction__emoji {
+    font-family: 'AppleEmoji', 'Vazir', sans-serif;
     line-height: 1;
 }
 
