@@ -93,10 +93,10 @@ export function DataStorageSettings({ onBack }: Props) {
     const isDarkMode = typeof document !== 'undefined' && document.documentElement.classList.contains('dark-mode');
     const panelBorder = isDarkMode
         ? '1px solid var(--border-primary)'
-        : '1px solid color-mix(in srgb, var(--text-primary) 24%, var(--border-primary))';
+        : '1px solid color-mix(in srgb, var(--text-primary) 14%, var(--border-primary))';
     const panelBg = isDarkMode
         ? 'var(--surface-primary)'
-        : 'color-mix(in srgb, var(--surface-primary) 88%, var(--text-primary) 12%)';
+        : 'color-mix(in srgb, var(--surface-primary) 82%, var(--text-primary) 18%)';
 
     return <motion.div className="profile" style={{ fontFamily: 'Vazir, sans-serif' }} initial={{ opacity: 0, y: 8, scale: 0.995 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
         <div className="profile__header" style={{ direction: 'ltr' }}>
@@ -123,7 +123,7 @@ export function DataStorageSettings({ onBack }: Props) {
                 ].map((row) => (
                     <div key={row.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, direction: 'rtl', padding: '10px 14px', borderTop: panelBorder }}>
                         <span>{row.label}</span>
-                        <button type="button" onClick={() => onToggleAutoDownload(row.key)} aria-label={`toggle ${row.label}`} style={{ width: 48, height: 28, borderRadius: 999, border: isDarkMode ? (row.enabled ? '1px solid color-mix(in srgb, var(--accent-primary) 70%, var(--border-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 35%, var(--border-primary))') : (row.enabled ? '1px solid color-mix(in srgb, var(--text-primary) 42%, var(--accent-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 45%, var(--border-primary))'), background: row.enabled ? 'var(--accent-primary)' : (isDarkMode ? 'var(--surface-tertiary)' : 'color-mix(in srgb, var(--text-primary) 24%, var(--surface-primary))'), position: 'relative', transition: 'all .2s ease' }}>
+                        <button type="button" onClick={() => onToggleAutoDownload(row.key)} aria-label={`toggle ${row.label}`} style={{ width: 48, height: 28, borderRadius: 999, border: isDarkMode ? (row.enabled ? '1px solid color-mix(in srgb, var(--accent-primary) 70%, var(--border-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 35%, var(--border-primary))') : (row.enabled ? '1px solid color-mix(in srgb, var(--text-primary) 28%, var(--accent-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 24%, var(--border-primary))'), background: row.enabled ? 'var(--accent-primary)' : (isDarkMode ? 'var(--surface-tertiary)' : 'color-mix(in srgb, var(--text-primary) 30%, var(--surface-primary))'), position: 'relative', transition: 'all .2s ease' }}>
                             <span style={{ position: 'absolute', top: 2, right: row.enabled ? 2 : 22, width: 22, height: 22, borderRadius: '50%', background: '#fff', transition: 'all .2s ease' }} />
                         </button>
                     </div>
