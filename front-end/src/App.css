@@ -343,7 +343,6 @@ body,
     justify-content: center;
     border-radius: 50%;
     font-weight: 600;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     color: #ffffff;
     box-shadow: var(--shadow-sm);
 }
@@ -572,7 +571,6 @@ body,
     border: none;
     cursor: pointer;
     color: var(--text-primary);
-    font-family: inherit;
 }
 
 .popover__item:hover {
@@ -680,6 +678,7 @@ body,
 }
 
 .chat-list__search-input {
+    font-family: 'AppleEmoji', 'Vazir', sans-serif;
     width: 100%;
     border-radius: 12px;
     background: var(--input-bg);
@@ -689,7 +688,6 @@ body,
     border: none;
     outline: none;
     transition: background var(--motion-fast) var(--motion-ease-standard), box-shadow var(--motion-fast) var(--motion-ease-standard), transform var(--motion-fast) var(--motion-ease-standard);
-    font-family: inherit;
     direction: rtl;
     text-align: right;
 }
@@ -735,7 +733,6 @@ body,
     border: none;
     cursor: pointer;
     transition: background var(--motion-base) var(--motion-ease-soft), transform var(--motion-fast) var(--motion-ease-standard);
-    font-family: inherit;
 }
 
 .chat-list__item:hover {
@@ -882,7 +879,6 @@ body,
     padding: 0;
     cursor: pointer;
     text-align: left;
-    font-family: inherit;
 }
 
 .chat-room__header-clickable:hover {
@@ -1578,7 +1574,6 @@ body,
     font-size: 11px;
     font-weight: 500;
     cursor: pointer;
-    font-family: inherit;
     transition: all 0.15s;
     margin-left: auto;
     user-select: none !important;
@@ -1859,7 +1854,6 @@ body,
     resize: none;
     overflow-y: auto;
     transition: all 0.15s;
-    font-family: inherit;
     direction: rtl;
     text-align: right;
 }
@@ -2105,7 +2099,6 @@ body,
     color: var(--text-primary);
     cursor: pointer;
     font-weight: 600;
-    font-family: inherit;
 }
 
 .chat-room-confirm-modal__btn:hover {
@@ -2254,7 +2247,6 @@ body,
 
 .contact-info__registration-date {
     margin-top: 8px;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 14px;
     font-weight: 600;
     color: var(--text-primary);
@@ -2375,7 +2367,6 @@ body,
     color: var(--text-primary);
     cursor: pointer;
     font-weight: 600;
-    font-family: inherit;
 }
 
 .confirm-modal__btn:hover {
@@ -2450,7 +2441,6 @@ body,
     border: none;
     cursor: pointer;
     transition: background 0.15s;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .profile__edit-btn:hover {
@@ -2470,7 +2460,6 @@ body,
     border: none;
     cursor: pointer;
     transition: background 0.15s;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .profile__cancel-btn:hover {
@@ -2490,7 +2479,6 @@ body,
     border: none;
     cursor: pointer;
     transition: background 0.15s;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .profile__save-btn:hover {
@@ -2561,7 +2549,6 @@ body,
 
 .profile__avatar-btn {
     display: inline-flex;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     align-items: center;
     gap: 6px;
     border-radius: 999px;
@@ -2575,7 +2562,6 @@ body,
 
 .profile__avatar-btn--danger {
     color: #dc2626;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     border-color: rgba(220, 38, 38, 0.25);
 }
 
@@ -2583,7 +2569,6 @@ body,
 .profile__avatar-btn[aria-disabled='true'] {
     opacity: 0.6;
     cursor: not-allowed;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .profile__fields {
@@ -2622,7 +2607,6 @@ body,
 
 .profile__chat-id-value {
     margin: 6px 0 0;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 14px;
     font-weight: 600;
     color: var(--text-primary);
@@ -2682,7 +2666,6 @@ body,
     color: var(--text-primary);
     outline: none;
     transition: all 0.15s;
-    font-family: inherit;
 }
 
 .profile__field-hint {
@@ -2764,7 +2747,6 @@ body,
     color: var(--text-primary);
     outline: none;
     transition: all 0.15s;
-    font-family: inherit;
 }
 
 .profile__textarea:focus {
@@ -2860,7 +2842,6 @@ body,
     align-items: center;
     gap: 5px;
     cursor: pointer;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .dark-mode .profile__info-note p {
@@ -2998,7 +2979,6 @@ body,
     font-size: 14px;
     font-weight: 500;
     color: var(--text-primary);
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     direction: rtl;
 }
 
@@ -3014,7 +2994,6 @@ body,
     font-size: 15px;
     background: var(--bg-primary);
     color: var(--text-primary);
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     transition: border-color 0.15s, box-shadow 0.15s;
 }
 
@@ -3047,7 +3026,6 @@ body,
     font-weight: 600;
     cursor: pointer;
     margin-top: 8px;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     direction: rtl;
     transition: background 0.15s, transform 0.1s;
 }
@@ -3075,7 +3053,6 @@ body,
     font-size: 15px;
     font-weight: 500;
     cursor: pointer;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     transition: background 0.15s, transform 0.1s;
     display: flex;
     align-items: center;
@@ -3111,7 +3088,6 @@ body,
     border: 1px solid #fecaca;
     direction: rtl;
     text-align: right;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .dark-mode .error-message {
@@ -3133,7 +3109,6 @@ body,
     border: 1px solid #bbf7d0;
     direction: rtl;
     text-align: right;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     line-height: 1.6;
 }
 
@@ -3166,7 +3141,6 @@ body,
     border: 1px solid #fde68a;
     direction: rtl;
     text-align: right;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     line-height: 1.6;
 }
 
@@ -3204,7 +3178,6 @@ body,
     border: none;
     padding: 0;
     cursor: pointer;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: inherit;
     transition: color 0.15s;
 }
@@ -3244,7 +3217,6 @@ body,
     border-radius: 20px;
     width: 100%;
     max-width: 420px;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     max-height: 85vh;
     overflow: hidden;
     box-shadow: var(--shadow-lg);
@@ -3278,7 +3250,6 @@ body,
 
 .new-chat-modal__tabs {
     display: flex;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     gap: 10px;
     padding: 12px 16px;
     border-bottom: 1px solid var(--border-primary);
@@ -3298,7 +3269,6 @@ body,
     gap: 8px;
     cursor: pointer;
     font-weight: 600;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     transition: all 0.2s ease;
 }
 
@@ -3307,19 +3277,16 @@ body,
     color: #fff;
     border-color: var(--accent-primary);
     box-shadow: 0 4px 10px color-mix(in srgb, var(--accent-primary) 20%, transparent);
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .new-chat-modal__group-box {
     padding: 16px;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 55%, transparent), transparent 38%);
 }
 
 .new-chat-modal__label {
     display: block;
     margin-bottom: 8px;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 13px;
     color: var(--text-secondary);
 }
@@ -3331,18 +3298,17 @@ body,
     background: var(--bg-secondary);
     border: 1px solid var(--border-primary);
     border-radius: 12px;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     padding: 0 10px;
     margin-bottom: 10px;
 }
 
 .new-chat-modal__input-wrap input {
+    font-family: 'AppleEmoji', 'Vazir', sans-serif;
     width: 100%;
     border: none;
     background: transparent;
     color: var(--text-primary);
     height: 40px;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     outline: none;
 }
 
@@ -3357,14 +3323,12 @@ body,
     background: var(--accent-primary);
     color: #fff;
     font-weight: 700;
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     padding: 10px 12px;
     cursor: pointer;
 }
 
 .new-chat-modal__action--secondary {
     background: var(--accent-hover);
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .search-box {
@@ -3382,13 +3346,13 @@ body,
 }
 
 .search-box input {
+    font-family: 'AppleEmoji', 'Vazir', sans-serif;
     flex: 1;
     border: none;
     background: none;
     font-size: 15px;
     outline: none;
     color: var(--text-primary);
-    font-family: 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .search-box input::placeholder {
@@ -3621,7 +3585,6 @@ body,
     border-radius: 8px;
     cursor: pointer;
     color: var(--text-primary);
-    font-family: inherit;
     transition: background 0.15s;
 }
 
@@ -3800,5 +3763,12 @@ body[data-music-player='active'] .app {
 
 
 .emoji-font {
-    font-family: 'Vazir', 'AppleEmoji', sans-serif;
+    font-family: 'AppleEmoji', 'Vazir', sans-serif;
+}
+
+
+.message-text--math {
+    direction: ltr;
+    unicode-bidi: plaintext;
+    font-family: 'Vazir', 'AppleEmoji', 'Segoe UI Symbol', sans-serif;
 }

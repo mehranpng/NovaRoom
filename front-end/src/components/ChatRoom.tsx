@@ -29,7 +29,7 @@ interface ChatRoomProps {
     messages: Message[];
     currentUserId: string;
     currentUser?: User | null;
-    onSendMessage: (payload: { text: string; replyToId?: string; editMessageId?: string; file?: FileMetadata }) => void;
+    onSendMessage: (payload: { text: string; replyToId?: string; editMessageId?: string; file?: FileMetadata }) => void | Promise<void>;
     onDeleteMessage: (messageId: string) => void;
     onBack: () => void;
     onCloseChat: () => void;
@@ -125,6 +125,10 @@ function iranDayNumber(ts: any): number {
     return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 86400000);
 }
 
+
+function hasMathLikeContent(text: string): boolean {
+    return /\$[^$]+\$|\\\(|\\\)|\\\[|\\\]|\\frac|\\sqrt|[∑∫√∞≈≠≤≥±πθλμ]/.test(text);
+}
 function toPersianDigits(value: string | number): string {
     return String(value).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)] ?? d);
 }
@@ -2565,7 +2569,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                     });
                 }}
                 style={{
-                    overflowX: replySwipeLocked ? 'hidden' : 'auto',
+                    overflowX: 'hidden',
                     overflowY: replySwipeLocked ? 'hidden' : 'auto',
                 }}
             >
@@ -2807,21 +2811,21 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                                 )}
                                                 {m.text && !Boolean(m.reasoningEnabled && m.reasoningContent) && (
                                                     hasMarkdownSyntax(m.text) ? (
-                                                        <div className="message-text message-text--markdown">
+                                                        <div className={hasMathLikeContent(cachedTextByMessageId[m.id] ?? m.text) ? 'message-text message-text--markdown message-text--math' : 'message-text message-text--markdown'}>
                                                             <MemoMarkdown text={cachedTextByMessageId[m.id] ?? m.text} components={markdownComponents} />
                                                         </div>
                                                     ) : (
-                                                        <div className="message-text">{renderTextWithLinks(m.text)}</div>
+                                                        <div className={hasMathLikeContent(m.text) ? 'message-text message-text--math' : 'message-text'}>{renderTextWithLinks(m.text)}</div>
                                                     )
                                                 )}
                                                 {m.text && Boolean(m.reasoningEnabled && m.reasoningContent) && (
                                                     <div className="ai-reasoning-answer" style={{ marginTop: 0 }}>
                                                         {hasMarkdownSyntax(m.text) ? (
-                                                            <div className="message-text message-text--markdown">
+                                                            <div className={hasMathLikeContent(cachedTextByMessageId[m.id] ?? m.text) ? 'message-text message-text--markdown message-text--math' : 'message-text message-text--markdown'}>
                                                                 <MemoMarkdown text={cachedTextByMessageId[m.id] ?? m.text} components={markdownComponents} />
                                                             </div>
                                                         ) : (
-                                                            <div className="message-text">{renderTextWithLinks(m.text)}</div>
+                                                            <div className={hasMathLikeContent(m.text) ? 'message-text message-text--math' : 'message-text'}>{renderTextWithLinks(m.text)}</div>
                                                         )}
                                                     </div>
                                                 )}

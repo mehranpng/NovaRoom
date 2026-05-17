@@ -167,6 +167,10 @@ const markdownComponents: Components = {
     ),
 };
 
+
+function hasMathLikeContent(text: string): boolean {
+    return /\$[^$]+\$|\\\(|\\\)|\\\[|\\\]|\\frac|\\sqrt|[∑∫√∞≈≠≤≥±πθλμ]/.test(text);
+}
 const AI_EMPTY_STATE_PROMPTS = [
     'درمورد چه چیزی سوال دارید؟',
     'هر چیزی می‌خواهید بپرسید.',
@@ -918,7 +922,7 @@ export function AIChatRoom({
                                                     )}
                                                 </AnimatePresence>
                                                 <div className="ai-reasoning-answer">
-                                                    <div className="message-text message-text--markdown">
+                                                    <div className={hasMathLikeContent(cachedTextByMessageId[m.id] ?? m.text) ? 'message-text message-text--markdown message-text--math' : 'message-text message-text--markdown'}>
                                                         <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
                                                             {message.text ?? ''}
                                                         </ReactMarkdown>
@@ -951,7 +955,7 @@ export function AIChatRoom({
                                             {isMine ? (
                                                 <div className="message-text">{message.text}</div>
                                             ) : (
-                                                <div className="message-text message-text--markdown">
+                                                <div className={hasMathLikeContent(cachedTextByMessageId[m.id] ?? m.text) ? 'message-text message-text--markdown message-text--math' : 'message-text message-text--markdown'}>
                                                     <ReactMarkdown
                                                         remarkPlugins={[remarkGfm, remarkBreaks]}
                                                         components={markdownComponents}
