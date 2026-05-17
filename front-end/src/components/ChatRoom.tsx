@@ -351,7 +351,7 @@ function renderTextWithLinks(text: string): React.ReactNode {
 
 /** ویبره خیلی کوتاه — فقط اگر دستگاه پشتیبانی کند */
 function triggerHaptic() {
-    try { navigator.vibrate?.(18); } catch { /* ignore */ }
+    try { navigator.vibrate?.(10); } catch { /* ignore */ }
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2565,7 +2565,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                     });
                 }}
                 style={{
-                    overflowX: replySwipeLocked ? 'hidden' : 'auto',
+                    overflowX: 'hidden',
                     overflowY: replySwipeLocked ? 'hidden' : 'auto',
                 }}
             >

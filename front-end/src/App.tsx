@@ -1620,13 +1620,6 @@ export function App() {
                     : chat
             )));
         };
-        const removeOptimisticMessage = (targetChatId: string, clientId: string) => {
-            setMessages((prev) => ({
-                ...prev,
-                [targetChatId]: (prev[targetChatId] || []).filter((m) => m.id !== clientId),
-            }));
-        };
-
         if (payload.editMessageId) {
             if (!activeChatId) return;
             const success = await editViaWS(activeChatId, payload.editMessageId, text);
@@ -1640,8 +1633,7 @@ export function App() {
             pushOptimisticMessage(savedMessagesId, clientId);
             const success = await sendViaWS(savedMessagesId, text, payload.replyToId, payload.file, clientId);
             if (!success) {
-                console.warn('WebSocket not connected');
-                removeOptimisticMessage(savedMessagesId, clientId);
+                console.warn('WebSocket not connected; message queued for resend');
             }
             loadChats(false);
             return;
@@ -1682,8 +1674,7 @@ export function App() {
                 pushOptimisticMessage(createdChatId, clientId);
                 const success = await sendViaWS(createdChatId, text, payload.replyToId, payload.file, clientId);
                 if (!success) {
-                    console.warn('WebSocket not connected');
-                    removeOptimisticMessage(createdChatId, clientId);
+                    console.warn('WebSocket not connected; message queued for resend');
                 }
 
                 loadChats(false);
@@ -1704,8 +1695,7 @@ export function App() {
         pushOptimisticMessage(activeChatId, clientId);
         const success = await sendViaWS(activeChatId, text, payload.replyToId, payload.file, clientId);
         if (!success) {
-            console.warn('WebSocket not connected');
-            removeOptimisticMessage(activeChatId, clientId);
+            console.warn('WebSocket not connected; message queued for resend');
         }
     }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, navigate, chats, isUserBlocked, messages]);
 

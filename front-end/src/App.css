@@ -1432,6 +1432,8 @@ body,
     line-height: 1.6;
     direction: rtl;
     text-align: right;
+    unicode-bidi: plaintext;
+    font-family: 'Vazir', 'STIX Two Math', 'Cambria Math', 'Segoe UI Symbol', 'Noto Sans Math', sans-serif;
 }
 
 .message-text--markdown .md-h1 {
