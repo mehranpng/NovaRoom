@@ -90,6 +90,14 @@ export function DataStorageSettings({ onBack }: Props) {
         notify({ type: 'success', message: 'کش رسانه با موفقیت پاک شد.' });
     };
 
+    const isDarkMode = typeof document !== 'undefined' && document.documentElement.classList.contains('dark-mode');
+    const panelBorder = isDarkMode
+        ? '1px solid var(--border-primary)'
+        : '1px solid color-mix(in srgb, var(--text-primary) 24%, var(--border-primary))';
+    const panelBg = isDarkMode
+        ? 'var(--surface-primary)'
+        : 'color-mix(in srgb, var(--surface-primary) 88%, var(--text-primary) 12%)';
+
     return <motion.div className="profile" style={{ fontFamily: 'Vazir, sans-serif' }} initial={{ opacity: 0, y: 8, scale: 0.995 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
         <div className="profile__header" style={{ direction: 'ltr' }}>
             <button onClick={onBack} className="profile__header-back"><ArrowLeft size={22} /></button>
@@ -98,25 +106,25 @@ export function DataStorageSettings({ onBack }: Props) {
         </div>
 
         <div className="profile__content" style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingInline: 14, paddingTop: 12, flex: '0 0 auto' }}>
-            <div style={{ border: '1px solid var(--border-primary)', borderRadius: 14, overflow: 'hidden' }}>
+            <div style={{ border: panelBorder, borderRadius: 14, overflow: 'hidden', background: panelBg }}>
                 <button type="button" className="popover__item" onClick={() => setShowClearModal(true)} style={{ width: '100%', minHeight: 56, justifyContent: 'space-between', direction: 'rtl', padding: '10px 14px', borderRadius: 0 }}>
                     <span style={{ fontWeight: 600 }}>رسانه‌های کش شده</span>
                     <span style={{ color: 'var(--accent-primary)', fontWeight: 700, direction: 'ltr' }}>{humanSize}</span>
                 </button>
             </div>
 
-            <div style={{ border: '1px solid var(--border-primary)', borderRadius: 14, overflow: 'hidden' }}>
-                <div style={{ padding: '12px 14px', fontSize: 15, fontWeight: 700, direction: 'rtl', borderBottom: '1px solid var(--border-primary)' }}>دانلود خودکار</div>
+            <div style={{ border: panelBorder, borderRadius: 14, overflow: 'hidden', background: panelBg }}>
+                <div style={{ padding: '12px 14px', fontSize: 15, fontWeight: 700, direction: 'rtl', borderBottom: panelBorder }}>دانلود خودکار</div>
 
                 {[
                     { key: 'image' as const, label: 'تصاویر', enabled: imageAutoDownload },
                     { key: 'video' as const, label: 'ویدیو ها', enabled: videoAutoDownload },
                     { key: 'audio' as const, label: 'آهنگ ها', enabled: audioAutoDownload },
                 ].map((row) => (
-                    <div key={row.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, direction: 'rtl', padding: '10px 14px', borderTop: '1px solid var(--border-primary)' }}>
+                    <div key={row.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, direction: 'rtl', padding: '10px 14px', borderTop: panelBorder }}>
                         <span>{row.label}</span>
-                        <button type="button" onClick={() => onToggleAutoDownload(row.key)} aria-label={`toggle ${row.label}`} style={{ width: 48, height: 28, borderRadius: 999, border: row.enabled ? '1px solid color-mix(in srgb, var(--accent-primary) 65%, var(--border-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 32%, var(--border-primary))', background: row.enabled ? 'var(--accent-primary)' : 'color-mix(in srgb, var(--text-primary) 12%, var(--surface-primary))', position: 'relative', transition: 'all .2s ease', boxShadow: row.enabled ? '0 0 0 2px color-mix(in srgb, var(--accent-primary) 20%, transparent) inset' : '0 0 0 1px color-mix(in srgb, var(--text-primary) 10%, transparent) inset' }}>
-                            <span style={{ position: 'absolute', top: 2, right: row.enabled ? 2 : 22, width: 22, height: 22, borderRadius: '50%', background: row.enabled ? 'var(--surface-primary)' : 'color-mix(in srgb, var(--text-primary) 90%, var(--surface-primary))', transition: 'all .2s ease', boxShadow: '0 1px 4px color-mix(in srgb, var(--text-primary) 25%, transparent)' }} />
+                        <button type="button" onClick={() => onToggleAutoDownload(row.key)} aria-label={`toggle ${row.label}`} style={{ width: 48, height: 28, borderRadius: 999, border: isDarkMode ? (row.enabled ? '1px solid color-mix(in srgb, var(--accent-primary) 70%, var(--border-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 35%, var(--border-primary))') : (row.enabled ? '1px solid color-mix(in srgb, var(--text-primary) 42%, var(--accent-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 45%, var(--border-primary))'), background: row.enabled ? 'var(--accent-primary)' : (isDarkMode ? 'var(--surface-tertiary)' : 'color-mix(in srgb, var(--text-primary) 24%, var(--surface-primary))'), position: 'relative', transition: 'all .2s ease' }}>
+                            <span style={{ position: 'absolute', top: 2, right: row.enabled ? 2 : 22, width: 22, height: 22, borderRadius: '50%', background: '#fff', transition: 'all .2s ease' }} />
                         </button>
                     </div>
                 ))}
