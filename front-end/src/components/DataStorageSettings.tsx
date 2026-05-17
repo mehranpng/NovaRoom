@@ -115,8 +115,8 @@ export function DataStorageSettings({ onBack }: Props) {
                 ].map((row) => (
                     <div key={row.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, direction: 'rtl', padding: '10px 14px', borderTop: '1px solid var(--border-primary)' }}>
                         <span>{row.label}</span>
-                        <button type="button" onClick={() => onToggleAutoDownload(row.key)} aria-label={`toggle ${row.label}`} style={{ width: 48, height: 28, borderRadius: 999, border: '1px solid var(--border-primary)', background: row.enabled ? 'var(--accent-primary)' : 'var(--surface-tertiary)', position: 'relative', transition: 'all .2s ease' }}>
-                            <span style={{ position: 'absolute', top: 2, right: row.enabled ? 2 : 22, width: 22, height: 22, borderRadius: '50%', background: '#fff', transition: 'all .2s ease' }} />
+                        <button type="button" onClick={() => onToggleAutoDownload(row.key)} aria-label={`toggle ${row.label}`} style={{ width: 48, height: 28, borderRadius: 999, border: row.enabled ? '1px solid color-mix(in srgb, var(--accent-primary) 65%, var(--border-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 32%, var(--border-primary))', background: row.enabled ? 'var(--accent-primary)' : 'color-mix(in srgb, var(--text-primary) 12%, var(--surface-primary))', position: 'relative', transition: 'all .2s ease', boxShadow: row.enabled ? '0 0 0 2px color-mix(in srgb, var(--accent-primary) 20%, transparent) inset' : '0 0 0 1px color-mix(in srgb, var(--text-primary) 10%, transparent) inset' }}>
+                            <span style={{ position: 'absolute', top: 2, right: row.enabled ? 2 : 22, width: 22, height: 22, borderRadius: '50%', background: row.enabled ? 'var(--surface-primary)' : 'color-mix(in srgb, var(--text-primary) 90%, var(--surface-primary))', transition: 'all .2s ease', boxShadow: '0 1px 4px color-mix(in srgb, var(--text-primary) 25%, transparent)' }} />
                         </button>
                     </div>
                 ))}

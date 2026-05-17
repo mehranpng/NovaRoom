@@ -1063,7 +1063,7 @@ body,
     height: 12px;
     border-radius: 999px;
     border: 2px solid color-mix(in srgb, var(--accent-primary) 28%, transparent);
-    border-top-color: #2f80ed;
+    border-top-color: var(--accent-primary);
     animation: ai-chat-drawer-spin 0.8s linear infinite;
     flex: 0 0 auto;
     position: absolute;

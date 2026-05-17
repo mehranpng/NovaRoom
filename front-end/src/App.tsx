@@ -93,7 +93,9 @@ export function App() {
         const fromCookie = typeof document !== 'undefined'
             ? document.cookie.split('; ').find((row) => row.startsWith('auth_token='))?.split('=')[1]
             : null;
-        return fromCookie ? decodeURIComponent(fromCookie) : null;
+        if (fromCookie) return decodeURIComponent(fromCookie);
+        const fromStorage = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
+        return fromStorage || null;
     });
     const [isAuthChecking, setIsAuthChecking] = useState(true);
     const [isAuthenticated, setIsAuthenticated] = useState(Boolean(authToken));
@@ -2188,6 +2190,10 @@ export function App() {
             if (!targetChatId) return false;
 
             const finalChatId = targetChatId;
+            const targetRoute = `/ai-chat/${encodeURIComponent(finalChatId)}`;
+            if (location.pathname !== targetRoute) {
+                navigate(targetRoute);
+            }
 
             const currentAIChatMessages = aiMessagesByChat[finalChatId] || [];
             const sentCount = currentAIChatMessages.filter((m) => m.senderId === currentUser.chatId).length;
@@ -2243,7 +2249,7 @@ export function App() {
         } finally {
             aiSendInFlightRef.current = false;
         }
-    }, [currentUser, activeAIChatId, aiMessagesByChat, sendAIMessage, aiResponding, aiRespondingChatId, aiChats, aiProRemaining, aiFlashRemaining]);
+    }, [currentUser, activeAIChatId, aiMessagesByChat, sendAIMessage, aiResponding, aiRespondingChatId, aiChats, aiProRemaining, aiFlashRemaining, location.pathname, navigate]);
 
     const handleStopAIResponse = useCallback(() => {
         const success = stopAIGeneration();

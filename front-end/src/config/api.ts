@@ -18,7 +18,12 @@ export const getHeaders = (includeAuth = true) => {
         const tokenFromCookie = (typeof document !== 'undefined'
             ? document.cookie.split('; ').find((row) => row.startsWith('auth_token='))?.split('=')[1]
             : null);
-        const token = tokenFromCookie ? decodeURIComponent(tokenFromCookie) : null;
+        const tokenFromStorage = (typeof localStorage !== 'undefined'
+            ? localStorage.getItem('token')
+            : null);
+        const token = tokenFromCookie
+            ? decodeURIComponent(tokenFromCookie)
+            : (tokenFromStorage || null);
         if (token) headers.Authorization = `Bearer ${token}`;
     }
 
