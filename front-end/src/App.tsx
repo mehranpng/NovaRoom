@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { Component, type ErrorInfo, type ReactNode, useState, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import type { Message, View, User, Chat, ChatLastMessage, FileMetadata, AIChatSummary, AIModelKey } from './types';
 import { apiFetch } from './config/api';
@@ -23,6 +23,38 @@ import { useDarkMode } from './hooks/useDarkMode';
 import './App.css';
 
 
+
+
+type AppErrorBoundaryState = { hasError: boolean; message: string };
+
+class AppErrorBoundary extends Component<{ children: ReactNode }, AppErrorBoundaryState> {
+    state: AppErrorBoundaryState = { hasError: false, message: '' };
+
+    static getDerivedStateFromError(error: Error): AppErrorBoundaryState {
+        return { hasError: true, message: String(error?.message || 'Unknown render error') };
+    }
+
+    componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+        console.error('App render error:', error, errorInfo);
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, textAlign: 'center', direction: 'rtl' }}>
+                    <div>
+                        <h2 style={{ margin: 0 }}>خطا در بارگذاری صفحه</h2>
+                        <p style={{ marginTop: 10, opacity: 0.8 }}>{this.state.message}</p>
+                        <button type="button" className="btn btn--primary" onClick={() => window.location.reload()}>
+                            تلاش مجدد
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
 const MESSAGE_CACHE_VERSION = 'v1';
 const MAX_CACHED_MESSAGES_PER_CHAT = 120;
 
@@ -2367,6 +2399,7 @@ export function App() {
     const isInfoRouteActive = currentSearchParams.get('panel') === 'info' && view !== 'profile';
 
     return (
+        <AppErrorBoundary>
         <MusicPlayerProvider>
             <NotificationCenter />
             <div className={cx('app', 'app--resizable-desktop')} style={desktopSidebarWidth != null ? ({ ['--desktop-sidebar-width' as string]: `${desktopSidebarWidth}px` }) : undefined}>
@@ -2531,5 +2564,6 @@ export function App() {
             </div>
             <MiniMusicPlayer />
         </MusicPlayerProvider>
+        </AppErrorBoundary>
     );
 }
