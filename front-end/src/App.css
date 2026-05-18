@@ -1211,6 +1211,15 @@ body,
     text-align: left;
 }
 
+
+.chat-room,
+.chat-room__messages,
+.chat-room__messages-inner,
+.message-row,
+.message-bubble {
+    overflow-x: hidden;
+}
+
 .chat-room__messages {
     flex: 1;
     overflow-y: auto;
@@ -1282,6 +1291,7 @@ body,
     border-radius: 18px;
     margin-bottom: 2px;
     transition: transform var(--motion-fast) var(--motion-ease-standard), box-shadow var(--motion-base) var(--motion-ease-standard);
+    min-width: 0;
 }
 
 @media (min-width: 640px) {
@@ -1420,6 +1430,7 @@ body,
     line-height: 1.625;
     white-space: pre-wrap;
     word-break: break-word;
+    overflow-wrap: anywhere;
     direction: rtl;
     text-align: right;
 }
@@ -1479,6 +1490,8 @@ body,
 .message-text--markdown .md-p {
     margin: 0;
     white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .message-text--markdown .md-p:first-child {
@@ -2627,6 +2640,7 @@ body,
     font-weight: 600;
     color: var(--text-primary);
     word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .profile__copy-btn {
@@ -3655,6 +3669,7 @@ body,
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    min-height: 24px;
     padding: 2px 8px;
     border-radius: 12px;
     border: 1.5px solid transparent;

@@ -351,7 +351,7 @@ function renderTextWithLinks(text: string): React.ReactNode {
 
 /** ویبره خیلی کوتاه — فقط اگر دستگاه پشتیبانی کند */
 function triggerHaptic() {
-    try { navigator.vibrate?.(18); } catch { /* ignore */ }
+    try { navigator.vibrate?.(10); } catch { /* ignore */ }
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2565,7 +2565,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                     });
                 }}
                 style={{
-                    overflowX: replySwipeLocked ? 'hidden' : 'auto',
+                    overflowX: 'hidden',
                     overflowY: replySwipeLocked ? 'hidden' : 'auto',
                 }}
             >
@@ -2843,7 +2843,13 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                                                     type="button"
                                                                 >
                                                                     <span className="message-reaction__emoji">{reaction.emoji}</span>
-                                                                    {reaction.count > 1 && <span className="message-reaction__count" style={{ fontFamily: 'Vazir, sans-serif' }}>{toPersianDigits(reaction.count)}</span>}
+                                                                    <span
+                                                                        className="message-reaction__count"
+                                                                        style={{ fontFamily: 'Vazir, sans-serif', visibility: reaction.count > 1 ? 'visible' : 'hidden' }}
+                                                                        aria-hidden={reaction.count <= 1}
+                                                                    >
+                                                                        {reaction.count > 1 ? toPersianDigits(reaction.count) : toPersianDigits(0)}
+                                                                    </span>
                                                                 </button>
                                                             );
                                                         })}

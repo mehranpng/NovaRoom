@@ -139,6 +139,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    max-width: 100%;
 }
 
 .file-upload-size {
@@ -255,6 +256,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    max-width: 100%;
     color: var(--text-primary);
     direction: ltr;
     text-align: left;
@@ -378,6 +380,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    max-width: 100%;
 }
 
 .file-audio-artist {

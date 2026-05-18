@@ -65,6 +65,15 @@ const mergeMessages = (base: Message[], incoming: Message[], mode: 'replace' | '
     const byId = new Map<string, Message>();
     if (mode === 'replace') {
         for (const m of incoming) byId.set(m.id, m);
+        const incomingClientIds = new Set(incoming.map((m) => String((m as any).clientId || '')).filter(Boolean));
+        for (const pending of base) {
+            const isPendingSend = pending.deliveryStatus === 'sending';
+            const pendingClientId = String((pending as any).clientId || '');
+            const alreadyInIncoming = byId.has(pending.id) || (pendingClientId && incomingClientIds.has(pendingClientId));
+            if (isPendingSend && !alreadyInIncoming) {
+                byId.set(pending.id, pending);
+            }
+        }
         return Array.from(byId.values()).sort((a, b) => {
             const tsDiff = normalizeTimestamp(a.timestamp) - normalizeTimestamp(b.timestamp);
             if (tsDiff !== 0) return tsDiff;
