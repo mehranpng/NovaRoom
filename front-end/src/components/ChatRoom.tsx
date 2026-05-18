@@ -335,6 +335,28 @@ function hasMarkdownSyntax(text: string): boolean {
     return /(^|\n)\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>\s)|(```|`[^`]+`|\[[^\]]+\]\([^\)]+\)|\*\*[^*]+\*\*|__[^_]+__)/m.test(text);
 }
 
+
+function isSingleEmojiGrapheme(input: string): boolean {
+    const value = String(input || '').trim();
+    if (!value) return false;
+    const seg = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+    const units = Array.from(seg.segment(value), (x: any) => x.segment).filter(Boolean);
+    if (units.length !== 1) return false;
+    return /\p{Extended_Pictographic}/u.test(units[0]);
+}
+
+function getPureEmojiCount(input: string): number {
+    const value = String(input || '').trim();
+    if (!value) return 0;
+    const seg = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+    const units = Array.from(seg.segment(value), (x: any) => x.segment).filter(Boolean);
+    if (!units.length) return 0;
+    for (const unit of units) {
+        if (!isSingleEmojiGrapheme(unit)) return 0;
+    }
+    return units.length;
+}
+
 function renderTextWithLinks(text: string): React.ReactNode {
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
     const isUrl = (value: string) => /^(https?:\/\/[^\s]+|www\.[^\s]+)$/i.test(value);
@@ -1885,6 +1907,8 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
             const prev = idx > 0 ? messages[idx - 1] : null;
             const next = idx < messages.length - 1 ? messages[idx + 1] : null;
             const isMine = m.senderId === currentUserId;
+                                const pureEmojiCount = m.text ? getPureEmojiCount(m.text) : 0;
+                                const isBigEmojiOnly = pureEmojiCount > 0 && pureEmojiCount <= 2 && !m.file && !m.replyTo && !m.forwardedFrom;
             const prevSameSender = prev ? prev.senderId === m.senderId : false;
             const nextSameSender = next ? next.senderId === m.senderId : false;
             const dayBreak = !prev || !sameDay(prev.timestamp, m.timestamp);
@@ -2704,7 +2728,9 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
 
                                             <div
                                                 ref={(el) => { if (!el) { messageElsRef.current.delete(m.id); return; } messageElsRef.current.set(m.id, el); }}
-                                                className={isMine ? `message-bubble message-bubble--mine ${shape}` : `message-bubble message-bubble--theirs ${shape}`}
+                                                className={isMine
+                                                    ? `message-bubble message-bubble--mine ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''}`
+                                                    : `message-bubble message-bubble--theirs ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''}`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     if (Date.now() < swipeRef.current.blockClickUntil) return;
@@ -2811,7 +2837,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                                             <MemoMarkdown text={cachedTextByMessageId[m.id] ?? m.text} components={markdownComponents} />
                                                         </div>
                                                     ) : (
-                                                        <div className="message-text">{renderTextWithLinks(m.text)}</div>
+                                                        <div className={isBigEmojiOnly ? 'message-text message-text--emoji-only' : 'message-text'}>{renderTextWithLinks(m.text)}</div>
                                                     )
                                                 )}
                                                 {m.text && Boolean(m.reasoningEnabled && m.reasoningContent) && (
@@ -2821,7 +2847,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                                                 <MemoMarkdown text={cachedTextByMessageId[m.id] ?? m.text} components={markdownComponents} />
                                                             </div>
                                                         ) : (
-                                                            <div className="message-text">{renderTextWithLinks(m.text)}</div>
+                                                            <div className={isBigEmojiOnly ? 'message-text message-text--emoji-only' : 'message-text'}>{renderTextWithLinks(m.text)}</div>
                                                         )}
                                                     </div>
                                                 )}

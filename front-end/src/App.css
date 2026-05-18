@@ -1429,10 +1429,28 @@ body,
     font-size: 15px;
     line-height: 1.625;
     white-space: pre-wrap;
-    word-break: break-word;
+    word-break: normal;
     overflow-wrap: break-word;
     direction: rtl;
     text-align: right;
+}
+
+
+.message-bubble--emoji-only {
+    background: transparent !important;
+    box-shadow: none !important;
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+
+.message-text--emoji-only {
+    font-size: clamp(40px, 6.8vw, 54px);
+    line-height: 1.15;
+    letter-spacing: 0;
+}
+
+.message-text--emoji-only > span {
+    font-family: 'AppleEmoji', 'Vazir', sans-serif;
 }
 
 /* ========================================
@@ -1490,7 +1508,7 @@ body,
 .message-text--markdown .md-p {
     margin: 0;
     white-space: pre-wrap;
-    word-break: break-word;
+    word-break: normal;
     overflow-wrap: break-word;
 }
 
