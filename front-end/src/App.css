@@ -1214,9 +1214,12 @@ body,
 
 .chat-room,
 .chat-room__messages,
-.chat-room__messages-inner,
-.message-row {
+.chat-room__messages-inner {
     overflow-x: hidden;
+}
+
+.message-row {
+    overflow-x: visible;
 }
 
 .chat-room__messages {
@@ -1449,7 +1452,7 @@ body,
     text-align: center;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
-    word-break: break-word;
+    word-break: break-all;
 }
 
 .message-text--emoji-only-1 { font-size: clamp(76px, 13vw, 108px); }
