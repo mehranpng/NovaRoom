@@ -437,6 +437,46 @@ function getPureEmojiCount(input: string): number {
     return emojiMatches.length;
 }
 
+const EMOJI_WRAP_LIMIT_PER_LINE = 16;
+
+function isEmojiPresentationGrapheme(unit: string): boolean {
+    if (!unit) return false;
+    const stripped = unit.replace(/[\uFE0E\uFE0F\u200D\u{1F3FB}-\u{1F3FF}]/gu, '');
+    if (!stripped) return false;
+    return /^\p{Extended_Pictographic}+$/u.test(stripped);
+}
+
+function wrapLongEmojiRuns(input: string, wrapAfter = EMOJI_WRAP_LIMIT_PER_LINE): string {
+    const value = String(input || '');
+    if (!value || wrapAfter < 1) return value;
+
+    const lines = value.split('\n');
+    const wrappedLines = lines.map((line) => {
+        const graphemes = splitGraphemesSafe(line);
+        let emojiRunCount = 0;
+        let out = '';
+
+        for (const unit of graphemes) {
+            if (isEmojiPresentationGrapheme(unit)) {
+                emojiRunCount += 1;
+                if (emojiRunCount > wrapAfter) {
+                    out += '\n';
+                    emojiRunCount = 1;
+                }
+                out += unit;
+                continue;
+            }
+
+            emojiRunCount = 0;
+            out += unit;
+        }
+
+        return out;
+    });
+
+    return wrappedLines.join('\n');
+}
+
 function renderTextWithLinks(text: string): React.ReactNode {
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
     const isUrl = (value: string) => /^(https?:\/\/[^\s]+|www\.[^\s]+)$/i.test(value);
@@ -3306,7 +3346,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                             <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
                                 value={text}
                                 onChange={(e) => {
-                                    const nextValue = e.target.value;
+                                    const nextValue = wrapLongEmojiRuns(e.target.value);
                                     setText(nextValue);
                                     refreshTyping(nextValue);
                                 }}
