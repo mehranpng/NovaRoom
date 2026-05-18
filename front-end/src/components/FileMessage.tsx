@@ -29,7 +29,6 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [cacheChecked, setCacheChecked] = useState(false);
   const [resolvedAudioDuration, setResolvedAudioDuration] = useState(0);
-  const pendingOpenAfterDownloadRef = useRef(false);
   const musicPlayer = useMusicPlayer();
   const isImage = isImageFile(file.mimeType); const isAudio = (file.mimeType || '').startsWith('audio/'); const isVideo = (file.mimeType || '').startsWith('video/');
   const cacheKey = `chat:${chatId}:file:${file.fileId}`;
@@ -58,9 +57,8 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     return true;
   };
 
-  const startDownload = async (openAfterDownload = false) => {
+  const startDownload = async () => {
     if (downloadState === 'decrypting' || downloadState === 'downloading') return;
-    if (openAfterDownload && isImage) pendingOpenAfterDownloadRef.current = true;
     const taskKey = file.fileId;
     const subscriber: DownloadSubscriber = (state, progress) => { setDownloadState(state); setDownloadProgress(progress); };
     const notify = (task: DownloadTask) => task.subscribers.forEach((fn) => fn(task.state, task.progress));
@@ -102,10 +100,6 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     if (finalBlob) {
       const object = URL.createObjectURL(finalBlob);
       setMediaUrl(object); setDownloadState('done'); onMediaLoad?.();
-      if (pendingOpenAfterDownloadRef.current && isImage) {
-        pendingOpenAfterDownloadRef.current = false;
-        onImageClick?.(object, file);
-      }
     }
   };
 
@@ -207,10 +201,9 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
       <div className="file-image-preview" style={{ background: isVideo ? '#000' : 'transparent', width: isImage ? undefined : '100%', minWidth: isVideo ? 220 : undefined, maxWidth: '100%', aspectRatio: (isImage || isVideo) ? effectiveAspectRatio : undefined }} onClick={(e) => {
         e.stopPropagation();
         if (!mediaUrl && (downloadState === 'decrypting' || downloadState === 'downloading')) {
-          pendingOpenAfterDownloadRef.current = false;
           return;
         }
-        if (!mediaUrl) void startDownload(isImage);
+        if (!mediaUrl) void startDownload();
       }}>
         {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} style={{ objectFit: shouldContain ? 'contain' : 'cover' }} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><video src={mediaUrl} preload="metadata" muted playsInline style={{ width: '100%', height: '100%', objectFit: shouldContain ? 'contain' : 'cover', background: '#000' }} /><span className="file-video-duration">{formatDuration(mediaDuration)}</span><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
           (<>

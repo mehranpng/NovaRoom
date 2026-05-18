@@ -1926,11 +1926,12 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
             const next = idx < messages.length - 1 ? messages[idx + 1] : null;
             const isMine = m.senderId === currentUserId;
                                 const pureEmojiCount = m.text ? getPureEmojiCount(m.text) : 0;
-                                const isBigEmojiOnly = pureEmojiCount > 0 && pureEmojiCount <= 2 && !m.file && !m.replyTo && !m.forwardedFrom;
+                                const isBigEmojiOnly = pureEmojiCount > 0 && pureEmojiCount <= 5 && !m.file && !m.replyTo && !m.forwardedFrom;
+            const emojiOnlyClass = isBigEmojiOnly ? `message-text--emoji-only-${Math.min(5, pureEmojiCount)}` : "";
             const prevSameSender = prev ? prev.senderId === m.senderId : false;
             const nextSameSender = next ? next.senderId === m.senderId : false;
             const dayBreak = !prev || !sameDay(prev.timestamp, m.timestamp);
-            return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender), isBigEmojiOnly };
+            return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender), isBigEmojiOnly, emojiOnlyClass };
         });
     }, [chatContentReady, messages, currentUserId]);
 
@@ -2619,7 +2620,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                     <span className="chat-range-loader chat-range-loader--active" />
                                 </div>
                             )}
-                            {items.map(({ m, isMine, dayBreak, shape, isBigEmojiOnly }) => {
+                            {items.map(({ m, isMine, dayBreak, shape, isBigEmojiOnly, emojiOnlyClass }) => {
                                 const isHighlighted = highlightId === m.id;
                                 const dragX = dragState.id === m.id ? dragState.x : 0;
                                 const dragActive = dragState.id === m.id ? dragState.active : false;
@@ -2855,7 +2856,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                                             <MemoMarkdown text={cachedTextByMessageId[m.id] ?? m.text} components={markdownComponents} />
                                                         </div>
                                                     ) : (
-                                                        <div className={isBigEmojiOnly ? 'message-text message-text--emoji-only' : 'message-text'}>{renderTextWithLinks(m.text)}</div>
+                                                        <div className={isBigEmojiOnly ? `message-text message-text--emoji-only ${emojiOnlyClass}` : 'message-text'}>{renderTextWithLinks(m.text)}</div>
                                                     )
                                                 )}
                                                 {m.text && Boolean(m.reasoningEnabled && m.reasoningContent) && (
@@ -2865,7 +2866,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                                                 <MemoMarkdown text={cachedTextByMessageId[m.id] ?? m.text} components={markdownComponents} />
                                                             </div>
                                                         ) : (
-                                                            <div className={isBigEmojiOnly ? 'message-text message-text--emoji-only' : 'message-text'}>{renderTextWithLinks(m.text)}</div>
+                                                            <div className={isBigEmojiOnly ? `message-text message-text--emoji-only ${emojiOnlyClass}` : 'message-text'}>{renderTextWithLinks(m.text)}</div>
                                                         )}
                                                     </div>
                                                 )}
