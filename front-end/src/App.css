@@ -1430,7 +1430,7 @@ body,
     line-height: 1.625;
     white-space: pre-wrap;
     word-break: break-word;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
     direction: rtl;
     text-align: right;
 }
@@ -1491,7 +1491,7 @@ body,
     margin: 0;
     white-space: pre-wrap;
     word-break: break-word;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
 }
 
 .message-text--markdown .md-p:first-child {
@@ -2640,7 +2640,7 @@ body,
     font-weight: 600;
     color: var(--text-primary);
     word-break: break-word;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
 }
 
 .profile__copy-btn {
@@ -3705,6 +3705,8 @@ body,
 .message-reaction__emoji {
     font-family: 'AppleEmoji', 'Vazir', sans-serif;
     line-height: 1;
+    display: inline-flex;
+    align-items: center;
 }
 
 .message-reaction__count {

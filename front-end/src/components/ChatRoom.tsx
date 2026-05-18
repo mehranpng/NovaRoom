@@ -2843,13 +2843,11 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                                                     type="button"
                                                                 >
                                                                     <span className="message-reaction__emoji">{reaction.emoji}</span>
-                                                                    <span
-                                                                        className="message-reaction__count"
-                                                                        style={{ fontFamily: 'Vazir, sans-serif', visibility: reaction.count > 1 ? 'visible' : 'hidden' }}
-                                                                        aria-hidden={reaction.count <= 1}
-                                                                    >
-                                                                        {reaction.count > 1 ? toPersianDigits(reaction.count) : toPersianDigits(0)}
-                                                                    </span>
+                                                                    {reaction.count > 1 && (
+                                                                        <span className="message-reaction__count" style={{ fontFamily: 'Vazir, sans-serif' }}>
+                                                                            {toPersianDigits(reaction.count)}
+                                                                        </span>
+                                                                    )}
                                                                 </button>
                                                             );
                                                         })}

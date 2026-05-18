@@ -365,12 +365,19 @@
     padding: 10px 12px;
     background: rgba(0, 0, 0, 0.05);
     border-radius: 14px;
+    width: 100%;
     max-width: 340px;
-    min-width: 220px;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .message-bubble--mine .file-audio-card {
     background: color-mix(in srgb, var(--message-mine-text) 16%, transparent);
+}
+
+.file-audio-meta {
+    flex: 1;
+    min-width: 0;
 }
 
 .file-audio-title {
