@@ -367,12 +367,16 @@ function isSingleEmojiGrapheme(input: string): boolean {
 function getPureEmojiCount(input: string): number {
     const value = String(input || '').trim();
     if (!value) return 0;
-    const units = splitGraphemesSafe(value).filter((u) => u.trim().length > 0);
-    if (!units.length) return 0;
-    for (const unit of units) {
-        if (!isSingleEmojiGrapheme(unit)) return 0;
-    }
-    return units.length;
+
+    const emojiMatches = value.match(/\p{Extended_Pictographic}/gu) || [];
+    if (!emojiMatches.length) return 0;
+
+    const nonEmojiParts = value
+        .replace(/\p{Extended_Pictographic}/gu, '')
+        .replace(/[\u200D\uFE0E\uFE0F\u{1F3FB}-\u{1F3FF}\s]/gu, '');
+
+    if (nonEmojiParts.length > 0) return 0;
+    return emojiMatches.length;
 }
 
 function renderTextWithLinks(text: string): React.ReactNode {

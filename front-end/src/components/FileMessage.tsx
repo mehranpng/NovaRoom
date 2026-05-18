@@ -2,7 +2,7 @@ import type { FileMetadata } from '../types';
 import { formatFileSize, getFileIcon, isImageFile } from '../utils/fileUtils';
 import { Play, Pause, Download, X, LockOpen } from 'lucide-react';
 import { API_BASE_URL } from '../config/api';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useMusicPlayer } from '../contexts/MusicPlayerContext';
 import { decryptFileBytesClientSide } from '../utils/e2ee';
 import { getCachedBlob, getOrCacheBlob } from '../utils/mediaCache';
@@ -147,7 +147,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     const shouldAutoDownload = (isImage && isAutoDownloadEnabled(autoDownloadCookieKeys.image))
       || (isVideo && isAutoDownloadEnabled(autoDownloadCookieKeys.video))
       || (isAudio && isAutoDownloadEnabled(autoDownloadCookieKeys.audio));
-    if (shouldAutoDownload) void startDownload(false);
+    if (shouldAutoDownload) void startDownload();
   }, [cacheChecked, mediaUrl, downloadState, isImage, isVideo, isAudio]);
 
   useEffect(() => {

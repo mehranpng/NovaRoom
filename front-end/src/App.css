@@ -1800,6 +1800,15 @@ body,
 .dark-mode .message-bubble--emoji-only .message-meta {
     color: #ffffff;
 }
+
+.message-bubble--emoji-only .message-meta--mine,
+.message-bubble--emoji-only .message-meta--theirs,
+.message-bubble--emoji-only .message-meta--mine .message-edited-label,
+.message-bubble--emoji-only .message-meta--mine .message-ai-model-label,
+.message-bubble--emoji-only .message-meta--mine .message-seen--single,
+.message-bubble--emoji-only .message-meta--mine .message-seen--double {
+    color: inherit;
+}
 .message-meta {
     display: flex;
     align-items: center;
