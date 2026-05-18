@@ -189,13 +189,56 @@ function extractFileIdFromAvatar(rawAvatar: string): string {
 }
 
 
-type WindowWithMathJax = Window & { MathJax?: { typesetPromise?: (elements?: Element[]) => Promise<void> } };
+
+
+
+type WindowWithMathJax = Window & {
+    MathJax?: {
+        typesetPromise?: (elements?: Element[]) => Promise<void>;
+    };
+    __mathJaxLoadPromise?: Promise<void>;
+};
+
+function ensureMathJaxLoaded(): Promise<void> {
+    if (typeof window === 'undefined') return Promise.resolve();
+    const w = window as WindowWithMathJax;
+    if (w.MathJax?.typesetPromise) return Promise.resolve();
+    if (w.__mathJaxLoadPromise) return w.__mathJaxLoadPromise;
+
+    w.MathJax = w.MathJax || {
+        tex: {
+            inlineMath: [['$', '$'], ['\\(', '\\)']],
+            displayMath: [['$$', '$$'], ['\\[', '\\]']],
+        },
+        svg: { fontCache: 'global' },
+    };
+
+    w.__mathJaxLoadPromise = new Promise<void>((resolve) => {
+        const existing = document.querySelector('script[data-mathjax="1"]') as HTMLScriptElement | null;
+        if (existing) {
+            existing.addEventListener('load', () => resolve(), { once: true });
+            existing.addEventListener('error', () => resolve(), { once: true });
+            return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js';
+        script.async = true;
+        script.defer = true;
+        script.dataset.mathjax = '1';
+        script.onload = () => resolve();
+        script.onerror = () => resolve();
+        document.head.appendChild(script);
+    });
+    return w.__mathJaxLoadPromise;
+}
 
 function typesetMath(container: Element | null) {
     if (!container || typeof window === 'undefined') return;
-    const mj = (window as WindowWithMathJax).MathJax;
-    if (!mj?.typesetPromise) return;
-    void mj.typesetPromise([container]).catch(() => {});
+    void ensureMathJaxLoaded().then(() => {
+        const mj = (window as WindowWithMathJax).MathJax;
+        if (!mj?.typesetPromise) return;
+        void mj.typesetPromise([container]).catch(() => {});
+    });
 }
 
 type GroupMember = {
