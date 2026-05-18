@@ -1926,7 +1926,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
             const next = idx < messages.length - 1 ? messages[idx + 1] : null;
             const isMine = m.senderId === currentUserId;
                                 const pureEmojiCount = m.text ? getPureEmojiCount(m.text) : 0;
-                                const isBigEmojiOnly = pureEmojiCount > 0 && pureEmojiCount <= 5 && !m.file && !m.replyTo && !m.forwardedFrom;
+                                const isBigEmojiOnly = pureEmojiCount >= 1 && pureEmojiCount <= 5 && !m.file && !m.replyTo && !m.forwardedFrom;
             const emojiOnlyClass = isBigEmojiOnly ? `message-text--emoji-only-${Math.min(5, pureEmojiCount)}` : "";
             const prevSameSender = prev ? prev.senderId === m.senderId : false;
             const nextSameSender = next ? next.senderId === m.senderId : false;

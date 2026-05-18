@@ -1447,6 +1447,9 @@ body,
     line-height: 1.15;
     letter-spacing: 0;
     text-align: center;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .message-text--emoji-only-1 { font-size: clamp(76px, 13vw, 108px); }
@@ -1789,6 +1792,14 @@ body,
 /* ========================================
    (rest of file unchanged)
    ======================================== */
+
+.message-bubble--emoji-only .message-meta {
+    color: var(--text-primary);
+}
+
+.dark-mode .message-bubble--emoji-only .message-meta {
+    color: #ffffff;
+}
 .message-meta {
     display: flex;
     align-items: center;
