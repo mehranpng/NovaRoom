@@ -1215,8 +1215,7 @@ body,
 .chat-room,
 .chat-room__messages,
 .chat-room__messages-inner,
-.message-row,
-.message-bubble {
+.message-row {
     overflow-x: hidden;
 }
 
@@ -1292,6 +1291,7 @@ body,
     margin-bottom: 2px;
     transition: transform var(--motion-fast) var(--motion-ease-standard), box-shadow var(--motion-base) var(--motion-ease-standard);
     min-width: 0;
+    overflow: visible;
 }
 
 @media (min-width: 640px) {
