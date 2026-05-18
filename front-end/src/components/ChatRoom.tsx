@@ -1930,7 +1930,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
             const prevSameSender = prev ? prev.senderId === m.senderId : false;
             const nextSameSender = next ? next.senderId === m.senderId : false;
             const dayBreak = !prev || !sameDay(prev.timestamp, m.timestamp);
-            return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender) };
+            return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender), isBigEmojiOnly };
         });
     }, [chatContentReady, messages, currentUserId]);
 
@@ -2619,7 +2619,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                     <span className="chat-range-loader chat-range-loader--active" />
                                 </div>
                             )}
-                            {items.map(({ m, isMine, dayBreak, shape }) => {
+                            {items.map(({ m, isMine, dayBreak, shape, isBigEmojiOnly }) => {
                                 const isHighlighted = highlightId === m.id;
                                 const dragX = dragState.id === m.id ? dragState.x : 0;
                                 const dragActive = dragState.id === m.id ? dragState.active : false;
