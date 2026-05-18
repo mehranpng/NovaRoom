@@ -171,10 +171,19 @@ const markdownComponents: Components = {
 
 
 
-type WindowWithMathJax = Window & {
-    MathJax?: {
-        typesetPromise?: (elements?: Element[]) => Promise<void>;
+type MathJaxConfig = {
+    typesetPromise?: (elements?: Element[]) => Promise<void>;
+    tex?: {
+        inlineMath: string[][];
+        displayMath: string[][];
     };
+    svg?: {
+        fontCache: string;
+    };
+};
+
+type WindowWithMathJax = Window & {
+    MathJax?: MathJaxConfig;
     __mathJaxLoadPromise?: Promise<void>;
 };
 

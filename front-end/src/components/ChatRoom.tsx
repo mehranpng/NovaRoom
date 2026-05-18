@@ -192,55 +192,6 @@ function extractFileIdFromAvatar(rawAvatar: string): string {
 
 
 
-type WindowWithMathJax = Window & {
-    MathJax?: {
-        typesetPromise?: (elements?: Element[]) => Promise<void>;
-    };
-    __mathJaxLoadPromise?: Promise<void>;
-};
-
-function ensureMathJaxLoaded(): Promise<void> {
-    if (typeof window === 'undefined') return Promise.resolve();
-    const w = window as WindowWithMathJax;
-    if (w.MathJax?.typesetPromise) return Promise.resolve();
-    if (w.__mathJaxLoadPromise) return w.__mathJaxLoadPromise;
-
-    w.MathJax = w.MathJax || {
-        tex: {
-            inlineMath: [['$', '$'], ['\\(', '\\)']],
-            displayMath: [['$$', '$$'], ['\\[', '\\]']],
-        },
-        svg: { fontCache: 'global' },
-    };
-
-    w.__mathJaxLoadPromise = new Promise<void>((resolve) => {
-        const existing = document.querySelector('script[data-mathjax="1"]') as HTMLScriptElement | null;
-        if (existing) {
-            existing.addEventListener('load', () => resolve(), { once: true });
-            existing.addEventListener('error', () => resolve(), { once: true });
-            return;
-        }
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js';
-        script.async = true;
-        script.defer = true;
-        script.dataset.mathjax = '1';
-        script.onload = () => resolve();
-        script.onerror = () => resolve();
-        document.head.appendChild(script);
-    });
-    return w.__mathJaxLoadPromise;
-}
-
-function typesetMath(container: Element | null) {
-    if (!container || typeof window === 'undefined') return;
-    void ensureMathJaxLoaded().then(() => {
-        const mj = (window as WindowWithMathJax).MathJax;
-        if (!mj?.typesetPromise) return;
-        void mj.typesetPromise([container]).catch(() => {});
-    });
-}
-
 type GroupMember = {
     name: string;
     username: string;
@@ -391,35 +342,6 @@ function normalizeMessageTextForRender(text: string): string {
 
 function hasMarkdownSyntax(text: string): boolean {
     return /(^|\n)\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>\s)|(```|`[^`]+`|\[[^\]]+\]\([^\)]+\)|\*\*[^*]+\*\*|__[^_]+__|\$\$?[\s\S]+?\$\$?|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\])/m.test(text);
-}
-
-
-function splitGraphemesSafe(input: string): string[] {
-    const value = String(input || '');
-    try {
-        const SegmenterCtor = (Intl as any)?.Segmenter;
-        if (typeof SegmenterCtor === 'function') {
-            const seg = new SegmenterCtor(undefined, { granularity: 'grapheme' });
-            return Array.from(seg.segment(value), (x: any) => x.segment).filter(Boolean);
-        }
-    } catch {
-        // ignore and fallback
-    }
-    return Array.from(value);
-}
-
-function isSingleEmojiGrapheme(input: string): boolean {
-    const value = String(input || '').trim();
-    if (!value) return false;
-    const units = splitGraphemesSafe(value);
-    if (units.length !== 1) return false;
-    const cp = units[0].codePointAt(0) || 0;
-    const isLikelyEmoji =
-        (cp >= 0x1F300 && cp <= 0x1FAFF)
-        || (cp >= 0x2600 && cp <= 0x27BF)
-        || units[0].includes('️')
-        || units[0].includes('‍');
-    return isLikelyEmoji;
 }
 
 function getPureEmojiCount(input: string): number {
