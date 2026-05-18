@@ -167,6 +167,16 @@ const markdownComponents: Components = {
     ),
 };
 
+
+type WindowWithMathJax = Window & { MathJax?: { typesetPromise?: (elements?: Element[]) => Promise<void> } };
+
+function typesetMath(container: Element | null) {
+    if (!container || typeof window === 'undefined') return;
+    const mj = (window as WindowWithMathJax).MathJax;
+    if (!mj?.typesetPromise) return;
+    void mj.typesetPromise([container]).catch(() => {});
+}
+
 const AI_EMPTY_STATE_PROMPTS = [
     'درمورد چه چیزی سوال دارید؟',
     'هر چیزی می‌خواهید بپرسید.',
@@ -480,6 +490,10 @@ export function AIChatRoom({
         prevLenRef.current = messages.length;
         prevLastMessageRef.current = messages[messages.length - 1] ?? null;
     }, [messages, currentUserId]);
+
+    useEffect(() => {
+        typesetMath(messagesContainerRef.current);
+    }, [messages]);
 
     // Handle typing indicator
     useEffect(() => {

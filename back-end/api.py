@@ -904,6 +904,36 @@ async def get_current_user(
     return user
 
 
+async def _sync_login_seen_by_with_sessions(chat_id: str, sessions: List[dict], login_events: Optional[List[dict]] = None) -> None:
+    allowed_hashes = {str(item.get("tokenHash") or "").strip() for item in (sessions or [])}
+    allowed_hashes = {h for h in allowed_hashes if h}
+
+    if login_events is None:
+        user_doc = await cl_users.find_one({"chatId": chat_id}, {"login": 1})
+        login_events = _normalize_login_events(user_doc or {})
+
+    cleaned_events: List[dict] = []
+    changed = False
+    for event in login_events or []:
+        current_seen = [str(h).strip() for h in (event.get("seenBy") or []) if str(h).strip()]
+        filtered_seen = []
+        seen_unique = set()
+        for h in current_seen:
+            if h not in allowed_hashes or h in seen_unique:
+                continue
+            seen_unique.add(h)
+            filtered_seen.append(h)
+        if filtered_seen != current_seen:
+            changed = True
+        cleaned_events.append({**event, "seenBy": filtered_seen})
+
+    if changed:
+        await cl_users.update_one(
+            {"chatId": chat_id},
+            {"$set": {"login.loginEvents": cleaned_events}, "$unset": {"login.token": ""}},
+        )
+
+
 @app.post("/auth/logout")
 async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
     user = await get_user_from_session_token(credentials.credentials)
@@ -918,6 +948,7 @@ async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
         {"chatId": user["chatId"]},
         {"$set": {"login.sessions": next_sessions}, "$unset": {"login.token": ""}},
     )
+    await _sync_login_seen_by_with_sessions(user["chatId"], next_sessions)
     user_id = user["chatId"]
     for ws in list(active_connections.get(user_id, [])):
         try:
@@ -1001,6 +1032,7 @@ async def revoke_single_session(
         {"chatId": current_user["chatId"]},
         {"$set": {"login.sessions": next_sessions}, "$unset": {"login.token": ""}},
     )
+    await _sync_login_seen_by_with_sessions(current_user["chatId"], next_sessions)
     return {"ok": True}
 
 
@@ -1014,6 +1046,7 @@ async def revoke_other_sessions(current_user: dict = Depends(get_current_user)):
         {"chatId": current_user["chatId"]},
         {"$set": {"login.sessions": keep}, "$unset": {"login.token": ""}},
     )
+    await _sync_login_seen_by_with_sessions(current_user["chatId"], keep)
     return {"ok": True}
 
 

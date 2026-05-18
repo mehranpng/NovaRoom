@@ -188,6 +188,16 @@ function extractFileIdFromAvatar(rawAvatar: string): string {
     return '';
 }
 
+
+type WindowWithMathJax = Window & { MathJax?: { typesetPromise?: (elements?: Element[]) => Promise<void> } };
+
+function typesetMath(container: Element | null) {
+    if (!container || typeof window === 'undefined') return;
+    const mj = (window as WindowWithMathJax).MathJax;
+    if (!mj?.typesetPromise) return;
+    void mj.typesetPromise([container]).catch(() => {});
+}
+
 type GroupMember = {
     name: string;
     username: string;
@@ -332,7 +342,7 @@ const markdownComponents: Components = {
 };
 
 function hasMarkdownSyntax(text: string): boolean {
-    return /(^|\n)\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>\s)|(```|`[^`]+`|\[[^\]]+\]\([^\)]+\)|\*\*[^*]+\*\*|__[^_]+__)/m.test(text);
+    return /(^|\n)\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>\s)|(```|`[^`]+`|\[[^\]]+\]\([^\)]+\)|\*\*[^*]+\*\*|__[^_]+__|\$\$?[\s\S]+?\$\$?|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\])/m.test(text);
 }
 
 
