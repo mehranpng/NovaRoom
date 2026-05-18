@@ -3304,6 +3304,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                 }}
                             />
                             <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
+                                wrap="soft"
                                 value={text}
                                 onChange={(e) => {
                                     const nextValue = e.target.value;

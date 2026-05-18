@@ -1929,7 +1929,11 @@ body,
     border: none;
     outline: none;
     resize: none;
+    overflow-x: hidden;
     overflow-y: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
     transition: all 0.15s;
     font-family: inherit;
     direction: rtl;
