@@ -336,20 +336,38 @@ function hasMarkdownSyntax(text: string): boolean {
 }
 
 
+function splitGraphemesSafe(input: string): string[] {
+    const value = String(input || '');
+    try {
+        const SegmenterCtor = (Intl as any)?.Segmenter;
+        if (typeof SegmenterCtor === 'function') {
+            const seg = new SegmenterCtor(undefined, { granularity: 'grapheme' });
+            return Array.from(seg.segment(value), (x: any) => x.segment).filter(Boolean);
+        }
+    } catch {
+        // ignore and fallback
+    }
+    return Array.from(value);
+}
+
 function isSingleEmojiGrapheme(input: string): boolean {
     const value = String(input || '').trim();
     if (!value) return false;
-    const seg = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-    const units = Array.from(seg.segment(value), (x: any) => x.segment).filter(Boolean);
+    const units = splitGraphemesSafe(value);
     if (units.length !== 1) return false;
-    return /\p{Extended_Pictographic}/u.test(units[0]);
+    const cp = units[0].codePointAt(0) || 0;
+    const isLikelyEmoji =
+        (cp >= 0x1F300 && cp <= 0x1FAFF)
+        || (cp >= 0x2600 && cp <= 0x27BF)
+        || units[0].includes('️')
+        || units[0].includes('‍');
+    return isLikelyEmoji;
 }
 
 function getPureEmojiCount(input: string): number {
     const value = String(input || '').trim();
     if (!value) return 0;
-    const seg = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-    const units = Array.from(seg.segment(value), (x: any) => x.segment).filter(Boolean);
+    const units = splitGraphemesSafe(value).filter((u) => u.trim().length > 0);
     if (!units.length) return 0;
     for (const unit of units) {
         if (!isSingleEmojiGrapheme(unit)) return 0;
