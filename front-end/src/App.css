@@ -1467,7 +1467,7 @@ body,
 
 
 .message-text > span {
-    word-break: break-word;
+    word-break: break-all;
     overflow-wrap: anywhere;
 }
 

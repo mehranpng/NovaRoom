@@ -2768,9 +2768,9 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                                     transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 180ms ease-out',
                                                     touchAction: dragActive ? 'none' : 'auto',
                                                     boxShadow: isHighlighted
-                                                        ? '0 0 0 3px rgba(245, 158, 11, 0.4)'
+                                                        ? 'inset 0 0 0 3px rgba(245, 158, 11, 0.4)'
                                                         : isMenuActive
-                                                            ? '0 0 0 2px color-mix(in srgb, var(--accent-primary) 36%, transparent)'
+                                                            ? 'inset 0 0 0 2px color-mix(in srgb, var(--accent-primary) 36%, transparent)'
                                                             : undefined,
                                                 }}
                                             >
