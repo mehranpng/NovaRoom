@@ -384,6 +384,11 @@ const markdownComponents: Components = {
     ),
 };
 
+
+function normalizeMessageTextForRender(text: string): string {
+    return String(text || '').replace(/\\n/g, '\n');
+}
+
 function hasMarkdownSyntax(text: string): boolean {
     return /(^|\n)\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>\s)|(```|`[^`]+`|\[[^\]]+\]\([^\)]+\)|\*\*[^*]+\*\*|__[^_]+__|\$\$?[\s\S]+?\$\$?|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\])/m.test(text);
 }
@@ -2908,22 +2913,22 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                                     </div>
                                                 )}
                                                 {m.text && !Boolean(m.reasoningEnabled && m.reasoningContent) && (
-                                                    hasMarkdownSyntax(m.text) ? (
+                                                    hasMarkdownSyntax(normalizeMessageTextForRender(m.text)) ? (
                                                         <div className="message-text message-text--markdown">
-                                                            <MemoMarkdown text={cachedTextByMessageId[m.id] ?? m.text} components={markdownComponents} />
+                                                            <MemoMarkdown text={normalizeMessageTextForRender(cachedTextByMessageId[m.id] ?? m.text)} components={markdownComponents} />
                                                         </div>
                                                     ) : (
-                                                        <div className={isBigEmojiOnly ? `message-text message-text--emoji-only ${emojiOnlyClass}` : 'message-text'}>{renderTextWithLinks(m.text)}</div>
+                                                        <div className={isBigEmojiOnly ? `message-text message-text--emoji-only ${emojiOnlyClass}` : 'message-text'}>{renderTextWithLinks(normalizeMessageTextForRender(m.text))}</div>
                                                     )
                                                 )}
                                                 {m.text && Boolean(m.reasoningEnabled && m.reasoningContent) && (
                                                     <div className="ai-reasoning-answer" style={{ marginTop: 0 }}>
-                                                        {hasMarkdownSyntax(m.text) ? (
+                                                        {hasMarkdownSyntax(normalizeMessageTextForRender(m.text)) ? (
                                                             <div className="message-text message-text--markdown">
-                                                                <MemoMarkdown text={cachedTextByMessageId[m.id] ?? m.text} components={markdownComponents} />
+                                                                <MemoMarkdown text={normalizeMessageTextForRender(cachedTextByMessageId[m.id] ?? m.text)} components={markdownComponents} />
                                                             </div>
                                                         ) : (
-                                                            <div className={isBigEmojiOnly ? `message-text message-text--emoji-only ${emojiOnlyClass}` : 'message-text'}>{renderTextWithLinks(m.text)}</div>
+                                                            <div className={isBigEmojiOnly ? `message-text message-text--emoji-only ${emojiOnlyClass}` : 'message-text'}>{renderTextWithLinks(normalizeMessageTextForRender(m.text))}</div>
                                                         )}
                                                     </div>
                                                 )}

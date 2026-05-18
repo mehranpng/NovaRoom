@@ -1452,7 +1452,11 @@ body,
     text-align: center;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
-    word-break: break-all;
+    word-break: break-word;
+    max-inline-size: 100%;
+    width: fit-content;
+    min-width: 0;
+    margin-inline: auto;
 }
 
 .message-text--emoji-only-1 { font-size: clamp(76px, 13vw, 108px); }
@@ -1463,6 +1467,8 @@ body,
 
 .message-text--emoji-only > span {
     font-family: 'AppleEmoji', 'Vazir', sans-serif;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 

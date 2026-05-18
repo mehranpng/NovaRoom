@@ -231,6 +231,11 @@ const AI_EMPTY_STATE_PROMPTS = [
     'چه چیزی امروز ذهنتان را مشغول کرده؟',
 ];
 
+
+function normalizeMessageTextForRender(text: string): string {
+    return String(text || '').replace(/\\n/g, '\n');
+}
+
 function pickRandomEmptyPrompt(): string {
     return AI_EMPTY_STATE_PROMPTS[Math.floor(Math.random() * AI_EMPTY_STATE_PROMPTS.length)];
 }
@@ -977,7 +982,7 @@ export function AIChatRoom({
                                                 <div className="ai-reasoning-answer">
                                                     <div className="message-text message-text--markdown">
                                                         <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
-                                                            {message.text ?? ''}
+                                                            {normalizeMessageTextForRender(message.text ?? '')}
                                                         </ReactMarkdown>
                                                     </div>
                                                 </div>
@@ -1006,14 +1011,14 @@ export function AIChatRoom({
                                             style={{ cursor: isResponding || isTyping ? 'default' : 'pointer' }}
                                         >
                                             {isMine ? (
-                                                <div className="message-text">{message.text}</div>
+                                                <div className="message-text">{normalizeMessageTextForRender(message.text)}</div>
                                             ) : (
                                                 <div className="message-text message-text--markdown">
                                                     <ReactMarkdown
                                                         remarkPlugins={[remarkGfm, remarkBreaks]}
                                                         components={markdownComponents}
                                                     >
-                                                        {message.text ?? ''}
+                                                        {normalizeMessageTextForRender(message.text ?? '')}
                                                     </ReactMarkdown>
                                                 </div>
                                             )}
