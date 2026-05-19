@@ -1662,12 +1662,6 @@ export function App() {
                     : chat
             )));
         };
-        const removeOptimisticMessage = (targetChatId: string, clientId: string) => {
-            setMessages((prev) => ({
-                ...prev,
-                [targetChatId]: (prev[targetChatId] || []).filter((m) => m.id !== clientId),
-            }));
-        };
         const writeOptimisticToCache = (targetChatId: string, messagesState: Record<string, Message[]>) => {
             writeCachedMessages(targetChatId, currentUser?.chatId, messagesState[targetChatId] || []);
         };
@@ -1753,12 +1747,12 @@ export function App() {
 
     const handleDeleteMessage = useCallback((messageId: string) => {
         if (!activeChatId) return;
-        
+
         const currentMessages = messages[activeChatId] || [];
         const msgToDelete = currentMessages.find(m => m.id === messageId);
-        
+
         if (msgToDelete?.deliveryStatus === 'sending') {
-             setMessages((prev) => {
+            setMessages((prev) => {
                 const nextState = {
                     ...prev,
                     [activeChatId]: prev[activeChatId].filter((m) => m.id !== messageId)
@@ -2374,13 +2368,13 @@ export function App() {
         apiFetch('/auth/login-events').then((r: any) => {
             setLoginEvents(Array.isArray(r?.events) ? r.events : []);
             setUnseenLoginCount(Number(r?.unseenCount || 0));
-        }).catch(() => {});
+        }).catch(() => { });
     }, [isAuthenticated, location.pathname]);
 
     useEffect(() => {
         if (!isAuthenticated) return;
         if (location.pathname !== '/settings/devices/logs') return;
-        apiFetch('/auth/login-events/mark-seen', { method: 'POST' }).then(() => setUnseenLoginCount(0)).catch(() => {});
+        apiFetch('/auth/login-events/mark-seen', { method: 'POST' }).then(() => setUnseenLoginCount(0)).catch(() => { });
     }, [isAuthenticated, location.pathname]);
 
     if (isAuthChecking) {
