@@ -1215,7 +1215,7 @@ body,
 .chat-room,
 .chat-room__messages,
 .chat-room__messages-inner {
-    overflow-x: hidden;
+    
 }
 
 .message-row {
@@ -1240,8 +1240,8 @@ body,
 }
 
 .chat-room__messages-inner {
-    max-width: 672px;
-    margin: 0 auto;
+    
+    
     position: relative;
 }
 
@@ -1473,7 +1473,7 @@ body,
 
 
 .message-text > span {
-    word-break: break-all;
+    word-break: break-word;
     overflow-wrap: anywhere;
 }
 
@@ -1674,7 +1674,7 @@ body,
 }
 
 .message-text--markdown .md-link {
-    word-break: break-all;
+    word-break: break-word;
 }
 
 .message-text .md-link,
@@ -1686,7 +1686,7 @@ body,
     color: var(--message-link-color, currentColor) !important;
     text-decoration: underline;
     text-decoration-color: currentColor;
-    word-break: break-all;
+    word-break: break-word;
     background: transparent;
     outline: none;
     box-shadow: none;
@@ -1803,11 +1803,11 @@ body,
    ======================================== */
 
 .message-bubble--emoji-only .message-meta {
-    color: var(--text-primary);
+    color: #000000 !important;
 }
 
 .dark-mode .message-bubble--emoji-only .message-meta {
-    color: #ffffff;
+    color: #ffffff !important;
 }
 
 .message-bubble--emoji-only .message-meta--mine,
@@ -1908,8 +1908,8 @@ body,
 }
 
 .chat-room__input-wrapper {
-    max-width: 672px;
-    margin: 0 auto;
+    
+    
     display: flex;
     align-items: flex-end;
     gap: 10px;
@@ -1929,7 +1929,7 @@ body,
     border: none;
     outline: none;
     resize: none;
-    overflow-x: hidden;
+    
     overflow-y: auto;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -1983,8 +1983,8 @@ body,
 }
 
 .chat-room__blocked-box {
-    max-width: 672px;
-    margin: 0 auto;
+    
+    
     border-radius: 14px;
     border: 1px solid rgba(239, 68, 68, 0.35);
     background: rgba(239, 68, 68, 0.08);
@@ -1998,7 +1998,7 @@ body,
 
 /* Reply/Edit box above input */
 .chat-room__reply-edit-box {
-    max-width: 672px;
+    
     margin: 0 auto 8px;
     padding: 8px 10px;
     border-radius: 14px;
@@ -2014,7 +2014,7 @@ body,
 }
 
 .chat-room__upload-progress-box {
-    max-width: 672px;
+    
     margin: 0 auto 8px;
     display: flex;
     align-items: center;
@@ -2664,7 +2664,7 @@ body,
 
 .profile__fields {
     max-width: 512px;
-    margin: 0 auto;
+    
     padding: 0 16px 32px;
 }
 

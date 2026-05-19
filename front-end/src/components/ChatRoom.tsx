@@ -1166,7 +1166,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
     const startHighlight = (messageId: string) => {
         setHighlightId(messageId);
         if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
-        highlightTimeoutRef.current = window.setTimeout(() => setHighlightId(null), 1000);
+        highlightTimeoutRef.current = window.setTimeout(() => setHighlightId(null), 1500);
     };
 
     const scrollToMessage = (messageId: string) => {
@@ -2745,10 +2745,10 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                                 style={{
                                                     cursor: 'pointer',
                                                     transform: `translateX(${dragX}px)`,
-                                                    transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 180ms ease-out',
+                                                    transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 500ms ease-out',
                                                     touchAction: dragActive ? 'none' : 'auto',
                                                     boxShadow: isHighlighted
-                                                        ? 'inset 0 0 0 3px rgba(245, 158, 11, 0.4)'
+                                                        ? '0 0 0 3px rgba(245, 158, 11, 0.6)'
                                                         : isMenuActive
                                                             ? 'inset 0 0 0 2px color-mix(in srgb, var(--accent-primary) 36%, transparent)'
                                                             : undefined,

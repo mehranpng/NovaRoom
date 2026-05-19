@@ -1588,6 +1588,20 @@ export function App() {
         sendSeen(activeChatId);
     }, [messages, activeChatId, currentUser, view, sendSeen]);
 
+
+    useEffect(() => {
+        if (!wsConnected || !currentUser) return;
+        Object.entries(messages).forEach(([chatId, chatMessages]) => {
+            const pendingMessages = chatMessages.filter(m => m.deliveryStatus === 'sending' && m.senderId === currentUser.chatId && !m.forwardedFrom);
+            pendingMessages.forEach(async (m) => {
+                const success = await sendViaWS(chatId, m.text || '', m.replyTo?.id, m.file, m.clientId);
+                if (!success) {
+                    console.warn('Failed to resend pending message via WS:', m.id);
+                }
+            });
+        });
+    }, [wsConnected, currentUser, messages, sendViaWS]);
+
     const handleSendMessage = useCallback(async (payload: { text: string; replyToId?: string; editMessageId?: string; file?: FileMetadata }) => {
         if (!currentUser) return;
         const text = payload.text;
@@ -1610,10 +1624,14 @@ export function App() {
                 file: payload.file,
                 replyTo: replySrc ? { id: replySrc.id, senderId: replySrc.senderId, text: replySrc.text } : undefined,
             };
-            setMessages((prev) => ({
-                ...prev,
-                [targetChatId]: [...(prev[targetChatId] || []), optimistic],
-            }));
+            setMessages((prev) => {
+                const nextState = {
+                    ...prev,
+                    [targetChatId]: [...(prev[targetChatId] || []), optimistic],
+                };
+                setTimeout(() => writeOptimisticToCache(targetChatId, nextState), 0);
+                return nextState;
+            });
             setChats((prev) => prev.map((chat) => (
                 chat.id === targetChatId
                     ? {
@@ -1635,6 +1653,9 @@ export function App() {
                 [targetChatId]: (prev[targetChatId] || []).filter((m) => m.id !== clientId),
             }));
         };
+        const writeOptimisticToCache = (targetChatId: string, messagesState: Record<string, Message[]>) => {
+            writeCachedMessages(targetChatId, currentUser?.chatId, messagesState[targetChatId] || []);
+        };
 
         if (payload.editMessageId) {
             if (!activeChatId) return;
@@ -1649,8 +1670,7 @@ export function App() {
             pushOptimisticMessage(savedMessagesId, clientId);
             const success = await sendViaWS(savedMessagesId, text, payload.replyToId, payload.file, clientId);
             if (!success) {
-                console.warn('WebSocket not connected');
-                removeOptimisticMessage(savedMessagesId, clientId);
+                console.warn('WebSocket not connected, keeping message in local queue');
             }
             loadChats(false);
             return;
@@ -1691,8 +1711,7 @@ export function App() {
                 pushOptimisticMessage(createdChatId, clientId);
                 const success = await sendViaWS(createdChatId, text, payload.replyToId, payload.file, clientId);
                 if (!success) {
-                    console.warn('WebSocket not connected');
-                    removeOptimisticMessage(createdChatId, clientId);
+                    console.warn('WebSocket not connected, keeping message in local queue');
                 }
 
                 loadChats(false);
@@ -1713,13 +1732,28 @@ export function App() {
         pushOptimisticMessage(activeChatId, clientId);
         const success = await sendViaWS(activeChatId, text, payload.replyToId, payload.file, clientId);
         if (!success) {
-            console.warn('WebSocket not connected');
-            removeOptimisticMessage(activeChatId, clientId);
+            console.warn('WebSocket not connected, keeping message in local queue');
         }
     }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, navigate, chats, isUserBlocked, messages]);
 
     const handleDeleteMessage = useCallback((messageId: string) => {
         if (!activeChatId) return;
+        
+        const currentMessages = messages[activeChatId] || [];
+        const msgToDelete = currentMessages.find(m => m.id === messageId);
+        
+        if (msgToDelete?.deliveryStatus === 'sending') {
+             setMessages((prev) => {
+                const nextState = {
+                    ...prev,
+                    [activeChatId]: prev[activeChatId].filter((m) => m.id !== messageId)
+                };
+                writeCachedMessages(activeChatId, currentUser?.chatId, nextState[activeChatId] || []);
+                return nextState;
+            });
+            return;
+        }
+
         deleteViaWS(activeChatId, messageId);
     }, [activeChatId, deleteViaWS]);
 
@@ -1790,6 +1824,10 @@ export function App() {
                     console.warn('Failed to sync forwarded messages immediately', syncErr);
                 }
             }
+            setMessages((prev) => ({
+                ...prev,
+                [targetChatId]: (prev[targetChatId] || []).filter((m) => m.id !== forwardClientId),
+            }));
             // Do not force a full replace right away; eventual consistency can briefly
             // hide optimistic forwarded messages. We keep optimistic row visible until
             // websocket/new sync confirms server copy.
