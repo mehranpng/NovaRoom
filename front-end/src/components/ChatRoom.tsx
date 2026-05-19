@@ -2732,8 +2732,8 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                             <div
                                                 ref={(el) => { if (!el) { messageElsRef.current.delete(m.id); return; } messageElsRef.current.set(m.id, el); }}
                                                 className={isMine
-                                                    ? `message-bubble message-bubble--mine ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''}`
-                                                    : `message-bubble message-bubble--theirs ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''}`}
+                                                    ? `message-bubble message-bubble--mine ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isHighlighted ? 'message-bubble--highlighted' : ''} ${isMenuActive ? 'message-bubble--menu-active' : ''}`
+                                                    : `message-bubble message-bubble--theirs ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isHighlighted ? 'message-bubble--highlighted' : ''} ${isMenuActive ? 'message-bubble--menu-active' : ''}`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     if (Date.now() < swipeRef.current.blockClickUntil) return;
@@ -2747,11 +2747,6 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                                     transform: `translateX(${dragX}px)`,
                                                     transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 180ms ease-out',
                                                     touchAction: dragActive ? 'none' : 'auto',
-                                                    boxShadow: isHighlighted
-                                                        ? 'inset 0 0 0 3px rgba(245, 158, 11, 0.4)'
-                                                        : isMenuActive
-                                                            ? 'inset 0 0 0 2px color-mix(in srgb, var(--accent-primary) 36%, transparent)'
-                                                            : undefined,
                                                 }}
                                             >
                                                 {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--first') && (() => {
@@ -2937,35 +2932,44 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                 const hasCaption = Boolean((activeMsg.text || '').trim());
                 const showCopyAction = !activeMsg.file || hasCaption;
                 const showDownloadAction = Boolean(activeMsg.file?.fileId);
+                const isPendingOnlyAction = activeMsgIsMine && activeMsg.deliveryStatus === 'sending';
 
                 return (
                     <div ref={msgMenuRef} className="popover popover--mini"
                         style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
                         onClick={(e) => e.stopPropagation()}>
-                        {showSeenByAction && (
-                            <button className="popover__item" onClick={() => {
-                                setSeenByMenu({ id: activeMsg.id, top: msgMenu.top, left: msgMenu.left });
-                                setMsgMenu(null);
-                            }} type="button">
-                                <Eye size={16} />دیده شده توسط
-                            </button>
-                        )}
-                        <button className="popover__item" onClick={() => { const el = messageElsRef.current.get(activeMsg.id); if (el) openReactionMenu(activeMsg.id, el, { top: msgMenu.top, left: msgMenu.left }); }} type="button">
-                            <Smile size={16} />واکنش
-                        </button>
-                        {canReplyInMessageMenu && (
-                            <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><CornerUpRight size={16} />پاسخ</button>
-                        )}
-                        <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><CornerUpLeft size={16} />فوروارد</button>
-                        {activeMsg.senderId === currentUserId && !activeMsg.forwardedFrom && (
-                            <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
-                        )}
-                        {showCopyAction && (<button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><Copy size={16} />کپی</button>)}
-                        {showDownloadAction && (<button className="popover__item" onClick={() => doDownloadMessageFile(activeMsg)} type="button"><Download size={16} />دانلود</button>)}
-                        {canDeleteActiveMsg && (
+                        {isPendingOnlyAction ? (
                             <button className="popover__item popover__item--danger" onClick={() => doDeleteMessage(activeMsg.id)} type="button">
-                                <Trash2 size={16} />حذف
+                                <X size={16} />لغو ارسال
                             </button>
+                        ) : (
+                            <>
+                                {showSeenByAction && (
+                                    <button className="popover__item" onClick={() => {
+                                        setSeenByMenu({ id: activeMsg.id, top: msgMenu.top, left: msgMenu.left });
+                                        setMsgMenu(null);
+                                    }} type="button">
+                                        <Eye size={16} />دیده شده توسط
+                                    </button>
+                                )}
+                                <button className="popover__item" onClick={() => { const el = messageElsRef.current.get(activeMsg.id); if (el) openReactionMenu(activeMsg.id, el, { top: msgMenu.top, left: msgMenu.left }); }} type="button">
+                                    <Smile size={16} />واکنش
+                                </button>
+                                {canReplyInMessageMenu && (
+                                    <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><CornerUpRight size={16} />پاسخ</button>
+                                )}
+                                <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><CornerUpLeft size={16} />فوروارد</button>
+                                {activeMsg.senderId === currentUserId && !activeMsg.forwardedFrom && (
+                                    <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
+                                )}
+                                {showCopyAction && (<button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><Copy size={16} />کپی</button>)}
+                                {showDownloadAction && (<button className="popover__item" onClick={() => doDownloadMessageFile(activeMsg)} type="button"><Download size={16} />دانلود</button>)}
+                                {canDeleteActiveMsg && (
+                                    <button className="popover__item popover__item--danger" onClick={() => doDeleteMessage(activeMsg.id)} type="button">
+                                        <Trash2 size={16} />حذف
+                                    </button>
+                                )}
+                            </>
                         )}
                     </div>
                 );

@@ -1240,8 +1240,9 @@ body,
 }
 
 .chat-room__messages-inner {
-    max-width: 672px;
-    margin: 0 auto;
+    max-width: 100%;
+    margin: 0;
+    padding-inline: 6px;
     position: relative;
 }
 
@@ -1288,7 +1289,7 @@ body,
 }
 
 .message-bubble {
-    max-width: 90%;
+    max-width: min(92%, 720px);
     padding: 7px 11px 6px;
     border-radius: 18px;
     margin-bottom: 2px;
@@ -1299,7 +1300,7 @@ body,
 
 @media (min-width: 640px) {
     .message-bubble {
-        max-width: 76%;
+        max-width: min(84%, 820px);
     }
 }
 
@@ -1317,6 +1318,26 @@ body,
     --message-link-color: var(--message-link-color-theirs);
 }
 
+
+
+.message-bubble--highlighted,
+.message-bubble--menu-active {
+    outline-offset: 3px;
+}
+
+.message-bubble--highlighted {
+    outline: 3px solid rgba(245, 158, 11, 0.42);
+    animation: message-highlight-fade 0.9s ease-out forwards;
+}
+
+.message-bubble--menu-active {
+    outline: 2px solid color-mix(in srgb, var(--accent-primary) 36%, transparent);
+}
+
+@keyframes message-highlight-fade {
+    from { opacity: 1; }
+    to { outline-color: transparent; }
+}
 .message-forwarded-label {
     display: block;
     margin: 0 0 6px auto;
@@ -1433,7 +1454,7 @@ body,
     line-height: 1.625;
     white-space: pre-wrap;
     word-break: normal;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
     direction: rtl;
     text-align: right;
 }
@@ -1451,7 +1472,7 @@ body,
     letter-spacing: 0;
     text-align: center;
     white-space: pre-wrap;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
     word-break: break-word;
     max-inline-size: 100%;
     width: fit-content;
@@ -1467,14 +1488,14 @@ body,
 
 .message-text--emoji-only > span {
     font-family: 'AppleEmoji', 'Vazir', sans-serif;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
     word-break: break-word;
 }
 
 
 .message-text > span {
     word-break: break-all;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
 }
 
 /* ========================================
@@ -1908,8 +1929,9 @@ body,
 }
 
 .chat-room__input-wrapper {
-    max-width: 672px;
-    margin: 0 auto;
+    max-width: 100%;
+    margin: 0;
+    padding-inline: 6px;
     display: flex;
     align-items: flex-end;
     gap: 10px;
@@ -1932,7 +1954,7 @@ body,
     overflow-x: hidden;
     overflow-y: auto;
     white-space: pre-wrap;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
     word-break: break-word;
     transition: all 0.15s;
     font-family: inherit;
@@ -1983,8 +2005,9 @@ body,
 }
 
 .chat-room__blocked-box {
-    max-width: 672px;
-    margin: 0 auto;
+    max-width: 100%;
+    margin: 0;
+    padding-inline: 6px;
     border-radius: 14px;
     border: 1px solid rgba(239, 68, 68, 0.35);
     background: rgba(239, 68, 68, 0.08);

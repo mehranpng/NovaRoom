@@ -66,11 +66,25 @@ const mergeMessages = (base: Message[], incoming: Message[], mode: 'replace' | '
     if (mode === 'replace') {
         for (const m of incoming) byId.set(m.id, m);
         const incomingClientIds = new Set(incoming.map((m) => String((m as any).clientId || '')).filter(Boolean));
+        const hasLikelyServerCopy = (pending: Message): boolean => {
+            const pendingClientId = String((pending as any).clientId || '');
+            return incoming.some((srv) => {
+                if (srv.id === pending.id) return true;
+                if (pendingClientId && String((srv as any).clientId || '') === pendingClientId) return true;
+                if (srv.senderId !== pending.senderId) return false;
+                if (Math.abs(normalizeTimestamp(srv.timestamp) - normalizeTimestamp(pending.timestamp)) > 120_000) return false;
+                const sameText = String(srv.text || '') === String(pending.text || '');
+                const sameForwardFlag = Boolean(srv.forwardedFrom) === Boolean(pending.forwardedFrom);
+                const sameFile = String(srv.file?.fileId || '') === String(pending.file?.fileId || '')
+                    && String(srv.file?.mimeType || '') === String(pending.file?.mimeType || '');
+                return sameText && sameForwardFlag && sameFile;
+            });
+        };
         for (const pending of base) {
             const isPendingSend = pending.deliveryStatus === 'sending';
             const pendingClientId = String((pending as any).clientId || '');
             const alreadyInIncoming = byId.has(pending.id) || (pendingClientId && incomingClientIds.has(pendingClientId));
-            if (isPendingSend && !alreadyInIncoming) {
+            if (isPendingSend && !alreadyInIncoming && !hasLikelyServerCopy(pending)) {
                 byId.set(pending.id, pending);
             }
         }
@@ -1649,8 +1663,7 @@ export function App() {
             pushOptimisticMessage(savedMessagesId, clientId);
             const success = await sendViaWS(savedMessagesId, text, payload.replyToId, payload.file, clientId);
             if (!success) {
-                console.warn('WebSocket not connected');
-                removeOptimisticMessage(savedMessagesId, clientId);
+                console.warn('WebSocket not connected; message kept as pending');
             }
             loadChats(false);
             return;
@@ -1691,8 +1704,7 @@ export function App() {
                 pushOptimisticMessage(createdChatId, clientId);
                 const success = await sendViaWS(createdChatId, text, payload.replyToId, payload.file, clientId);
                 if (!success) {
-                    console.warn('WebSocket not connected');
-                    removeOptimisticMessage(createdChatId, clientId);
+                    console.warn('WebSocket not connected; message kept as pending');
                 }
 
                 loadChats(false);
@@ -1713,8 +1725,7 @@ export function App() {
         pushOptimisticMessage(activeChatId, clientId);
         const success = await sendViaWS(activeChatId, text, payload.replyToId, payload.file, clientId);
         if (!success) {
-            console.warn('WebSocket not connected');
-            removeOptimisticMessage(activeChatId, clientId);
+            console.warn('WebSocket not connected; message kept as pending');
         }
     }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, navigate, chats, isUserBlocked, messages]);
 
