@@ -203,6 +203,7 @@ export function App() {
     const [pendingUser, setPendingUser] = useState<User | null>(null);
     const [pendingForwardDrafts, setPendingForwardDrafts] = useState<Record<string, { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }>>({});
     const pendingForwardSendHintsRef = useRef<Record<string, number>>({});
+    const resentPendingMessageIdsRef = useRef<Set<string>>(new Set());
     const aiStreamStartedRef = useRef<Record<string, boolean>>({});
     const aiPendingStreamMetaRef = useRef<Record<string, Message>>({});
     const dragHoverChatTimerRef = useRef<number | null>(null);
@@ -1591,14 +1592,25 @@ export function App() {
 
     useEffect(() => {
         if (!wsConnected || !currentUser) return;
+        const activePendingKeys = new Set<string>();
         Object.entries(messages).forEach(([chatId, chatMessages]) => {
             const pendingMessages = chatMessages.filter(m => m.deliveryStatus === 'sending' && m.senderId === currentUser.chatId && !m.forwardedFrom);
             pendingMessages.forEach(async (m) => {
+                const pendingKey = `${chatId}:${m.id}`;
+                activePendingKeys.add(pendingKey);
+                if (resentPendingMessageIdsRef.current.has(pendingKey)) return;
+                resentPendingMessageIdsRef.current.add(pendingKey);
                 const success = await sendViaWS(chatId, m.text || '', m.replyTo?.id, m.file, m.clientId);
                 if (!success) {
+                    resentPendingMessageIdsRef.current.delete(pendingKey);
                     console.warn('Failed to resend pending message via WS:', m.id);
                 }
             });
+        });
+        resentPendingMessageIdsRef.current.forEach((key) => {
+            if (!activePendingKeys.has(key)) {
+                resentPendingMessageIdsRef.current.delete(key);
+            }
         });
     }, [wsConnected, currentUser, messages, sendViaWS]);
 

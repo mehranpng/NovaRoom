@@ -2745,16 +2745,16 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                                 style={{
                                                     cursor: 'pointer',
                                                     transform: `translateX(${dragX}px)`,
-                                                    transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 500ms ease-out',
+                                                    transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 220ms ease',
                                                     touchAction: dragActive ? 'none' : 'auto',
                                                     boxShadow: isHighlighted
                                                         ? '0 0 0 3px rgba(245, 158, 11, 0.6)'
                                                         : isMenuActive
                                                             ? 'inset 0 0 0 2px color-mix(in srgb, var(--accent-primary) 36%, transparent)'
-                                                            : undefined,
+                                                            : 'inset 0 0 0 2px rgba(0,0,0,0)',
                                                 }}
                                             >
-                                                {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--first') && (() => {
+                                                {isGroupChat && !isMine && !isBigEmojiOnly && (shape === 'msg-shape--single' || shape === 'msg-shape--first') && (() => {
                                                     const sender = groupMembers[m.senderId];
                                                     const senderName = sender?.name || m.senderId || 'ناشناس';
                                                     const colors = ['#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3', '#00BCD4', '#009688', '#4CAF50', '#FF5722', '#FF9800'];
