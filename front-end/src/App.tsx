@@ -70,7 +70,17 @@ const mergeMessages = (base: Message[], incoming: Message[], mode: 'replace' | '
             const isPendingSend = pending.deliveryStatus === 'sending';
             const pendingClientId = String((pending as any).clientId || '');
             const alreadyInIncoming = byId.has(pending.id) || (pendingClientId && incomingClientIds.has(pendingClientId));
-            if (isPendingSend && !alreadyInIncoming) {
+            const serverMatched = incoming.some((msg) => {
+                if (msg.senderId !== pending.senderId) return false;
+                if (Math.abs(normalizeTimestamp(msg.timestamp) - normalizeTimestamp(pending.timestamp)) > 120_000) return false;
+                const sameText = String(msg.text || '') === String(pending.text || '');
+                const sameForward = Boolean(msg.forwardedFrom) === Boolean(pending.forwardedFrom);
+                const pendingFileId = String(pending.file?.fileId || '');
+                const msgFileId = String(msg.file?.fileId || '');
+                const sameFile = (pendingFileId && msgFileId && pendingFileId === msgFileId) || (!pendingFileId && !msgFileId);
+                return sameText && sameForward && sameFile;
+            });
+            if (isPendingSend && !alreadyInIncoming && !serverMatched) {
                 byId.set(pending.id, pending);
             }
         }
@@ -1629,13 +1639,6 @@ export function App() {
                     : chat
             )));
         };
-        const removeOptimisticMessage = (targetChatId: string, clientId: string) => {
-            setMessages((prev) => ({
-                ...prev,
-                [targetChatId]: (prev[targetChatId] || []).filter((m) => m.id !== clientId),
-            }));
-        };
-
         if (payload.editMessageId) {
             if (!activeChatId) return;
             const success = await editViaWS(activeChatId, payload.editMessageId, text);
@@ -1648,10 +1651,7 @@ export function App() {
             const clientId = makeClientId();
             pushOptimisticMessage(savedMessagesId, clientId);
             const success = await sendViaWS(savedMessagesId, text, payload.replyToId, payload.file, clientId);
-            if (!success) {
-                console.warn('WebSocket not connected');
-                removeOptimisticMessage(savedMessagesId, clientId);
-            }
+            if (!success) console.warn('WebSocket not connected');
             loadChats(false);
             return;
         }
@@ -1690,10 +1690,7 @@ export function App() {
                 const clientId = makeClientId();
                 pushOptimisticMessage(createdChatId, clientId);
                 const success = await sendViaWS(createdChatId, text, payload.replyToId, payload.file, clientId);
-                if (!success) {
-                    console.warn('WebSocket not connected');
-                    removeOptimisticMessage(createdChatId, clientId);
-                }
+                if (!success) console.warn('WebSocket not connected');
 
                 loadChats(false);
                 return;
@@ -1712,16 +1709,20 @@ export function App() {
         const clientId = makeClientId();
         pushOptimisticMessage(activeChatId, clientId);
         const success = await sendViaWS(activeChatId, text, payload.replyToId, payload.file, clientId);
-        if (!success) {
-            console.warn('WebSocket not connected');
-            removeOptimisticMessage(activeChatId, clientId);
-        }
+        if (!success) console.warn('WebSocket not connected');
     }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, navigate, chats, isUserBlocked, messages]);
 
     const handleDeleteMessage = useCallback((messageId: string) => {
         if (!activeChatId) return;
         deleteViaWS(activeChatId, messageId);
     }, [activeChatId, deleteViaWS]);
+    const handleCancelPendingMessage = useCallback((messageId: string) => {
+        if (!activeChatId) return;
+        setMessages((prev) => ({
+            ...prev,
+            [activeChatId]: (prev[activeChatId] || []).filter((m) => m.id !== messageId),
+        }));
+    }, [activeChatId]);
 
     const handleForwardMessage = useCallback(async (sourceChatId: string, messageId: string, targetChatId: string) => {
         const sourceChatMessage = (messages[sourceChatId] || []).find((m) => m.id === messageId);
@@ -2494,6 +2495,7 @@ export function App() {
                                 currentUser={currentUser}
                                 onSendMessage={handleSendMessage}
                                 onDeleteMessage={handleDeleteMessage}
+                                onCancelPendingMessage={handleCancelPendingMessage}
                                 onBack={handleBack}
                                 onCloseChat={handleCloseChat}
                                 onChatDeleted={handleChatDeleted}

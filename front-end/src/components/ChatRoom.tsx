@@ -31,6 +31,7 @@ interface ChatRoomProps {
     currentUser?: User | null;
     onSendMessage: (payload: { text: string; replyToId?: string; editMessageId?: string; file?: FileMetadata }) => void;
     onDeleteMessage: (messageId: string) => void;
+    onCancelPendingMessage?: (messageId: string) => void;
     onBack: () => void;
     onCloseChat: () => void;
     onChatDeleted?: (chatId: string) => void;
@@ -387,6 +388,7 @@ export function ChatRoom({
     currentUser,
     onSendMessage,
     onDeleteMessage,
+    onCancelPendingMessage,
     onBack,
     onCloseChat,
     onChatDeleted,
@@ -2171,6 +2173,10 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
         setConfirmDeleteMsg(messageId);
     };
+    const doCancelPendingMessage = (messageId: string) => {
+        onCancelPendingMessage?.(messageId);
+        setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
+    };
 
     const confirmDeleteMessage = () => {
         if (confirmDeleteMsg) { const msg = messages.find((m) => m.id === confirmDeleteMsg); onDeleteMessage(confirmDeleteMsg); void deleteCachedText(`chat:${chatId}:message:${confirmDeleteMsg}:text`); if (msg?.file?.fileId) void deleteCachedBlob(`chat:${chatId}:file:${msg.file.fileId}`); setConfirmDeleteMsg(null); }
@@ -2748,9 +2754,9 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                                     transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 180ms ease-out',
                                                     touchAction: dragActive ? 'none' : 'auto',
                                                     boxShadow: isHighlighted
-                                                        ? 'inset 0 0 0 3px rgba(245, 158, 11, 0.4)'
+                                                        ? '0 0 0 2px rgba(245, 158, 11, 0.45)'
                                                         : isMenuActive
-                                                            ? 'inset 0 0 0 2px color-mix(in srgb, var(--accent-primary) 36%, transparent)'
+                                                            ? '0 0 0 2px color-mix(in srgb, var(--accent-primary) 36%, transparent)'
                                                             : undefined,
                                                 }}
                                             >
@@ -2934,10 +2940,22 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                 const canDeleteActiveMsg = activeMsgIsMine || (isGroupChat && isVerifiedUser);
                 const showSeenByAction = isGroupChat && activeMsgIsMine && !isOfficialChannel;
                 const canReplyInMessageMenu = !(isOfficialChannel && !isVerifiedUser);
+                const isPendingMessage = activeMsg.deliveryStatus === 'sending';
                 const hasCaption = Boolean((activeMsg.text || '').trim());
                 const showCopyAction = !activeMsg.file || hasCaption;
                 const showDownloadAction = Boolean(activeMsg.file?.fileId);
 
+                if (isPendingMessage) {
+                    return (
+                        <div ref={msgMenuRef} className="popover popover--mini"
+                            style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
+                            onClick={(e) => e.stopPropagation()}>
+                            <button className="popover__item popover__item--danger" onClick={() => doCancelPendingMessage(activeMsg.id)} type="button">
+                                <X size={16} />لغو
+                            </button>
+                        </div>
+                    );
+                }
                 return (
                     <div ref={msgMenuRef} className="popover popover--mini"
                         style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
