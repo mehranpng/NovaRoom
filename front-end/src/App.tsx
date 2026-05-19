@@ -204,6 +204,7 @@ export function App() {
     const [pendingForwardDrafts, setPendingForwardDrafts] = useState<Record<string, { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }>>({});
     const pendingForwardSendHintsRef = useRef<Record<string, number>>({});
     const resentPendingMessageIdsRef = useRef<Set<string>>(new Set());
+    const wasWsConnectedRef = useRef(false);
     const aiStreamStartedRef = useRef<Record<string, boolean>>({});
     const aiPendingStreamMetaRef = useRef<Record<string, Message>>({});
     const dragHoverChatTimerRef = useRef<number | null>(null);
@@ -1591,7 +1592,9 @@ export function App() {
 
 
     useEffect(() => {
-        if (!wsConnected || !currentUser) return;
+        const justConnected = wsConnected && !wasWsConnectedRef.current;
+        wasWsConnectedRef.current = wsConnected;
+        if (!wsConnected || !currentUser || !justConnected) return;
         const activePendingKeys = new Set<string>();
         Object.entries(messages).forEach(([chatId, chatMessages]) => {
             const pendingMessages = chatMessages.filter(m => m.deliveryStatus === 'sending' && m.senderId === currentUser.chatId && !m.forwardedFrom);
