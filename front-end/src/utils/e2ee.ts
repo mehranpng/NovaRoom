@@ -156,30 +156,37 @@ const xorStream = async (data: Uint8Array, key: Uint8Array, nonce: Uint8Array): 
     const out = new Uint8Array(data.length);
     let counter = 0;
     let idx = 0;
-    let iterationsSinceYield = 0;
+    const BATCH_SIZE = 1024;
 
     while (idx < data.length) {
-        const counterBytes = new Uint8Array(8);
-        const view = new DataView(counterBytes.buffer);
-        view.setUint32(4, counter, false);
-        const blockInput = new Uint8Array(key.length + nonce.length + counterBytes.length);
-        blockInput.set(key, 0);
-        blockInput.set(nonce, key.length);
-        blockInput.set(counterBytes, key.length + nonce.length);
+        const batchPromises: Promise<Uint8Array>[] = [];
+        const numBlocks = Math.min(BATCH_SIZE, Math.ceil((data.length - idx) / 32));
 
-        const block = await sha256(blockInput);
-        for (let i = 0; i < block.length && idx < data.length; i += 1) {
-            out[idx] = data[idx] ^ block[i];
-            idx += 1;
+        for (let b = 0; b < numBlocks; b++) {
+            const counterBytes = new Uint8Array(8);
+            const view = new DataView(counterBytes.buffer);
+            view.setUint32(4, counter + b, false);
+            const blockInput = new Uint8Array(key.length + nonce.length + counterBytes.length);
+            blockInput.set(key, 0);
+            blockInput.set(nonce, key.length);
+            blockInput.set(counterBytes, key.length + nonce.length);
+            batchPromises.push(sha256(blockInput));
         }
-        counter += 1;
-        iterationsSinceYield += 1;
-        if (iterationsSinceYield >= 48) {
-            iterationsSinceYield = 0;
-            await new Promise<void>((resolve) => {
-                window.setTimeout(resolve, 0);
-            });
+
+        const blocks = await Promise.all(batchPromises);
+
+        for (let b = 0; b < blocks.length; b++) {
+            const block = blocks[b];
+            for (let i = 0; i < block.length && idx < data.length; i += 1) {
+                out[idx] = data[idx] ^ block[i];
+                idx += 1;
+            }
         }
+        counter += numBlocks;
+
+        await new Promise<void>((resolve) => {
+            window.setTimeout(resolve, 0);
+        });
     }
 
     return out;
