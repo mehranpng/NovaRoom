@@ -731,7 +731,19 @@ export function App() {
         if (isDuplicateMessage) return;
 
         if (replacedOptimisticMine) {
-            playChatSound('send');
+            const sendSoundKey = String(newMsg.clientId || newMsg.id || '');
+            if (sendSoundKey && !playedSendSoundIdsRef.current.has(sendSoundKey)) {
+                playedSendSoundIdsRef.current.add(sendSoundKey);
+                // Keep dedupe set bounded in long sessions.
+                if (playedSendSoundIdsRef.current.size > 500) {
+                    const iterator = playedSendSoundIdsRef.current.values();
+                    const oldestKey = iterator.next().value;
+                    if (oldestKey) {
+                        playedSendSoundIdsRef.current.delete(oldestKey);
+                    }
+                }
+                playChatSound('send');
+            }
             if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
                 navigator.vibrate(12);
             }
