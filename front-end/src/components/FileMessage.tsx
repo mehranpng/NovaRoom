@@ -196,6 +196,42 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     : Math.max(0.35, Math.min(2.4, rawAspectRatio));
   const shouldContain = isVideo && (effectiveAspectRatio < 0.5 || effectiveAspectRatio > 2.05);
 
+  useEffect(() => {
+    if (isImage || isVideo || isAudio) return;
+
+    const onCustomDownload = async (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.fileId === file.fileId) {
+        const taskKey = file.fileId;
+        let task = fileDownloadTasks.get(taskKey);
+        
+        if (!task || (task.state !== 'downloading' && task.state !== 'decrypting' && task.state !== 'done')) {
+          await startDownload();
+          task = fileDownloadTasks.get(taskKey);
+        }
+        
+        if (task && task.promise) {
+          await task.promise;
+        }
+
+        const finalBlob = await getCachedBlob(cacheKey);
+        if (finalBlob) {
+          const url = URL.createObjectURL(finalBlob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = file.fileName || 'file';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+        }
+      }
+    };
+
+    window.addEventListener('trigger-file-download', onCustomDownload);
+    return () => window.removeEventListener('trigger-file-download', onCustomDownload);
+  }, [file.fileId, file.fileName, cacheKey, isImage, isVideo, isAudio]);
+
   return <div className="file-message">
     {(isImage || isVideo) && (
       <div className="file-image-preview" style={{ background: isVideo ? '#000' : 'transparent', width: isImage ? undefined : '100%', minWidth: isVideo ? 220 : undefined, maxWidth: '100%', aspectRatio: (isImage || isVideo) ? effectiveAspectRatio : undefined }} onClick={(e) => {
@@ -241,6 +277,31 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
       )}
     </div>}
 
-    {!isImage && !isVideo && !isAudio && <div className="file-attachment"><div className="file-icon">{getFileIcon(file.mimeType)}</div><div className="file-info"><div className="file-name">{file.fileName}</div><div className="file-size">{formatFileSize(file.fileSize)}</div></div></div>}
+    {!isImage && !isVideo && !isAudio && <div className="file-attachment">
+      <div className="file-icon" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40 }}>
+        {(downloadState === 'downloading' || downloadState === 'decrypting' || downloadState === 'idle') ? (
+          <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%`, margin: 0 }} onClick={(e) => {
+            e.stopPropagation();
+            if (downloadState === 'downloading') cancelDownload();
+            else if (downloadState === 'idle') startDownload();
+            else if (downloadState === 'done') {
+                // For 'done' state we re-trigger the file-save if needed, though usually 'done' is handled by object URL for media
+                // For general files we already handle trigger-file-download. Let's make button work too.
+                window.dispatchEvent(new CustomEvent('trigger-file-download', { detail: { fileId: file.fileId } }));
+            }
+          }}>
+            {downloadState === 'done' ? (mediaUrl ? <Download size={16} /> : <Download size={16} />) : actionIcon}
+          </button>
+        ) : (
+          getFileIcon(file.mimeType)
+        )}
+      </div>
+      <div className="file-info">
+        <div className="file-name">{file.fileName}</div>
+        <div className="file-size">
+          {formatFileSize(file.fileSize)}
+        </div>
+      </div>
+    </div>}
   </div>;
 }

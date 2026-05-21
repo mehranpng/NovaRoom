@@ -156,7 +156,8 @@ const xorStream = async (data: Uint8Array, key: Uint8Array, nonce: Uint8Array): 
     const out = new Uint8Array(data.length);
     let counter = 0;
     let idx = 0;
-    const BATCH_SIZE = 1024;
+    const BATCH_SIZE = 2048; // Process 64KB per batch
+    let batchCount = 0;
 
     while (idx < data.length) {
         const batchPromises: Promise<Uint8Array>[] = [];
@@ -183,10 +184,14 @@ const xorStream = async (data: Uint8Array, key: Uint8Array, nonce: Uint8Array): 
             }
         }
         counter += numBlocks;
+        batchCount += 1;
 
-        await new Promise<void>((resolve) => {
-            window.setTimeout(resolve, 0);
-        });
+        // Yield to main thread every 1MB (approx 16 batches of 64KB)
+        if (batchCount % 16 === 0) {
+            await new Promise<void>((resolve) => {
+                window.setTimeout(resolve, 0);
+            });
+        }
     }
 
     return out;

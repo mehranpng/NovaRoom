@@ -1199,6 +1199,18 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
 
     const doDownloadMessageFile = async (m: Message) => {
         if (!m.file?.fileId) return;
+        setMsgMenu(null);
+        
+        const mt = (m.file.mimeType || '').toLowerCase();
+        const isImage = mt.startsWith('image/');
+        const isVideo = mt.startsWith('video/');
+        const isAudio = mt.startsWith('audio/');
+        
+        if (!isImage && !isVideo && !isAudio) {
+            window.dispatchEvent(new CustomEvent('trigger-file-download', { detail: { fileId: m.file.fileId } }));
+            return;
+        }
+
         try {
             const blob = await getOrCacheBlob({
                 cacheKey: `chat:${chatId}:file:${m.file.fileId}`,
@@ -1223,7 +1235,6 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         } catch {
             alert('خطا در دانلود فایل');
         }
-        setMsgMenu(null);
     };
 
     const doCopyMessage = async (m: Message) => {

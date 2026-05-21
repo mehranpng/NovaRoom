@@ -55,17 +55,12 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
     };
 
     const triggerNativeFilePicker = (input: HTMLInputElement) => {
-        const picker = (input as HTMLInputElement & { showPicker?: () => void }).showPicker;
-        if (typeof picker === 'function') {
-            picker.call(input);
-            return;
-        }
+        // Use click() as it is more compatible and reliable for triggering file picker
+        // in response to user click event across all browsers.
         input.click();
     };
 
     const openPicker = (inputRef: React.RefObject<HTMLInputElement | null>) => (e: React.MouseEvent<HTMLButtonElement>) => {
-        e.preventDefault();
-        e.stopPropagation();
         if (uploading) return;
 
         const input = inputRef.current;
@@ -73,7 +68,10 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
 
         setPickerSession(true);
         triggerNativeFilePicker(input);
-        window.setTimeout(() => setPickerMenuOpen(false), 0);
+        
+        // Slightly delay closing the menu to ensure the gesture is fully recognized
+        // and not interrupted by the menu disappearance in some browsers.
+        window.setTimeout(() => setPickerMenuOpen(false), 100);
     };
 
     const pushTaskUpdate = (task: UploadTask) => {
