@@ -63,9 +63,12 @@ const normalizeTimestamp = (ts: unknown): number => {
 
 const mergeMessages = (base: Message[], incoming: Message[], mode: 'replace' | 'prepend' | 'append'): Message[] => {
     const byId = new Map<string, Message>();
+    const incomingClientIds = new Set(incoming.map((m) => String((m as any).clientId || '')).filter(Boolean));
+
     if (mode === 'replace') {
-        for (const m of incoming) byId.set(m.id, m);
-        const incomingClientIds = new Set(incoming.map((m) => String((m as any).clientId || '')).filter(Boolean));
+        for (const m of incoming) {
+            byId.set(m.id, m);
+        }
         for (const pending of base) {
             const isPendingSend = pending.deliveryStatus === 'sending';
             const pendingClientId = String((pending as any).clientId || '');
@@ -74,14 +77,29 @@ const mergeMessages = (base: Message[], incoming: Message[], mode: 'replace' | '
                 byId.set(pending.id, pending);
             }
         }
-        return Array.from(byId.values()).sort((a, b) => {
-            const tsDiff = normalizeTimestamp(a.timestamp) - normalizeTimestamp(b.timestamp);
-            if (tsDiff !== 0) return tsDiff;
-            return String(a.id || '').localeCompare(String(b.id || ''));
-        });
+    } else {
+        const combined = mode === 'prepend' ? [...incoming, ...base] : [...base, ...incoming];
+        for (const m of combined) {
+            const mClientId = String((m as any).clientId || '');
+            const isPending = m.deliveryStatus === 'sending';
+            
+            if (isPending && mClientId && incomingClientIds.has(mClientId)) {
+                // This is a pending message that is already represented by a server message in 'incoming'
+                continue;
+            }
+            
+            // If we already have this ID, server message takes precedence over pending
+            if (byId.has(m.id)) {
+                const existing = byId.get(m.id)!;
+                if (existing.deliveryStatus === 'sending' && m.deliveryStatus !== 'sending') {
+                    byId.set(m.id, m);
+                }
+            } else {
+                byId.set(m.id, m);
+            }
+        }
     }
-    const combined = mode === 'prepend' ? [...incoming, ...base] : [...base, ...incoming];
-    for (const m of combined) byId.set(m.id, m);
+
     return Array.from(byId.values()).sort((a, b) => {
         const tsDiff = normalizeTimestamp(a.timestamp) - normalizeTimestamp(b.timestamp);
         if (tsDiff !== 0) return tsDiff;
@@ -113,6 +131,11 @@ export function App() {
     const [activeChatId, setActiveChatId] = useState<string | null>(null);
     const [chats, setChats] = useState<Chat[]>([]);
     const [messages, setMessages] = useState<Record<string, Message[]>>({});
+    const messagesRef = useRef<Record<string, Message[]>>({});
+    useEffect(() => {
+        messagesRef.current = messages;
+    }, [messages]);
+
     const [messageRangeState, setMessageRangeState] = useState<Record<string, {
         hasOlder: boolean;
         hasNewer: boolean;
@@ -220,7 +243,9 @@ export function App() {
     const activeChatIdRef = useRef<string | null>(null);
     const viewRef = useRef<View>('chatList');
     const lastSeenAckMessageIdRef = useRef<Record<string, string>>({});
+    const playedSendSoundIdsRef = useRef<Set<string>>(new Set());
     const lastReceiveSoundMessageRef = useRef<Record<string, string>>({});
+
     const chatLoadRequestRef = useRef(0);
     const aiSendInFlightRef = useRef(false);
     useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
@@ -636,48 +661,73 @@ export function App() {
 
     // WebSocket handlers wrapped in useCallback to prevent infinite reconnection loops
     const handleNewMessage = useCallback((chatId: string, newMsg: Message) => {
+        const currentMessages = messagesRef.current[chatId] || [];
+        
         let isDuplicateMessage = false;
         let replacedOptimisticMine = false;
-        setMessages(prev => {
-            const currentMessages = prev[chatId] || [];
-            if (newMsg.clientId) {
-                const optimisticIdx = currentMessages.findIndex((m) => m.id === newMsg.clientId && m.deliveryStatus === 'sending');
-                if (optimisticIdx !== -1) {
-                    replacedOptimisticMine = true;
-                    const nextMessages = [...currentMessages];
-                    nextMessages[optimisticIdx] = { ...newMsg, deliveryStatus: 'sent' };
-                    return { ...prev, [chatId]: nextMessages };
-                }
+
+        if (newMsg.clientId) {
+            const optimisticIdx = currentMessages.findIndex((m) => m.id === newMsg.clientId && m.deliveryStatus === 'sending');
+            if (optimisticIdx !== -1) {
+                replacedOptimisticMine = true;
             }
+        }
+        
+        if (!replacedOptimisticMine) {
             if (currentMessages.some(m => m.id === newMsg.id)) {
                 isDuplicateMessage = true;
-                return prev;
+            } else {
+                const optimisticMineIdx = currentMessages.findIndex((m) => {
+                    if (m.senderId !== newMsg.senderId) return false;
+                    if (m.deliveryStatus !== 'sending') return false;
+                    if (Math.abs(normalizeTimestamp(newMsg.timestamp) - normalizeTimestamp(m.timestamp)) > 120_000) return false;
+                    const sameText = String(m.text || '') === String(newMsg.text || '');
+                    const prevFileId = String(m.file?.fileId || '');
+                    const nextFileId = String(newMsg.file?.fileId || '');
+                    const sameFileType = String(m.file?.mimeType || '') === String(newMsg.file?.mimeType || '');
+                    const sameFile = (prevFileId && nextFileId && prevFileId === nextFileId) || (!prevFileId && !nextFileId && sameFileType);
+                    return sameText && sameFile;
+                });
+                if (optimisticMineIdx !== -1) {
+                    replacedOptimisticMine = true;
+                }
             }
-            const optimisticMineIdx = currentMessages.findIndex((m) => {
+        }
+
+        setMessages(prev => {
+            const list = prev[chatId] || [];
+            
+            // Re-check inside functional update to be absolutely safe
+            if (newMsg.clientId) {
+                const idx = list.findIndex((m) => m.id === newMsg.clientId && m.deliveryStatus === 'sending');
+                if (idx !== -1) {
+                    const next = [...list];
+                    next[idx] = { ...newMsg, deliveryStatus: 'sent' };
+                    return { ...prev, [chatId]: next };
+                }
+            }
+            
+            if (list.some(m => m.id === newMsg.id)) return prev;
+
+            const contentIdx = list.findIndex((m) => {
                 if (m.senderId !== newMsg.senderId) return false;
                 if (m.deliveryStatus !== 'sending') return false;
                 if (Math.abs(normalizeTimestamp(newMsg.timestamp) - normalizeTimestamp(m.timestamp)) > 120_000) return false;
-                const sameText = String(m.text || '') === String(newMsg.text || '');
-                const prevFileId = String(m.file?.fileId || '');
-                const nextFileId = String(newMsg.file?.fileId || '');
-                const sameFileType = String(m.file?.mimeType || '') === String(newMsg.file?.mimeType || '');
-                const sameFile = (prevFileId && nextFileId && prevFileId === nextFileId) || (!prevFileId && !nextFileId && sameFileType);
-                return sameText && sameFile;
+                return String(m.text || '') === String(newMsg.text || '');
             });
-            if (optimisticMineIdx !== -1) {
-                replacedOptimisticMine = true;
-                const nextMessages = [...currentMessages];
-                nextMessages[optimisticMineIdx] = { ...newMsg, deliveryStatus: 'sent' };
-                return { ...prev, [chatId]: nextMessages };
+
+            if (contentIdx !== -1) {
+                const next = [...list];
+                next[contentIdx] = { ...newMsg, deliveryStatus: 'sent' };
+                return { ...prev, [chatId]: next };
             }
+
             return {
                 ...prev,
-                [chatId]: [...currentMessages, newMsg]
+                [chatId]: [...list, newMsg]
             };
         });
 
-        // Prevent double unread increments / duplicated chat-lastMessage updates
-        // when the same message event is delivered more than once.
         if (isDuplicateMessage) return;
 
         if (replacedOptimisticMine) {
@@ -692,9 +742,6 @@ export function App() {
             loadChats(false);
         }
 
-        // Once a real message arrives for a group that was just created,
-        // remove it from the pinned-timestamp registry so future sorts are
-        // driven by the actual lastMessage timestamp.
         if (newGroupTimestamps.current[chatId]) {
             delete newGroupTimestamps.current[chatId];
         }
@@ -733,6 +780,7 @@ export function App() {
             });
         });
     }, [currentUser?.chatId, loadChats, playChatSound]);
+
 
     const handleMessageEdited = useCallback((chatId: string, updated: Message) => {
         setMessages(prev => {
@@ -1833,15 +1881,9 @@ export function App() {
                     console.warn('Failed to sync forwarded messages immediately', syncErr);
                 }
             }
-            setMessages((prev) => ({
-                ...prev,
-                [targetChatId]: (prev[targetChatId] || []).filter((m) => m.id !== forwardClientId),
-            }));
-            // Do not force a full replace right away; eventual consistency can briefly
-            // hide optimistic forwarded messages. We keep optimistic row visible until
-            // websocket/new sync confirms server copy.
         } catch (e) {
             console.error('Failed to refresh forwarded target chat messages', e);
+            // If it failed, we should probably remove the optimistic message
             setMessages((prev) => ({
                 ...prev,
                 [targetChatId]: (prev[targetChatId] || []).filter((m) => m.id !== forwardClientId),
