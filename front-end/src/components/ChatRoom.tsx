@@ -2738,8 +2738,8 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                             <div
                                                 ref={(el) => { if (!el) { messageElsRef.current.delete(m.id); return; } messageElsRef.current.set(m.id, el); }}
                                                 className={isMine
-                                                    ? `message-bubble message-bubble--mine ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''}`
-                                                    : `message-bubble message-bubble--theirs ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''}`}
+                                                    ? `message-bubble message-bubble--mine ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isHighlighted ? 'message-bubble--highlighted' : ''}`
+                                                    : `message-bubble message-bubble--theirs ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isHighlighted ? 'message-bubble--highlighted' : ''}`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     if (Date.now() < swipeRef.current.blockClickUntil) return;
@@ -2753,11 +2753,9 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                                     transform: `translateX(${dragX}px)`,
                                                     transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 220ms ease',
                                                     touchAction: dragActive ? 'none' : 'auto',
-                                                    boxShadow: isHighlighted
-                                                        ? '0 0 0 3px rgba(245, 158, 11, 0.6)'
-                                                        : isMenuActive
-                                                            ? 'inset 0 0 0 2px color-mix(in srgb, var(--accent-primary) 36%, transparent)'
-                                                            : 'inset 0 0 0 2px rgba(0,0,0,0)',
+                                                    boxShadow: isMenuActive
+                                                        ? 'inset 0 0 0 2px color-mix(in srgb, var(--accent-primary) 36%, transparent)'
+                                                        : 'inset 0 0 0 2px rgba(0,0,0,0)',
                                                 }}
                                             >
                                                 {isGroupChat && !isMine && !isBigEmojiOnly && (shape === 'msg-shape--single' || shape === 'msg-shape--first') && (() => {

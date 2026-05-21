@@ -1297,6 +1297,26 @@ body,
     overflow: visible;
 }
 
+@keyframes message-highlight-fade {
+    0% {
+        box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+    }
+    10% {
+        box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.7);
+    }
+    85% {
+        box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.7);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+    }
+}
+
+.message-bubble--highlighted {
+    animation: message-highlight-fade 1.5s ease-in-out forwards !important;
+    z-index: 2;
+}
+
 @media (min-width: 640px) {
     .message-bubble {
         max-width: 76%;
