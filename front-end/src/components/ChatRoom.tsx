@@ -1988,7 +1988,13 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         }, 320);
     };
 
+    const lastSubmitTimeRef = useRef<number>(0);
+
     const submit = () => {
+        const now = Date.now();
+        if (now - lastSubmitTimeRef.current < 300) return;
+        lastSubmitTimeRef.current = now;
+
         if (isContactBlocked || !canSendInOfficialChannel) return;
         const rawText = text;
         const trimmedText = rawText.trim();

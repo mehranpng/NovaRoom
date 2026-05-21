@@ -349,7 +349,7 @@ export function useWebSocket({
     }, [token, scheduleReconnect, rejectAllPendingRequests]);
 
     const send = useCallback(
-        (event: OutgoingEvent): boolean => {
+        (event: OutgoingEvent, enqueueOnFail = true): boolean => {
             const payload = JSON.stringify(event);
             const ws = socketRef.current;
 
@@ -358,13 +358,13 @@ export function useWebSocket({
                     ws.send(payload);
                     return true;
                 } catch {
-                    outboxRef.current.push(payload);
+                    if (enqueueOnFail) outboxRef.current.push(payload);
                     scheduleReconnect();
                     return false;
                 }
             }
 
-            outboxRef.current.push(payload);
+            if (enqueueOnFail) outboxRef.current.push(payload);
             connect();
             scheduleReconnect();
             return false;
@@ -378,7 +378,7 @@ export function useWebSocket({
             if (text.length > MAX_CHAT_MESSAGE_LENGTH) return false;
             if (!chatId || (!text.trim() && !file)) return false;
             const encryptedText = text.trim() ? await encryptChatTextClientSide(text, token || '', chatId) : '';
-            return send({ type: 'message', chatId, text: encryptedText, replyToId, file, clientId });
+            return send({ type: 'message', chatId, text: encryptedText, replyToId, file, clientId }, false);
         },
         [send, token]
     );
