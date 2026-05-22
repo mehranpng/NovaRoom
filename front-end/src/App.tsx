@@ -205,7 +205,6 @@ export function App() {
     // until the first message is sent.
     const [pendingUser, setPendingUser] = useState<User | null>(null);
     const [pendingForwardDrafts, setPendingForwardDrafts] = useState<Record<string, { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }>>({});
-    const wasWsConnectedRef = useRef(false);
     const aiStreamStartedRef = useRef<Record<string, boolean>>({});
     const aiPendingStreamMetaRef = useRef<Record<string, Message>>({});
     const dragHoverChatTimerRef = useRef<number | null>(null);
