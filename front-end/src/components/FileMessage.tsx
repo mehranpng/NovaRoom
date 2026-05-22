@@ -54,6 +54,8 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     if (!cached) return false;
     const object = URL.createObjectURL(cached);
     setMediaUrl(object); setDownloadState('done'); onMediaLoad?.();
+    // Also clear preview cache if we have the full image
+    void deleteCachedBlob(`chat:${chatId}:preview:${file.fileId}`);
     return true;
   };
 
@@ -85,6 +87,8 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
           const blob = await decodeResponseBlob(res);
           task!.blob = blob;
           await getOrCacheBlob({ cacheKey, loadBlob: async () => blob });
+          // Clear preview cache since we now have the full image
+          void deleteCachedBlob(`chat:${chatId}:preview:${file.fileId}`);
           task!.state = 'done'; notify(task!);
         } catch {
           window.clearInterval(progressTimer);
@@ -174,16 +178,29 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
       img.src = nextUrl;
       onMediaLoad?.();
     }).catch(() => undefined);
-    return () => { cancelled = true; };
+    return () => { 
+      cancelled = true; 
+      if (previewUrl && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
   }, [isImage, isVideo, previewDirectUrl, token, chatId, file.fileId]);
 
   const actionIcon = downloadState === 'downloading' ? <X size={16} /> : downloadState === 'decrypting' ? <LockOpen size={16} /> : <Download size={16} />;
 
   useEffect(() => {
+    const oldMediaUrl = mediaUrl;
+    const oldPreviewUrl = previewUrl;
+    
     setMediaUrl(null);
     setPreviewUrl(null);
     setPreviewAspectRatio(null);
     setResolvedAudioDuration(0);
+
+    return () => {
+      if (oldMediaUrl && oldMediaUrl.startsWith('blob:')) URL.revokeObjectURL(oldMediaUrl);
+      if (oldPreviewUrl && oldPreviewUrl.startsWith('blob:')) URL.revokeObjectURL(oldPreviewUrl);
+    };
   }, [file.fileId]);
 
   const metadataWidth = Number((file as any)?.meta?.width || (file as any)?.metadata?.width || (file as any)?.width || 0);

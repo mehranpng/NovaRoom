@@ -82,7 +82,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
 
         if (trimmed.length > 32) {
             setUsernameStatus('invalid');
-            setUsernameHint('حداکثر 32 کاراکتر.');
+            setUsernameHint('حداکثر ۳۲ کاراکتر');
             return;
         }
 

@@ -1915,12 +1915,11 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
     };
 
     const items = useMemo(() => {
-        if (!chatContentReady) return [];
         return messages.map((m, idx) => {
             const prev = idx > 0 ? messages[idx - 1] : null;
             const next = idx < messages.length - 1 ? messages[idx + 1] : null;
             const isMine = m.senderId === currentUserId;
-                                const pureEmojiCount = m.text ? getPureEmojiCount(m.text) : 0;
+            const pureEmojiCount = m.text ? getPureEmojiCount(m.text) : 0;
             const hasEmojiOnlyStickerStyle = pureEmojiCount >= 1 && pureEmojiCount <= 5 && !m.file && !m.replyTo && !m.forwardedFrom;
             const emojiOnlyClass = hasEmojiOnlyStickerStyle ? `message-text--emoji-only-${Math.min(5, pureEmojiCount)}` : "";
             const prevSameSender = prev ? prev.senderId === m.senderId : false;
@@ -1928,7 +1927,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
             const dayBreak = !prev || !sameDay(prev.timestamp, m.timestamp);
             return { m, isMine, dayBreak, shape: bubbleShape(prevSameSender, nextSameSender), isBigEmojiOnly: hasEmojiOnlyStickerStyle, emojiOnlyClass };
         });
-    }, [chatContentReady, messages, currentUserId]);
+    }, [messages, currentUserId]);
 
     const otherTypingUserIds = useMemo(
         () => (typingUserIds || []).filter((uid) => uid && uid !== currentUserId),
@@ -2614,328 +2613,333 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                 }}
             >
                 <div className="chat-room__messages-inner">
-                    {(loading || !chatContentReady) ? <ChatMessagesSkeleton /> : (
+                    {loading ? (
+                        <ChatMessagesSkeleton />
+                    ) : (
                         <>
-                            {(loadingOlderMessages || localLoadingOlder) && (
-                                <div className="chat-range-loader-wrap chat-range-loader-wrap--top">
-                                    <span className="chat-range-loader chat-range-loader--active" />
-                                </div>
-                            )}
-                            {items.map(({ m, isMine, dayBreak, shape, isBigEmojiOnly, emojiOnlyClass }) => {
-                                const isHighlighted = highlightId === m.id;
-                                const dragX = dragState.id === m.id ? dragState.x : 0;
-                                const dragActive = dragState.id === m.id ? dragState.active : false;
-                                const unreadAnchorForUi = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
-                                const showUnreadSeparator = Boolean(unreadAnchorForUi && unreadAnchorForUi === m.id && m.senderId !== currentUserId);
-                                const unreadCountForUi = Math.max(getUnseenIncomingMessages().length, displayUnreadCount);
+                            {!chatContentReady && <ChatMessagesSkeleton />}
+                            <div className="messages-list-visible-wrap" style={{ display: chatContentReady ? 'contents' : 'none' }}>
+                                {(loadingOlderMessages || localLoadingOlder) && (
+                                    <div className="chat-range-loader-wrap chat-range-loader-wrap--top">
+                                        <span className="chat-range-loader chat-range-loader--active" />
+                                    </div>
+                                )}
+                                {items.map(({ m, isMine, dayBreak, shape, isBigEmojiOnly, emojiOnlyClass }) => {
+                                    const isHighlighted = highlightId === m.id;
+                                    const dragX = dragState.id === m.id ? dragState.x : 0;
+                                    const dragActive = dragState.id === m.id ? dragState.active : false;
+                                    const unreadAnchorForUi = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
+                                    const showUnreadSeparator = Boolean(unreadAnchorForUi && unreadAnchorForUi === m.id && m.senderId !== currentUserId);
+                                    const unreadCountForUi = Math.max(getUnseenIncomingMessages().length, displayUnreadCount);
 
-                                const isMenuActive = Boolean(msgMenu && msgMenu.id === m.id);
-                                const seenByCountForMessage = seenByUsersByMessage[m.id]?.length ?? 0;
-                                const isSeenForUi = Boolean(
-                                    m.seen || (isGroupChat && isMine && seenByCountForMessage > 0) || (isOfficialChannel && isMine)
-                                );
-                                const messageSeenByRaw = Array.isArray((m as any).seenBy) ? (m as any).seenBy.length : 0;
-                                const messageSeenCountRaw = Number((m as any).seenCount || 0);
-                                const messageSeenCount = Math.max(1, seenByCountForMessage, messageSeenByRaw, messageSeenCountRaw);
+                                    const isMenuActive = Boolean(msgMenu && msgMenu.id === m.id);
+                                    const seenByCountForMessage = seenByUsersByMessage[m.id]?.length ?? 0;
+                                    const isSeenForUi = Boolean(
+                                        m.seen || (isGroupChat && isMine && seenByCountForMessage > 0) || (isOfficialChannel && isMine)
+                                    );
+                                    const messageSeenByRaw = Array.isArray((m as any).seenBy) ? (m as any).seenBy.length : 0;
+                                    const messageSeenCountRaw = Number((m as any).seenCount || 0);
+                                    const messageSeenCount = Math.max(1, seenByCountForMessage, messageSeenByRaw, messageSeenCountRaw);
 
-                                // FIX: use optimistic reactions if available, fallback to server data
-                                const effectiveReactions = (optimisticReactions[m.id] ?? m.reactions ?? []).slice().sort((a: any, b: any) => Number(b?.count || 0) - Number(a?.count || 0));
+                                    // FIX: use optimistic reactions if available, fallback to server data
+                                    const effectiveReactions = (optimisticReactions[m.id] ?? m.reactions ?? []).slice().sort((a: any, b: any) => Number(b?.count || 0) - Number(a?.count || 0));
 
-                                return (
-                                    <div key={m.id}>
-                                        {dayBreak && (
-                                            <div className="chat-room__date-separator">
-                                                <div className="chat-room__date-label">{formatDayLabel(m.timestamp)}</div>
-                                            </div>
-                                        )}
-
-                                        {showUnreadSeparator && (
-                                            <div ref={unreadSeparatorRef} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', justifyContent: 'center' }}>
-                                                <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
-                                                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 999, padding: '6px 10px', fontFamily: 'Vazir, sans-serif' }}>
-                                                    پیام‌های خوانده نشده{unreadCountForUi > 0 ? ` (${toPersianDigits(unreadCountForUi)})` : ''}
+                                    return (
+                                        <div key={m.id}>
+                                            {dayBreak && (
+                                                <div className="chat-room__date-separator">
+                                                    <div className="chat-room__date-label">{formatDayLabel(m.timestamp)}</div>
                                                 </div>
-                                                <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
-                                            </div>
-                                        )}
+                                            )}
 
-                                        <div
-                                            className={isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`}
-                                            onPointerDown={(e) => {
-                                                if (!canSwipeToReply) return;
-                                                if (e.pointerType !== 'mouse' || e.button !== 0) return;
-                                                swipeRef.current = { id: m.id, startX: e.clientX, startY: e.clientY, active: true, captured: false, pointerId: e.pointerId, blockClickUntil: swipeRef.current.blockClickUntil };
-                                            }}
-                                            onPointerMove={(e) => {
-                                                if (!canSwipeToReply) return;
-                                                if (e.pointerType !== 'mouse' || !swipeRef.current.active || swipeRef.current.id !== m.id) return;
-                                                const dx = e.clientX - swipeRef.current.startX;
-                                                const dy = e.clientY - swipeRef.current.startY;
-                                                if (!swipeRef.current.captured) {
-                                                    // چپ به راست: dx باید مثبت باشد
-                                                    if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
-                                                    swipeRef.current.captured = true;
-                                                    setReplySwipeLocked(true);
-                                                    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
-                                                }
-                                                e.preventDefault();
-                                                setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
-                                            }}
-                                            onPointerUp={(e) => {
-                                                if (!canSwipeToReply) return;
-                                                if (e.pointerType !== 'mouse' || !swipeRef.current.active || swipeRef.current.id !== m.id) return;
-                                                const dx = e.clientX - swipeRef.current.startX;
-                                                const dy = e.clientY - swipeRef.current.startY;
-                                                if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
-                                                if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m, true);
-                                                resetDrag(m.id);
-                                                swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
-                                            }}
-                                            onPointerCancel={(e) => {
-                                                if (!canSwipeToReply) return;
-                                                if (e.pointerType !== 'mouse' || swipeRef.current.id !== m.id) return;
-                                                resetDrag(m.id);
-                                                swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
-                                            }}
-                                            onTouchStart={(e) => {
-                                                if (!canSwipeToReply) return;
-                                                const t = e.touches[0];
-                                                swipeRef.current = { id: m.id, startX: t.clientX, startY: t.clientY, active: true, captured: false, pointerId: null, blockClickUntil: swipeRef.current.blockClickUntil };
-                                            }}
-                                            onTouchMove={(e) => {
-                                                if (!canSwipeToReply) return;
-                                                if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
-                                                const t = e.touches[0];
-                                                const dx = t.clientX - swipeRef.current.startX;
-                                                const dy = t.clientY - swipeRef.current.startY;
-                                                if (!swipeRef.current.captured) {
-                                                    // چپ به راست: dx باید مثبت باشد
-                                                    if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
-                                                    swipeRef.current.captured = true;
-                                                    setReplySwipeLocked(true);
-                                                }
-                                                e.preventDefault();
-                                                setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
-                                            }}
-                                            onTouchEnd={(e) => {
-                                                if (!canSwipeToReply) return;
-                                                if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
-                                                const t = e.changedTouches[0];
-                                                const dx = t.clientX - swipeRef.current.startX;
-                                                const dy = t.clientY - swipeRef.current.startY;
-                                                if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
-                                                if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m, true);
-                                                resetDrag(m.id);
-                                                swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
-                                            }}
-                                            onTouchCancel={() => {
-                                                if (!canSwipeToReply) return;
-                                                if (swipeRef.current.id !== m.id) return;
-                                                resetDrag(m.id);
-                                                swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
-                                            }}
-                                        >
-                                            {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--last') && (() => {
-                                                const sender = groupMembers[m.senderId];
-                                                const senderName = sender?.name || m.senderId || 'ناشناس';
-                                                return (
-                                                    <div style={{ position: 'absolute', left: 0, bottom: 0, cursor: 'pointer', zIndex: 1 }}
-                                                        onClick={(e) => { e.stopPropagation(); openMember(m.senderId); }}>
-                                                        <Avatar name={senderName} size="sm" src={sender?.avatar || ''} />
+                                            {showUnreadSeparator && (
+                                                <div ref={unreadSeparatorRef} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', justifyContent: 'center' }}>
+                                                    <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
+                                                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 999, padding: '6px 10px', fontFamily: 'Vazir, sans-serif' }}>
+                                                        پیام‌های خوانده نشده{unreadCountForUi > 0 ? ` (${toPersianDigits(unreadCountForUi)})` : ''}
                                                     </div>
-                                                );
-                                            })()}
+                                                    <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
+                                                </div>
+                                            )}
 
                                             <div
-                                                ref={(el) => { if (!el) { messageElsRef.current.delete(m.id); return; } messageElsRef.current.set(m.id, el); }}
-                                                className={isMine
-                                                    ? `message-bubble message-bubble--mine ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isHighlighted ? 'message-bubble--highlighted' : ''}`
-                                                    : `message-bubble message-bubble--theirs ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isHighlighted ? 'message-bubble--highlighted' : ''}`}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (Date.now() < swipeRef.current.blockClickUntil) return;
-                                                    const ne = e.nativeEvent as MouseEvent;
-                                                    openMessageMenu(m.id, e.currentTarget, ne.clientX, ne.clientY);
+                                                className={isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`}
+                                                onPointerDown={(e) => {
+                                                    if (!canSwipeToReply) return;
+                                                    if (e.pointerType !== 'mouse' || e.button !== 0) return;
+                                                    swipeRef.current = { id: m.id, startX: e.clientX, startY: e.clientY, active: true, captured: false, pointerId: e.pointerId, blockClickUntil: swipeRef.current.blockClickUntil };
                                                 }}
-                                                role="button" tabIndex={0}
-                                                onKeyDown={(e) => { if (e.key === 'Enter') openMessageMenu(m.id, e.currentTarget as any); }}
-                                                style={{
-                                                    cursor: 'pointer',
-                                                    transform: `translateX(${dragX}px)`,
-                                                    transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 220ms ease',
-                                                    touchAction: dragActive ? 'none' : 'auto',
-                                                    boxShadow: isMenuActive
-                                                        ? 'inset 0 0 0 2px color-mix(in srgb, var(--accent-primary) 36%, transparent)'
-                                                        : 'inset 0 0 0 2px rgba(0,0,0,0)',
+                                                onPointerMove={(e) => {
+                                                    if (!canSwipeToReply) return;
+                                                    if (e.pointerType !== 'mouse' || !swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                                    const dx = e.clientX - swipeRef.current.startX;
+                                                    const dy = e.clientY - swipeRef.current.startY;
+                                                    if (!swipeRef.current.captured) {
+                                                        // چپ به راست: dx باید مثبت باشد
+                                                        if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
+                                                        swipeRef.current.captured = true;
+                                                        setReplySwipeLocked(true);
+                                                        try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
+                                                    }
+                                                    e.preventDefault();
+                                                    setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
+                                                }}
+                                                onPointerUp={(e) => {
+                                                    if (!canSwipeToReply) return;
+                                                    if (e.pointerType !== 'mouse' || !swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                                    const dx = e.clientX - swipeRef.current.startX;
+                                                    const dy = e.clientY - swipeRef.current.startY;
+                                                    if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
+                                                    if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m, true);
+                                                    resetDrag(m.id);
+                                                    swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
+                                                }}
+                                                onPointerCancel={(e) => {
+                                                    if (!canSwipeToReply) return;
+                                                    if (e.pointerType !== 'mouse' || swipeRef.current.id !== m.id) return;
+                                                    resetDrag(m.id);
+                                                    swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
+                                                }}
+                                                onTouchStart={(e) => {
+                                                    if (!canSwipeToReply) return;
+                                                    const t = e.touches[0];
+                                                    swipeRef.current = { id: m.id, startX: t.clientX, startY: t.clientY, active: true, captured: false, pointerId: null, blockClickUntil: swipeRef.current.blockClickUntil };
+                                                }}
+                                                onTouchMove={(e) => {
+                                                    if (!canSwipeToReply) return;
+                                                    if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                                    const t = e.touches[0];
+                                                    const dx = t.clientX - swipeRef.current.startX;
+                                                    const dy = t.clientY - swipeRef.current.startY;
+                                                    if (!swipeRef.current.captured) {
+                                                        // چپ به راست: dx باید مثبت باشد
+                                                        if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
+                                                        swipeRef.current.captured = true;
+                                                        setReplySwipeLocked(true);
+                                                    }
+                                                    e.preventDefault();
+                                                    setDragState({ id: m.id, x: Math.max(0, Math.min(72, dx)), active: true });
+                                                }}
+                                                onTouchEnd={(e) => {
+                                                    if (!canSwipeToReply) return;
+                                                    if (!swipeRef.current.active || swipeRef.current.id !== m.id) return;
+                                                    const t = e.changedTouches[0];
+                                                    const dx = t.clientX - swipeRef.current.startX;
+                                                    const dy = t.clientY - swipeRef.current.startY;
+                                                    if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
+                                                    if (dx > 60 && Math.abs(dx) > Math.abs(dy)) beginReply(m, true);
+                                                    resetDrag(m.id);
+                                                    swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
+                                                }}
+                                                onTouchCancel={() => {
+                                                    if (!canSwipeToReply) return;
+                                                    if (swipeRef.current.id !== m.id) return;
+                                                    resetDrag(m.id);
+                                                    swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
                                                 }}
                                             >
-                                                {isGroupChat && !isMine && !isBigEmojiOnly && (shape === 'msg-shape--single' || shape === 'msg-shape--first') && (() => {
+                                                {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--last') && (() => {
                                                     const sender = groupMembers[m.senderId];
                                                     const senderName = sender?.name || m.senderId || 'ناشناس';
-                                                    const colors = ['#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3', '#00BCD4', '#009688', '#4CAF50', '#FF5722', '#FF9800'];
-                                                    const colorIdx = m.senderId ? Math.abs(m.senderId.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % colors.length : 0;
                                                     return (
-                                                        <div onClick={(e) => { e.stopPropagation(); openMember(m.senderId); }}
-                                                            style={{ fontSize: 13, fontWeight: 700, color: colors[colorIdx], marginBottom: 3, cursor: 'pointer', fontFamily: "'Vazir', 'AppleEmoji', sans-serif", lineHeight: '1.2' }}>
-                                                            {senderName}
+                                                        <div style={{ position: 'absolute', left: 0, bottom: 0, cursor: 'pointer', zIndex: 1 }}
+                                                            onClick={(e) => { e.stopPropagation(); openMember(m.senderId); }}>
+                                                            <Avatar name={senderName} size="sm" src={sender?.avatar || ''} />
                                                         </div>
                                                     );
                                                 })()}
 
-                                                {m.forwardedFrom && (
-                                                    <button
-                                                        type="button"
-                                                        className="message-forwarded-label"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            openForwardSource(m);
-                                                        }}
-                                                    >
-                                                        فوروارد شده از: {m.forwardedFrom.name || m.forwardedFrom.username || 'ناشناس'}
-                                                    </button>
-                                                )}
+                                                <div
+                                                    ref={(el) => { if (!el) { messageElsRef.current.delete(m.id); return; } messageElsRef.current.set(m.id, el); }}
+                                                    className={isMine
+                                                        ? `message-bubble message-bubble--mine ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isHighlighted ? 'message-bubble--highlighted' : ''}`
+                                                        : `message-bubble message-bubble--theirs ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isHighlighted ? 'message-bubble--highlighted' : ''}`}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (Date.now() < swipeRef.current.blockClickUntil) return;
+                                                        const ne = e.nativeEvent as MouseEvent;
+                                                        openMessageMenu(m.id, e.currentTarget, ne.clientX, ne.clientY);
+                                                    }}
+                                                    role="button" tabIndex={0}
+                                                    onKeyDown={(e) => { if (e.key === 'Enter') openMessageMenu(m.id, e.currentTarget as any); }}
+                                                    style={{
+                                                        cursor: 'pointer',
+                                                        transform: `translateX(${dragX}px)`,
+                                                        transition: dragActive ? 'none' : 'transform 140ms ease-out, box-shadow 220ms ease',
+                                                        touchAction: dragActive ? 'none' : 'auto',
+                                                        boxShadow: isMenuActive
+                                                            ? 'inset 0 0 0 2px color-mix(in srgb, var(--accent-primary) 36%, transparent)'
+                                                            : 'inset 0 0 0 2px rgba(0,0,0,0)',
+                                                    }}
+                                                >
+                                                    {isGroupChat && !isMine && !isBigEmojiOnly && (shape === 'msg-shape--single' || shape === 'msg-shape--first') && (() => {
+                                                        const sender = groupMembers[m.senderId];
+                                                        const senderName = sender?.name || m.senderId || 'ناشناس';
+                                                        const colors = ['#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3', '#00BCD4', '#009688', '#4CAF50', '#FF5722', '#FF9800'];
+                                                        const colorIdx = m.senderId ? Math.abs(m.senderId.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % colors.length : 0;
+                                                        return (
+                                                            <div onClick={(e) => { e.stopPropagation(); openMember(m.senderId); }}
+                                                                style={{ fontSize: 13, fontWeight: 700, color: colors[colorIdx], marginBottom: 3, cursor: 'pointer', fontFamily: "'Vazir', 'AppleEmoji', sans-serif", lineHeight: '1.2' }}>
+                                                                {senderName}
+                                                            </div>
+                                                        );
+                                                    })()}
 
-                                                {m.replyTo && (
-                                                    <div onClick={(e) => { e.stopPropagation(); scrollToMessage(m.replyTo!.id); }}
-                                                        role="button" tabIndex={0}
-                                                        onKeyDown={(e) => { if (e.key === 'Enter') scrollToMessage(m.replyTo!.id); }}
-                                                        className="message-reply-box"
-                                                        style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
-                                                        <div className="message-reply-box__label">{isGroupChat ? getReplySenderName(m.replyTo) : 'پاسخ'}</div>
-                                                        <div className="message-reply-box__text">{getReplyPreviewText(m.replyTo)}</div>
-                                                    </div>
-                                                )}
-
-                                                {m.file && (
-                                                    <FileMessage
-                                                        file={m.file}
-                                                        token={token}
-                                                        chatId={chatId}
-                                                        onMediaLoad={() => handleInitialMediaReady(m.id)}
-                                                        onImageClick={(imageUrl, file) => openImageViewer(imageUrl, file)}
-                                                        onVideoClick={(videoUrl, file) => openVideoViewer(videoUrl, file)}
-                                                    />
-                                                )}
-                                                {Boolean(m.reasoningEnabled && m.reasoningContent) && (
-                                                    <div className="ai-reasoning-message-stack" style={{ width: '100%' }}>
+                                                    {m.forwardedFrom && (
                                                         <button
                                                             type="button"
-                                                            className="ai-reasoning-header"
+                                                            className="message-forwarded-label"
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                setReasoningPanelByMessage((prev) => ({ ...prev, [m.id]: !Boolean(prev[m.id]) }));
+                                                                openForwardSource(m);
                                                             }}
                                                         >
-                                                            <span className="ai-reasoning-header-main">
-                                                                <span className="ai-reasoning-static-title">روند استدلال</span>
-                                                                <span className='ai-reasoning-timer'>
-                                                                    {`${toPersianDigits(Math.floor(Number(m.reasoningDurationSec || 0) / 60))}:${toPersianDigits(String(Number(m.reasoningDurationSec || 0) % 60).padStart(2, '0'))}`}
-                                                                </span>
-                                                            </span>
-                                                            <ChevronDown size={15} className={reasoningPanelByMessage[m.id] ? 'ai-reasoning-chevron ai-reasoning-chevron--open' : 'ai-reasoning-chevron'} />
+                                                            فوروارد شده از: {m.forwardedFrom.name || m.forwardedFrom.username || 'ناشناس'}
                                                         </button>
-                                                        <AnimatePresence initial={false}>
-                                                            {Boolean(reasoningPanelByMessage[m.id]) && (
-                                                                <motion.div
-                                                                    className="ai-reasoning-body"
-                                                                    initial={{ height: 0, opacity: 0 }}
-                                                                    animate={{ height: 'auto', opacity: 1 }}
-                                                                    exit={{ height: 0, opacity: 0 }}
-                                                                    transition={{ duration: 0.2, ease: 'easeOut' }}
-                                                                >
-                                                                    <div className="ai-reasoning-content">{m.reasoningContent}</div>
-                                                                </motion.div>
-                                                            )}
-                                                        </AnimatePresence>
-                                                    </div>
-                                                )}
-                                                {m.text && !Boolean(m.reasoningEnabled && m.reasoningContent) && (
-                                                    hasMarkdownSyntax(normalizeMessageTextForRender(m.text)) ? (
-                                                        <div className="message-text message-text--markdown">
-                                                            <MemoMarkdown text={normalizeMessageTextForRender(cachedTextByMessageId[m.id] ?? m.text)} components={markdownComponents} />
+                                                    )}
+
+                                                    {m.replyTo && (
+                                                        <div onClick={(e) => { e.stopPropagation(); scrollToMessage(m.replyTo!.id); }}
+                                                            role="button" tabIndex={0}
+                                                            onKeyDown={(e) => { if (e.key === 'Enter') scrollToMessage(m.replyTo!.id); }}
+                                                            className="message-reply-box"
+                                                            style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
+                                                            <div className="message-reply-box__label">{isGroupChat ? getReplySenderName(m.replyTo) : 'پاسخ'}</div>
+                                                            <div className="message-reply-box__text">{getReplyPreviewText(m.replyTo)}</div>
                                                         </div>
-                                                    ) : (
-                                                        <div className={isBigEmojiOnly ? `message-text message-text--emoji-only ${emojiOnlyClass}` : 'message-text'}>{renderTextWithLinks(normalizeMessageTextForRender(m.text))}</div>
-                                                    )
-                                                )}
-                                                {m.text && Boolean(m.reasoningEnabled && m.reasoningContent) && (
-                                                    <div className="ai-reasoning-answer" style={{ marginTop: 0 }}>
-                                                        {hasMarkdownSyntax(normalizeMessageTextForRender(m.text)) ? (
+                                                    )}
+
+                                                    {m.file && (
+                                                        <FileMessage
+                                                            file={m.file}
+                                                            token={token}
+                                                            chatId={chatId}
+                                                            onMediaLoad={() => handleInitialMediaReady(m.id)}
+                                                            onImageClick={(imageUrl, file) => openImageViewer(imageUrl, file)}
+                                                            onVideoClick={(videoUrl, file) => openVideoViewer(videoUrl, file)}
+                                                        />
+                                                    )}
+                                                    {Boolean(m.reasoningEnabled && m.reasoningContent) && (
+                                                        <div className="ai-reasoning-message-stack" style={{ width: '100%' }}>
+                                                            <button
+                                                                type="button"
+                                                                className="ai-reasoning-header"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setReasoningPanelByMessage((prev) => ({ ...prev, [m.id]: !Boolean(prev[m.id]) }));
+                                                                }}
+                                                            >
+                                                                <span className="ai-reasoning-header-main">
+                                                                    <span className="ai-reasoning-static-title">روند استدلال</span>
+                                                                    <span className='ai-reasoning-timer'>
+                                                                        {`${toPersianDigits(Math.floor(Number(m.reasoningDurationSec || 0) / 60))}:${toPersianDigits(String(Number(m.reasoningDurationSec || 0) % 60).padStart(2, '0'))}`}
+                                                                    </span>
+                                                                </span>
+                                                                <ChevronDown size={15} className={reasoningPanelByMessage[m.id] ? 'ai-reasoning-chevron ai-reasoning-chevron--open' : 'ai-reasoning-chevron'} />
+                                                            </button>
+                                                            <AnimatePresence initial={false}>
+                                                                {Boolean(reasoningPanelByMessage[m.id]) && (
+                                                                    <motion.div
+                                                                        className="ai-reasoning-body"
+                                                                        initial={{ height: 0, opacity: 0 }}
+                                                                        animate={{ height: 'auto', opacity: 1 }}
+                                                                        exit={{ height: 0, opacity: 0 }}
+                                                                        transition={{ duration: 0.2, ease: 'easeOut' }}
+                                                                    >
+                                                                        <div className="ai-reasoning-content">{m.reasoningContent}</div>
+                                                                    </motion.div>
+                                                                )}
+                                                            </AnimatePresence>
+                                                        </div>
+                                                    )}
+                                                    {m.text && !Boolean(m.reasoningEnabled && m.reasoningContent) && (
+                                                        hasMarkdownSyntax(normalizeMessageTextForRender(m.text)) ? (
                                                             <div className="message-text message-text--markdown">
                                                                 <MemoMarkdown text={normalizeMessageTextForRender(cachedTextByMessageId[m.id] ?? m.text)} components={markdownComponents} />
                                                             </div>
                                                         ) : (
                                                             <div className={isBigEmojiOnly ? `message-text message-text--emoji-only ${emojiOnlyClass}` : 'message-text'}>{renderTextWithLinks(normalizeMessageTextForRender(m.text))}</div>
+                                                        )
+                                                    )}
+                                                    {m.text && Boolean(m.reasoningEnabled && m.reasoningContent) && (
+                                                        <div className="ai-reasoning-answer" style={{ marginTop: 0 }}>
+                                                            {hasMarkdownSyntax(normalizeMessageTextForRender(m.text)) ? (
+                                                                <div className="message-text message-text--markdown">
+                                                                    <MemoMarkdown text={normalizeMessageTextForRender(cachedTextByMessageId[m.id] ?? m.text)} components={markdownComponents} />
+                                                                </div>
+                                                            ) : (
+                                                                <div className={isBigEmojiOnly ? `message-text message-text--emoji-only ${emojiOnlyClass}` : 'message-text'}>{renderTextWithLinks(normalizeMessageTextForRender(m.text))}</div>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                    {effectiveReactions && effectiveReactions.length > 0 && (
+                                                        <div className="message-reactions">
+                                                            {effectiveReactions.map((reaction: any, idx: number) => {
+                                                                const userIds = reaction.userIds || [];
+                                                                const isMyReaction = userIds.includes(currentUserId);
+                                                                return (
+                                                                    <button key={idx}
+                                                                        className={isMyReaction ? 'message-reaction message-reaction--active' : 'message-reaction'}
+                                                                        onClick={(e) => { e.stopPropagation(); if (isMyReaction) handleDeleteReaction(m.id); else handleReact(m.id, reaction.emoji); }}
+                                                                        onMouseEnter={(e) => {
+                                                                            if (!window.matchMedia?.('(pointer:fine)').matches) return;
+                                                                            e.stopPropagation();
+                                                                            openReactionMenu(m.id, e.currentTarget);
+                                                                        }}
+                                                                        type="button"
+                                                                    >
+                                                                        <span className="message-reaction__emoji">{reaction.emoji}</span>
+                                                                        {reaction.count > 1 && (
+                                                                            <span className="message-reaction__count" style={{ fontFamily: 'Vazir, sans-serif' }}>
+                                                                                {toPersianDigits(reaction.count)}
+                                                                            </span>
+                                                                        )}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+
+                                                    <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
+                                                        <span className="message-time">{formatMessageTime(m.timestamp)}</span>
+                                                        {m.edited && <span className="message-edited-label">ویرایش شده</span>}
+                                                        {m.aiModelName && <span className="message-ai-model-label">{m.aiModelName}</span>}
+                                                        {isOfficialChannel && (
+                                                            <span className="message-edited-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                                                                <span>{toPersianDigits(messageSeenCount)}</span>
+                                                                <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden>
+                                                                    <path
+                                                                        fillRule="evenodd"
+                                                                        clipRule="evenodd"
+                                                                        d="M12 5.5C5.3 5.5 1.5 12 1.5 12s3.8 6.5 10.5 6.5S22.5 12 22.5 12 18.7 5.5 12 5.5Zm0 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"
+                                                                        fill="currentColor"
+                                                                    />
+                                                                </svg>
+                                                            </span>
+                                                        )}
+                                                        {isMine && (
+                                                            m.deliveryStatus === 'sending'
+                                                                ? <span className="message-pending-indicator" aria-label="در حال ارسال">◷</span>
+                                                                : (
+                                                                    <span className={isSeenForUi ? 'message-seen message-seen--double' : 'message-seen message-seen--single'} aria-label={isSeenForUi ? 'seen' : 'sent'}>
+                                                                        <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--first" />
+                                                                        {isSeenForUi && <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--second" />}
+                                                                    </span>
+                                                                )
                                                         )}
                                                     </div>
-                                                )}
-
-                                                {effectiveReactions && effectiveReactions.length > 0 && (
-                                                    <div className="message-reactions">
-                                                        {effectiveReactions.map((reaction: any, idx: number) => {
-                                                            const userIds = reaction.userIds || [];
-                                                            const isMyReaction = userIds.includes(currentUserId);
-                                                            return (
-                                                                <button key={idx}
-                                                                    className={isMyReaction ? 'message-reaction message-reaction--active' : 'message-reaction'}
-                                                                    onClick={(e) => { e.stopPropagation(); if (isMyReaction) handleDeleteReaction(m.id); else handleReact(m.id, reaction.emoji); }}
-                                                                    onMouseEnter={(e) => {
-                                                                        if (!window.matchMedia?.('(pointer:fine)').matches) return;
-                                                                        e.stopPropagation();
-                                                                        openReactionMenu(m.id, e.currentTarget);
-                                                                    }}
-                                                                    type="button"
-                                                                >
-                                                                    <span className="message-reaction__emoji">{reaction.emoji}</span>
-                                                                    {reaction.count > 1 && (
-                                                                        <span className="message-reaction__count" style={{ fontFamily: 'Vazir, sans-serif' }}>
-                                                                            {toPersianDigits(reaction.count)}
-                                                                        </span>
-                                                                    )}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                )}
-
-                                                <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
-                                                    <span className="message-time">{formatMessageTime(m.timestamp)}</span>
-                                                    {m.edited && <span className="message-edited-label">ویرایش شده</span>}
-                                                    {m.aiModelName && <span className="message-ai-model-label">{m.aiModelName}</span>}
-                                                    {isOfficialChannel && (
-                                                        <span className="message-edited-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                                                            <span>{toPersianDigits(messageSeenCount)}</span>
-                                                            <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden>
-                                                                <path
-                                                                    fillRule="evenodd"
-                                                                    clipRule="evenodd"
-                                                                    d="M12 5.5C5.3 5.5 1.5 12 1.5 12s3.8 6.5 10.5 6.5S22.5 12 22.5 12 18.7 5.5 12 5.5Zm0 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"
-                                                                    fill="currentColor"
-                                                                />
-                                                            </svg>
-                                                        </span>
-                                                    )}
-                                                    {isMine && (
-                                                        m.deliveryStatus === 'sending'
-                                                            ? <span className="message-pending-indicator" aria-label="در حال ارسال">◷</span>
-                                                            : (
-                                                                <span className={isSeenForUi ? 'message-seen message-seen--double' : 'message-seen message-seen--single'} aria-label={isSeenForUi ? 'seen' : 'sent'}>
-                                                                    <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--first" />
-                                                                    {isSeenForUi && <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--second" />}
-                                                                </span>
-                                                            )
-                                                    )}
                                                 </div>
                                             </div>
                                         </div>
+                                    );
+                                })}
+                                {(loadingNewerMessages || localLoadingNewer) && (
+                                    <div className="chat-range-loader-wrap chat-range-loader-wrap--bottom">
+                                        <span className="chat-range-loader chat-range-loader--active" />
                                     </div>
-                                );
-                            })}
-                            {(loadingNewerMessages || localLoadingNewer) && (
-                                <div className="chat-range-loader-wrap chat-range-loader-wrap--bottom">
-                                    <span className="chat-range-loader chat-range-loader--active" />
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </>
                     )}
                     <div ref={messagesEndRef} />
