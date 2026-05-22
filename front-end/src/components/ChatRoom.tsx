@@ -623,6 +623,16 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
     const typingActiveRef = useRef(false);
     const typingTimeoutRef = useRef<number | null>(null);
 
+    const onTypingChangeRef = useRef(onTypingChange);
+    useEffect(() => {
+        onTypingChangeRef.current = onTypingChange;
+    }, [onTypingChange]);
+
+    const onUploadStatusChangeRef = useRef(onUploadStatusChange);
+    useEffect(() => {
+        onUploadStatusChangeRef.current = onUploadStatusChange;
+    }, [onUploadStatusChange]);
+
     const clearTypingTimeout = () => {
         if (typingTimeoutRef.current) {
             window.clearTimeout(typingTimeoutRef.current);
@@ -632,8 +642,8 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
 
     const emitTyping = (isTyping: boolean) => {
         if (isContactBlocked && isTyping) return;
-        if (!onTypingChange) return;
-        onTypingChange(chatId, isTyping);
+        if (!onTypingChangeRef.current) return;
+        onTypingChangeRef.current(chatId, isTyping);
     };
 
     const stopTyping = () => {
@@ -644,7 +654,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
     };
 
     const refreshTyping = (nextValue: string) => {
-        if (!onTypingChange) return;
+        if (!onTypingChangeRef.current) return;
         const hasAnyChar = nextValue.length > 0;
         if (!hasAnyChar) {
             stopTyping();
@@ -665,14 +675,14 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
     };
 
     useEffect(() => {
-        if (!onUploadStatusChange) return;
-        onUploadStatusChange(chatId, uploadComposerState.isUploading);
-    }, [chatId, onUploadStatusChange, uploadComposerState.isUploading]);
+        if (!onUploadStatusChangeRef.current) return;
+        onUploadStatusChangeRef.current(chatId, uploadComposerState.isUploading);
+    }, [chatId, uploadComposerState.isUploading]);
 
     useEffect(() => () => {
-        if (!onUploadStatusChange) return;
-        onUploadStatusChange(chatId, false);
-    }, [chatId, onUploadStatusChange]);
+        if (!onUploadStatusChangeRef.current) return;
+        onUploadStatusChangeRef.current(chatId, false);
+    }, [chatId]);
 
     useEffect(() => {
         if (!isContactBlocked) return;
@@ -1443,7 +1453,17 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                     if (cached != null) next[m.id] = cached;
                 }
             }
-            if (!cancelled) setCachedTextByMessageId(next);
+            if (!cancelled) {
+                setCachedTextByMessageId((prev) => {
+                    const prevKeys = Object.keys(prev);
+                    const nextKeys = Object.keys(next);
+                    if (prevKeys.length !== nextKeys.length) return next;
+                    for (const k of nextKeys) {
+                        if (prev[k] !== next[k]) return next;
+                    }
+                    return prev;
+                });
+            }
         };
         void hydrateAndStore();
         return () => { cancelled = true; };
@@ -2456,6 +2476,9 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         );
     }
 
+    const unreadAnchorForUi = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
+    const unreadCountForUi = Math.max(getUnseenIncomingMessages().length, displayUnreadCount);
+
     const toastVariants: Variants = {
         hidden: { opacity: 0 },
         visible: { opacity: 1, transition: { duration: 0.22, ease: 'easeOut' } },
@@ -2644,9 +2667,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                                     const isHighlighted = highlightId === m.id;
                                     const dragX = dragState.id === m.id ? dragState.x : 0;
                                     const dragActive = dragState.id === m.id ? dragState.active : false;
-                                    const unreadAnchorForUi = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
                                     const showUnreadSeparator = Boolean(unreadAnchorForUi && unreadAnchorForUi === m.id && m.senderId !== currentUserId);
-                                    const unreadCountForUi = Math.max(getUnseenIncomingMessages().length, displayUnreadCount);
 
                                     const isMenuActive = Boolean(msgMenu && msgMenu.id === m.id);
                                     const seenByCountForMessage = seenByUsersByMessage[m.id]?.length ?? 0;
