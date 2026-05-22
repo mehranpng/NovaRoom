@@ -776,9 +776,9 @@ export function AIChatRoom({
     const activeMsg = msgMenu ? messages.find((m) => m.id === msgMenu.id) : null;
 
     const toastVariants: Variants = {
-        hidden: { opacity: 0, },
-        visible: { opacity: 1, transition: { duration: 0.2 } },
-        exit: { opacity: 0, transition: { duration: 0.2 } },
+        hidden: { x: 0 },
+        visible: { x: 0 },
+        exit: { x: 0 },
     };
 
     return (
@@ -815,9 +815,9 @@ export function AIChatRoom({
                             {modelDropdownOpen && (
                                 <motion.div
                                     className="ai-model-switcher__menu"
-                                    initial={{ opacity: 0, y: -6 }}
+                                    initial={{ opacity: 1, y: -6 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: -6 }}
+                                    exit={{ opacity: 1, y: -6 }}
                                     transition={{ duration: 0.16 }}
                                 >
                                     <button type="button" className={`${selectedModel === 'nova-flash' ? 'ai-model-option ai-model-option--active' : 'ai-model-option'}${isFlashDisabled ? ' ai-model-option--disabled' : ''}`} onClick={() => handleSelectModel('nova-flash')}>
@@ -920,10 +920,10 @@ export function AIChatRoom({
                                                     {Boolean(reasoningPanelByMessage[message.id]) && (
                                                         <motion.div
                                                             className="ai-reasoning-body"
-                                                            initial={{ height: 0, opacity: 0 }}
+                                                            initial={{ height: 0, opacity: 1 }}
                                                             animate={{ height: 'auto', opacity: 1 }}
-                                                            exit={{ height: 0, opacity: 0 }}
-                                                            transition={{ duration: 0.2, ease: 'easeOut' }}
+                                                            exit={{ height: 0, opacity: 1 }}
+                                                            transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
                                                         >
                                                             <div className="ai-reasoning-content">
                                                                 <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]} components={markdownComponents}>
@@ -1022,10 +1022,10 @@ export function AIChatRoom({
                         <motion.aside
                             className="ai-chat-drawer"
                             onClick={(e) => e.stopPropagation()}
-                            initial={{ x: 280 }}
+                            initial={{ x: '100%' }}
                             animate={{ x: 0 }}
-                            exit={{ x: 280 }}
-                            transition={{ type: 'spring', stiffness: 440, damping: 36, mass: 0.8 }}
+                            exit={{ x: '100%' }}
+                            transition={{ type: 'spring', stiffness: 450, damping: 28, mass: 0.6 }}
                         >
                             <button
                                 type="button"

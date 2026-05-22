@@ -876,16 +876,23 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         const incoming = messages.filter((m: any) => m.senderId !== currentUserId);
         if (incoming.length === 0) return null;
 
+        // 1. Hard priority: first message that is explicitly marked seen=false
         const firstUnseenByFlag = incoming.find((m: any) => m.seen === false);
-        const cnt = Number(unreadCount || 0);
+        if (firstUnseenByFlag) return firstUnseenByFlag.id;
 
+        // 2. Fallback to unreadCount if provided by the parent/server
+        const cnt = Number(unreadCount || 0);
         if (Number.isFinite(cnt) && cnt > 0) {
+            // Take the last 'cnt' messages from incoming
             const clamped = Math.min(incoming.length, Math.max(1, Math.floor(cnt)));
             const byCount = incoming[incoming.length - clamped];
+            
+            // If we have no 'seen' flags at all in our data (all might be null/undefined), 
+            // or if we trust the count more than the lack of 'false' flags.
             if (byCount?.id) return byCount.id;
         }
 
-        return firstUnseenByFlag?.id || null;
+        return null;
     };
 
     const isUnreadAnchorValid = (messageId: string | null): boolean => {
