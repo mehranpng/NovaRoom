@@ -4,6 +4,8 @@ import { ArrowDown, ArrowLeft, Copy, Eye, AlignJustify, Pencil, SendHorizontal, 
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import type { Components } from 'react-markdown';
 import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata } from '../types';
 import { Avatar } from './Avatar';
@@ -204,6 +206,17 @@ type GroupMember = {
 
 
 
+function normalizeMessageTextForRender(text: string): string {
+    let t = String(text || '').replace(/\\n/g, '\n');
+    // Convert \[ \] to $$ $$
+    t = t.replace(/\\\[/g, '$$$$');
+    t = t.replace(/\\\]/g, '$$$$');
+    // Convert \( \) to $ $
+    t = t.replace(/\\\(/g, '$$');
+    t = t.replace(/\\\)/g, '$$');
+    return t;
+}
+
 const MemoMarkdown = memo(function MemoMarkdown({
     text,
     components,
@@ -212,8 +225,8 @@ const MemoMarkdown = memo(function MemoMarkdown({
     components: Components;
 }) {
     return (
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-            {text}
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={components}>
+            {normalizeMessageTextForRender(text)}
         </ReactMarkdown>
     );
 });
@@ -335,10 +348,6 @@ const markdownComponents: Components = {
     ),
 };
 
-
-function normalizeMessageTextForRender(text: string): string {
-    return String(text || '').replace(/\\n/g, '\n');
-}
 
 function hasMarkdownSyntax(text: string): boolean {
     return /(^|\n)\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>\s)|(```|`[^`]+`|\[[^\]]+\]\([^\)]+\)|\*\*[^*]+\*\*|__[^_]+__|\$\$?[\s\S]+?\$\$?|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\])/m.test(text);

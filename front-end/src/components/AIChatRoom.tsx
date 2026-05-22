@@ -4,6 +4,8 @@ import { motion, AnimatePresence, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import type { Components } from 'react-markdown';
 import type { Message, Chat, FileMetadata, AIChatSummary, AIModelKey } from '../types';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
@@ -167,68 +169,6 @@ const markdownComponents: Components = {
     ),
 };
 
-
-
-
-
-type MathJaxConfig = {
-    typesetPromise?: (elements?: Element[]) => Promise<void>;
-    tex?: {
-        inlineMath: string[][];
-        displayMath: string[][];
-    };
-    svg?: {
-        fontCache: string;
-    };
-};
-
-type WindowWithMathJax = Window & {
-    MathJax?: MathJaxConfig;
-    __mathJaxLoadPromise?: Promise<void>;
-};
-
-function ensureMathJaxLoaded(): Promise<void> {
-    if (typeof window === 'undefined') return Promise.resolve();
-    const w = window as WindowWithMathJax;
-    if (w.MathJax?.typesetPromise) return Promise.resolve();
-    if (w.__mathJaxLoadPromise) return w.__mathJaxLoadPromise;
-
-    w.MathJax = w.MathJax || {
-        tex: {
-            inlineMath: [['$', '$'], ['\\(', '\\)']],
-            displayMath: [['$$', '$$'], ['\\[', '\\]']],
-        },
-        svg: { fontCache: 'global' },
-    };
-
-    w.__mathJaxLoadPromise = new Promise<void>((resolve) => {
-        const existing = document.querySelector('script[data-mathjax="1"]') as HTMLScriptElement | null;
-        if (existing) {
-            existing.addEventListener('load', () => resolve(), { once: true });
-            existing.addEventListener('error', () => resolve(), { once: true });
-            return;
-        }
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js';
-        script.async = true;
-        script.defer = true;
-        script.dataset.mathjax = '1';
-        script.onload = () => resolve();
-        script.onerror = () => resolve();
-        document.head.appendChild(script);
-    });
-    return w.__mathJaxLoadPromise;
-}
-
-function typesetMath(container: Element | null) {
-    if (!container || typeof window === 'undefined') return;
-    void ensureMathJaxLoaded().then(() => {
-        const mj = (window as WindowWithMathJax).MathJax;
-        if (!mj?.typesetPromise) return;
-        void mj.typesetPromise([container]).catch(() => {});
-    });
-}
-
 const AI_EMPTY_STATE_PROMPTS = [
     'درمورد چه چیزی سوال دارید؟',
     'هر چیزی می‌خواهید بپرسید.',
@@ -242,7 +182,14 @@ const AI_EMPTY_STATE_PROMPTS = [
 
 
 function normalizeMessageTextForRender(text: string): string {
-    return String(text || '').replace(/\\n/g, '\n');
+    let t = String(text || '').replace(/\\n/g, '\n');
+    // Convert \[ \] to $$ $$
+    t = t.replace(/\\\[/g, '$$$$');
+    t = t.replace(/\\\]/g, '$$$$');
+    // Convert \( \) to $ $
+    t = t.replace(/\\\(/g, '$$');
+    t = t.replace(/\\\)/g, '$$');
+    return t;
 }
 
 function pickRandomEmptyPrompt(): string {
@@ -547,10 +494,6 @@ export function AIChatRoom({
         prevLenRef.current = messages.length;
         prevLastMessageRef.current = messages[messages.length - 1] ?? null;
     }, [messages, currentUserId]);
-
-    useEffect(() => {
-        typesetMath(messagesContainerRef.current);
-    }, [messages]);
 
     // Handle typing indicator
     useEffect(() => {
@@ -983,14 +926,16 @@ export function AIChatRoom({
                                                             transition={{ duration: 0.2, ease: 'easeOut' }}
                                                         >
                                                             <div className="ai-reasoning-content">
-                                                                {message.reasoningContent || '...'}
+                                                                <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]} components={markdownComponents}>
+                                                                    {normalizeMessageTextForRender(message.reasoningContent || '...')}
+                                                                </ReactMarkdown>
                                                             </div>
                                                         </motion.div>
                                                     )}
                                                 </AnimatePresence>
                                                 <div className="ai-reasoning-answer">
                                                     <div className="message-text message-text--markdown">
-                                                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
+                                                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]} components={markdownComponents}>
                                                             {normalizeMessageTextForRender(message.text ?? '')}
                                                         </ReactMarkdown>
                                                     </div>
@@ -1019,18 +964,15 @@ export function AIChatRoom({
                                             }}
                                             style={{ cursor: isResponding || isTyping ? 'default' : 'pointer' }}
                                         >
-                                            {isMine ? (
-                                                <div className="message-text">{normalizeMessageTextForRender(message.text)}</div>
-                                            ) : (
-                                                <div className="message-text message-text--markdown">
-                                                    <ReactMarkdown
-                                                        remarkPlugins={[remarkGfm, remarkBreaks]}
-                                                        components={markdownComponents}
-                                                    >
-                                                        {normalizeMessageTextForRender(message.text ?? '')}
-                                                    </ReactMarkdown>
-                                                </div>
-                                            )}
+                                            <div className="message-text message-text--markdown">
+                                                <ReactMarkdown
+                                                    remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]}
+                                                    rehypePlugins={[rehypeKatex]}
+                                                    components={markdownComponents}
+                                                >
+                                                    {normalizeMessageTextForRender(message.text ?? '')}
+                                                </ReactMarkdown>
+                                            </div>
                                             <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
                                                 {message.aiModelName && <span className="message-ai-model-label">{message.aiModelName}</span>}
                                                 <span className="message-time">{formatMessageTime(message.timestamp)}</span>

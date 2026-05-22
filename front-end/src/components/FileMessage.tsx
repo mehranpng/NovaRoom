@@ -5,7 +5,7 @@ import { API_BASE_URL } from '../config/api';
 import { useState, useEffect } from 'react';
 import { useMusicPlayer } from '../contexts/MusicPlayerContext';
 import { decryptFileBytesClientSide } from '../utils/e2ee';
-import { getCachedBlob, getOrCacheBlob } from '../utils/mediaCache';
+import { getCachedBlob, getOrCacheBlob, deleteCachedBlob } from '../utils/mediaCache';
 import { autoDownloadCookieKeys, isAutoDownloadEnabled } from '../utils/autoDownloadPrefs';
 
 interface FileMessageProps { file: FileMetadata; token: string; chatId: string; onMediaLoad?: () => void; onImageClick?: (imageUrl: string, file: FileMetadata) => void; onVideoClick?: (videoUrl: string, file: FileMetadata) => void; }
@@ -296,18 +296,16 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
 
     {!isImage && !isVideo && !isAudio && <div className="file-attachment">
       <div className="file-icon" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40 }}>
-        {(downloadState === 'downloading' || downloadState === 'decrypting' || downloadState === 'idle') ? (
+        {(downloadState === 'downloading' || downloadState === 'decrypting' || downloadState === 'idle' || downloadState === 'done' || downloadState === 'error') ? (
           <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%`, margin: 0 }} onClick={(e) => {
             e.stopPropagation();
             if (downloadState === 'downloading') cancelDownload();
-            else if (downloadState === 'idle') startDownload();
+            else if (downloadState === 'idle' || downloadState === 'error') startDownload();
             else if (downloadState === 'done') {
-                // For 'done' state we re-trigger the file-save if needed, though usually 'done' is handled by object URL for media
-                // For general files we already handle trigger-file-download. Let's make button work too.
                 window.dispatchEvent(new CustomEvent('trigger-file-download', { detail: { fileId: file.fileId } }));
             }
           }}>
-            {downloadState === 'done' ? (mediaUrl ? <Download size={16} /> : <Download size={16} />) : actionIcon}
+            {downloadState === 'done' ? <Download size={16} /> : actionIcon}
           </button>
         ) : (
           getFileIcon(file.mimeType)

@@ -60,7 +60,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         input.click();
     };
 
-    const openPicker = (inputRef: React.RefObject<HTMLInputElement | null>) => (e: React.MouseEvent<HTMLButtonElement>) => {
+    const openPicker = (inputRef: React.RefObject<HTMLInputElement | null>) => () => {
         if (uploading) return;
 
         const input = inputRef.current;

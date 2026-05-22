@@ -90,3 +90,28 @@ body {
 *::-webkit-scrollbar-thumb:hover {
     background-color: #9ca3af;
 }
+
+/* KaTeX Layout & RTL fixes */
+.katex-display {
+    direction: ltr;
+    margin: 1em 0;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.katex {
+    direction: ltr !important;
+    display: inline-block;
+}
+
+.dark .katex-display {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.message-text--markdown .katex-display > .katex {
+    display: block;
+    text-align: center;
+}
