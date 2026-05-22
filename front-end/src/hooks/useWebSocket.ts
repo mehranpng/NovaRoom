@@ -77,7 +77,6 @@ export function useWebSocket({
     const [connectionState, setConnectionState] = useState<'connected' | 'connecting' | 'disconnected'>('disconnected');
     const [reconnectExhausted, setReconnectExhausted] = useState(false);
 
-    const outboxRef = useRef<string[]>([]);
     const reconnectTimerRef = useRef<number | null>(null);
     const shouldReconnectRef = useRef(true);
     const reconnectAttemptsRef = useRef(0);
@@ -143,21 +142,6 @@ export function useWebSocket({
         }
     };
 
-    const flushOutbox = () => {
-        const ws = socketRef.current;
-        if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-        while (outboxRef.current.length > 0) {
-            const payload = outboxRef.current.shift();
-            if (!payload) break;
-            try {
-                ws.send(payload);
-            } catch {
-                outboxRef.current.unshift(payload);
-                break;
-            }
-        }
-    };
 
     const scheduleReconnect = useCallback(() => {
         if (!shouldReconnectRef.current) return;
@@ -198,7 +182,6 @@ export function useWebSocket({
             setConnectionState('connected');
             lastPongAtRef.current = Date.now();
             onConnectionChangeRef.current?.(true);
-            flushOutbox();
         };
 
         ws.onmessage = (event) => {
@@ -349,7 +332,7 @@ export function useWebSocket({
     }, [token, scheduleReconnect, rejectAllPendingRequests]);
 
     const send = useCallback(
-        (event: OutgoingEvent, enqueueOnFail = true): boolean => {
+        (event: OutgoingEvent): boolean => {
             const payload = JSON.stringify(event);
             const ws = socketRef.current;
 
@@ -358,13 +341,11 @@ export function useWebSocket({
                     ws.send(payload);
                     return true;
                 } catch {
-                    if (enqueueOnFail) outboxRef.current.push(payload);
                     scheduleReconnect();
                     return false;
                 }
             }
 
-            if (enqueueOnFail) outboxRef.current.push(payload);
             connect();
             scheduleReconnect();
             return false;
@@ -378,7 +359,7 @@ export function useWebSocket({
             if (text.length > MAX_CHAT_MESSAGE_LENGTH) return false;
             if (!chatId || (!text.trim() && !file)) return false;
             const encryptedText = text.trim() ? await encryptChatTextClientSide(text, token || '', chatId) : '';
-            return send({ type: 'message', chatId, text: encryptedText, replyToId, file, clientId }, false);
+            return send({ type: 'message', chatId, text: encryptedText, replyToId, file, clientId });
         },
         [send, token]
     );

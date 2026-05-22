@@ -23,34 +23,6 @@ import { useDarkMode } from './hooks/useDarkMode';
 import './App.css';
 
 
-const MESSAGE_CACHE_VERSION = 'v1';
-const MAX_CACHED_MESSAGES_PER_CHAT = 120;
-
-function getMessageCacheKey(chatId: string, viewerId?: string | null): string {
-    return `messageCache:${MESSAGE_CACHE_VERSION}:${viewerId || 'anon'}:${chatId}`;
-}
-
-function readCachedMessages(chatId: string, viewerId?: string | null): Message[] {
-    try {
-        const raw = localStorage.getItem(getMessageCacheKey(chatId, viewerId));
-        if (!raw) return [];
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return [];
-        return parsed as Message[];
-    } catch {
-        return [];
-    }
-}
-
-function writeCachedMessages(chatId: string, viewerId: string | null | undefined, messages: Message[]): void {
-    if (!viewerId) return;
-    try {
-        const trimmed = messages.slice(-MAX_CACHED_MESSAGES_PER_CHAT);
-        localStorage.setItem(getMessageCacheKey(chatId, viewerId), JSON.stringify(trimmed));
-    } catch {
-        // ignore quota/storage errors
-    }
-}
 const normalizeTimestamp = (ts: unknown): number => {
     if (typeof ts === 'number' && Number.isFinite(ts)) return ts;
     if (typeof ts === 'string') {
@@ -73,7 +45,15 @@ const mergeMessages = (base: Message[], incoming: Message[], mode: 'replace' | '
             const isPendingSend = pending.deliveryStatus === 'sending';
             const pendingClientId = String((pending as any).clientId || '');
             const alreadyInIncoming = byId.has(pending.id) || (pendingClientId && incomingClientIds.has(pendingClientId));
-            if (isPendingSend && !alreadyInIncoming) {
+            const hasSameContentServerMessage = incoming.some((serverMsg) => {
+                if (String(serverMsg.senderId || '') !== String(pending.senderId || '')) return false;
+                if (Math.abs(normalizeTimestamp(serverMsg.timestamp) - normalizeTimestamp(pending.timestamp)) > 120_000) return false;
+                const sameText = String(serverMsg.text || '') === String(pending.text || '');
+                const sameFileId = String(serverMsg.file?.fileId || '') === String(pending.file?.fileId || '');
+                const hasNoFile = !serverMsg.file && !pending.file;
+                return sameText && (hasNoFile || sameFileId);
+            });
+            if (isPendingSend && !alreadyInIncoming && !hasSameContentServerMessage) {
                 byId.set(pending.id, pending);
             }
         }
@@ -225,8 +205,6 @@ export function App() {
     // until the first message is sent.
     const [pendingUser, setPendingUser] = useState<User | null>(null);
     const [pendingForwardDrafts, setPendingForwardDrafts] = useState<Record<string, { sourceChatId: string; messageId: string; previewText?: string; previewFile?: FileMetadata | null }>>({});
-    const pendingForwardSendHintsRef = useRef<Record<string, number>>({});
-    const resentPendingMessageIdsRef = useRef<Set<string>>(new Set());
     const wasWsConnectedRef = useRef(false);
     const aiStreamStartedRef = useRef<Record<string, boolean>>({});
     const aiPendingStreamMetaRef = useRef<Record<string, Message>>({});
@@ -760,11 +738,7 @@ export function App() {
 
         setChats(prev => {
             const myId = currentUser?.chatId;
-            const hasForwardSendHint = Boolean(newMsg.forwardedFrom) && (pendingForwardSendHintsRef.current[chatId] || 0) > 0;
-            if (hasForwardSendHint) {
-                pendingForwardSendHintsRef.current[chatId] = Math.max(0, (pendingForwardSendHintsRef.current[chatId] || 0) - 1);
-            }
-            const isIncoming = Boolean(myId) && newMsg.senderId !== myId && !hasForwardSendHint;
+            const isIncoming = Boolean(myId) && newMsg.senderId !== myId;
             const isActiveChat = activeChatIdRef.current === chatId && viewRef.current === 'chatRoom';
             const shouldIncrementUnread = isIncoming && !isActiveChat;
 
@@ -1222,7 +1196,6 @@ export function App() {
 
         setMessages((prev) => {
             const merged = mergeMessages(prev[chatId] || [], chunk, mode);
-            writeCachedMessages(chatId, currentUser?.chatId, merged);
             return { ...prev, [chatId]: merged };
         });
 
@@ -1378,12 +1351,7 @@ export function App() {
         setChats(prev => prev.map(c => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
 
         const inMemory = messages[chatId] || [];
-        const cached = inMemory.length > 0 ? inMemory : readCachedMessages(chatId, currentUser?.chatId || null);
-        const hasImmediateMessages = cached.length > 0;
-
-        if (hasImmediateMessages && inMemory.length === 0) {
-            setMessages((prev) => ({ ...prev, [chatId]: cached }));
-        }
+        const hasImmediateMessages = inMemory.length > 0;
 
         const shouldShowSkeleton = !messagesLoadedOnce[chatId] && !hasImmediateMessages;
         if (shouldShowSkeleton) {
@@ -1651,31 +1619,6 @@ export function App() {
     }, [messages, activeChatId, currentUser, view, sendSeen]);
 
 
-    useEffect(() => {
-        const justConnected = wsConnected && !wasWsConnectedRef.current;
-        wasWsConnectedRef.current = wsConnected;
-        if (!wsConnected || !currentUser || !justConnected) return;
-        const activePendingKeys = new Set<string>();
-        Object.entries(messages).forEach(([chatId, chatMessages]) => {
-            const pendingMessages = chatMessages.filter(m => m.deliveryStatus === 'sending' && m.senderId === currentUser.chatId && !m.forwardedFrom);
-            pendingMessages.forEach(async (m) => {
-                const pendingKey = `${chatId}:${m.id}`;
-                activePendingKeys.add(pendingKey);
-                if (resentPendingMessageIdsRef.current.has(pendingKey)) return;
-                resentPendingMessageIdsRef.current.add(pendingKey);
-                const success = await sendViaWS(chatId, m.text || '', m.replyTo?.id, m.file, m.clientId);
-                if (!success) {
-                    resentPendingMessageIdsRef.current.delete(pendingKey);
-                    console.warn('Failed to resend pending message via WS:', m.id);
-                }
-            });
-        });
-        resentPendingMessageIdsRef.current.forEach((key) => {
-            if (!activePendingKeys.has(key)) {
-                resentPendingMessageIdsRef.current.delete(key);
-            }
-        });
-    }, [wsConnected, currentUser, messages, sendViaWS]);
 
     const handleSendMessage = useCallback(async (payload: { text: string; replyToId?: string; editMessageId?: string; file?: FileMetadata }) => {
         if (!currentUser) return;
@@ -1704,7 +1647,6 @@ export function App() {
                     ...prev,
                     [targetChatId]: [...(prev[targetChatId] || []), optimistic],
                 };
-                setTimeout(() => writeOptimisticToCache(targetChatId, nextState), 0);
                 return nextState;
             });
             setChats((prev) => prev.map((chat) => (
@@ -1722,10 +1664,6 @@ export function App() {
                     : chat
             )));
         };
-        const writeOptimisticToCache = (targetChatId: string, messagesState: Record<string, Message[]>) => {
-            writeCachedMessages(targetChatId, currentUser?.chatId, messagesState[targetChatId] || []);
-        };
-
         if (payload.editMessageId) {
             if (!activeChatId) return;
             const success = await editViaWS(activeChatId, payload.editMessageId, text);
@@ -1739,7 +1677,7 @@ export function App() {
             pushOptimisticMessage(savedMessagesId, clientId);
             const success = await sendViaWS(savedMessagesId, text, payload.replyToId, payload.file, clientId);
             if (!success) {
-                console.warn('WebSocket not connected, keeping message in local queue');
+                console.warn('WebSocket not connected, message was not sent');
             }
             loadChats(false);
             return;
@@ -1780,7 +1718,7 @@ export function App() {
                 pushOptimisticMessage(createdChatId, clientId);
                 const success = await sendViaWS(createdChatId, text, payload.replyToId, payload.file, clientId);
                 if (!success) {
-                    console.warn('WebSocket not connected, keeping message in local queue');
+                    console.warn('WebSocket not connected, message was not sent');
                 }
 
                 loadChats(false);
@@ -1801,7 +1739,7 @@ export function App() {
         pushOptimisticMessage(activeChatId, clientId);
         const success = await sendViaWS(activeChatId, text, payload.replyToId, payload.file, clientId);
         if (!success) {
-            console.warn('WebSocket not connected, keeping message in local queue');
+            console.warn('WebSocket not connected, message was not sent');
         }
     }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, navigate, chats, isUserBlocked, messages]);
 
@@ -1817,7 +1755,6 @@ export function App() {
                     ...prev,
                     [activeChatId]: prev[activeChatId].filter((m) => m.id !== messageId)
                 };
-                writeCachedMessages(activeChatId, currentUser?.chatId, nextState[activeChatId] || []);
                 return nextState;
             });
             return;
@@ -1870,7 +1807,6 @@ export function App() {
         }
         if (!sourceMessage) return;
         try {
-            pendingForwardSendHintsRef.current[targetChatId] = (pendingForwardSendHintsRef.current[targetChatId] || 0) + 1;
             const encryptedText = await encryptChatTextClientSide(String(sourceMessage.text || ''), authToken || '', targetChatId);
             const encryptedReasoning = sourceMessage?.reasoningContent
                 ? await encryptChatTextClientSide(String(sourceMessage.reasoningContent || ''), authToken || '', targetChatId)
