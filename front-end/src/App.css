@@ -2782,6 +2782,8 @@ body,
 .profile__fields {
     max-width: 512px;
     padding: 0 16px 32px;
+    margin: 0 auto;
+    width: 100%;
 }
 
 .profile__chat-id-card {
@@ -2880,7 +2882,7 @@ body,
 
 .profile__field-hint {
     direction: rtl;
-    text-align: left;
+    text-align: right;
 }
 
 .profile__field-input:focus {
@@ -3018,7 +3020,7 @@ body,
     font-size: 13px;
     color: var(--text-secondary);
     direction: rtl;
-    text-align: left;
+    text-align: right;
 }
 
 .profile__group-item {

@@ -435,7 +435,7 @@ export function Profile({ user, onBack, onUpdateProfile }: ProfileProps) {
                                     rows={3}
                                     maxLength={150}
                                 />
-                                <p className="profile__char-count" style={{ textAlign: 'left', direction: 'ltr' }}>{toPersianDigits(bio.length)}/{toPersianDigits(150)}</p>
+                                <p className="profile__char-count" style={{ textAlign: 'right', direction: 'rtl' }}>{toPersianDigits(bio.length)}/{toPersianDigits(150)}</p>
                             </div>
                         ) : (
                             <div className="profile__field-static">

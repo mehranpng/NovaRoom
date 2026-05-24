@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, Lock } from 'lucide-react';
 import DotGrid from './DotGrid';
 import { useDarkMode } from '../hooks/useDarkMode';
+import DecryptedText from './DecryptedText';
 
 export function EmptyState() {
     const { isDarkMode, themePalette, themeTone, accentIntensity } = useDarkMode();
     const [colors, setColors] = useState({ base: '#9ca3af', active: '#2563eb' });
+    const [isFooterHovered, setIsFooterHovered] = useState(false);
 
     useEffect(() => {
         // We need to get the computed values of the CSS variables 
@@ -41,13 +43,28 @@ export function EmptyState() {
                 </div>
                 <h2 className="empty-state__title">به نوا روم خوش آمدید</h2>
                 <p className="empty-state__description">برای شروع صحبت یک گفتگو انتخاب کنید یا کاربری را جستوجو کنید.</p>
-                
-                <div className="empty-state__footer">
-                    <span className="empty-state__dot" />
-                    رمزگذاری سرتاسری
+
+                <div
+                    className="empty-state__footer"
+                    onMouseEnter={() => setIsFooterHovered(true)}
+                    onMouseLeave={() => setIsFooterHovered(false)}
+                    style={{ cursor: 'default' }}
+                >
+                    <Lock size={12} style={{ marginLeft: 6, color: colors.active }} />
+                    <DecryptedText
+                        text="رمزگذاری سرتاسری"
+                        animateOn="inViewHover"
+                        revealDirection="start"
+                        speed={60}
+                        maxIterations={40}
+                        sequential={true}
+                        externalHover={isFooterHovered}
+                    />
+
                 </div>
             </div>
         </div>
     );
 
 }
+
