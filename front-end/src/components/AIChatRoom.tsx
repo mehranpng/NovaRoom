@@ -9,6 +9,8 @@ import type { Message, Chat, FileMetadata, AIChatSummary, AIModelKey } from '../
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
 import { ForwardModal } from './ForwardModal';
 import { notify } from '../utils/notificationBus';
+import ASCIIText from './ASCIIText';
+import { useDarkMode } from '../hooks/useDarkMode';
 
 interface AIChatRoomProps {
     messages: Message[];
@@ -167,18 +169,6 @@ const markdownComponents: Components = {
     ),
 };
 
-const AI_EMPTY_STATE_PROMPTS = [
-    'درمورد چه چیزی سوال دارید؟',
-    'هر چیزی می‌خواهید بپرسید.',
-    'به چه چیزی فکر می‌کنید؟',
-    'چه ایده‌ای در سر دارید؟',
-    'دوست دارید از کجا شروع کنیم؟',
-    'الان دنبال چه پاسخی هستید؟',
-    'می‌خواهید روی چه موضوعی کار کنیم؟',
-    'چه چیزی امروز ذهنتان را مشغول کرده؟',
-];
-
-
 function normalizeMessageTextForRender(text: string): string {
     let t = String(text || '').replace(/\\n/g, '\n');
     // Convert \[ \] to $$ $$
@@ -188,10 +178,6 @@ function normalizeMessageTextForRender(text: string): string {
     t = t.replace(/\\\(/g, '$$');
     t = t.replace(/\\\)/g, '$$');
     return t;
-}
-
-function pickRandomEmptyPrompt(): string {
-    return AI_EMPTY_STATE_PROMPTS[Math.floor(Math.random() * AI_EMPTY_STATE_PROMPTS.length)];
 }
 
 export function AIChatRoom({
@@ -223,6 +209,7 @@ export function AIChatRoom({
     temporaryMode = false,
     currentUserVerified = false,
 }: AIChatRoomProps) {
+    const { isDarkMode } = useDarkMode();
     const MAX_AI_MESSAGE_LENGTH = 3000;
     const [text, setText] = useState('');
     const [msgMenu, setMsgMenu] = useState<{ id: string; top: number; left: number } | null>(null);
@@ -235,7 +222,6 @@ export function AIChatRoom({
     const prevActiveAIChatIdRef = useRef<string | null>(activeAIChatId);
     const [aiChatsDrawerOpen, setAIChatsDrawerOpen] = useState(false);
     const [pendingDeleteChat, setPendingDeleteChat] = useState<AIChatSummary | null>(null);
-    const [emptyStatePrompt, setEmptyStatePrompt] = useState<string>(() => pickRandomEmptyPrompt());
     const [reasoningPanelByMessage, setReasoningPanelByMessage] = useState<Record<string, boolean>>({});
     const [reasoningElapsedByMessage, setReasoningElapsedByMessage] = useState<Record<string, number>>({});
     const reasoningStartAtRef = useRef<Record<string, number>>({});
@@ -330,10 +316,6 @@ export function AIChatRoom({
 
         prevActiveAIChatIdRef.current = nextId;
     }, [activeAIChatId, messages.length, reasoningEnabled]);
-
-    useEffect(() => {
-        setEmptyStatePrompt(pickRandomEmptyPrompt());
-    }, [activeAIChatId]);
 
     useEffect(() => {
         try {
@@ -865,7 +847,17 @@ export function AIChatRoom({
                                     <div style={{ fontSize: 24, fontWeight: 800 }}>گفتگوی موقت</div>
                                     <div style={{ fontSize: 13, fontWeight: 500, opacity: 0.85 }}>پیام‌های گفتگوی موقت ذخیره نمی‌شوند و با خروج از این صفحه حذف می‌شوند.</div>
                                 </div>
-                            ) : emptyStatePrompt}
+                            ) : (
+                                <ASCIIText
+                                    text="NovaAI"
+                                    enableWaves={false}
+                                    asciiFontSize={5}
+                                    planeBaseHeight={window.innerWidth < 768 ? 3 : 5}
+                                    textColor="#ffffff"
+                                    isDarkMode={isDarkMode}
+                                />
+                            )}
+
                         </div>
                     ) : (
                         messages.map((message) => {
@@ -965,7 +957,7 @@ export function AIChatRoom({
                                             <div className="message-text message-text--markdown">
                                                 <ReactMarkdown
                                                     remarkPlugins={[remarkGfm, remarkBreaks]}
-                                                    
+
                                                     components={markdownComponents}
                                                 >
                                                     {normalizeMessageTextForRender(message.text ?? '')}

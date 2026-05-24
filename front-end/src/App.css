@@ -1088,6 +1088,8 @@ body,
     color: var(--text-secondary);
     padding: 20px;
     direction: rtl;
+    position: relative;
+    overflow: hidden;
 }
 
 .ai-reasoning-message-stack {
