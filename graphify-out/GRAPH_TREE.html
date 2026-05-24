@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>/ — graphify tree viewer</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f9f9f9;
+      color: #333;
+    }
+    h1 {
+      margin: 20px 0 0 24px;
+      font-size: 2.2rem;
+      font-weight: bold;
+      color: #1e3a56;
+    }
+    .controls {
+      margin: 20px 0 15px 24px;
+    }
+    button {
+      margin-right: 10px;
+      padding: 8px 18px;
+      background: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.2s ease-in-out;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    button:active {
+      background: #004085;
+    }
+    #tree-container {
+      width: calc(100vw - 48px); /* Adjust for body margin/padding */
+      height: 85vh;
+      overflow: auto;
+      border-radius: 8px;
+      background: #fff;
+      margin-left: 24px;
+      margin-right: 24px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      border: 1px solid #ddd;
+    }
+    svg {
+      background: #fff;
+      border-radius: 8px;
+      display: block; /* Important for D3 */
+    }
+    .node circle {
+      stroke-width: 2.5px;
+    }
+    .node text { /* Base style for the <text> container */
+      font: 13px 'Segoe UI', sans-serif;
+      paint-order: stroke fill; /* Ensures text is readable over lines */
+      stroke: #fff; /* White halo */
+      stroke-width: 3px; /* Halo thickness */
+      stroke-linejoin: round;
+      stroke-opacity: 0.85; /* Halo opacity */
+    }
+    .link {
+      fill: none;
+      stroke-opacity: 0.7;
+      stroke-width: 2px;
+    }
+  </style>
+</head>
+<body>
+  <h1>/ — Knowledge Graph</h1>
+  <div class="controls">
+    <button onclick="expandAll()">Expand All</button>
+    <button onclick="collapseAll()">Collapse All</button>
+    <button onclick="resetView()">Reset View</button>
+  </div>
+  <div id="tree-container">
+    <svg id="tree-svg" width="6000" height="8000"></svg>
+  </div>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script>
+    const initialJsonData = {"name":"/","total_count":547,"children":[{"name":"back-end","total_count":184,"children":[{"name":"ai_service.py","total_count":6,"children":[{"name":"_coerce_chunk_text()","total_count":1,"children":[]},{"name":"_contains_cjk()","total_count":1,"children":[]},{"name":"generate_ai_response_stream()","total_count":1,"children":[]},{"name":"generate_chat_title()","total_count":1,"children":[]},{"name":"generate_conversation_summary()","total_count":1,"children":[]},{"name":"get_system_prompt()","total_count":1,"children":[]}]},{"name":"api.py","total_count":141,"children":[{"name":"_base64url_decode_bytes()","total_count":1,"children":[]},{"name":"_derive_client_shared_key()","total_count":1,"children":[]},{"name":"_derive_enc_key()","total_count":1,"children":[]},{"name":"_derive_enc_key_legacy_scoped_tokenhash()","total_count":1,"children":[]},{"name":"_derive_enc_key_legacy_shared()","total_count":1,"children":[]},{"name":"_derive_enc_key_legacy_token_raw()","total_count":1,"children":[]},{"name":"_filter_recipients_by_block_status()","total_count":1,"children":[]},{"name":"_get_blocked_from_user_doc()","total_count":1,"children":[]},{"name":"_get_pinned_from_user_doc()","total_count":1,"children":[]},{"name":"_is_direct_blocked_between()","total_count":1,"children":[]},{"name":"_is_server_managed_scope()","total_count":1,"children":[]},{"name":"_normalize_login_events()","total_count":1,"children":[]},{"name":"_normalize_session_list()","total_count":1,"children":[]},{"name":"_remap_forward_file_to_target_chat()","total_count":1,"children":[]},{"name":"_sync_login_seen_by_with_sessions()","total_count":1,"children":[]},{"name":"_try_unpack_client_file_packet()","total_count":1,"children":[]},{"name":"_user_can_pin_chat()","total_count":1,"children":[]},{"name":"_xor_stream()","total_count":1,"children":[]},{"name":"Add or toggle a reaction to a message","total_count":1,"children":[]},{"name":"add_reaction()","total_count":1,"children":[]},{"name":"ai_model_label_from_key()","total_count":1,"children":[]},{"name":"ai_model_name_from_key()","total_count":1,"children":[]},{"name":"AIChatRenameRequest","total_count":1,"children":[]},{"name":"AICreateChatRequest","total_count":1,"children":[]},{"name":"attach_session_to_user()","total_count":1,"children":[]},{"name":"bcrypt_checkpw_async()","total_count":1,"children":[]},{"name":"block_user()","total_count":1,"children":[]},{"name":"broadcast()","total_count":1,"children":[]},{"name":"build_group_invite_link()","total_count":1,"children":[]},{"name":"build_last_message()","total_count":1,"children":[]},{"name":"ChatCreateRequest","total_count":1,"children":[]},{"name":"complete_registration()","total_count":1,"children":[]},{"name":"consume_quota()","total_count":1,"children":[]},{"name":"create_access_token()","total_count":1,"children":[]},{"name":"create_ai_chat()","total_count":1,"children":[]},{"name":"create_group()","total_count":1,"children":[]},{"name":"create_or_get_chat()","total_count":1,"children":[]},{"name":"decrypt_client_file_bytes()","total_count":1,"children":[]},{"name":"decrypt_scoped_text()","total_count":1,"children":[]},{"name":"decrypt_user_bio()","total_count":1,"children":[]},{"name":"decrypt_with_fallback()","total_count":1,"children":[]},{"name":"delete_ai_chat()","total_count":1,"children":[]},{"name":"delete_ai_message()","total_count":1,"children":[]},{"name":"delete_chat()","total_count":1,"children":[]},{"name":"download_file()","total_count":1,"children":[]},{"name":"dt_to_epoch_ms()","total_count":1,"children":[]},{"name":"encrypt_client_file_bytes()","total_count":1,"children":[]},{"name":"encrypt_scoped_text()","total_count":1,"children":[]},{"name":"ensure_ai_chat()","total_count":1,"children":[]},{"name":"extract_client_ip()","total_count":1,"children":[]},{"name":"extract_message_file_ids()","total_count":1,"children":[]},{"name":"force_user_offline()","total_count":1,"children":[]},{"name":"forward_message()","total_count":1,"children":[]},{"name":"ForwardMessageRequest","total_count":1,"children":[]},{"name":"get_ai_chats()","total_count":1,"children":[]},{"name":"get_ai_messages()","total_count":1,"children":[]},{"name":"get_ai_pro_usage_status()","total_count":1,"children":[]},{"name":"get_chat_id_for_two()","total_count":1,"children":[]},{"name":"get_chat_list()","total_count":1,"children":[]},{"name":"get_chat_members()","total_count":1,"children":[]},{"name":"get_chat_stats()","total_count":1,"children":[]},{"name":"get_current_user()","total_count":1,"children":[]},{"name":"get_messages()","total_count":1,"children":[]},{"name":"get_my_blocks()","total_count":1,"children":[]},{"name":"get_my_pins()","total_count":1,"children":[]},{"name":"get_profile()","total_count":1,"children":[]},{"name":"get_profile_groups()","total_count":1,"children":[]},{"name":"get_saved_messages_id()","total_count":1,"children":[]},{"name":"get_usage_status()","total_count":1,"children":[]},{"name":"get_user_from_session_token()","total_count":1,"children":[]},{"name":"GroupCreateRequest","total_count":1,"children":[]},{"name":"GroupJoinRequest","total_count":1,"children":[]},{"name":"GroupUpdateRequest","total_count":1,"children":[]},{"name":"hash_access_token()","total_count":1,"children":[]},{"name":"is_ciphertext()","total_count":1,"children":[]},{"name":"is_official_channel_chat()","total_count":1,"children":[]},{"name":"join_group()","total_count":1,"children":[]},{"name":"jwt_decode_async()","total_count":1,"children":[]},{"name":"jwt_encode_async()","total_count":1,"children":[]},{"name":"leave_group()","total_count":1,"children":[]},{"name":"list_login_events()","total_count":1,"children":[]},{"name":"list_sessions()","total_count":1,"children":[]},{"name":"login()","total_count":1,"children":[]},{"name":"LoginRequest","total_count":1,"children":[]},{"name":"logout()","total_count":1,"children":[]},{"name":"mark_login_events_seen()","total_count":1,"children":[]},{"name":"mark_user_connected()","total_count":1,"children":[]},{"name":"mark_user_disconnected()","total_count":1,"children":[]},{"name":"migrate_unencrypted_messages()","total_count":1,"children":[]},{"name":"normalize_ai_model_key()","total_count":1,"children":[]},{"name":"normalize_device_name()","total_count":1,"children":[]},{"name":"normalize_ip_address()","total_count":1,"children":[]},{"name":"normalize_username()","total_count":1,"children":[]},{"name":"OfficialChEditRequest","total_count":1,"children":[]},{"name":"OfficialChSendRequest","total_count":1,"children":[]},{"name":"PasswordResetRequest","total_count":1,"children":[]},{"name":"PasswordResetVerifyRequest","total_count":1,"children":[]},{"name":"pin_chat()","total_count":1,"children":[]},{"name":"ProfileUpdate","total_count":1,"children":[]},{"name":"Public endpoint for checking username availability during registration","total_count":1,"children":[]},{"name":"public_username_available()","total_count":1,"children":[]},{"name":"ReactionRequest","total_count":1,"children":[]},{"name":"register_email()","total_count":1,"children":[]},{"name":"RegisterEmailRequest","total_count":1,"children":[]},{"name":"Remove user's reaction from a message","total_count":1,"children":[]},{"name":"remove_reaction()","total_count":1,"children":[]},{"name":"remove_uploaded_file()","total_count":1,"children":[]},{"name":"rename_ai_chat()","total_count":1,"children":[]},{"name":"Request password reset - sends code to email","total_count":1,"children":[]},{"name":"request_password_reset()","total_count":1,"children":[]},{"name":"resolve_user_online_state()","total_count":1,"children":[]},{"name":"revoke_other_sessions()","total_count":1,"children":[]},{"name":"revoke_single_session()","total_count":1,"children":[]},{"name":"safe_send()","total_count":1,"children":[]},{"name":"safe_send_ai()","total_count":1,"children":[]},{"name":"search_users()","total_count":1,"children":[]},{"name":"serialize_session_for_client()","total_count":1,"children":[]},{"name":"set_presence_offline()","total_count":1,"children":[]},{"name":"should_delete_file_with_message()","total_count":1,"children":[]},{"name":"startup_db()","total_count":1,"children":[]},{"name":"Step 1: Send verification code to email","total_count":1,"children":[]},{"name":"Step 2: Verify the code sent to email","total_count":1,"children":[]},{"name":"Step 3: Complete registration with name, username and password","total_count":1,"children":[]},{"name":"tehran_day_key()","total_count":1,"children":[]},{"name":"TokenResponse","total_count":1,"children":[]},{"name":"try_object_id()","total_count":1,"children":[]},{"name":"unpin_chat()","total_count":1,"children":[]},{"name":"update_group()","total_count":1,"children":[]},{"name":"update_profile()","total_count":1,"children":[]},{"name":"upload_file()","total_count":1,"children":[]},{"name":"user_bio_scope()","total_count":1,"children":[]},{"name":"username_available()","total_count":1,"children":[]},{"name":"UserSearchResult","total_count":1,"children":[]},{"name":"utc_now()","total_count":1,"children":[]},{"name":"validate_username()","total_count":1,"children":[]},{"name":"Verify reset code and change password","total_count":1,"children":[]},{"name":"verify_and_reset_password()","total_count":1,"children":[]},{"name":"verify_registration_code()","total_count":1,"children":[]},{"name":"VerifyCodeRequest","total_count":1,"children":[]},{"name":"websocket_ai_endpoint()","total_count":1,"children":[]},{"name":"websocket_endpoint()","total_count":1,"children":[]}]},{"name":"api_reaction_helper.py","total_count":2,"children":[{"name":"aggregate_reactions()","total_count":1,"children":[]},{"name":"Helper function for aggregating reactions","total_count":1,"children":[]}]},{"name":"email_service.py","total_count":14,"children":[{"name":"Clear the password reset code after successful password change","total_count":1,"children":[]},{"name":"clear_reset_code()","total_count":1,"children":[]},{"name":"Generate a random verification code","total_count":1,"children":[]},{"name":"generate_verification_code()","total_count":1,"children":[]},{"name":"Send email asynchronously","total_count":1,"children":[]},{"name":"Send password reset code to email","total_count":1,"children":[]},{"name":"Send verification code to email and store it temporarily","total_count":1,"children":[]},{"name":"send_email_async()","total_count":1,"children":[]},{"name":"send_password_reset_email()","total_count":1,"children":[]},{"name":"send_verification_email()","total_count":1,"children":[]},{"name":"Verify if the code is correct and not expired","total_count":1,"children":[]},{"name":"Verify if the password reset code is correct and not expired","total_count":1,"children":[]},{"name":"verify_code()","total_count":1,"children":[]},{"name":"verify_reset_code()","total_count":1,"children":[]}]},{"name":"file_service.py","total_count":14,"children":[{"name":"_file_key()","total_count":1,"children":[]},{"name":"_xor_stream()","total_count":1,"children":[]},{"name":"cleanup_orphaned_files()","total_count":1,"children":[]},{"name":"delete_file()","total_count":1,"children":[]},{"name":"encrypt_existing_uploads()","total_count":1,"children":[]},{"name":"encrypt_file_bytes()","total_count":1,"children":[]},{"name":"generate_unique_filename()","total_count":1,"children":[]},{"name":"Get full path for a file ID","total_count":1,"children":[]},{"name":"get_file_path()","total_count":1,"children":[]},{"name":"is_allowed_file()","total_count":1,"children":[]},{"name":"read_file_content()","total_count":1,"children":[]},{"name":"sanitize_filename()","total_count":1,"children":[]},{"name":"save_uploaded_file()","total_count":1,"children":[]},{"name":"validate_file_access()","total_count":1,"children":[]}]},{"name":"requirements.txt","total_count":6,"children":[{"name":"aiofiles","total_count":1,"children":[]},{"name":"back-end/requirements.txt","total_count":1,"children":[]},{"name":"jdatetime","total_count":1,"children":[]},{"name":"openai","total_count":1,"children":[]},{"name":"pymongo","total_count":1,"children":[]},{"name":"python-multipart","total_count":1,"children":[]}]},{"name":"__init__.py","total_count":1,"children":[]}]},{"name":"front-end","total_count":352,"children":[{"name":"index.html","total_count":6,"children":[{"name":"AI Assistant","total_count":1,"children":[]},{"name":"Fanavaran","total_count":1,"children":[]},{"name":"front-end/index.html","total_count":1,"children":[]},{"name":"NovaRoom","total_count":1,"children":[]},{"name":"src/main.tsx","total_count":1,"children":[]},{"name":"WebSocket","total_count":1,"children":[]}]},{"name":"package.json","total_count":31,"children":[{"name":"@eslint/js","total_count":1,"children":[]},{"name":"@types/node","total_count":1,"children":[]},{"name":"@types/react","total_count":1,"children":[]},{"name":"@vitejs/plugin-react-swc","total_count":1,"children":[]},{"name":"build","total_count":1,"children":[]},{"name":"dependencies","total_count":1,"children":[]},{"name":"dev","total_count":1,"children":[]},{"name":"devDependencies","total_count":1,"children":[]},{"name":"emoji-mart","total_count":1,"children":[]},{"name":"eslint","total_count":1,"children":[]},{"name":"eslint-plugin-react-hooks","total_count":1,"children":[]},{"name":"eslint-plugin-react-refresh","total_count":1,"children":[]},{"name":"framer-motion","total_count":1,"children":[]},{"name":"globals","total_count":1,"children":[]},{"name":"lint","total_count":1,"children":[]},{"name":"lucide-react","total_count":1,"children":[]},{"name":"name","total_count":1,"children":[]},{"name":"preview","total_count":1,"children":[]},{"name":"private","total_count":1,"children":[]},{"name":"react","total_count":1,"children":[]},{"name":"react-dom","total_count":1,"children":[]},{"name":"react-markdown","total_count":1,"children":[]},{"name":"react-router-dom","total_count":1,"children":[]},{"name":"remark-breaks","total_count":1,"children":[]},{"name":"remark-gfm","total_count":1,"children":[]},{"name":"scripts","total_count":1,"children":[]},{"name":"type","total_count":1,"children":[]},{"name":"typescript","total_count":1,"children":[]},{"name":"typescript-eslint","total_count":1,"children":[]},{"name":"version","total_count":1,"children":[]},{"name":"vite","total_count":1,"children":[]}]},{"name":"src","total_count":271,"children":[{"name":"App.tsx","total_count":3,"children":[{"name":"App()","total_count":1,"children":[]},{"name":"mergeMessages()","total_count":1,"children":[]},{"name":"normalizeTimestamp()","total_count":1,"children":[]}]},{"name":"components","total_count":155,"children":[{"name":"AIChatRoom.tsx","total_count":13,"children":[{"name":"AI_EMPTY_STATE_PROMPTS","total_count":1,"children":[]},{"name":"AIChatRoom()","total_count":1,"children":[]},{"name":"CodeBlock()","total_count":1,"children":[]},{"name":"deleteCookie()","total_count":1,"children":[]},{"name":"formatMessageTime()","total_count":1,"children":[]},{"name":"getCookie()","total_count":1,"children":[]},{"name":"iranShiftedDate()","total_count":1,"children":[]},{"name":"markdownComponents","total_count":1,"children":[]},{"name":"normalizeMessageTextForRender()","total_count":1,"children":[]},{"name":"normalizeTs()","total_count":1,"children":[]},{"name":"pickRandomEmptyPrompt()","total_count":1,"children":[]},{"name":"setCookie()","total_count":1,"children":[]},{"name":"toPersianDigits()","total_count":1,"children":[]}]},{"name":"Avatar.tsx","total_count":11,"children":[{"name":"Avatar()","total_count":1,"children":[]},{"name":"avatarCache","total_count":1,"children":[]},{"name":"avatarFetching","total_count":1,"children":[]},{"name":"AvatarProps","total_count":1,"children":[]},{"name":"fetchAvatar()","total_count":1,"children":[]},{"name":"getAvatarDisplayUrl()","total_count":1,"children":[]},{"name":"getColorIndex()","total_count":1,"children":[]},{"name":"getInitials()","total_count":1,"children":[]},{"name":"iconSizeMap","total_count":1,"children":[]},{"name":"resolveAvatarUrl()","total_count":1,"children":[]},{"name":"sizeMap","total_count":1,"children":[]}]},{"name":"ChatList.tsx","total_count":27,"children":[{"name":"apiFetch()","total_count":1,"children":[]},{"name":"ChatList()","total_count":1,"children":[]},{"name":"ChatListProps","total_count":1,"children":[]},{"name":"ConfirmAction","total_count":1,"children":[]},{"name":"extractLastMessageFile()","total_count":1,"children":[]},{"name":"FilledBotIcon()","total_count":1,"children":[]},{"name":"FilledGroupIcon()","total_count":1,"children":[]},{"name":"FilledMegaphoneIcon()","total_count":1,"children":[]},{"name":"formatTime()","total_count":1,"children":[]},{"name":"getFilePreviewLabel()","total_count":1,"children":[]},{"name":"getGroupStats()","total_count":1,"children":[]},{"name":"getLastMessagePreview()","total_count":1,"children":[]},{"name":"getPinnedKey()","total_count":1,"children":[]},{"name":"IconProps","total_count":1,"children":[]},{"name":"normalizeTs()","total_count":1,"children":[]},{"name":"resolveVerified()","total_count":1,"children":[]},{"name":"safeJsonParse()","total_count":1,"children":[]},{"name":"tehranJalaliDayMonthFmt","total_count":1,"children":[]},{"name":"tehranJalaliFmt","total_count":1,"children":[]},{"name":"tehranJalaliYearFmt","total_count":1,"children":[]},{"name":"tehranMidnightEpoch()","total_count":1,"children":[]},{"name":"tehranTimeFmt","total_count":1,"children":[]},{"name":"tehranWeekdayFmt","total_count":1,"children":[]},{"name":"tehranYMD()","total_count":1,"children":[]},{"name":"tehranYmdFmt","total_count":1,"children":[]},{"name":"toPersianDigits()","total_count":1,"children":[]},{"name":"useIsMobile()","total_count":1,"children":[]}]},{"name":"ChatListSkeleton.tsx","total_count":1,"children":[{"name":"ChatListSkeleton()","total_count":1,"children":[]}]},{"name":"ChatRoom.tsx","total_count":33,"children":[{"name":"applyOptimisticDeleteReaction()","total_count":1,"children":[]},{"name":"applyOptimisticReact()","total_count":1,"children":[]},{"name":"bubbleShape()","total_count":1,"children":[]},{"name":"ChatRoom()","total_count":1,"children":[]},{"name":"ChatRoomProps","total_count":1,"children":[]},{"name":"CodeBlock()","total_count":1,"children":[]},{"name":"extractFileIdFromAvatar()","total_count":1,"children":[]},{"name":"formatDayLabel()","total_count":1,"children":[]},{"name":"formatMessageTime()","total_count":1,"children":[]},{"name":"getPureEmojiCount()","total_count":1,"children":[]},{"name":"GroupMember","total_count":1,"children":[]},{"name":"hasMarkdownSyntax()","total_count":1,"children":[]},{"name":"iranDayNumber()","total_count":1,"children":[]},{"name":"iranShiftedDate()","total_count":1,"children":[]},{"name":"iranYMD()","total_count":1,"children":[]},{"name":"markdownComponents","total_count":1,"children":[]},{"name":"MemoMarkdown","total_count":1,"children":[]},{"name":"normalizeMessageTextForRender()","total_count":1,"children":[]},{"name":"normalizeTs()","total_count":1,"children":[]},{"name":"pendingUploadedFileByChat","total_count":1,"children":[]},{"name":"persianJalaliDayMonthFmt","total_count":1,"children":[]},{"name":"persianJalaliFullSlashFmt","total_count":1,"children":[]},{"name":"persianJalaliYearFmt","total_count":1,"children":[]},{"name":"persianTimeFmt","total_count":1,"children":[]},{"name":"persianWeekdayFmt","total_count":1,"children":[]},{"name":"ReactionEntry","total_count":1,"children":[]},{"name":"renderTextWithLinks()","total_count":1,"children":[]},{"name":"resolveAvatarUrl()","total_count":1,"children":[]},{"name":"resolveVerified()","total_count":1,"children":[]},{"name":"sameDay()","total_count":1,"children":[]},{"name":"SeenByUser","total_count":1,"children":[]},{"name":"toPersianDigits()","total_count":1,"children":[]},{"name":"triggerHaptic()","total_count":1,"children":[]}]},{"name":"ContactInfo.tsx","total_count":6,"children":[{"name":"ContactInfo()","total_count":1,"children":[]},{"name":"ContactInfoProps","total_count":1,"children":[]},{"name":"extractFileIdFromAvatar()","total_count":1,"children":[]},{"name":"extractUploadedFileId()","total_count":1,"children":[]},{"name":"resolveVerified()","total_count":1,"children":[]},{"name":"toPersianDigits()","total_count":1,"children":[]}]},{"name":"DarkModeToggle.tsx","total_count":1,"children":[{"name":"DarkModeToggle()","total_count":1,"children":[]}]},{"name":"DataStorageSettings.tsx","total_count":2,"children":[{"name":"formatCacheSize()","total_count":1,"children":[]},{"name":"Props","total_count":1,"children":[]}]},{"name":"Devices.tsx","total_count":6,"children":[{"name":"ConfirmAction","total_count":1,"children":[]},{"name":"Devices()","total_count":1,"children":[]},{"name":"DeviceSession","total_count":1,"children":[]},{"name":"DevicesProps","total_count":1,"children":[]},{"name":"toJalaliTehran()","total_count":1,"children":[]},{"name":"toPersianDigits()","total_count":1,"children":[]}]},{"name":"EmptyState.tsx","total_count":1,"children":[{"name":"EmptyState()","total_count":1,"children":[]}]},{"name":"FileMessage.tsx","total_count":6,"children":[{"name":"DownloadState","total_count":1,"children":[]},{"name":"DownloadSubscriber","total_count":1,"children":[]},{"name":"DownloadTask","total_count":1,"children":[]},{"name":"fileDownloadTasks","total_count":1,"children":[]},{"name":"FileMessage()","total_count":1,"children":[]},{"name":"FileMessageProps","total_count":1,"children":[]}]},{"name":"FileUpload.tsx","total_count":6,"children":[{"name":"createBlurredPreview()","total_count":1,"children":[]},{"name":"FileUpload()","total_count":1,"children":[]},{"name":"FileUploadProps","total_count":1,"children":[]},{"name":"readMediaDuration()","total_count":1,"children":[]},{"name":"UploadTask","total_count":1,"children":[]},{"name":"uploadTasksByChat","total_count":1,"children":[]}]},{"name":"ForgotPassword.tsx","total_count":2,"children":[{"name":"ForgotPassword()","total_count":1,"children":[]},{"name":"Step","total_count":1,"children":[]}]},{"name":"ForwardModal.tsx","total_count":1,"children":[{"name":"ForwardModal()","total_count":1,"children":[]}]},{"name":"ImageMediaViewer.tsx","total_count":1,"children":[{"name":"ImageMediaViewer()","total_count":1,"children":[]}]},{"name":"Login.tsx","total_count":2,"children":[{"name":"Login()","total_count":1,"children":[]},{"name":"LoginProps","total_count":1,"children":[]}]},{"name":"LoginLogs.tsx","total_count":5,"children":[{"name":"LoginEvent","total_count":1,"children":[]},{"name":"LoginLogs()","total_count":1,"children":[]},{"name":"toJalaliTehran()","total_count":1,"children":[]},{"name":"toPersianDigits()","total_count":1,"children":[]},{"name":"toTitleCaseDevice()","total_count":1,"children":[]}]},{"name":"MiniMusicPlayer.tsx","total_count":3,"children":[{"name":"btnStyle","total_count":1,"children":[]},{"name":"formatTime()","total_count":1,"children":[]},{"name":"MiniMusicPlayer()","total_count":1,"children":[]}]},{"name":"NewChatModal.tsx","total_count":2,"children":[{"name":"NewChatModal()","total_count":1,"children":[]},{"name":"NewChatModalProps","total_count":1,"children":[]}]},{"name":"NotificationCenter.tsx","total_count":4,"children":[{"name":"getTypeClassName()","total_count":1,"children":[]},{"name":"IconGlyph()","total_count":1,"children":[]},{"name":"NotificationCard()","total_count":1,"children":[]},{"name":"NotificationItem","total_count":1,"children":[]}]},{"name":"Profile.tsx","total_count":5,"children":[{"name":"OwnedGroup","total_count":1,"children":[]},{"name":"Profile()","total_count":1,"children":[]},{"name":"ProfileProps","total_count":1,"children":[]},{"name":"toPersianDigits()","total_count":1,"children":[]},{"name":"UsernameStatus","total_count":1,"children":[]}]},{"name":"ReactionPicker.tsx","total_count":3,"children":[{"name":"EMOJIS","total_count":1,"children":[]},{"name":"ReactionPicker()","total_count":1,"children":[]},{"name":"ReactionPickerProps","total_count":1,"children":[]}]},{"name":"Register.tsx","total_count":4,"children":[{"name":"Register()","total_count":1,"children":[]},{"name":"RegisterProps","total_count":1,"children":[]},{"name":"Step","total_count":1,"children":[]},{"name":"UsernameStatus","total_count":1,"children":[]}]},{"name":"Settings.tsx","total_count":2,"children":[{"name":"Settings()","total_count":1,"children":[]},{"name":"SettingsProps","total_count":1,"children":[]}]},{"name":"ThemeSettings.tsx","total_count":4,"children":[{"name":"intensityOptions","total_count":1,"children":[]},{"name":"modeOptions","total_count":1,"children":[]},{"name":"ThemeSettings()","total_count":1,"children":[]},{"name":"toneOptions","total_count":1,"children":[]}]},{"name":"VerifiedBadge.tsx","total_count":1,"children":[{"name":"VerifiedBadge()","total_count":1,"children":[]}]},{"name":"VideoMediaViewer.tsx","total_count":2,"children":[{"name":"formatDuration()","total_count":1,"children":[]},{"name":"VideoMediaViewer()","total_count":1,"children":[]}]},{"name":"ChatMessagesSkeleton.tsx","total_count":1,"children":[]}]},{"name":"config","total_count":4,"children":[{"name":"api.ts","total_count":4,"children":[{"name":"apiFetch()","total_count":1,"children":[]},{"name":"getHeaders()","total_count":1,"children":[]},{"name":"getMessageSeenBy()","total_count":1,"children":[]},{"name":"toggleReaction()","total_count":1,"children":[]}]}]},{"name":"contexts","total_count":5,"children":[{"name":"MusicPlayerContext.tsx","total_count":5,"children":[{"name":"MusicPlayerContextValue","total_count":1,"children":[]},{"name":"MusicPlayerProvider()","total_count":1,"children":[]},{"name":"MusicPlayerState","total_count":1,"children":[]},{"name":"TrackInfo","total_count":1,"children":[]},{"name":"useMusicPlayer()","total_count":1,"children":[]}]}]},{"name":"data","total_count":5,"children":[{"name":"mockData.ts","total_count":5,"children":[{"name":"contacts","total_count":1,"children":[]},{"name":"currentUser","total_count":1,"children":[]},{"name":"mockChats","total_count":1,"children":[]},{"name":"mockMessages","total_count":1,"children":[]},{"name":"now","total_count":1,"children":[]}]}]},{"name":"hooks","total_count":23,"children":[{"name":"useAIWebSocket.ts","total_count":1,"children":[{"name":"useAIWebSocket()","total_count":1,"children":[]}]},{"name":"useDarkMode.ts","total_count":18,"children":[{"name":"AccentIntensity","total_count":1,"children":[]},{"name":"buildAccentVarsWithIntensity()","total_count":1,"children":[]},{"name":"createCustomSurfaceVars()","total_count":1,"children":[]},{"name":"getInitialIntensity()","total_count":1,"children":[]},{"name":"getInitialPalette()","total_count":1,"children":[]},{"name":"getInitialThemeMode()","total_count":1,"children":[]},{"name":"getInitialTone()","total_count":1,"children":[]},{"name":"hexToRgb()","total_count":1,"children":[]},{"name":"intensityScale","total_count":1,"children":[]},{"name":"mixHex()","total_count":1,"children":[]},{"name":"neutralThemeVars","total_count":1,"children":[]},{"name":"paletteAccentVars","total_count":1,"children":[]},{"name":"paletteMeta","total_count":1,"children":[]},{"name":"rgbToHex()","total_count":1,"children":[]},{"name":"ThemeMode","total_count":1,"children":[]},{"name":"ThemePalette","total_count":1,"children":[]},{"name":"ThemeTone","total_count":1,"children":[]},{"name":"useDarkMode()","total_count":1,"children":[]}]},{"name":"useWebSocket.ts","total_count":4,"children":[{"name":"eventTypeAliases","total_count":1,"children":[]},{"name":"OutgoingEvent","total_count":1,"children":[]},{"name":"useWebSocket()","total_count":1,"children":[]},{"name":"UseWebSocketProps","total_count":1,"children":[]}]}]},{"name":"types.ts","total_count":11,"children":[{"name":"AIChatSummary","total_count":1,"children":[]},{"name":"AIModelKey","total_count":1,"children":[]},{"name":"Chat","total_count":1,"children":[]},{"name":"ChatLastMessage","total_count":1,"children":[]},{"name":"FileMetadata","total_count":1,"children":[]},{"name":"ForwardedFrom","total_count":1,"children":[]},{"name":"Message","total_count":1,"children":[]},{"name":"MessageReaction","total_count":1,"children":[]},{"name":"MessageReply","total_count":1,"children":[]},{"name":"User","total_count":1,"children":[]},{"name":"View","total_count":1,"children":[]}]},{"name":"utils","total_count":64,"children":[{"name":"autoDownloadPrefs.ts","total_count":3,"children":[{"name":"autoDownloadCookieKeys","total_count":1,"children":[]},{"name":"isAutoDownloadEnabled()","total_count":1,"children":[]},{"name":"setAutoDownloadCookie()","total_count":1,"children":[]}]},{"name":"cx.ts","total_count":1,"children":[{"name":"cx()","total_count":1,"children":[]}]},{"name":"device.ts","total_count":1,"children":[{"name":"detectDeviceName()","total_count":1,"children":[]}]},{"name":"e2ee.ts","total_count":26,"children":[{"name":"AVATAR_MAGIC","total_count":1,"children":[]},{"name":"buildLegacyMaterial()","total_count":1,"children":[]},{"name":"buildSharedMaterial()","total_count":1,"children":[]},{"name":"decryptMessageClientSide()","total_count":1,"children":[]},{"name":"deriveKey()","total_count":1,"children":[]},{"name":"encryptAvatarBytesClientSide()","total_count":1,"children":[]},{"name":"encryptBioClientSide()","total_count":1,"children":[]},{"name":"encryptChatTextClientSide()","total_count":1,"children":[]},{"name":"encryptClientText()","total_count":1,"children":[]},{"name":"encryptFileBytesClientSide()","total_count":1,"children":[]},{"name":"FILE_MAGIC","total_count":1,"children":[]},{"name":"fromBase64Url()","total_count":1,"children":[]},{"name":"hasFileMagic()","total_count":1,"children":[]},{"name":"hmacSha256Fallback()","total_count":1,"children":[]},{"name":"hmacTag()","total_count":1,"children":[]},{"name":"randomBytes()","total_count":1,"children":[]},{"name":"rotr()","total_count":1,"children":[]},{"name":"sha256()","total_count":1,"children":[]},{"name":"SHA256_K","total_count":1,"children":[]},{"name":"sha256Fallback()","total_count":1,"children":[]},{"name":"textDecoder","total_count":1,"children":[]},{"name":"textEncoder","total_count":1,"children":[]},{"name":"toArrayBuffer()","total_count":1,"children":[]},{"name":"toBase64Url()","total_count":1,"children":[]},{"name":"toUtf8()","total_count":1,"children":[]},{"name":"xorStream()","total_count":1,"children":[]}]},{"name":"fileUtils.ts","total_count":4,"children":[{"name":"formatFileSize()","total_count":1,"children":[]},{"name":"getFileIcon()","total_count":1,"children":[]},{"name":"isImageFile()","total_count":1,"children":[]},{"name":"validateFileSize()","total_count":1,"children":[]}]},{"name":"mediaCache.ts","total_count":21,"children":[{"name":"CacheRecord","total_count":1,"children":[]},{"name":"cacheTextValue()","total_count":1,"children":[]},{"name":"clearAllMediaCache()","total_count":1,"children":[]},{"name":"deleteCachedBlob()","total_count":1,"children":[]},{"name":"deleteCachedText()","total_count":1,"children":[]},{"name":"deleteMediaCacheKey()","total_count":1,"children":[]},{"name":"deleteTextCacheKey()","total_count":1,"children":[]},{"name":"getCachedBlob()","total_count":1,"children":[]},{"name":"getCachedTextValue()","total_count":1,"children":[]},{"name":"getMediaCacheUsageBytes()","total_count":1,"children":[]},{"name":"getOrCacheBlob()","total_count":1,"children":[]},{"name":"GetOrCacheBlobParams","total_count":1,"children":[]},{"name":"openDb()","total_count":1,"children":[]},{"name":"openMediaDb()","total_count":1,"children":[]},{"name":"openTextDb()","total_count":1,"children":[]},{"name":"readBlobFromCache()","total_count":1,"children":[]},{"name":"readTextCache()","total_count":1,"children":[]},{"name":"saveBlobCache()","total_count":1,"children":[]},{"name":"saveBlobToCache()","total_count":1,"children":[]},{"name":"saveTextCache()","total_count":1,"children":[]},{"name":"TextCacheRecord","total_count":1,"children":[]}]},{"name":"notificationBus.ts","total_count":8,"children":[{"name":"inferNotificationType()","total_count":1,"children":[]},{"name":"normalizeInput()","total_count":1,"children":[]},{"name":"NotificationInput","total_count":1,"children":[]},{"name":"NotificationType","total_count":1,"children":[]},{"name":"notify()","total_count":1,"children":[]},{"name":"subscribeNotifications()","total_count":1,"children":[]},{"name":"Subscriber","total_count":1,"children":[]},{"name":"subscribers","total_count":1,"children":[]}]}]},{"name":"main.tsx","total_count":1,"children":[]}]},{"name":"tsconfig.app.json","total_count":21,"children":[{"name":"allowImportingTsExtensions","total_count":1,"children":[]},{"name":"compilerOptions","total_count":1,"children":[]},{"name":"erasableSyntaxOnly","total_count":1,"children":[]},{"name":"include","total_count":1,"children":[]},{"name":"jsx","total_count":1,"children":[]},{"name":"lib","total_count":1,"children":[]},{"name":"module","total_count":1,"children":[]},{"name":"moduleDetection","total_count":1,"children":[]},{"name":"moduleResolution","total_count":1,"children":[]},{"name":"noEmit","total_count":1,"children":[]},{"name":"noFallthroughCasesInSwitch","total_count":1,"children":[]},{"name":"noUncheckedSideEffectImports","total_count":1,"children":[]},{"name":"noUnusedLocals","total_count":1,"children":[]},{"name":"noUnusedParameters","total_count":1,"children":[]},{"name":"skipLibCheck","total_count":1,"children":[]},{"name":"strict","total_count":1,"children":[]},{"name":"target","total_count":1,"children":[]},{"name":"tsBuildInfoFile","total_count":1,"children":[]},{"name":"types","total_count":1,"children":[]},{"name":"useDefineForClassFields","total_count":1,"children":[]},{"name":"verbatimModuleSyntax","total_count":1,"children":[]}]},{"name":"tsconfig.json","total_count":2,"children":[{"name":"files","total_count":1,"children":[]},{"name":"references","total_count":1,"children":[]}]},{"name":"tsconfig.node.json","total_count":19,"children":[{"name":"allowImportingTsExtensions","total_count":1,"children":[]},{"name":"compilerOptions","total_count":1,"children":[]},{"name":"erasableSyntaxOnly","total_count":1,"children":[]},{"name":"include","total_count":1,"children":[]},{"name":"lib","total_count":1,"children":[]},{"name":"module","total_count":1,"children":[]},{"name":"moduleDetection","total_count":1,"children":[]},{"name":"moduleResolution","total_count":1,"children":[]},{"name":"noEmit","total_count":1,"children":[]},{"name":"noFallthroughCasesInSwitch","total_count":1,"children":[]},{"name":"noUncheckedSideEffectImports","total_count":1,"children":[]},{"name":"noUnusedLocals","total_count":1,"children":[]},{"name":"noUnusedParameters","total_count":1,"children":[]},{"name":"skipLibCheck","total_count":1,"children":[]},{"name":"strict","total_count":1,"children":[]},{"name":"target","total_count":1,"children":[]},{"name":"tsBuildInfoFile","total_count":1,"children":[]},{"name":"types","total_count":1,"children":[]},{"name":"verbatimModuleSyntax","total_count":1,"children":[]}]},{"name":"eslint.config.js","total_count":1,"children":[]},{"name":"vite.config.ts","total_count":1,"children":[]}]},{"name":"README.md","total_count":11,"children":[{"name":".env","total_count":1,"children":[]},{"name":"api.py","total_count":1,"children":[]},{"name":"back-end directory","total_count":1,"children":[]},{"name":"bcrypt","total_count":1,"children":[]},{"name":"FastAPI","total_count":1,"children":[]},{"name":"MongoDB","total_count":1,"children":[]},{"name":"Motor","total_count":1,"children":[]},{"name":"PyJWT","total_count":1,"children":[]},{"name":"python-dotenv","total_count":1,"children":[]},{"name":"README.md","total_count":1,"children":[]},{"name":"Uvicorn","total_count":1,"children":[]}]}]};
+
+    function transformData(jsonData) {
+        // Helper function to recursively build the children structure
+        function processNode(node, parentL1StageName) {
+            let displayName = node.name;
+            // Append total_count if it exists and is not already in the name
+            if (node.total_count !== undefined) {
+                if (!/\(Total Count: \d+\)$/.test(displayName)) {
+                    displayName += ` (Total Count: ${node.total_count})`;
+                }
+            }
+
+            const newNode = { name: displayName };
+
+            if (parentL1StageName === "Root") {
+                 newNode.originalStageName = node.name;
+            } else {
+                newNode.originalStageName = parentL1StageName;
+            }
+
+            if (node.children && node.children.length > 0) {
+                const stageNameToPass = (parentL1StageName === "Root") ? node.name : parentL1StageName;
+                newNode.children = node.children.map(child => processNode(child, stageNameToPass));
+            }
+
+            return newNode;
+        }
+
+        let rootDisplayName = jsonData.name;
+        if (jsonData.total_count !== undefined && !/\(Total Count: \d+\)$/.test(rootDisplayName)) {
+            rootDisplayName += ` (Total Count: ${jsonData.total_count})`;
+        }
+
+        return {
+            name: rootDisplayName,
+            originalStageName: "Root",
+            children: (jsonData.children || []).map(child => processNode(child, "Root"))
+        };
+    }
+
+    const treeData = transformData(initialJsonData);
+
+    // Auto-populated phaseColors: every depth-1 child of the root gets
+    // a stable colour from a bigger palette so all top-level dirs are
+    // distinguishable.
+    const PALETTE = [
+      ["#3498DB","#2980B9","#AED6F1"], ["#2ECC71","#27AE60","#A9DFBF"],
+      ["#E74C3C","#C0392B","#F5B7B1"], ["#9B59B6","#8E44AD","#D7BDE2"],
+      ["#F39C12","#D68910","#FAD7A0"], ["#1ABC9C","#117864","#A2D9CE"],
+      ["#34495E","#1B2631","#ABB2B9"], ["#E67E22","#BA4A00","#F5CBA7"],
+      ["#16A085","#0E6655","#A2D9CE"], ["#D35400","#A04000","#EDBB99"],
+      ["#7F8C8D","#566573","#D5DBDB"], ["#C0392B","#7B241C","#F5B7B1"],
+      ["#2E86C1","#1B4F72","#A9CCE3"], ["#28B463","#196F3D","#A9DFBF"],
+      ["#AF7AC5","#6C3483","#D2B4DE"],
+    ];
+    const phaseColors = { "Root": { fill: "#4A4A4A", stroke: "#333333", collapsedFill: "#6C757D" },
+                          "Default": { fill: "#BDC3C7", stroke: "#95A5A6", collapsedFill: "#ECF0F1" } };
+    (initialJsonData.children || []).forEach((c, i) => {
+      const pal = PALETTE[i % PALETTE.length];
+      phaseColors[c.name] = { fill: pal[0], stroke: pal[1], collapsedFill: pal[2] };
+    });
+
+    const levelSpecificPalettes = {
+      0: { fill: "#4A4A4A", stroke: "#333333", collapsedFill: "#6C757D" },
+      2: { fill: "#6ab04c", stroke: "#508a38", collapsedFill: "#a3d391" },
+      3: { fill: "#f0932b", stroke: "#d0730f", collapsedFill: "#f6c07e" },
+      4: { fill: "#be2edd", stroke: "#a01cb3", collapsedFill: "#e08bf2" },
+      5: { fill: "#00a8ff", stroke: "#007ac1", collapsedFill: "#74d2ff" },
+      6: { fill: "#e55039", stroke: "#c23620", collapsedFill: "#f09a8d" },
+      default: { fill: "#747d8c", stroke: "#57606f", collapsedFill: "#a4b0be" }
+    };
+
+    const svgElement = d3.select("#tree-svg");
+    const initialSvgWidth = +svgElement.attr("width");
+    const initialSvgHeight = +svgElement.attr("height");
+    const margin = { top: 40, right: 120, bottom: 80, left: 450 };
+    let width = initialSvgWidth - margin.left - margin.right;
+    let height = initialSvgHeight - margin.top - margin.bottom;
+    const duration = 500;
+    let nodeCounter = 0;
+    const g = svgElement.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+    const treemap = d3.tree().nodeSize([40, 0]);
+    let rootNode = d3.hierarchy(treeData, d => d.children);
+    rootNode.x0 = 0;
+    rootNode.y0 = 0;
+
+    if (rootNode.children) {
+      rootNode.children.forEach(d_child => {
+        if (d_child.children) { collapseBranch(d_child); }
+      });
+    }
+    updateTree(rootNode);
+
+    function collapseBranch(d) { if (d.children) { d._children = d.children; d._children.forEach(collapseBranch); d.children = null; } }
+    function expandBranch(d) { if (d._children) { d.children = d._children; d._children = null; } if (d.children) { d.children.forEach(expandBranch); } }
+    window.expandAll = () => { expandBranch(rootNode); updateTree(rootNode); };
+    window.collapseAll = () => { if (rootNode.children) { rootNode.children.forEach(collapseBranch); } updateTree(rootNode); };
+    window.resetView = () => { if (rootNode.children) { rootNode.children.forEach(d_child => { if (d_child.children || d_child._children) { collapseBranch(d_child); } }); } if (rootNode._children && !rootNode.children) { rootNode.children = rootNode._children; rootNode._children = null; } updateTree(rootNode); };
+
+    function updateTree(source) {
+      const treeLayoutData = treemap(rootNode);
+      let nodes = treeLayoutData.descendants();
+      let links = treeLayoutData.descendants().slice(1);
+
+      let minX = 0;
+      let maxX = 0;
+      if (nodes.length > 0) {
+        minX = d3.min(nodes, d => d.x);
+        maxX = d3.max(nodes, d => d.x);
+      }
+
+      let neededHeight = Math.max(initialSvgHeight, maxX - minX + margin.top + margin.bottom + 100);
+      svgElement.transition().duration(duration / 2).attr("height", neededHeight);
+      g.transition().duration(duration / 2).attr("transform", `translate(${margin.left},${margin.top - minX + 40})`);
+
+      nodes.forEach(d => { d.y = d.depth * 400; }); // Adjust horizontal separation if needed
+
+      const node = g.selectAll('g.node').data(nodes, d => d.id || (d.id = ++nodeCounter));
+      const nodeEnter = node.enter().append('g')
+        .attr('class', d => "node" + (d.children || d._children ? " node--internal" : " node--leaf") + (d._children ? " _children" : ""))
+        .attr('transform', d => `translate(${source.y0},${source.x0})`)
+        .on('click', (event, d) => { if (d.children) { d._children = d.children; d.children = null; } else if (d._children) { d.children = d._children; d._children = null; } updateTree(d); })
+        .style('cursor', d => (d.children || d._children) ? 'pointer' : 'default');
+
+      nodeEnter.append('circle').attr('r', 1e-6);
+
+      nodeEnter.append('text')
+        .attr('dy', '.35em')
+        .attr('x', d => d.children || d._children ? -14 : 14)
+        .attr('text-anchor', d => d.children || d._children ? 'end' : 'start')
+        .style("fill-opacity", 1e-6)
+        .call(wrapText, 380);
+
+      const nodeUpdate = nodeEnter.merge(node);
+      nodeUpdate.transition().duration(duration)
+        .attr('transform', d => `translate(${d.y},${d.x})`)
+        .attr('class', d => "node" + (d.children ? " node--internal" : " node--leaf") + (d._children ? " node--internal _children" : ""));
+
+      nodeUpdate.select('circle').attr('r', 8.5)
+        .style('fill', d => {
+            let palette;
+            if (d.depth === 0) {
+                palette = levelSpecificPalettes[0];
+            } else if (d.depth === 1) {
+                palette = phaseColors[d.data.originalStageName] || phaseColors.Default;
+            } else {
+                palette = levelSpecificPalettes[d.depth] || levelSpecificPalettes.default;
+            }
+            if (d._children) return palette.collapsedFill;
+            if (d.children) return palette.fill;
+            return "#fff";
+        })
+        .style('stroke', d => {
+            let palette;
+            if (d.depth === 0) {
+                palette = levelSpecificPalettes[0];
+            } else if (d.depth === 1) {
+                palette = phaseColors[d.data.originalStageName] || phaseColors.Default;
+            } else {
+                palette = levelSpecificPalettes[d.depth] || levelSpecificPalettes.default;
+            }
+            return palette.stroke;
+        });
+      nodeUpdate.select('text').style("fill-opacity", 1).call(wrapText, 380);
+
+      const nodeExit = node.exit().transition().duration(duration).attr('transform', d => `translate(${source.y},${source.x})`).remove();
+      nodeExit.select('circle').attr('r', 1e-6);
+      nodeExit.select('text').style('fill-opacity', 1e-6);
+
+      const link = g.selectAll('path.link').data(links, d => d.id);
+      const linkEnter = link.enter().insert('path', "g").attr('class', 'link').attr('d', d => { const o = { x: source.x0, y: source.y0 }; return diagonal(o, o); });
+
+      linkEnter.merge(link).transition().duration(duration).attr('d', d => diagonal(d, d.parent))
+        .style('stroke', d => {
+            const sourceNode = d.parent;
+            if (!sourceNode) return phaseColors.Default.stroke;
+            const l1AncestorName = sourceNode.data.originalStageName;
+            const colorPalette = phaseColors[l1AncestorName] || phaseColors.Default;
+            return colorPalette.stroke;
+        });
+      link.exit().transition().duration(duration).attr('d', d => { const o = { x: source.x, y: source.y }; return diagonal(o, o); }).remove();
+      nodes.forEach(d => { d.x0 = d.x; d.y0 = d.y; });
+    }
+
+    function diagonal(s, d) { return `M ${s.y} ${s.x} C ${(s.y + d.y) / 2} ${s.x}, ${(s.y + d.y) / 2} ${d.x}, ${d.y} ${d.x}`; }
+
+    function wrapText(textElements, maxWidth) {
+        const textPartColors = {
+            name: '#343a40',
+            count: '#0056b3'
+        };
+        const countRegex = /(\s\(Total Count: \d+\))$/;
+
+        textElements.each(function () {
+            const textD3 = d3.select(this);
+            const originalNodeText = textD3.datum().data.name;
+            const x = parseFloat(textD3.attr("x") || 0);
+            const initialDy = textD3.attr("dy");
+            const textAnchor = textD3.attr("text-anchor");
+            const lineHeight = 1.1;
+
+            textD3.text(null);
+
+            let namePart = originalNodeText;
+            let countPartText = "";
+
+            const countMatch = originalNodeText.match(countRegex);
+            if (countMatch && originalNodeText.endsWith(countMatch[0])) {
+                namePart = originalNodeText.substring(0, originalNodeText.length - countMatch[0].length).trim();
+                countPartText = countMatch[0].trim();
+            }
+
+            const tokens = [];
+            namePart.split(/\s+/).filter(Boolean).forEach(word => {
+                tokens.push({ text: word, type: 'name' });
+            });
+            if (countPartText) {
+                tokens.push({ text: countPartText, type: 'count' });
+            }
+
+            if (tokens.length === 0 && originalNodeText) {
+                tokens.push({ text: originalNodeText, type: 'name' });
+            }
+
+            let currentTspan = textD3.append("tspan").attr("x", x).attr("dy", initialDy);
+            if (textAnchor === "end") currentTspan.attr("text-anchor", "end");
+
+            let lineTokens = [];
+
+            for (let i = 0; i < tokens.length; i++) {
+                const tokenObj = tokens[i];
+
+                lineTokens.push(tokenObj);
+                currentTspan.text(lineTokens.map(t => t.text).join(" "));
+
+                if (currentTspan.node().getComputedTextLength() > maxWidth && lineTokens.length > 1) {
+                    lineTokens.pop();
+
+                    currentTspan.text(null);
+                    lineTokens.forEach((prevToken, idx) => {
+                        currentTspan.append("tspan")
+                            .text((idx > 0 ? " " : "") + prevToken.text)
+                            .style("fill", textPartColors[prevToken.type] || textPartColors.name)
+                            .style("font-weight", prevToken.type === 'count' ? "bold" : "normal");
+                    });
+
+                    lineTokens = [tokenObj];
+                    currentTspan = textD3.append("tspan").attr("x", x).attr("dy", lineHeight + "em");
+                    if (textAnchor === "end") currentTspan.attr("text-anchor", "end");
+                }
+            }
+
+            currentTspan.text(null);
+            lineTokens.forEach((token, idx) => {
+                currentTspan.append("tspan")
+                    .text((idx > 0 ? " " : "") + token.text)
+                    .style("fill", textPartColors[token.type] || textPartColors.name)
+                    .style("font-weight", token.type === 'count' ? "bold" : "normal");
+            });
+
+            if (textD3.selectAll("tspan > tspan").empty() && textD3.select("tspan").text().length === 0 && originalNodeText) {
+                let t = textD3.select("tspan");
+                let displayText = originalNodeText;
+                t.text(displayText).style("fill", textPartColors.name);
+                if (t.node() && t.node().getComputedTextLength() > maxWidth && displayText.length > 20) {
+                    let estimatedChars = Math.floor(maxWidth / (t.node().getComputedTextLength()/displayText.length) );
+                    displayText = displayText.substring(0, Math.max(0, estimatedChars - 3)) + "...";
+                    t.text(displayText);
+                }
+            }
+        });
+    }
+  </script>
+</body>
+</html>

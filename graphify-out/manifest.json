@@ -1,0 +1,282 @@
+{
+  "E:\\web\\Messenger\\back-end\\ai_service.py": {
+    "mtime": 1777408116.4922652,
+    "ast_hash": "73ff99d31aa6dd3b0e38e778b42a87ed",
+    "semantic_hash": "73ff99d31aa6dd3b0e38e778b42a87ed"
+  },
+  "E:\\web\\Messenger\\back-end\\api.py": {
+    "mtime": 1779398297.4569623,
+    "ast_hash": "5a6826bb7ead2fd64c9747c0e2ba469d",
+    "semantic_hash": "5a6826bb7ead2fd64c9747c0e2ba469d"
+  },
+  "E:\\web\\Messenger\\back-end\\api_reaction_helper.py": {
+    "mtime": 1773690091.9609861,
+    "ast_hash": "d62ceeb232addfc463423bbebdbf7276",
+    "semantic_hash": "d62ceeb232addfc463423bbebdbf7276"
+  },
+  "E:\\web\\Messenger\\back-end\\email_service.py": {
+    "mtime": 1775585136.8689668,
+    "ast_hash": "82fdfe3d8f518dd3ab954a2e865f3346",
+    "semantic_hash": "82fdfe3d8f518dd3ab954a2e865f3346"
+  },
+  "E:\\web\\Messenger\\back-end\\file_service.py": {
+    "mtime": 1778281610.4805825,
+    "ast_hash": "dd3de965ea5696255964be013bd2b4b8",
+    "semantic_hash": "dd3de965ea5696255964be013bd2b4b8"
+  },
+  "E:\\web\\Messenger\\back-end\\__init__.py": {
+    "mtime": 1771344344.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "E:\\web\\Messenger\\front-end\\eslint.config.js": {
+    "mtime": 1771344344.0,
+    "ast_hash": "b8893da386a89dfd3672dad848f4ec7e",
+    "semantic_hash": "b8893da386a89dfd3672dad848f4ec7e"
+  },
+  "E:\\web\\Messenger\\front-end\\package.json": {
+    "mtime": 1779647202.538588,
+    "ast_hash": "868fbca15622d6987687c2dfcdc09ecf",
+    "semantic_hash": "868fbca15622d6987687c2dfcdc09ecf"
+  },
+  "E:\\web\\Messenger\\front-end\\tsconfig.app.json": {
+    "mtime": 1773948110.442575,
+    "ast_hash": "20a0ab2a7be39c04ad4ff3db89000c51",
+    "semantic_hash": "20a0ab2a7be39c04ad4ff3db89000c51"
+  },
+  "E:\\web\\Messenger\\front-end\\tsconfig.json": {
+    "mtime": 1771344344.0,
+    "ast_hash": "a3d39fa780ebff65444de257f291ce6c",
+    "semantic_hash": "a3d39fa780ebff65444de257f291ce6c"
+  },
+  "E:\\web\\Messenger\\front-end\\tsconfig.node.json": {
+    "mtime": 1771344344.0,
+    "ast_hash": "eec85c9d7c6b599801557f1afd86672c",
+    "semantic_hash": "eec85c9d7c6b599801557f1afd86672c"
+  },
+  "E:\\web\\Messenger\\front-end\\vite.config.ts": {
+    "mtime": 1771344344.0,
+    "ast_hash": "06d0e8ab54c7b16ef736e1ab6cc69d59",
+    "semantic_hash": "06d0e8ab54c7b16ef736e1ab6cc69d59"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\App.tsx": {
+    "mtime": 1779489568.6237285,
+    "ast_hash": "500a0efd789b21717f350d45ae327e43",
+    "semantic_hash": "500a0efd789b21717f350d45ae327e43"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\main.tsx": {
+    "mtime": 1779647202.5435843,
+    "ast_hash": "5c4e7e94719e044f9f298b33f585e501",
+    "semantic_hash": "5c4e7e94719e044f9f298b33f585e501"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\types.ts": {
+    "mtime": 1779489168.7456415,
+    "ast_hash": "6a977f9837ed07d338a559fad140a364",
+    "semantic_hash": "6a977f9837ed07d338a559fad140a364"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\AIChatRoom.tsx": {
+    "mtime": 1779647202.5395868,
+    "ast_hash": "35790cf464eecff96a207ab047173e4b",
+    "semantic_hash": "35790cf464eecff96a207ab047173e4b"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\Avatar.tsx": {
+    "mtime": 1777588668.4021406,
+    "ast_hash": "67f50bb55dd44c23ef4f4160fbcd0fba",
+    "semantic_hash": "67f50bb55dd44c23ef4f4160fbcd0fba"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\ChatList.tsx": {
+    "mtime": 1779449607.5961661,
+    "ast_hash": "a3c2fd7d598cd63752f84a923456c4de",
+    "semantic_hash": "a3c2fd7d598cd63752f84a923456c4de"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\ChatListSkeleton.tsx": {
+    "mtime": 1771344344.0,
+    "ast_hash": "b9155d3c71fd25c076f10c9fa533f19f",
+    "semantic_hash": "b9155d3c71fd25c076f10c9fa533f19f"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\ChatMessagesSkeleton.tsx": {
+    "mtime": 1771344344.0,
+    "ast_hash": "cb8cbf126c9ff97a9c7fdd3f33dc0438",
+    "semantic_hash": "cb8cbf126c9ff97a9c7fdd3f33dc0438"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\ChatRoom.tsx": {
+    "mtime": 1779650481.3015845,
+    "ast_hash": "f97be6d5077d9cf221e81e92f56b7e3e",
+    "semantic_hash": "f97be6d5077d9cf221e81e92f56b7e3e"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\ContactInfo.tsx": {
+    "mtime": 1777926622.665481,
+    "ast_hash": "d6a556ac817417995d01098108d0bb18",
+    "semantic_hash": "d6a556ac817417995d01098108d0bb18"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\DarkModeToggle.tsx": {
+    "mtime": 1776372329.8483956,
+    "ast_hash": "74c741e2722a4a917d2214cdfdde51c3",
+    "semantic_hash": "74c741e2722a4a917d2214cdfdde51c3"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\DataStorageSettings.tsx": {
+    "mtime": 1779649740.8948762,
+    "ast_hash": "e9d8d196674c4133b3c072eb5eae544f",
+    "semantic_hash": "e9d8d196674c4133b3c072eb5eae544f"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\Devices.tsx": {
+    "mtime": 1777650860.6048288,
+    "ast_hash": "c7de69e1fdb7f09a90b0b637007c3b40",
+    "semantic_hash": "c7de69e1fdb7f09a90b0b637007c3b40"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\EmptyState.tsx": {
+    "mtime": 1777332766.4942553,
+    "ast_hash": "d2d43c0e20394a20a59bb40dbb1e33cf",
+    "semantic_hash": "d2d43c0e20394a20a59bb40dbb1e33cf"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\FileMessage.tsx": {
+    "mtime": 1779649704.938797,
+    "ast_hash": "bb89ccd44bf75b3022c12c1efb933115",
+    "semantic_hash": "bb89ccd44bf75b3022c12c1efb933115"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\FileUpload.tsx": {
+    "mtime": 1779446353.2866986,
+    "ast_hash": "f542231f0755d73bb7f5b588f6c001f3",
+    "semantic_hash": "f542231f0755d73bb7f5b588f6c001f3"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\ForgotPassword.tsx": {
+    "mtime": 1775425259.346627,
+    "ast_hash": "262a6d01c7cc2f53684027006c61a319",
+    "semantic_hash": "262a6d01c7cc2f53684027006c61a319"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\ForwardModal.tsx": {
+    "mtime": 1778962055.3097813,
+    "ast_hash": "79aa4d4a649c8806d9f1f82fa034ff65",
+    "semantic_hash": "79aa4d4a649c8806d9f1f82fa034ff65"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\ImageMediaViewer.tsx": {
+    "mtime": 1777932712.8707943,
+    "ast_hash": "83d5d122c18dc3d59a27384e7485f50b",
+    "semantic_hash": "83d5d122c18dc3d59a27384e7485f50b"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\Login.tsx": {
+    "mtime": 1776369109.457722,
+    "ast_hash": "504c432a1d6b615fec87d4e3818e110a",
+    "semantic_hash": "504c432a1d6b615fec87d4e3818e110a"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\LoginLogs.tsx": {
+    "mtime": 1778962055.3107803,
+    "ast_hash": "e5a54bbee82c6ef496b5b9570b57cd91",
+    "semantic_hash": "e5a54bbee82c6ef496b5b9570b57cd91"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\MiniMusicPlayer.tsx": {
+    "mtime": 1777926622.6674793,
+    "ast_hash": "e5f6107094929c81204efd2a7f824ee9",
+    "semantic_hash": "e5f6107094929c81204efd2a7f824ee9"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\NewChatModal.tsx": {
+    "mtime": 1777846718.21149,
+    "ast_hash": "d11688a5e565913a2783c1cf85a7f922",
+    "semantic_hash": "d11688a5e565913a2783c1cf85a7f922"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\NotificationCenter.tsx": {
+    "mtime": 1775595363.1350167,
+    "ast_hash": "d6b7143ec128ff185ffaa458d99a8dfc",
+    "semantic_hash": "d6b7143ec128ff185ffaa458d99a8dfc"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\Profile.tsx": {
+    "mtime": 1779444305.0917077,
+    "ast_hash": "1ec30724e8990e888c40dae6d03350ba",
+    "semantic_hash": "1ec30724e8990e888c40dae6d03350ba"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\ReactionPicker.tsx": {
+    "mtime": 1778455449.8059857,
+    "ast_hash": "994be16b47297b7472d6342e59aed333",
+    "semantic_hash": "994be16b47297b7472d6342e59aed333"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\Register.tsx": {
+    "mtime": 1779444304.9632516,
+    "ast_hash": "5922d56ded28ce14b5909bab4aec6e7b",
+    "semantic_hash": "5922d56ded28ce14b5909bab4aec6e7b"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\Settings.tsx": {
+    "mtime": 1778969434.1164927,
+    "ast_hash": "ddce84c20483b6a7a8cfd9bb7db64634",
+    "semantic_hash": "ddce84c20483b6a7a8cfd9bb7db64634"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\ThemeSettings.tsx": {
+    "mtime": 1777846867.1915605,
+    "ast_hash": "bb4adb23eba60729ae683482d7c75608",
+    "semantic_hash": "bb4adb23eba60729ae683482d7c75608"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\VerifiedBadge.tsx": {
+    "mtime": 1777414928.1715539,
+    "ast_hash": "daacc8aaf4085ac3ea96080c0a888230",
+    "semantic_hash": "daacc8aaf4085ac3ea96080c0a888230"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\components\\VideoMediaViewer.tsx": {
+    "mtime": 1777932712.8707943,
+    "ast_hash": "7841f921657a7431d721b8906fc7c1bb",
+    "semantic_hash": "7841f921657a7431d721b8906fc7c1bb"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\config\\api.ts": {
+    "mtime": 1779055000.3841596,
+    "ast_hash": "5632187fbb15fd3e2964a1c4386a07a8",
+    "semantic_hash": "5632187fbb15fd3e2964a1c4386a07a8"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\contexts\\MusicPlayerContext.tsx": {
+    "mtime": 1775939972.0259528,
+    "ast_hash": "4e56c45639b42f0744ee0a93093ca287",
+    "semantic_hash": "4e56c45639b42f0744ee0a93093ca287"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\data\\mockData.ts": {
+    "mtime": 1771344344.0,
+    "ast_hash": "3af808c6a23d938b0d4ce2c4e65f8bdf",
+    "semantic_hash": "3af808c6a23d938b0d4ce2c4e65f8bdf"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\hooks\\useAIWebSocket.ts": {
+    "mtime": 1777329915.4308257,
+    "ast_hash": "27564650f0affe4ffcfa55cf8db8ed25",
+    "semantic_hash": "27564650f0affe4ffcfa55cf8db8ed25"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\hooks\\useDarkMode.ts": {
+    "mtime": 1777585248.1930685,
+    "ast_hash": "9e0fb1b7d5317cce41628c4c45163e6d",
+    "semantic_hash": "9e0fb1b7d5317cce41628c4c45163e6d"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\hooks\\useWebSocket.ts": {
+    "mtime": 1779486345.089772,
+    "ast_hash": "66ba757ea87f3ae11381afa289b9ef02",
+    "semantic_hash": "66ba757ea87f3ae11381afa289b9ef02"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\utils\\autoDownloadPrefs.ts": {
+    "mtime": 1779649695.429761,
+    "ast_hash": "2aff6915008596ed753ae000dffaebb6",
+    "semantic_hash": "2aff6915008596ed753ae000dffaebb6"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\utils\\cx.ts": {
+    "mtime": 1771344344.0,
+    "ast_hash": "9e682fb6c83f3a54d8a11b14c7bd9035",
+    "semantic_hash": "9e682fb6c83f3a54d8a11b14c7bd9035"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\utils\\device.ts": {
+    "mtime": 1776369109.4657173,
+    "ast_hash": "e2206a84e269d390a4f50984b9421db5",
+    "semantic_hash": "e2206a84e269d390a4f50984b9421db5"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\utils\\e2ee.ts": {
+    "mtime": 1779394727.353657,
+    "ast_hash": "6c3d3656bf18da1017c76de94bce844a",
+    "semantic_hash": "6c3d3656bf18da1017c76de94bce844a"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\utils\\fileUtils.ts": {
+    "mtime": 1775942236.5508852,
+    "ast_hash": "352f4e203e85cd27aa2e6fc1f8d9b231",
+    "semantic_hash": "352f4e203e85cd27aa2e6fc1f8d9b231"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\utils\\mediaCache.ts": {
+    "mtime": 1778969137.3618727,
+    "ast_hash": "40047a5bba8c78af6dedaa24f84799b9",
+    "semantic_hash": "40047a5bba8c78af6dedaa24f84799b9"
+  },
+  "E:\\web\\Messenger\\front-end\\src\\utils\\notificationBus.ts": {
+    "mtime": 1775469285.928408,
+    "ast_hash": "e5e7ffc411d832545620b6d58bf4d77c",
+    "semantic_hash": "e5e7ffc411d832545620b6d58bf4d77c"
+  }
+}
