@@ -4,6 +4,7 @@ export const autoDownloadCookieKeys = {
   image: 'auto_download_images',
   video: 'auto_download_videos',
   audio: 'auto_download_audios',
+  file: 'auto_download_files',
 } as const;
 
 export const setAutoDownloadCookie = (name: string, value: '0' | '1') => {

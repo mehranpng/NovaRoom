@@ -150,7 +150,8 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     if (!cacheChecked || mediaUrl || downloadState === 'downloading' || downloadState === 'decrypting' || downloadState === 'done') return;
     const shouldAutoDownload = (isImage && isAutoDownloadEnabled(autoDownloadCookieKeys.image))
       || (isVideo && isAutoDownloadEnabled(autoDownloadCookieKeys.video))
-      || (isAudio && isAutoDownloadEnabled(autoDownloadCookieKeys.audio));
+      || (isAudio && isAutoDownloadEnabled(autoDownloadCookieKeys.audio))
+      || (!isImage && !isVideo && !isAudio && isAutoDownloadEnabled(autoDownloadCookieKeys.file));
     if (shouldAutoDownload) void startDownload();
   }, [cacheChecked, mediaUrl, downloadState, isImage, isVideo, isAudio]);
 
@@ -296,20 +297,19 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
 
     {!isImage && !isVideo && !isAudio && <div className="file-attachment">
       <div className="file-icon" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40 }}>
-        {(downloadState === 'downloading' || downloadState === 'decrypting' || downloadState === 'idle' || downloadState === 'done' || downloadState === 'error') ? (
-          <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%`, margin: 0 }} onClick={(e) => {
-            e.stopPropagation();
-            if (downloadState === 'downloading') cancelDownload();
-            else if (downloadState === 'idle' || downloadState === 'error') startDownload();
-            else if (downloadState === 'done') {
-                window.dispatchEvent(new CustomEvent('trigger-file-download', { detail: { fileId: file.fileId } }));
-            }
-          }}>
-            {downloadState === 'done' ? <Download size={16} /> : actionIcon}
-          </button>
-        ) : (
-          getFileIcon(file.mimeType)
-        )}
+        <div className="file-icon-box file-icon-box--generic">
+          {(downloadState === 'downloading' || downloadState === 'decrypting' || downloadState === 'idle' || downloadState === 'error') ? (
+            <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%`, margin: 0 }} onClick={(e) => {
+              e.stopPropagation();
+              if (downloadState === 'downloading') cancelDownload();
+              else if (downloadState === 'idle' || downloadState === 'error') startDownload();
+            }}>
+              {actionIcon}
+            </button>
+          ) : (
+            getFileIcon(file.mimeType)
+          )}
+        </div>
       </div>
       <div className="file-info">
         <div className="file-name">{file.fileName}</div>

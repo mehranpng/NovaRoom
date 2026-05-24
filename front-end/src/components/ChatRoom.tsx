@@ -18,7 +18,7 @@ import { FileMessage } from './FileMessage';
 import { ImageMediaViewer } from './ImageMediaViewer';
 import { VideoMediaViewer } from './VideoMediaViewer';
 import { decryptAvatarBytesClientSide, decryptFileBytesClientSide } from '../utils/e2ee';
-import { cacheTextValue, deleteCachedBlob, deleteCachedText, getCachedTextValue, getOrCacheBlob } from '../utils/mediaCache';
+import { cacheTextValue, deleteCachedBlob, deleteCachedText, getCachedBlob, getCachedTextValue, getOrCacheBlob } from '../utils/mediaCache';
 import './FileComponents.css';
 
 const pendingUploadedFileByChat: Record<string, FileMetadata | null> = {};
@@ -464,7 +464,7 @@ export function ChatRoom({
     const [replyTo, setReplyTo] = useState<MessageReplyType | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
 
-    const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number }>(null);
+    const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number; isFileDownloaded?: boolean }>(null);
     const [reactionMenu, setReactionMenu] = useState<null | { id: string; top: number; left: number }>(null);
     const [seenByMenu, setSeenByMenu] = useState<null | { id: string; top: number; left: number }>(null);
     const [seenByUsersByMessage, setSeenByUsersByMessage] = useState<Record<string, SeenByUser[]>>({});
@@ -2072,7 +2072,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         window.setTimeout(() => setConfirmLeaveGroup(true), 40);
     };
 
-    const openMessageMenu = (messageId: string, targetEl: HTMLElement, clientX?: number, clientY?: number) => {
+    const openMessageMenu = async (messageId: string, targetEl: HTMLElement, clientX?: number, clientY?: number) => {
         const room = roomRef.current;
         if (!room) return;
 
@@ -2094,11 +2094,17 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         const relX = x - roomRect.left;
         const relY = y - roomRect.top;
 
-        setMsgMenu({ id: messageId, top: relY + 8, left: relX - 12 });
+        const message = messages.find((m) => m.id === messageId);
+        let isFileDownloaded = false;
+        if (message?.file?.fileId) {
+            const blob = await getCachedBlob(`chat:${chatId}:file:${message.file.fileId}`);
+            if (blob) isFileDownloaded = true;
+        }
+
+        setMsgMenu({ id: messageId, top: relY + 8, left: relX - 12, isFileDownloaded });
         setReactionMenu(null);
         setSeenByMenu(null);
 
-        const message = messages.find((m) => m.id === messageId);
         if (isGroupChat && message?.senderId === currentUserId) {
             loadSeenBy(messageId);
         }
@@ -2127,7 +2133,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
             setMsgMenu((s) => (s ? { ...s, left: clampedLeft, top: clampedTop } : s));
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [msgMenu?.id, msgMenu?.top, msgMenu?.left]);
+    }, [msgMenu?.id, msgMenu?.top, msgMenu?.left, msgMenu?.isFileDownloaded]);
 
     useLayoutEffect(() => {
         if (!reactionMenu) return;
@@ -2969,7 +2975,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                 const canReplyInMessageMenu = !(isOfficialChannel && !isVerifiedUser);
                 const hasCaption = Boolean((activeMsg.text || '').trim());
                 const showCopyAction = !activeMsg.file || hasCaption;
-                const showDownloadAction = Boolean(activeMsg.file?.fileId);
+                const showDownloadAction = Boolean(activeMsg.file?.fileId && msgMenu.isFileDownloaded);
 
                 return (
                     <div ref={msgMenuRef} className="popover popover--mini"

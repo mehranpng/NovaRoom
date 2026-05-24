@@ -25,6 +25,7 @@ export function DataStorageSettings({ onBack }: Props) {
     const [imageAutoDownload, setImageAutoDownload] = useState(false);
     const [videoAutoDownload, setVideoAutoDownload] = useState(false);
     const [audioAutoDownload, setAudioAutoDownload] = useState(false);
+    const [fileAutoDownload, setFileAutoDownload] = useState(false);
     const confirmOverlayRef = useRef<HTMLDivElement | null>(null);
 
     const loadCacheUsage = async () => {
@@ -37,6 +38,7 @@ export function DataStorageSettings({ onBack }: Props) {
         setImageAutoDownload(isAutoDownloadEnabled(autoDownloadCookieKeys.image));
         setVideoAutoDownload(isAutoDownloadEnabled(autoDownloadCookieKeys.video));
         setAudioAutoDownload(isAutoDownloadEnabled(autoDownloadCookieKeys.audio));
+        setFileAutoDownload(isAutoDownloadEnabled(autoDownloadCookieKeys.file));
     }, []);
 
     useEffect(() => {
@@ -57,7 +59,7 @@ export function DataStorageSettings({ onBack }: Props) {
         };
     }, [showClearModal]);
 
-    const onToggleAutoDownload = (kind: 'image' | 'video' | 'audio') => {
+    const onToggleAutoDownload = (kind: 'image' | 'video' | 'audio' | 'file') => {
         if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
             navigator.vibrate(10);
         }
@@ -73,9 +75,15 @@ export function DataStorageSettings({ onBack }: Props) {
             setAutoDownloadCookie(autoDownloadCookieKeys.video, next ? '1' : '0');
             return;
         }
-        const next = !audioAutoDownload;
-        setAudioAutoDownload(next);
-        setAutoDownloadCookie(autoDownloadCookieKeys.audio, next ? '1' : '0');
+        if (kind === 'audio') {
+            const next = !audioAutoDownload;
+            setAudioAutoDownload(next);
+            setAutoDownloadCookie(autoDownloadCookieKeys.audio, next ? '1' : '0');
+            return;
+        }
+        const next = !fileAutoDownload;
+        setFileAutoDownload(next);
+        setAutoDownloadCookie(autoDownloadCookieKeys.file, next ? '1' : '0');
     };
 
     const humanSize = useMemo(() => formatCacheSize(cacheUsageBytes), [cacheUsageBytes]);
@@ -120,6 +128,7 @@ export function DataStorageSettings({ onBack }: Props) {
                     { key: 'image' as const, label: 'تصاویر', enabled: imageAutoDownload },
                     { key: 'video' as const, label: 'ویدیو ها', enabled: videoAutoDownload },
                     { key: 'audio' as const, label: 'آهنگ ها', enabled: audioAutoDownload },
+                    { key: 'file' as const, label: 'فایل ها', enabled: fileAutoDownload },
                 ].map((row) => (
                     <div key={row.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, direction: 'rtl', padding: '10px 14px', borderTop: panelBorder }}>
                         <span>{row.label}</span>
