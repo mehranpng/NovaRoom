@@ -4,8 +4,6 @@ import { motion, AnimatePresence, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
 import type { Components } from 'react-markdown';
 import type { Message, Chat, FileMetadata, AIChatSummary, AIModelKey } from '../types';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
@@ -926,7 +924,7 @@ export function AIChatRoom({
                                                             transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
                                                         >
                                                             <div className="ai-reasoning-content">
-                                                                <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]} components={markdownComponents}>
+                                                                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
                                                                     {normalizeMessageTextForRender(message.reasoningContent || '...')}
                                                                 </ReactMarkdown>
                                                             </div>
@@ -935,7 +933,7 @@ export function AIChatRoom({
                                                 </AnimatePresence>
                                                 <div className="ai-reasoning-answer">
                                                     <div className="message-text message-text--markdown">
-                                                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]} components={markdownComponents}>
+                                                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
                                                             {normalizeMessageTextForRender(message.text ?? '')}
                                                         </ReactMarkdown>
                                                     </div>
@@ -966,8 +964,8 @@ export function AIChatRoom({
                                         >
                                             <div className="message-text message-text--markdown">
                                                 <ReactMarkdown
-                                                    remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]}
-                                                    rehypePlugins={[rehypeKatex]}
+                                                    remarkPlugins={[remarkGfm, remarkBreaks]}
+                                                    
                                                     components={markdownComponents}
                                                 >
                                                     {normalizeMessageTextForRender(message.text ?? '')}
