@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Check, Monitor, Moon, Sun } from 'lucide-react';
 import { useDarkMode, type AccentIntensity, type ThemeMode, type ThemePalette, type ThemeTone } from '../hooks/useDarkMode';
 
@@ -33,6 +34,14 @@ export function ThemeSettings() {
         ultraDarkMode,
         setUltraDarkMode,
     } = useDarkMode();
+    const ultraDarkAvailable = isDarkMode;
+    const shouldDisableCustomTone = isDarkMode && ultraDarkMode;
+
+    useEffect(() => {
+        if (shouldDisableCustomTone && themeTone === 'custom') {
+            setThemeTone('neutral');
+        }
+    }, [shouldDisableCustomTone, themeTone, setThemeTone]);
 
     return (
         <div className="profile__content" style={{ gap: 12, paddingInline: 14, paddingTop: 12 }}>
@@ -58,12 +67,21 @@ export function ThemeSettings() {
                     <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>حالت فوق تاریک</span>
                     <button
                         type="button"
-                        onClick={() => setUltraDarkMode((prev) => !prev)}
+                        onClick={() => {
+                            if (!ultraDarkAvailable) return;
+                            if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                                navigator.vibrate(10);
+                            }
+                            setUltraDarkMode((prev) => !prev);
+                        }}
                         aria-label="toggle ultra dark mode"
+                        disabled={!ultraDarkAvailable}
                         style={{
                             width: 48,
                             height: 28,
                             borderRadius: 999,
+                            opacity: ultraDarkAvailable ? 1 : 0.45,
+                            cursor: ultraDarkAvailable ? 'pointer' : 'not-allowed',
                             border: isDarkMode
                                 ? (ultraDarkMode ? '1px solid color-mix(in srgb, var(--accent-primary) 70%, var(--border-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 35%, var(--border-primary))')
                                 : (ultraDarkMode ? '1px solid color-mix(in srgb, var(--text-primary) 28%, var(--accent-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 24%, var(--border-primary))'),
@@ -81,12 +99,30 @@ export function ThemeSettings() {
                 <p className="profile__field-label" style={{ marginBottom: 10 }}>رنگ‌بندی تم</p>
                 <div style={{ display: 'grid', gap: 8 }}>
                     {toneOptions.map((option) => (
+                        (() => {
+                            const isDisabled = option.value === 'custom' && shouldDisableCustomTone;
+                            return (
                         <button
                             key={option.value}
                             type="button"
                             className="popover__item"
-                            onClick={() => setThemeTone(option.value)}
-                            style={{ borderRadius: 12, border: '1px solid var(--border-primary)', alignItems: 'start', flexDirection: 'column', gap: 4, direction: 'rtl', textAlign: 'right' }}
+                            onClick={() => {
+                                if (isDisabled) return;
+                                setThemeTone(option.value);
+                            }}
+                            disabled={isDisabled}
+                            style={{
+                                borderRadius: 12,
+                                border: '1px solid var(--border-primary)',
+                                alignItems: 'start',
+                                flexDirection: 'column',
+                                gap: 4,
+                                direction: 'rtl',
+                                textAlign: 'right',
+                                opacity: isDisabled ? 0.45 : 1,
+                                cursor: isDisabled ? 'not-allowed' : 'pointer',
+                                filter: isDisabled ? 'grayscale(0.2)' : 'none',
+                            }}
                         >
                             <span style={{ display: 'inline-flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span>{option.label}</span>
@@ -94,6 +130,8 @@ export function ThemeSettings() {
                             </span>
                             <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{option.description}</span>
                         </button>
+                            );
+                        })()
                     ))}
                 </div>
             </div>
