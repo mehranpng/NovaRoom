@@ -10,6 +10,7 @@ const TONE_STORAGE_KEY = 'themeTone';
 const PALETTE_STORAGE_KEY = 'themePalette';
 const LEGACY_DARK_MODE_KEY = 'darkMode';
 const INTENSITY_STORAGE_KEY = 'themeAccentIntensity';
+const ULTRA_DARK_STORAGE_KEY = 'themeUltraDark';
 
 
 
@@ -189,6 +190,11 @@ function getInitialPalette(): ThemePalette {
   return stored && stored in paletteMeta ? stored : 'blue';
 }
 
+function getInitialUltraDark(): boolean {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem(ULTRA_DARK_STORAGE_KEY) === 'true';
+}
+
 const createCustomSurfaceVars = (isDarkMode: boolean): Record<string, string> => {
   if (!isDarkMode) {
     return {
@@ -228,6 +234,7 @@ export function useDarkMode() {
   const [themeTone, setThemeTone] = useState<ThemeTone>(getInitialTone);
   const [themePalette, setThemePalette] = useState<ThemePalette>(getInitialPalette);
   const [accentIntensity, setAccentIntensity] = useState<AccentIntensity>(getInitialIntensity);
+  const [ultraDarkMode, setUltraDarkMode] = useState<boolean>(getInitialUltraDark);
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
@@ -256,6 +263,7 @@ export function useDarkMode() {
     localStorage.setItem(TONE_STORAGE_KEY, themeTone);
     localStorage.setItem(PALETTE_STORAGE_KEY, themePalette);
     localStorage.setItem(INTENSITY_STORAGE_KEY, accentIntensity);
+    localStorage.setItem(ULTRA_DARK_STORAGE_KEY, ultraDarkMode ? 'true' : 'false');
 
     const baseVars = isDarkMode ? neutralThemeVars.dark : neutralThemeVars.light;
     Object.entries(baseVars).forEach(([key, value]) => root.style.setProperty(key, value));
@@ -271,6 +279,24 @@ export function useDarkMode() {
     if (themeTone === 'custom') {
       const customSurfaceVars = createCustomSurfaceVars(isDarkMode);
       Object.entries(customSurfaceVars).forEach(([key, value]) => root.style.setProperty(key, value));
+    }
+
+    if (isDarkMode && ultraDarkMode) {
+      const ultraDarkVars: Record<string, string> = {
+        '--bg-primary': '#000000',
+        '--bg-secondary': '#141414',
+        '--bg-tertiary': '#1f1f1f',
+        '--border-primary': '#2a2a2a',
+        '--border-secondary': '#363636',
+        '--hover-bg': '#242424',
+        '--hover-bg-light': '#1d1d1d',
+        '--message-theirs-bg': '#1b1b1b',
+        '--input-bg': '#1b1b1b',
+        '--input-bg-focus': '#262626',
+        '--reply-box-bg': '#1b1b1b',
+        '--reply-box-border': '#2e2e2e',
+      };
+      Object.entries(ultraDarkVars).forEach(([key, value]) => root.style.setProperty(key, value));
     }
 
     const computed = getComputedStyle(root);
@@ -317,7 +343,7 @@ export function useDarkMode() {
 
     ensureMeta('msapplication-navbutton-color');
     (root.style as any).colorScheme = isDarkMode ? 'dark' : 'light';
-  }, [isDarkMode, themeMode, themeTone, themePalette, accentIntensity]);
+  }, [isDarkMode, themeMode, themeTone, themePalette, accentIntensity, ultraDarkMode]);
 
   return {
     themeMode,
@@ -330,5 +356,7 @@ export function useDarkMode() {
     paletteOptions: paletteMeta,
     accentIntensity,
     setAccentIntensity,
+    ultraDarkMode,
+    setUltraDarkMode,
   };
 }

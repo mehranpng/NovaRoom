@@ -29,6 +29,9 @@ export function ThemeSettings() {
         paletteOptions,
         accentIntensity,
         setAccentIntensity,
+        isDarkMode,
+        ultraDarkMode,
+        setUltraDarkMode,
     } = useDarkMode();
 
     return (
@@ -50,6 +53,27 @@ export function ThemeSettings() {
                             {themeMode === value ? <Check size={16} /> : null}
                         </button>
                     ))}
+                </div>
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', direction: 'rtl' }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>حالت فوق تاریک</span>
+                    <button
+                        type="button"
+                        onClick={() => setUltraDarkMode((prev) => !prev)}
+                        aria-label="toggle ultra dark mode"
+                        style={{
+                            width: 48,
+                            height: 28,
+                            borderRadius: 999,
+                            border: isDarkMode
+                                ? (ultraDarkMode ? '1px solid color-mix(in srgb, var(--accent-primary) 70%, var(--border-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 35%, var(--border-primary))')
+                                : (ultraDarkMode ? '1px solid color-mix(in srgb, var(--text-primary) 28%, var(--accent-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 24%, var(--border-primary))'),
+                            background: ultraDarkMode ? 'var(--accent-primary)' : (isDarkMode ? 'var(--bg-tertiary)' : 'color-mix(in srgb, var(--text-primary) 30%, var(--bg-primary))'),
+                            position: 'relative',
+                            transition: 'all .2s ease',
+                        }}
+                    >
+                        <span style={{ position: 'absolute', top: 2, right: ultraDarkMode ? 2 : 22, width: 22, height: 22, borderRadius: '50%', background: isDarkMode ? '#fff' : (ultraDarkMode ? '#fff' : '#d3d3d3'), transition: 'all .2s ease' }} />
+                    </button>
                 </div>
             </div>
 
