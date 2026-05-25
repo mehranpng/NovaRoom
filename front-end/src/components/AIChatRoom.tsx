@@ -871,18 +871,18 @@ export function AIChatRoom({
                                     <div style={{ fontSize: 13, fontWeight: 500, opacity: 0.85 }}>پیام‌های گفتگوی موقت ذخیره نمی‌شوند و با خروج از این صفحه حذف می‌شوند.</div>
                                 </div>
                             ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, transform: 'translateY(-40px)', width: '100%' }}>
-                                    <div style={{ position: 'relative', width: 'min(680px, 100%)', height: window.innerWidth < 768 ? 150 : 210 }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', transform: 'translateY(-20px)', width: '100%' }}>
+                                    <div style={{ position: 'relative', width: 'min(680px, 100%)', height: window.innerWidth < 768 ? 200 : 210 }}>
                                         <ASCIIText
                                             text="NovaAI"
                                             enableWaves={false}
-                                            asciiFontSize={window.innerWidth < 768 ? 6 : 8}
-                                            planeBaseHeight={window.innerWidth < 768 ? 5 : 8}
+                                            asciiFontSize={window.innerWidth < 768 ? 4 : 5}
+                                            planeBaseHeight={window.innerWidth < 768 ? 7 : 8}
                                             textColor="#ffffff"
                                             isDarkMode={isDarkMode}
                                         />
                                     </div>
-                                    <div style={{ fontSize: window.innerWidth < 768 ? 17 : 22, fontWeight: 700, opacity: 0.95, lineHeight: 1.5 }}>{emptyStatePrompt}</div>
+                                    <div style={{ fontSize: window.innerWidth < 768 ? 22 : 25, fontWeight: 700, opacity: 0.95, lineHeight: 1.5 }}>{emptyStatePrompt}</div>
                                 </div>
                             )}
 
