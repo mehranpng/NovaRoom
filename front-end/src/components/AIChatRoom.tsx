@@ -872,17 +872,17 @@ export function AIChatRoom({
                                 </div>
                             ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', transform: 'translateY(-20px)', width: '100%' }}>
-                                    <div style={{ position: 'relative', width: 'min(680px, 100%)', height: window.innerWidth < 768 ? 200 : 210 }}>
+                                    <div style={{ position: 'relative', width: 'min(680px, 100%)', height: window.innerWidth < 768 ? 120 : 130 }}>
                                         <ASCIIText
                                             text="NovaAI"
                                             enableWaves={false}
                                             asciiFontSize={window.innerWidth < 768 ? 4 : 5}
-                                            planeBaseHeight={window.innerWidth < 768 ? 7 : 8}
+                                            planeBaseHeight={window.innerWidth < 768 ? 12 : 14}
                                             textColor="#ffffff"
                                             isDarkMode={isDarkMode}
                                         />
                                     </div>
-                                    <div style={{ fontSize: window.innerWidth < 768 ? 22 : 25, fontWeight: 700, opacity: 0.95, lineHeight: 1.5 }}>{emptyStatePrompt}</div>
+                                    <div style={{ fontSize: window.innerWidth < 768 ? 20 : 22, fontWeight: 700, opacity: 0.95, lineHeight: 1.5 }}>{emptyStatePrompt}</div>
                                 </div>
                             )}
 
