@@ -110,6 +110,7 @@ VALID_REACTIONS = [
     "💔",
     "🙏",
     "😐",
+    "🫩",
     "😍",
     "🤔",
     "🤯",
@@ -1825,19 +1826,27 @@ async def search_users(
         .to_list(10)
     )
 
-    return [
-        {
-            "chatId": u["chatId"],
-            "username": u["profile"]["username"],
-            "name": u["profile"]["name"],
-            "avatar": u["profile"]["avatar"],
-            "bio": decrypt_user_bio(u, str(current_user.get("_session_token") or "")),
-            "online": resolve_user_online_state(u),
-            "verified": bool(u.get("verified", False)),
-            "registrationDate": u.get("registrationDate"),
-        }
-        for u in users
-    ]
+    my_id = current_user["chatId"]
+    result = []
+    for u in users:
+        u_blocked_ids = set(_get_blocked_from_user_doc(u))
+        blocked_by_other = my_id in u_blocked_ids
+
+        result.append(
+            {
+                "chatId": u["chatId"],
+                "username": u["profile"]["username"],
+                "name": u["profile"]["name"],
+                "avatar": "" if blocked_by_other else u["profile"]["avatar"],
+                "bio": decrypt_user_bio(
+                    u, str(current_user.get("_session_token") or "")
+                ),
+                "online": False if blocked_by_other else resolve_user_online_state(u),
+                "verified": bool(u.get("verified", False)),
+                "registrationDate": u.get("registrationDate"),
+            }
+        )
+    return result
 
 
 @app.post("/chats")
@@ -2126,7 +2135,11 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
                     "avatar": (
                         (chat.get("groupAvatar") or "")
                         if is_group
-                        else (other_user["profile"]["avatar"] if other_user else "")
+                        else (
+                            ""
+                            if blocked_by_other
+                            else (other_user["profile"]["avatar"] if other_user else "")
+                        )
                     ),
                     "username": (
                         build_group_invite_link(chat.get("inviteCode", ""))
@@ -2323,18 +2336,24 @@ async def get_chat_members(
             u = users_by_id.get(uid)
             if not u:
                 continue
+
+            u_blocked_ids = set(_get_blocked_from_user_doc(u))
+            blocked_by_other = my_id in u_blocked_ids
+
             profile = u.get("profile", {})
             result.append(
                 {
                     "chatId": uid,
                     "name": profile.get("name") or profile.get("username") or uid,
                     "username": profile.get("username", ""),
-                    "avatar": profile.get("avatar", ""),
+                    "avatar": "" if blocked_by_other else profile.get("avatar", ""),
                     "bio": decrypt_user_bio(
                         u, str(current_user.get("_session_token") or "")
                     ),
                     "verified": bool(u.get("verified", False)),
-                    "online": resolve_user_online_state(u),
+                    "online": False
+                    if blocked_by_other
+                    else resolve_user_online_state(u),
                 }
             )
         return result
@@ -2350,6 +2369,9 @@ async def get_chat_members(
     users = await cl_users.find({"chatId": {"$in": participants}}).to_list(200)
     result = []
     for u in users:
+        u_blocked_ids = set(_get_blocked_from_user_doc(u))
+        blocked_by_other = my_id in u_blocked_ids
+
         profile = u.get("profile", {})
         result.append(
             {
@@ -2358,12 +2380,12 @@ async def get_chat_members(
                 or profile.get("username")
                 or u.get("chatId", ""),
                 "username": profile.get("username", ""),
-                "avatar": profile.get("avatar", ""),
+                "avatar": "" if blocked_by_other else profile.get("avatar", ""),
                 "bio": decrypt_user_bio(
                     u, str(current_user.get("_session_token") or "")
                 ),
                 "verified": u.get("verified", False),
-                "online": resolve_user_online_state(u),
+                "online": False if blocked_by_other else resolve_user_online_state(u),
             }
         )
     return result
@@ -2913,13 +2935,17 @@ async def get_message_seen_by(
     result = []
     for sid in seen_by:
         u = users_by_chat_id.get(sid)
+
+        u_blocked_ids = set(_get_blocked_from_user_doc(u))
+        blocked_by_other = user_id in u_blocked_ids
+
         profile = (u or {}).get("profile", {})
         result.append(
             {
                 "chatId": sid,
                 "name": profile.get("name") or profile.get("username") or sid,
                 "username": profile.get("username", ""),
-                "avatar": profile.get("avatar", ""),
+                "avatar": "" if blocked_by_other else profile.get("avatar", ""),
                 "verified": bool((u or {}).get("verified", False)),
             }
         )

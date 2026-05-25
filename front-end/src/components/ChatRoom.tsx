@@ -3243,7 +3243,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                 <div className="chat-room__input-wrapper">
                     {isContactBlocked ? (
                         <div className="chat-room__blocked-box">
-                            {blockedByOther ? 'این کاربر شما را بلاک کرده است.' : 'شما این کاربر را بلاک کرده‌اید.'}
+                            {isUserBlocked?.(contact) ? 'شما این کاربر را بلاک کرده‌اید.' : 'این کاربر شما را بلاک کرده است.'}
                         </div>
                     ) : !canSendInOfficialChannel ? (
                         <div className="chat-room__blocked-box" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-primary)', background: 'var(--bg-secondary)' }}>
