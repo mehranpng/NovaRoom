@@ -2025,10 +2025,10 @@ body,
 }
 
 .chat-room__input-wrapper {
-
-
+    width: 100%;
     display: flex;
     align-items: flex-end;
+    justify-content: center;
     gap: 10px;
     animation: screen-soft-in var(--motion-base) var(--motion-ease-standard);
 }
@@ -2100,8 +2100,7 @@ body,
 }
 
 .chat-room__blocked-box {
-
-
+    width: 100%;
     border-radius: 14px;
     border: 1px solid rgba(239, 68, 68, 0.35);
     background: rgba(239, 68, 68, 0.08);
