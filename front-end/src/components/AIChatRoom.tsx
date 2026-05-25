@@ -814,14 +814,14 @@ export function AIChatRoom({
                             <span>{selectedModelLabel}</span>
                             <ChevronDown size={14} className={modelDropdownOpen ? 'ai-model-switcher__chevron ai-model-switcher__chevron--open' : 'ai-model-switcher__chevron'} />
                         </button>
-                        <AnimatePresence>
+                        <AnimatePresence initial={false}>
                             {modelDropdownOpen && (
                                 <motion.div
                                     className="ai-model-switcher__menu"
-                                    initial={{ opacity: 1, y: -6 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 1, y: -6 }}
-                                    transition={{ duration: 0.16 }}
+                                    initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                                    transition={{ duration: 0.2, ease: 'easeOut' }}
                                 >
                                     <button type="button" className={`${selectedModel === 'nova-flash' ? 'ai-model-option ai-model-option--active' : 'ai-model-option'}${isFlashDisabled ? ' ai-model-option--disabled' : ''}`} onClick={() => handleSelectModel('nova-flash')}>
                                         <div className="ai-model-option__title">Nova Flash</div>
@@ -871,16 +871,18 @@ export function AIChatRoom({
                                     <div style={{ fontSize: 13, fontWeight: 500, opacity: 0.85 }}>پیام‌های گفتگوی موقت ذخیره نمی‌شوند و با خروج از این صفحه حذف می‌شوند.</div>
                                 </div>
                             ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, transform: 'translateY(-28px)' }}>
-                                    <ASCIIText
-                                        text="NovaAI"
-                                        enableWaves={false}
-                                        asciiFontSize={5}
-                                        planeBaseHeight={window.innerWidth < 768 ? 3 : 5}
-                                        textColor="#ffffff"
-                                        isDarkMode={isDarkMode}
-                                    />
-                                    <div style={{ fontSize: 16, fontWeight: 600, opacity: 0.9 }}>{emptyStatePrompt}</div>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, transform: 'translateY(-40px)', width: '100%' }}>
+                                    <div style={{ position: 'relative', width: 'min(680px, 100%)', height: window.innerWidth < 768 ? 150 : 210 }}>
+                                        <ASCIIText
+                                            text="NovaAI"
+                                            enableWaves={false}
+                                            asciiFontSize={window.innerWidth < 768 ? 6 : 8}
+                                            planeBaseHeight={window.innerWidth < 768 ? 5 : 8}
+                                            textColor="#ffffff"
+                                            isDarkMode={isDarkMode}
+                                        />
+                                    </div>
+                                    <div style={{ fontSize: window.innerWidth < 768 ? 17 : 22, fontWeight: 700, opacity: 0.95, lineHeight: 1.5 }}>{emptyStatePrompt}</div>
                                 </div>
                             )}
 
