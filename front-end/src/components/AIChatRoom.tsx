@@ -142,6 +142,22 @@ function CodeBlock({ className, children }: { className?: string; children?: Rea
 }
 // ──────────────────────────────────────────────────────────────────────────────
 
+
+const AI_EMPTY_STATE_PROMPTS = [
+    'درمورد چه چیزی سوال دارید؟',
+    'هر چیزی می‌خواهید بپرسید.',
+    'به چه چیزی فکر می‌کنید؟',
+    'چه ایده‌ای در سر دارید؟',
+    'دوست دارید از کجا شروع کنیم؟',
+    'الان دنبال چه پاسخی هستید؟',
+    'می‌خواهید روی چه موضوعی کار کنیم؟',
+    'چه چیزی امروز ذهنتان را مشغول کرده؟',
+];
+
+function pickRandomEmptyPrompt(): string {
+    return AI_EMPTY_STATE_PROMPTS[Math.floor(Math.random() * AI_EMPTY_STATE_PROMPTS.length)];
+}
+
 const markdownComponents: Components = {
     code({ className, children, ...props }) {
         const isInline = !('data-language' in props) && !className?.includes('language-');
@@ -222,6 +238,7 @@ export function AIChatRoom({
     const prevActiveAIChatIdRef = useRef<string | null>(activeAIChatId);
     const [aiChatsDrawerOpen, setAIChatsDrawerOpen] = useState(false);
     const [pendingDeleteChat, setPendingDeleteChat] = useState<AIChatSummary | null>(null);
+    const [emptyStatePrompt, setEmptyStatePrompt] = useState<string>(() => pickRandomEmptyPrompt());
     const [reasoningPanelByMessage, setReasoningPanelByMessage] = useState<Record<string, boolean>>({});
     const [reasoningElapsedByMessage, setReasoningElapsedByMessage] = useState<Record<string, number>>({});
     const reasoningStartAtRef = useRef<Record<string, number>>({});
@@ -253,6 +270,12 @@ export function AIChatRoom({
     const responseVibrationIntervalRef = useRef<number | null>(null);
     const streamingReasoningMessage = [...messages].reverse().find((m) => m.senderId !== currentUserId && m.isStreaming && m.reasoningEnabled);
     const PINNED_AI_CHATS_STORAGE_KEY = `pinnedAIChats:${currentUserId}`;
+
+    useEffect(() => {
+        if (!temporaryMode && messages.length === 0) {
+            setEmptyStatePrompt(pickRandomEmptyPrompt());
+        }
+    }, [activeAIChatId, temporaryMode, messages.length]);
 
     const resizeTextarea = () => {
         const textarea = textareaRef.current;
@@ -848,14 +871,17 @@ export function AIChatRoom({
                                     <div style={{ fontSize: 13, fontWeight: 500, opacity: 0.85 }}>پیام‌های گفتگوی موقت ذخیره نمی‌شوند و با خروج از این صفحه حذف می‌شوند.</div>
                                 </div>
                             ) : (
-                                <ASCIIText
-                                    text="NovaAI"
-                                    enableWaves={false}
-                                    asciiFontSize={5}
-                                    planeBaseHeight={window.innerWidth < 768 ? 3 : 5}
-                                    textColor="#ffffff"
-                                    isDarkMode={isDarkMode}
-                                />
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, transform: 'translateY(-28px)' }}>
+                                    <ASCIIText
+                                        text="NovaAI"
+                                        enableWaves={false}
+                                        asciiFontSize={5}
+                                        planeBaseHeight={window.innerWidth < 768 ? 3 : 5}
+                                        textColor="#ffffff"
+                                        isDarkMode={isDarkMode}
+                                    />
+                                    <div style={{ fontSize: 16, fontWeight: 600, opacity: 0.9 }}>{emptyStatePrompt}</div>
+                                </div>
                             )}
 
                         </div>
