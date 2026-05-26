@@ -389,7 +389,7 @@ export default function DecryptedText({
   useEffect(() => {
     if (externalHover && !wasExternalHovered.current) {
       triggerHoverDecrypt();
-    } else if (!externalHover && wasExternalHovered.current && (animateOn === 'hover' || animateOn === 'inViewHover')) {
+    } else if (!externalHover && wasExternalHovered.current) {
       resetToPlainText();
     }
     wasExternalHovered.current = externalHover;

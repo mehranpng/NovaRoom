@@ -54,26 +54,6 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         if (!active) clearPickerCloseTimer();
     };
 
-    const triggerNativeFilePicker = (input: HTMLInputElement) => {
-        // Use click() as it is more compatible and reliable for triggering file picker
-        // in response to user click event across all browsers.
-        input.click();
-    };
-
-    const openPicker = (inputRef: React.RefObject<HTMLInputElement | null>) => () => {
-        if (uploading) return;
-
-        const input = inputRef.current;
-        if (!input) return;
-
-        setPickerSession(true);
-        triggerNativeFilePicker(input);
-        
-        // Slightly delay closing the menu to ensure the gesture is fully recognized
-        // and not interrupted by the menu disappearance in some browsers.
-        window.setTimeout(() => setPickerMenuOpen(false), 100);
-    };
-
     const pushTaskUpdate = (task: UploadTask) => {
         task.listeners.forEach((listener) => listener(task));
         onUploadStateChange?.({
@@ -388,6 +368,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         <>
             <div className="file-upload-container">
             <input
+                id="file-upload-image"
                 ref={imageInputRef}
                 type="file"
                 accept="image/*"
@@ -397,6 +378,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             />
 
             <input
+                id="file-upload-video"
                 ref={videoInputRef}
                 type="file"
                 accept="video/*"
@@ -405,6 +387,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                 disabled={uploading}
             />
             <input
+                id="file-upload-audio"
                 ref={audioInputRef}
                 type="file"
                 accept="audio/*"
@@ -414,6 +397,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
             />
 
             <input
+                id="file-upload-generic"
                 ref={fileInputRef}
                 type="file"
                 accept="*/*"
@@ -443,24 +427,28 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                         initial={{ opacity: 0, y: 10, scale: 0.96 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 8, scale: 0.97 }}
-                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                        transition={{ duration: 0.12, ease: 'easeOut' }}
                     >
-                        <motion.button type="button" className="file-upload-picker-item" onClick={openPicker(imageInputRef)}
+                        <motion.label htmlFor="file-upload-image" className="file-upload-picker-item" 
+                            onClick={() => { setPickerSession(true); setPickerMenuOpen(false); }}
                             whileHover={{ x: -2 }} whileTap={{ scale: 0.98 }}>
                             <span className="file-upload-picker-item__label"><Image size={16} />تصویر</span>
-                        </motion.button>
-                        <motion.button type="button" className="file-upload-picker-item" onClick={openPicker(videoInputRef)}
+                        </motion.label>
+                        <motion.label htmlFor="file-upload-video" className="file-upload-picker-item" 
+                            onClick={() => { setPickerSession(true); setPickerMenuOpen(false); }}
                             whileHover={{ x: -2 }} whileTap={{ scale: 0.98 }}>
                             <span className="file-upload-picker-item__label"><Video size={16} />ویدیو</span>
-                        </motion.button>
-                        <motion.button type="button" className="file-upload-picker-item" onClick={openPicker(audioInputRef)}
+                        </motion.label>
+                        <motion.label htmlFor="file-upload-audio" className="file-upload-picker-item" 
+                            onClick={() => { setPickerSession(true); setPickerMenuOpen(false); }}
                             whileHover={{ x: -2 }} whileTap={{ scale: 0.98 }}>
                             <span className="file-upload-picker-item__label"><Music2 size={16} />آهنگ</span>
-                        </motion.button>
-                        <motion.button type="button" className="file-upload-picker-item" onClick={openPicker(fileInputRef)}
+                        </motion.label>
+                        <motion.label htmlFor="file-upload-generic" className="file-upload-picker-item" 
+                            onClick={() => { setPickerSession(true); setPickerMenuOpen(false); }}
                             whileHover={{ x: -2 }} whileTap={{ scale: 0.98 }}>
                             <span className="file-upload-picker-item__label"><FileIcon size={16} />فایل</span>
-                        </motion.button>
+                        </motion.label>
                     </motion.div>
                 )}
             </AnimatePresence>

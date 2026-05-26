@@ -53,7 +53,7 @@ export function EmptyState() {
                     <Lock size={12} style={{ marginLeft: 6, color: colors.active }} />
                     <DecryptedText
                         text="رمزگذاری سرتاسری"
-                        animateOn="inViewHover"
+                        animateOn="view"
                         revealDirection="start"
                         speed={60}
                         maxIterations={40}
