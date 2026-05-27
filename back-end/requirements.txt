@@ -9,3 +9,4 @@ jdatetime
 openai
 python-multipart
 aiofiles
+slowapi
