@@ -790,13 +790,57 @@
 .manual-download-wrap--video { top: 10px; right: 10px; left: auto; transform: none; flex-direction: row-reverse; direction: ltr; gap: 4px; }
 .manual-download-wrap--video .manual-download-btn { width: 31px; height: 31px; }
 .manual-download-wrap--video .manual-download-size-box { font-size: 10px; padding: 1px 5px; }
-.manual-download-btn { width:36px; height:36px; border-radius:50%; border:none; background:rgba(0,0,0,.45); color:#fff; display:flex; align-items:center; justify-content:center; position: relative; }
+.manual-download-btn { 
+    width:36px; 
+    height:36px; 
+    border-radius:50%; 
+    border:none; 
+    background: rgba(0,0,0,0.52); 
+    color:#fff; 
+    display:flex; 
+    align-items:center; 
+    justify-content:center; 
+    position: relative;
+    padding: 0;
+    overflow: hidden;
+}
 
-.manual-download-btn.is-decrypting { background: rgba(0,0,0,.28); }
-.manual-download-btn.is-downloading::before { content:''; position:absolute; inset:1px; border-radius:50%; background: conic-gradient(#fff var(--download-progress,0%), rgba(255,255,255,.25) 0); }
-.manual-download-btn.is-downloading::after, .manual-download-btn.is-decrypting::after { content:''; position:absolute; inset:4px; border-radius:50%; background: rgba(0,0,0,.38); }
-.manual-download-btn > svg { position:relative; z-index:2; }
-.manual-download-btn.is-decrypting::before { content:''; position:absolute; inset:1px; border-radius:50%; border:2px solid rgba(255,255,255,.8); border-top-color: transparent; animation: spin 0.8s linear infinite; }
+.manual-download-btn.is-decrypting { 
+    background: rgba(0,0,0,0.52); 
+}
+
+.manual-download-btn.is-downloading::before { 
+    content:''; 
+    position:absolute; 
+    inset:0px; 
+    border-radius:50%; 
+    background: conic-gradient(#fff var(--download-progress,0%), transparent 0); 
+    -webkit-mask-image: radial-gradient(transparent 70%, black 72%);
+    mask-image: radial-gradient(transparent 70%, black 72%);
+    z-index: 1;
+}
+
+.manual-download-btn.is-downloading::after, 
+.manual-download-btn.is-decrypting::after { 
+    display: none;
+}
+
+.manual-download-btn > svg { 
+    position:relative; 
+    z-index:3; 
+}
+
+.manual-download-btn.is-decrypting::before { 
+    content:''; 
+    position:absolute; 
+    inset:0px; 
+    border-radius:50%; 
+    border:2.5px solid rgba(255,255,255,0.15); 
+    border-top-color: #fff; 
+    animation: spin 0.8s linear infinite; 
+    z-index: 1;
+    box-sizing: border-box;
+}
 .manual-download-size { font-size:11px; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.8); }
 .manual-download-size-box { background: rgba(0,0,0,.52); padding: 2px 6px; border-radius: 999px; }
 .file-video-center-play { position:absolute; inset:0; margin:auto; width:42px; height:42px; border:none; border-radius:50%; background:rgba(0,0,0,.45); color:#fff; display:flex; align-items:center; justify-content:center; z-index:3; }

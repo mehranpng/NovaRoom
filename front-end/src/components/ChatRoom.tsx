@@ -708,7 +708,8 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
     const collectInitialMediaPendingIds = () => collectMediaIds(messages);
 
     const handleInitialMediaReady = (messageId: string) => {
-        if (!shouldPreserveExactScroll() && (isAtBottomRef.current || (!userHasScrolledRef.current && displayUnreadCount <= 0))) {
+        // Prevent auto-scrolling to bottom if user has scrolled up to see history
+        if (!shouldPreserveExactScroll() && isAtBottomRef.current && !userHasScrolledRef.current) {
             requestAnimationFrame(() => scrollToBottom(true));
         }
         if (restoringFromInfoRef.current && restoreTopAfterInfoRef.current !== null) {

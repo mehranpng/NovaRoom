@@ -25,6 +25,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewAspectRatio, setPreviewAspectRatio] = useState<number | null>(null);
+  const [actualAspectRatio, setActualAspectRatio] = useState<number | null>(null);
   const [downloadState, setDownloadState] = useState<DownloadState>('idle');
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [cacheChecked, setCacheChecked] = useState(false);
@@ -195,6 +196,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     setMediaUrl(null);
     setPreviewUrl(null);
     setPreviewAspectRatio(null);
+    setActualAspectRatio(null);
     setResolvedAudioDuration(0);
 
     return () => {
@@ -207,10 +209,13 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
   const metadataHeight = Number((file as any)?.meta?.height || (file as any)?.metadata?.height || (file as any)?.height || 0);
   const metadataAspectRatio = metadataWidth > 0 && metadataHeight > 0 ? (metadataWidth / metadataHeight) : null;
   const fallbackRatio = isVideo ? (16 / 9) : 0.75;
-  const rawAspectRatio = previewAspectRatio || metadataAspectRatio || fallbackRatio;
+  const rawAspectRatio = actualAspectRatio || previewAspectRatio || metadataAspectRatio || fallbackRatio;
+  
+  // Clamping aspect ratio to keep message bubbles reasonable but allow more variety
   const effectiveAspectRatio = isImage
-    ? Math.max(0.62, Math.min(1.8, rawAspectRatio))
-    : Math.max(0.35, Math.min(2.4, rawAspectRatio));
+    ? Math.max(0.5, Math.min(2.0, rawAspectRatio))
+    : Math.max(0.45, Math.min(2.2, rawAspectRatio));
+
   const shouldContain = isVideo && (effectiveAspectRatio < 0.5 || effectiveAspectRatio > 2.05);
 
   useEffect(() => {
@@ -249,22 +254,61 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     return () => window.removeEventListener('trigger-file-download', onCustomDownload);
   }, [file.fileId, file.fileName, cacheKey, isImage, isVideo, isAudio]);
 
-  const handleMediaRendered = () => {
+  const handleMediaRendered = (e?: React.SyntheticEvent<HTMLImageElement | HTMLVideoElement>) => {
+    if (e?.currentTarget) {
+      const target = e.currentTarget;
+      let w = 0;
+      let h = 0;
+      if (target instanceof HTMLImageElement) {
+        w = target.naturalWidth;
+        h = target.naturalHeight;
+      } else if (target instanceof HTMLVideoElement) {
+        w = target.videoWidth;
+        h = target.videoHeight;
+      }
+      if (w > 0 && h > 0) {
+        const nextRatio = w / h;
+        // Only update if it's the first time or the change is significant (> 1%)
+        const currentRatio = rawAspectRatio;
+        if (!actualAspectRatio || Math.abs(nextRatio - currentRatio) > currentRatio * 0.01) {
+          setActualAspectRatio(nextRatio);
+        }
+      }
+    }
     onMediaLoad?.();
   };
 
+  // Calculate container width to respect aspect ratio within max bounds (280x440)
+  const maxWidth = 280;
+  const maxHeight = 440;
+  const containerStyle: React.CSSProperties = {
+    background: isVideo ? '#000' : 'transparent',
+    aspectRatio: String(effectiveAspectRatio),
+    maxWidth: '100%',
+  };
+
+  if (effectiveAspectRatio < maxWidth / maxHeight) {
+    // Very tall media: limit by height
+    containerStyle.height = `${maxHeight}px`;
+    containerStyle.width = `${Math.round(maxHeight * effectiveAspectRatio)}px`;
+  } else {
+    // Wide or moderately tall media: limit by width
+    containerStyle.width = `${maxWidth}px`;
+    containerStyle.height = `${Math.round(maxWidth / effectiveAspectRatio)}px`;
+  }
+
   return <div className="file-message">
     {(isImage || isVideo) && (
-      <div className="file-image-preview" style={{ background: isVideo ? '#000' : 'transparent', width: isImage ? undefined : '100%', minWidth: isVideo ? 220 : undefined, maxWidth: '100%', aspectRatio: (isImage || isVideo) ? effectiveAspectRatio : undefined }} onClick={(e) => {
+      <div className="file-image-preview" style={containerStyle} onClick={(e) => {
         e.stopPropagation();
         if (!mediaUrl && (downloadState === 'decrypting' || downloadState === 'downloading')) {
           return;
         }
         if (!mediaUrl) void startDownload();
       }}>
-        {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} style={{ objectFit: shouldContain ? 'contain' : 'cover' }} onLoad={handleMediaRendered} onError={handleMediaRendered} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><video src={mediaUrl} preload="metadata" muted playsInline onLoadedMetadata={handleMediaRendered} onError={handleMediaRendered} style={{ width: '100%', height: '100%', objectFit: shouldContain ? 'contain' : 'cover', background: '#000' }} /><span className="file-video-duration">{formatDuration(mediaDuration)}</span><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
+        {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} style={{ objectFit: shouldContain ? 'contain' : 'cover' }} onLoad={handleMediaRendered} onError={() => onMediaLoad?.()} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><video src={mediaUrl} preload="metadata" muted playsInline onLoadedMetadata={handleMediaRendered} onError={() => onMediaLoad?.()} style={{ width: '100%', height: '100%', objectFit: shouldContain ? 'contain' : 'cover', background: '#000' }} /><span className="file-video-duration">{formatDuration(mediaDuration)}</span><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
           (<>
-            {previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)', objectFit: shouldContain ? 'contain' : 'cover' }} onLoad={handleMediaRendered} onError={handleMediaRendered} /> : <div style={{ width: '100%', height: '100%', background: '#000' }} />}
+            {previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)', objectFit: shouldContain ? 'contain' : 'cover' }} onLoad={handleMediaRendered} onError={() => onMediaLoad?.()} /> : <div style={{ width: '100%', height: '100%', background: '#000' }} />}
             {isVideo && <button type="button" className="file-video-center-play" onClick={(e) => { e.stopPropagation(); startDownload(); }}><Play size={20} fill="currentColor" /></button>}
             {isVideo && <span className="file-video-duration file-video-duration--top">{formatDuration(mediaDuration || 0)}</span>}
             <div className={`manual-download-wrap ${isImage ? 'manual-download-wrap--center' : ''} ${isVideo ? 'manual-download-wrap--video' : ''}`}>
