@@ -27,14 +27,14 @@ export function EmptyState() {
             <div className="empty-state__background">
                 <DotGrid
                     dotSize={3}
-                    gap={18}
+                    gap={20}
                     baseColor={colors.base}
                     activeColor={colors.active}
-                    proximity={120}
-                    shockRadius={180}
+                    proximity={80}
+                    shockRadius={80}
                     shockStrength={5}
                     resistance={750}
-                    returnDuration={1.5}
+                    returnDuration={5}
                 />
             </div>
             <div className="empty-state__content">
