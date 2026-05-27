@@ -618,6 +618,7 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
     const userScrolledAfterAutoJumpRef = useRef(false);
     const programmaticScrollEventsRef = useRef(0);
     const consumedInitialUnreadRef = useRef(false);
+    const rangeMediaPendingIdsRef = useRef<Set<string>>(new Set());
     const typingActiveRef = useRef(false);
     const typingTimeoutRef = useRef<number | null>(null);
 
@@ -686,12 +687,12 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
         programmaticScrollEventsRef.current += 2;
     };
 
-    const collectInitialMediaPendingIds = () => new Set(
-        messages
+    const collectMediaIds = (msgs: Message[]) => new Set(
+        msgs
             .filter((m) => {
                 const mt = (m.file?.mimeType || '').toLowerCase();
                 if (!m.file || (!mt.startsWith('image/') && !mt.startsWith('video/'))) return false;
-                // Don't block initial skeleton on self-sent media that can stay manual-download.
+                // Don't block loading on self-sent media that stays manual-download.
                 if (m.senderId === currentUserId) return false;
                 // Only wait for media that has fast visual source (preview) on open.
                 const hasPreview = Boolean(
@@ -703,6 +704,8 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
             })
             .map((m) => m.id)
     );
+
+    const collectInitialMediaPendingIds = () => collectMediaIds(messages);
 
     const handleInitialMediaReady = (messageId: string) => {
         if (!shouldPreserveExactScroll() && (isAtBottomRef.current || (!userHasScrolledRef.current && displayUnreadCount <= 0))) {
@@ -720,6 +723,16 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
             restoreBottomAfterInfoRef.current = false;
             restoringFromInfoRef.current = false;
         }
+
+        // Handle range media (older/newer load)
+        if (rangeMediaPendingIdsRef.current.has(messageId)) {
+            rangeMediaPendingIdsRef.current.delete(messageId);
+            if (rangeMediaPendingIdsRef.current.size === 0) {
+                setLocalLoadingOlder(false);
+                setLocalLoadingNewer(false);
+            }
+        }
+
         if (initialMediaFollowupDoneRef.current) return;
         if (!initialMediaPendingIdsRef.current.has(messageId)) return;
         initialMediaPendingIdsRef.current.delete(messageId);
@@ -1787,6 +1800,16 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
                     container.scrollTop = snap.prevTop + Math.max(0, delta);
                 }
             }
+
+            const newMessages = messages.slice(0, Math.max(0, added));
+            const mediaIds = collectMediaIds(newMessages);
+            if (mediaIds.size > 0) {
+                mediaIds.forEach(id => rangeMediaPendingIdsRef.current.add(id));
+                // We stay in localLoadingOlder state until handleInitialMediaReady clears them
+            } else {
+                setLocalLoadingOlder(false);
+            }
+
             pendingOlderAdjustRef.current = null;
             pendingOlderAnchorRef.current = null;
             pendingRangeLoadTypeRef.current = null;
@@ -1796,6 +1819,13 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
             return;
         }
         if (pendingRangeLoadTypeRef.current === 'newer' && !loadingNewerMessages) {
+            const newMessages = messages.slice(Math.max(0, messages.length - added));
+            const mediaIds = collectMediaIds(newMessages);
+            if (mediaIds.size > 0) {
+                mediaIds.forEach(id => rangeMediaPendingIdsRef.current.add(id));
+            } else {
+                setLocalLoadingNewer(false);
+            }
             pendingRangeLoadTypeRef.current = null;
         }
         if (added > 0) {
@@ -1905,7 +1935,13 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
             pendingOlderAnchorRef.current = anchor;
             setLocalLoadingOlder(true);
             Promise.resolve(onLoadOlderMessages?.(chatId)).finally(() => {
-                window.setTimeout(() => setLocalLoadingOlder(false), 180);
+                // Fallback: if no messages were added or no media found,
+                // the messages effect will clear this. We add a safety timeout.
+                window.setTimeout(() => {
+                    if (rangeMediaPendingIdsRef.current.size === 0) {
+                        setLocalLoadingOlder(false);
+                    }
+                }, 1000);
             });
         }
         // IMPORTANT: avoid triggering "newer" load when user is already at absolute bottom
@@ -1923,7 +1959,11 @@ const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId
             pendingRangeLoadTypeRef.current = 'newer';
             setLocalLoadingNewer(true);
             Promise.resolve(onLoadNewerMessages?.(chatId)).finally(() => {
-                window.setTimeout(() => setLocalLoadingNewer(false), 180);
+                window.setTimeout(() => {
+                    if (rangeMediaPendingIdsRef.current.size === 0) {
+                        setLocalLoadingNewer(false);
+                    }
+                }, 1000);
             });
         }
     };

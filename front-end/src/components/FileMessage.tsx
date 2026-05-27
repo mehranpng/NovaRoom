@@ -53,7 +53,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     const cached = await getCachedBlob(cacheKey);
     if (!cached) return false;
     const object = URL.createObjectURL(cached);
-    setMediaUrl(object); setDownloadState('done'); onMediaLoad?.();
+    setMediaUrl(object); setDownloadState('done');
     // Also clear preview cache if we have the full image
     void deleteCachedBlob(`chat:${chatId}:preview:${file.fileId}`);
     return true;
@@ -103,7 +103,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     const finalBlob = task.blob || await getCachedBlob(cacheKey);
     if (finalBlob) {
       const object = URL.createObjectURL(finalBlob);
-      setMediaUrl(object); setDownloadState('done'); onMediaLoad?.();
+      setMediaUrl(object); setDownloadState('done');
     }
   };
 
@@ -177,7 +177,6 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
         }
       };
       img.src = nextUrl;
-      onMediaLoad?.();
     }).catch(() => undefined);
     return () => { 
       cancelled = true; 
@@ -250,6 +249,10 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
     return () => window.removeEventListener('trigger-file-download', onCustomDownload);
   }, [file.fileId, file.fileName, cacheKey, isImage, isVideo, isAudio]);
 
+  const handleMediaRendered = () => {
+    onMediaLoad?.();
+  };
+
   return <div className="file-message">
     {(isImage || isVideo) && (
       <div className="file-image-preview" style={{ background: isVideo ? '#000' : 'transparent', width: isImage ? undefined : '100%', minWidth: isVideo ? 220 : undefined, maxWidth: '100%', aspectRatio: (isImage || isVideo) ? effectiveAspectRatio : undefined }} onClick={(e) => {
@@ -259,9 +262,9 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onImageClick, on
         }
         if (!mediaUrl) void startDownload();
       }}>
-        {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} style={{ objectFit: shouldContain ? 'contain' : 'cover' }} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><video src={mediaUrl} preload="metadata" muted playsInline style={{ width: '100%', height: '100%', objectFit: shouldContain ? 'contain' : 'cover', background: '#000' }} /><span className="file-video-duration">{formatDuration(mediaDuration)}</span><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
+        {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} style={{ objectFit: shouldContain ? 'contain' : 'cover' }} onLoad={handleMediaRendered} onError={handleMediaRendered} onClick={() => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" onClick={() => onVideoClick?.(mediaUrl, file)}><video src={mediaUrl} preload="metadata" muted playsInline onLoadedMetadata={handleMediaRendered} onError={handleMediaRendered} style={{ width: '100%', height: '100%', objectFit: shouldContain ? 'contain' : 'cover', background: '#000' }} /><span className="file-video-duration">{formatDuration(mediaDuration)}</span><span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span></button>) :
           (<>
-            {previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)', objectFit: shouldContain ? 'contain' : 'cover' }} /> : <div style={{ width: '100%', height: '100%', background: '#000' }} />}
+            {previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)', objectFit: shouldContain ? 'contain' : 'cover' }} onLoad={handleMediaRendered} onError={handleMediaRendered} /> : <div style={{ width: '100%', height: '100%', background: '#000' }} />}
             {isVideo && <button type="button" className="file-video-center-play" onClick={(e) => { e.stopPropagation(); startDownload(); }}><Play size={20} fill="currentColor" /></button>}
             {isVideo && <span className="file-video-duration file-video-duration--top">{formatDuration(mediaDuration || 0)}</span>}
             <div className={`manual-download-wrap ${isImage ? 'manual-download-wrap--center' : ''} ${isVideo ? 'manual-download-wrap--video' : ''}`}>
