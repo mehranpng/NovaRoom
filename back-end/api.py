@@ -63,10 +63,7 @@ from file_service import (
 
 load_dotenv()
 
-limiter = Limiter(
-    key_func=get_remote_address,
-    default_limits=["200/minute"]
-)
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 app = FastAPI(title="NovaRoom API")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -956,7 +953,9 @@ async def _sync_login_seen_by_with_sessions(
 
 @app.post("/auth/logout")
 @limiter.limit("40/minute;100/hour")
-async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def logout(
+    request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)
+):
     user = await get_user_from_session_token(credentials.credentials)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -1020,7 +1019,9 @@ def serialize_session_for_client(
 
 @app.get("/auth/sessions")
 @limiter.limit("100/minute;2000/hour")
-async def list_sessions(current_user: dict = Depends(get_current_user)):
+async def list_sessions(
+    request: Request, current_user: dict = Depends(get_current_user)
+):
     token = str(current_user.get("_session_token") or "")
     token_hash = hash_access_token(token) if token else ""
     sessions = _normalize_session_list(current_user)
@@ -1037,7 +1038,7 @@ async def list_sessions(current_user: dict = Depends(get_current_user)):
 @app.delete("/auth/sessions/{token_hash}")
 @limiter.limit("30/minute;100/hour")
 async def revoke_single_session(
-    token_hash: str, current_user: dict = Depends(get_current_user)
+    request: Request, token_hash: str, current_user: dict = Depends(get_current_user)
 ):
     my_token = str(current_user.get("_session_token") or "")
     my_hash = hash_access_token(my_token) if my_token else ""
@@ -1061,7 +1062,9 @@ async def revoke_single_session(
 
 @app.post("/auth/sessions/revoke-others")
 @limiter.limit("20/minute;100/hour")
-async def revoke_other_sessions(current_user: dict = Depends(get_current_user)):
+async def revoke_other_sessions(
+    request: Request, current_user: dict = Depends(get_current_user)
+):
     my_token = str(current_user.get("_session_token") or "")
     my_hash = hash_access_token(my_token) if my_token else ""
     sessions = _normalize_session_list(current_user)
@@ -1076,7 +1079,9 @@ async def revoke_other_sessions(current_user: dict = Depends(get_current_user)):
 
 @app.get("/auth/login-events")
 @limiter.limit("100/minute;2000/hour")
-async def list_login_events(current_user: dict = Depends(get_current_user)):
+async def list_login_events(
+    request: Request, current_user: dict = Depends(get_current_user)
+):
     token = str(current_user.get("_session_token") or "")
     my_hash = hash_access_token(token) if token else ""
     events = _normalize_login_events(current_user)
@@ -1107,7 +1112,9 @@ async def list_login_events(current_user: dict = Depends(get_current_user)):
 
 @app.post("/auth/login-events/mark-seen")
 @limiter.limit("100/minute;2000/hour")
-async def mark_login_events_seen(current_user: dict = Depends(get_current_user)):
+async def mark_login_events_seen(
+    request: Request, current_user: dict = Depends(get_current_user)
+):
     token = str(current_user.get("_session_token") or "")
     my_hash = hash_access_token(token) if token else ""
     events = _normalize_login_events(current_user)
@@ -1331,13 +1338,15 @@ async def migrate_unencrypted_messages():
 
 @app.get("/profile/me/pins")
 @limiter.limit("100/minute;2000/hour")
-async def get_my_pins(current_user: dict = Depends(get_current_user)):
+async def get_my_pins(request: Request, current_user: dict = Depends(get_current_user)):
     return {"pinnedChatIds": _get_pinned_from_user_doc(current_user)}
 
 
 @app.post("/profile/me/pins/{chat_id}")
 @limiter.limit("20/minute;300/hour")
-async def pin_chat(chat_id: str, current_user: dict = Depends(get_current_user)):
+async def pin_chat(
+    request: Request, chat_id: str, current_user: dict = Depends(get_current_user)
+):
     user_id = current_user["chatId"]
 
     if not _user_can_pin_chat(user_id, chat_id):
@@ -1378,7 +1387,9 @@ async def pin_chat(chat_id: str, current_user: dict = Depends(get_current_user))
 
 @app.delete("/profile/me/pins/{chat_id}")
 @limiter.limit("20/minute;300/hour")
-async def unpin_chat(chat_id: str, current_user: dict = Depends(get_current_user)):
+async def unpin_chat(
+    request: Request, chat_id: str, current_user: dict = Depends(get_current_user)
+):
     user_id = current_user["chatId"]
 
     pinned = _get_pinned_from_user_doc(current_user)
@@ -1403,14 +1414,18 @@ async def unpin_chat(chat_id: str, current_user: dict = Depends(get_current_user
 
 @app.get("/profile/me/blocks")
 @limiter.limit("100/minute;2000/hour")
-async def get_my_blocks(current_user: dict = Depends(get_current_user)):
+async def get_my_blocks(
+    request: Request, current_user: dict = Depends(get_current_user)
+):
     return {"blockedChatIds": _get_blocked_from_user_doc(current_user)}
 
 
 @app.post("/profile/me/blocks/{target_chat_id}")
 @limiter.limit("20/minute;300/hour")
 async def block_user(
-    target_chat_id: str, current_user: dict = Depends(get_current_user)
+    request: Request,
+    target_chat_id: str,
+    current_user: dict = Depends(get_current_user),
 ):
     my_id = str(current_user["chatId"])
     target_id = str(target_chat_id or "").strip()
@@ -1448,7 +1463,9 @@ async def block_user(
 @app.delete("/profile/me/blocks/{target_chat_id}")
 @limiter.limit("20/minute;300/hour")
 async def unblock_user(
-    target_chat_id: str, current_user: dict = Depends(get_current_user)
+    request: Request,
+    target_chat_id: str,
+    current_user: dict = Depends(get_current_user),
 ):
     my_id = str(current_user["chatId"])
     target_id = str(target_chat_id or "").strip()
@@ -1479,7 +1496,7 @@ async def unblock_user(
 
 @app.post("/auth/register/email")
 @limiter.limit("5/minute;20/hour")
-async def register_email(req: RegisterEmailRequest):
+async def register_email(request: Request, req: RegisterEmailRequest):
     """Step 1: Send verification code to email"""
     # Check if email already exists
     existing_user = await cl_users.find_one({"login.email": req.email})
@@ -1496,7 +1513,7 @@ async def register_email(req: RegisterEmailRequest):
 
 @app.post("/auth/register/verify")
 @limiter.limit("5/minute;20/hour")
-async def verify_registration_code(req: VerifyCodeRequest):
+async def verify_registration_code(request: Request, req: VerifyCodeRequest):
     """Step 2: Verify the code sent to email"""
     # Verify the code
     is_valid = await verify_code(req.email, req.code)
@@ -1597,7 +1614,7 @@ async def complete_registration(req: CompleteRegistrationRequest, request: Reque
 
 @app.post("/auth/password-reset/request")
 @limiter.limit("5/minute;20/hour")
-async def request_password_reset(req: PasswordResetRequest):
+async def request_password_reset(request: Request, req: PasswordResetRequest):
     """Request password reset - sends code to email"""
     # Check if email exists
     user = await cl_users.find_one({"login.email": req.email})
@@ -1615,7 +1632,7 @@ async def request_password_reset(req: PasswordResetRequest):
 
 @app.post("/auth/password-reset/verify")
 @limiter.limit("5/minute;20/hour")
-async def verify_and_reset_password(req: PasswordResetVerifyRequest):
+async def verify_and_reset_password(request: Request, req: PasswordResetVerifyRequest):
     """Verify reset code and change password"""
     # Verify the code
     is_valid = await verify_reset_code(req.email, req.code)
@@ -1689,7 +1706,7 @@ async def login(req: LoginRequest, request: Request):
 
 @app.get("/profile/me")
 @limiter.limit("100/minute;2000/hour")
-async def get_profile(current_user: dict = Depends(get_current_user)):
+async def get_profile(request: Request, current_user: dict = Depends(get_current_user)):
     return {
         "chatId": current_user["chatId"],
         "username": current_user["profile"]["username"],
@@ -1705,7 +1722,9 @@ async def get_profile(current_user: dict = Depends(get_current_user)):
 @app.patch("/profile/me")
 @limiter.limit("30/minute;300/hour")
 async def update_profile(
-    updates: ProfileUpdate, current_user: dict = Depends(get_current_user)
+    request: Request,
+    updates: ProfileUpdate,
+    current_user: dict = Depends(get_current_user),
 ):
     update_data = {}
     if updates.name:
@@ -1750,7 +1769,9 @@ async def update_profile(
 
 @app.get("/profile/groups")
 @limiter.limit("100/minute;2000/hour")
-async def get_profile_groups(current_user: dict = Depends(get_current_user)):
+async def get_profile_groups(
+    request: Request, current_user: dict = Depends(get_current_user)
+):
     user_id = current_user["chatId"]
     groups = (
         await cl_chats.find({"chatType": "group", "createdBy": user_id})
@@ -1806,6 +1827,7 @@ async def set_presence_offline(current_user: dict = Depends(get_current_user)):
 @app.get("/users/username-available")
 @limiter.limit("100/minute;2000/hour")
 async def username_available(
+    request: Request,
     username: str = Query(..., min_length=3, max_length=32),
     current_user: dict = Depends(get_current_user),
 ):
@@ -1831,6 +1853,7 @@ async def username_available(
 @app.get("/auth/username-available")
 @limiter.limit("100/minute;2000/hour")
 async def public_username_available(
+    request: Request,
     username: str = Query(..., min_length=3, max_length=32),
 ):
     """Public endpoint for checking username availability during registration"""
@@ -1851,6 +1874,7 @@ async def public_username_available(
 @app.get("/users/search", response_model=List[UserSearchResult])
 @limiter.limit("100/minute;2000/hour")
 async def search_users(
+    request: Request,
     query: str = Query(..., min_length=2),
     current_user: dict = Depends(get_current_user),
 ):
@@ -1895,7 +1919,9 @@ async def search_users(
 @app.post("/chats")
 @limiter.limit("100/hour")
 async def create_or_get_chat(
-    req: ChatCreateRequest, current_user: dict = Depends(get_current_user)
+    request: Request,
+    req: ChatCreateRequest,
+    current_user: dict = Depends(get_current_user),
 ):
     my_id = current_user["chatId"]
     target_id = req.targetChatId
@@ -1922,7 +1948,9 @@ async def create_or_get_chat(
 @app.post("/groups")
 @limiter.limit("20/minute;100/hour")
 async def create_group(
-    req: GroupCreateRequest, current_user: dict = Depends(get_current_user)
+    request: Request,
+    req: GroupCreateRequest,
+    current_user: dict = Depends(get_current_user),
 ):
     if not bool(current_user.get("verified", False)):
         raise HTTPException(
@@ -1968,7 +1996,9 @@ async def create_group(
 @app.post("/groups/join")
 @limiter.limit("20/minute;100/hour")
 async def join_group(
-    req: GroupJoinRequest, current_user: dict = Depends(get_current_user)
+    request: Request,
+    req: GroupJoinRequest,
+    current_user: dict = Depends(get_current_user),
 ):
     invite_code = (req.inviteCode or "").strip()
     if not invite_code:
@@ -1995,7 +2025,9 @@ async def join_group(
 
 @app.post("/groups/{chat_id}/leave")
 @limiter.limit("20/minute;100/hour")
-async def leave_group(chat_id: str, current_user: dict = Depends(get_current_user)):
+async def leave_group(
+    request: Request, chat_id: str, current_user: dict = Depends(get_current_user)
+):
     my_id = current_user["chatId"]
     if is_official_channel_chat(chat_id):
         raise HTTPException(status_code=403, detail="Cannot leave official channel")
@@ -2036,6 +2068,7 @@ async def leave_group(chat_id: str, current_user: dict = Depends(get_current_use
 @app.put("/groups/{chat_id}")
 @limiter.limit("30/minute;100/hour")
 async def update_group(
+    request: Request,
     chat_id: str,
     req: GroupUpdateRequest,
     current_user: dict = Depends(get_current_user),
@@ -2084,7 +2117,9 @@ async def update_group(
 
 @app.get("/chats")
 @limiter.limit("100/minute;2000/hour")
-async def get_chat_list(current_user: dict = Depends(get_current_user)):
+async def get_chat_list(
+    request: Request, current_user: dict = Depends(get_current_user)
+):
     my_id = current_user["chatId"]
     session_token = str(current_user.get("_session_token") or "")
     my_blocked_ids = set(_get_blocked_from_user_doc(current_user))
@@ -2339,7 +2374,9 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
 
 @app.get("/chats/{chat_id}/stats")
 @limiter.limit("100/minute;2000/hour")
-async def get_chat_stats(chat_id: str, current_user: dict = Depends(get_current_user)):
+async def get_chat_stats(
+    request: Request, chat_id: str, current_user: dict = Depends(get_current_user)
+):
     my_id = current_user["chatId"]
     if is_official_channel_chat(chat_id):
         total_members = await cl_users.count_documents({})
@@ -2368,7 +2405,7 @@ async def get_chat_stats(chat_id: str, current_user: dict = Depends(get_current_
 @app.get("/chats/{chat_id}/members")
 @limiter.limit("100/minute;2000/hour")
 async def get_chat_members(
-    chat_id: str, current_user: dict = Depends(get_current_user)
+    request: Request, chat_id: str, current_user: dict = Depends(get_current_user)
 ):
     my_id = current_user["chatId"]
     if is_official_channel_chat(chat_id):
@@ -2444,7 +2481,9 @@ async def get_chat_members(
 
 @app.delete("/chats/{chat_id}")
 @limiter.limit("30/minute;100/hour")
-async def delete_chat(chat_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_chat(
+    request: Request, chat_id: str, current_user: dict = Depends(get_current_user)
+):
     my_id = current_user["chatId"]
 
     # Prevent deleting saved messages via normal delete endpoint
@@ -2483,6 +2522,7 @@ async def delete_chat(chat_id: str, current_user: dict = Depends(get_current_use
 @app.get("/chats/{chat_id}/messages")
 @limiter.limit("100/minute;2000/hour")
 async def get_messages(
+    request: Request,
     chat_id: str,
     limit: int = 50,
     direction: str = Query("latest", pattern="^(latest|older|newer)$"),
@@ -2762,6 +2802,7 @@ async def get_messages(
 @app.post("/files/upload")
 @limiter.limit("30/minute;500/hour")
 async def upload_file(
+    request: Request,
     file: UploadFile = FastAPIFile(...),
     preview: Optional[UploadFile] = FastAPIFile(None),
     duration: Optional[float] = Form(None),
@@ -2858,6 +2899,7 @@ async def download_file(
 @app.delete("/files/{file_id}")
 @limiter.limit("30/minute;500/hour")
 async def remove_uploaded_file(
+    request: Request,
     file_id: str,
     current_user: dict = Depends(get_current_user),
 ):
@@ -2876,6 +2918,7 @@ async def remove_uploaded_file(
 @app.post("/chats/{chat_id}/messages/{message_id}/react")
 @limiter.limit("30/minute;500/hour")
 async def add_reaction(
+    request: Request,
     chat_id: str,
     message_id: str,
     req: ReactionRequest,
@@ -2952,6 +2995,7 @@ async def add_reaction(
 @app.get("/chats/{chat_id}/messages/{message_id}/seen-by")
 @limiter.limit("100/minute;2000/hour")
 async def get_message_seen_by(
+    request: Request,
     chat_id: str,
     message_id: str,
     current_user: dict = Depends(get_current_user),
@@ -3014,6 +3058,7 @@ async def get_message_seen_by(
 @app.delete("/chats/{chat_id}/messages/{message_id}/react")
 @limiter.limit("30/minute;500/hour")
 async def remove_reaction(
+    request: Request,
     chat_id: str,
     message_id: str,
     current_user: dict = Depends(get_current_user),
@@ -3071,7 +3116,9 @@ async def remove_reaction(
 @app.post("/messages/forward")
 @limiter.limit("30/minute;500/hour")
 async def forward_message(
-    req: ForwardMessageRequest, current_user: dict = Depends(get_current_user)
+    request: Request,
+    req: ForwardMessageRequest,
+    current_user: dict = Depends(get_current_user),
 ):
     user_id = current_user["chatId"]
     session_token = str(current_user.get("_session_token") or "")
@@ -4591,7 +4638,9 @@ async def consume_quota(user_id: str, model_key: str) -> Dict[str, Any]:
 
 @app.get("/ai/pro-usage-status")
 @limiter.limit("100/minute;2000/hour")
-async def get_ai_pro_usage_status(current_user: dict = Depends(get_current_user)):
+async def get_ai_pro_usage_status(
+    request: Request, current_user: dict = Depends(get_current_user)
+):
     user_id = current_user["chatId"]
     status = await get_usage_status(user_id)
     return {
@@ -4606,7 +4655,9 @@ async def get_ai_pro_usage_status(current_user: dict = Depends(get_current_user)
 
 @app.get("/ai/chats")
 @limiter.limit("100/minute;2000/hour")
-async def get_ai_chats(current_user: dict = Depends(get_current_user)):
+async def get_ai_chats(
+    request: Request, current_user: dict = Depends(get_current_user)
+):
     user_id = current_user["chatId"]
     session_token = str(current_user.get("_session_token") or "")
     rows = (
@@ -4648,6 +4699,7 @@ class AICreateChatRequest(BaseModel):
 @app.post("/ai/chats")
 @limiter.limit("30/minute;100/hour")
 async def create_ai_chat(
+    request: Request,
     body: Optional[AICreateChatRequest] = None,
     current_user: dict = Depends(get_current_user),
 ):
@@ -4692,6 +4744,7 @@ class AIChatRenameRequest(BaseModel):
 @app.patch("/ai/chats/{ai_chat_id}")
 @limiter.limit("30/minute;100/hour")
 async def rename_ai_chat(
+    request: Request,
     ai_chat_id: str,
     body: AIChatRenameRequest,
     current_user: dict = Depends(get_current_user),
@@ -4728,7 +4781,7 @@ async def rename_ai_chat(
 @app.delete("/ai/chats/{ai_chat_id}")
 @limiter.limit("30/minute;100/hour")
 async def delete_ai_chat(
-    ai_chat_id: str, current_user: dict = Depends(get_current_user)
+    request: Request, ai_chat_id: str, current_user: dict = Depends(get_current_user)
 ):
     user_id = current_user["chatId"]
     chat = await ensure_ai_chat(user_id, ai_chat_id)
@@ -5136,6 +5189,7 @@ async def websocket_ai_endpoint(websocket: WebSocket, token: str = Query(...)):
 @app.get("/ai/messages")
 @limiter.limit("100/minute;2000/hour")
 async def get_ai_messages(
+    request: Request,
     chatId: str = Query(...),
     limit: int = 50,
     current_user: dict = Depends(get_current_user),
@@ -5181,7 +5235,7 @@ async def get_ai_messages(
 @app.delete("/ai/messages/{message_id}")
 @limiter.limit("30/minute;100/hour")
 async def delete_ai_message(
-    message_id: str, current_user: dict = Depends(get_current_user)
+    request: Request, message_id: str, current_user: dict = Depends(get_current_user)
 ):
     user_id = current_user["chatId"]
     oid = await try_object_id(message_id)
