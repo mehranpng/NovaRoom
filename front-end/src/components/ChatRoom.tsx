@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Copy, Eye, MoreVertical, Pencil, Smile, Trash2, X, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload, Download, Pin } from 'lucide-react';
 import { AnimatePresence, motion } from "framer-motion";
-import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata, PendingForwardDraft, PinnedMessage } from '../types';
+import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata, PendingAttachment, PendingForwardDraft, PinnedMessage } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { API_BASE_URL, apiFetch, getMessageSeenBy } from '../config/api';
@@ -61,7 +61,7 @@ interface ChatRoomProps {
     messages: Message[];
     currentUserId: string;
     currentUser?: User | null;
-    onSendMessage: (payload: { text: string; replyToId?: string; editMessageId?: string; file?: FileMetadata }) => void;
+    onSendMessage: (payload: { text: string; replyToId?: string; editMessageId?: string; attachment?: PendingAttachment }) => void;
     onDeleteMessage: (messageId: string) => void;
     onDeleteMessages?: (messageIds: string[]) => void | Promise<void>;
     onBack: () => void;
@@ -87,7 +87,6 @@ interface ChatRoomProps {
     typingUserIds?: string[];
     uploadingUserIds?: string[];
     onTypingChange?: (chatId: string, isTyping: boolean) => void;
-    onUploadStatusChange?: (chatId: string, isUploading: boolean) => void;
     isUserBlocked?: (user: User) => boolean;
     onToggleBlockUser?: (user: User) => void | Promise<void>;
     hasOlderMessages?: boolean;
@@ -248,7 +247,6 @@ export function ChatRoom({
     typingUserIds = [],
     uploadingUserIds = [],
     onTypingChange,
-    onUploadStatusChange,
     isUserBlocked,
     onToggleBlockUser,
     hasOlderMessages = false,
@@ -1838,13 +1836,13 @@ export function ChatRoom({
 
     const handleComposerSend = useCallback((payload: ChatComposerSendPayload) => {
         if (isContactBlocked || !canSendInOfficialChannel) return false;
-        if (!payload.text.trim() && !payload.file && (!pendingForwardDraft || Boolean(editingId))) return false;
-        if (payload.text || payload.file) {
+        if (!payload.text.trim() && !payload.attachment && (!pendingForwardDraft || Boolean(editingId))) return false;
+        if (payload.text || payload.attachment) {
             onSendMessage({
                 text: payload.text,
                 replyToId: payload.replyToId,
                 editMessageId: payload.editMessageId,
-                file: payload.file,
+                attachment: payload.attachment,
             });
         }
         if (pendingForwardDraft && !editingId) {
@@ -1874,10 +1872,6 @@ export function ChatRoom({
     const handleTypingChange = useCallback((targetChatId: string, isTyping: boolean) => {
         onTypingChange?.(targetChatId, isTyping);
     }, [onTypingChange]);
-
-    const handleUploadStatusChange = useCallback((targetChatId: string, isUploading: boolean) => {
-        onUploadStatusChange?.(targetChatId, isUploading);
-    }, [onUploadStatusChange]);
 
     const doDeleteChat = async () => {
         try {
@@ -2821,7 +2815,6 @@ export function ChatRoom({
                 <ChatComposer
                     key={`${chatId}:${editingId ?? 'compose'}`}
                     chatId={chatId}
-                    token={token}
                     isContactBlocked={isContactBlocked}
                     canSend={canSendInOfficialChannel}
                     blockedMessage={isUserBlocked?.(contact) ? 'شما این کاربر را بلاک کرده‌اید.' : 'این کاربر شما را بلاک کرده است.'}
@@ -2837,7 +2830,6 @@ export function ChatRoom({
                     onCancelReplyEdit={handleCancelReplyEdit}
                     onCancelForward={handleCancelForward}
                     onTypingChange={handleTypingChange}
-                    onUploadStatusChange={handleUploadStatusChange}
                     onRegisterUploadFile={handleRegisterUploadFile}
                     onInputFocus={handleInputFocus}
                 />

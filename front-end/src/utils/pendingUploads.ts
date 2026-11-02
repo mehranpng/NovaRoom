@@ -1,3 +1,3 @@
-import type { FileMetadata } from '../types';
+import type { PendingAttachment } from '../types';
 
-export const pendingUploadedFileByChat: Record<string, FileMetadata | null> = {};
+export const pendingUploadedFileByChat: Record<string, PendingAttachment | null> = {};

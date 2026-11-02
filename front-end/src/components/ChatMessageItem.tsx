@@ -10,6 +10,7 @@ import { ChessInviteCard } from './chess/ChessInviteCard';
 import { toPersianDigits } from '../utils/format';
 import { triggerHaptic } from '../utils/haptics';
 import { copyText } from '../utils/clipboard';
+import { cancelUpload } from '../utils/chatFileUploader';
 
 export type ReactionEntry = { emoji: string; count: number; userIds: string[] };
 
@@ -209,6 +210,10 @@ function shallowRecordEqual(a: object, b: object) {
 
 function chatMessageItemPropsEqual(prev: ChatMessageItemProps, next: ChatMessageItemProps) {
     if (prev.message !== next.message && !shallowRecordEqual(prev.message, next.message)) return false;
+    if (prev.message.upload?.phase !== next.message.upload?.phase) return false;
+    if (prev.message.upload?.progress !== next.message.upload?.progress) return false;
+    if (prev.message.file?.fileId !== next.message.file?.fileId) return false;
+    if (prev.message.file?.localUrl !== next.message.file?.localUrl) return false;
     const keys = Object.keys(prev) as (keyof ChatMessageItemProps)[];
     if (keys.length !== Object.keys(next).length) return false;
     return keys.every((key) => key === 'message' || Object.is(prev[key], next[key]));
@@ -567,6 +572,8 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                             file={message.file}
                             token={token}
                             chatId={chatId}
+                            upload={message.deliveryStatus === 'sending' && message.file.localUrl ? message.upload : undefined}
+                            onCancelUpload={() => cancelUpload(message.id)}
                             onMediaLoad={() => actions.mediaReady(message.id)}
                             onMediaError={() => actions.mediaReady(message.id)}
                             onImageClick={(imageUrl, file) => {

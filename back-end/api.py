@@ -511,6 +511,10 @@ async def _remap_forward_file_to_target_chat(
         if key in file_meta:
             remapped_meta[key] = file_meta.get(key)
 
+    for key in ("width", "height", "duration"):
+        if key in file_meta:
+            remapped_meta[key] = file_meta.get(key)
+
     return remapped_meta
 
 
@@ -5201,6 +5205,19 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 reply_to_id = data.get("replyToId")
                 client_id = data.get("clientId")
                 file_data = data.get("file")
+                if isinstance(file_data, dict):
+                    for key in ("width", "height"):
+                        try:
+                            value = int(file_data.get(key))
+                        except (TypeError, ValueError):
+                            file_data.pop(key, None)
+                            continue
+                        if 1 <= value <= 20000:
+                            file_data[key] = value
+                        else:
+                            file_data.pop(key, None)
+                    file_data.pop("localUrl", None)
+                    file_data.pop("upload", None)
                 if not isinstance(text, str):
                     continue
                 if len(text) > MAX_CHAT_MESSAGE_LENGTH:

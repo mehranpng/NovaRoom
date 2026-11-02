@@ -53,7 +53,20 @@ export interface FileMetadata {
     coverArtFileId?: string;
     previewUrl?: string;
     previewFileId?: string;
+    width?: number;
+    height?: number;
+    duration?: number;
+    localUrl?: string;
 }
+
+export type PendingAttachment = {
+    file: File;
+    width: number;
+    height: number;
+    duration: number;
+    isEdited: boolean;
+    reEdit?: () => void;
+};
 
 export interface Message {
     id: string;
@@ -82,6 +95,7 @@ export interface Message {
     analyzingAttachment?: boolean;
     aiAttachment?: AIAttachmentMeta;
     chessInvite?: ChessInvite;
+    upload?: { phase: 'uploading' | 'encrypting'; progress: number };
 }
 
 export interface ChatLastMessage {

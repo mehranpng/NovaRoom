@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import type { Message, View, User, Chat, ChatLastMessage, FileMetadata, AIChatSummary, AIModelKey, PendingForwardDraft, AIUsageStatus, AIMemoryItem, AIAttachmentMeta, AISearchSource } from './types';
+import type { Message, View, User, Chat, ChatLastMessage, FileMetadata, AIChatSummary, AIModelKey, PendingForwardDraft, AIUsageStatus, AIMemoryItem, AIAttachmentMeta, AISearchSource, PendingAttachment } from './types';
 import { apiFetch, getAuthToken } from './config/api';
+import { cancelUpload, enqueueUpload, registerUpload, releaseUpload, uploadChatFile } from './utils/chatFileUploader';
 import { useWebSocket } from './hooks/useWebSocket';
 import { ChatList } from './components/ChatList';
 import { ChatRoom } from './components/ChatRoom';
@@ -71,7 +72,10 @@ const isSameMessageRecord = (prev: Message, next: Message): boolean => {
         Boolean(prev.edited) === Boolean(next.edited) &&
         (prev as any).editedAt === (next as any).editedAt &&
         prev.deliveryStatus === next.deliveryStatus &&
+        prev.upload?.phase === next.upload?.phase &&
+        prev.upload?.progress === next.upload?.progress &&
         prev.file?.fileId === next.file?.fileId &&
+        prev.file?.localUrl === next.file?.localUrl &&
         prev.file?.fileName === next.file?.fileName &&
         prev.file?.previewUrl === next.file?.previewUrl &&
         prev.file?.coverArtUrl === next.file?.coverArtUrl &&
@@ -2071,14 +2075,26 @@ export function App() {
 
 
 
-    const handleSendMessage = useCallback(async (payload: { text: string; replyToId?: string; editMessageId?: string; file?: FileMetadata }) => {
+    const handleSendMessage = useCallback(async (payload: { text: string; replyToId?: string; editMessageId?: string; attachment?: PendingAttachment }) => {
         if (!currentUser) return;
         const text = payload.text;
+        const attachment = payload.attachment;
         const makeClientId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const pushOptimisticMessage = (targetChatId: string, clientId: string) => {
             const now = Date.now();
             const sourceMessages = messages[targetChatId] || [];
             const replySrc = payload.replyToId ? sourceMessages.find((m) => m.id === payload.replyToId) : null;
+            const optimisticFile: FileMetadata | undefined = attachment ? {
+                fileId: `local-${clientId}`,
+                fileName: attachment.file.name,
+                fileSize: attachment.file.size,
+                mimeType: attachment.file.type || 'application/octet-stream',
+                uploadedAt: new Date(now).toISOString(),
+                width: attachment.width,
+                height: attachment.height,
+                duration: attachment.duration,
+                localUrl: URL.createObjectURL(attachment.file),
+            } : undefined;
             const optimistic: Message = {
                 id: clientId,
                 clientId,
@@ -2090,7 +2106,8 @@ export function App() {
                 deliveryStatus: 'sending',
                 edited: false,
                 reactions: [],
-                file: payload.file,
+                file: optimisticFile,
+                upload: attachment ? { phase: 'uploading', progress: 0 } : undefined,
                 replyTo: replySrc ? { id: replySrc.id, senderId: replySrc.senderId, text: replySrc.text } : undefined,
             };
             setMessages((prev) => {
@@ -2109,12 +2126,66 @@ export function App() {
                             text: text || '',
                             senderId: currentUser.chatId,
                             timestamp: now,
-                            file: payload.file,
+                            file: optimisticFile,
                         },
                     }
                     : chat
             )));
+            return optimisticFile?.localUrl;
         };
+
+        const runFileSend = async (targetChatId: string, clientId: string, localUrl: string) => {
+            if (!attachment) return;
+            const controller = new AbortController();
+            registerUpload(clientId, controller);
+            sendUploadStatus(targetChatId, true);
+            try {
+                await enqueueUpload(targetChatId, async () => {
+                    const file = await uploadChatFile({
+                        attachment,
+                        token: authToken || '',
+                        chatId: targetChatId,
+                        signal: controller.signal,
+                        onPhase: (phase, progress) => {
+                            setMessages((prev) => {
+                                const list = prev[targetChatId] || [];
+                                const idx = list.findIndex((m) => m.id === clientId);
+                                if (idx < 0) return prev;
+                                const nextList = list.slice();
+                                nextList[idx] = { ...nextList[idx], upload: { phase, progress } };
+                                return { ...prev, [targetChatId]: nextList };
+                            });
+                        },
+                    });
+                    const success = await sendViaWS(targetChatId, text, payload.replyToId, file, clientId);
+                    if (!success) console.warn('WebSocket not connected, message was not sent');
+                    window.setTimeout(() => URL.revokeObjectURL(localUrl), 1500);
+                });
+            } catch (error) {
+                setMessages((prev) => ({
+                    ...prev,
+                    [targetChatId]: (prev[targetChatId] || []).filter((m) => m.id !== clientId),
+                }));
+                URL.revokeObjectURL(localUrl);
+                void loadChats(false);
+                if ((error as Error | undefined)?.message !== 'aborted') alert('خطا در آپلود فایل');
+            } finally {
+                releaseUpload(clientId);
+                sendUploadStatus(targetChatId, false);
+            }
+        };
+
+        const dispatch = async (targetChatId: string) => {
+            const clientId = makeClientId();
+            const localUrl = pushOptimisticMessage(targetChatId, clientId);
+            if (!attachment || !localUrl) {
+                const success = await sendViaWS(targetChatId, text, payload.replyToId, undefined, clientId);
+                if (!success) console.warn('WebSocket not connected, message was not sent');
+                return;
+            }
+            await runFileSend(targetChatId, clientId, localUrl);
+        };
+
         if (payload.editMessageId) {
             if (!activeChatId) return;
             const success = await editViaWS(activeChatId, payload.editMessageId, text);
@@ -2124,12 +2195,7 @@ export function App() {
 
         const savedMessagesId = `saved_messages_${currentUser.chatId}`;
         if (activeChatId === savedMessagesId) {
-            const clientId = makeClientId();
-            pushOptimisticMessage(savedMessagesId, clientId);
-            const success = await sendViaWS(savedMessagesId, text, payload.replyToId, payload.file, clientId);
-            if (!success) {
-                console.warn('WebSocket not connected, message was not sent');
-            }
+            await dispatch(savedMessagesId);
             loadChats(false);
             return;
         }
@@ -2165,12 +2231,7 @@ export function App() {
                 setView('chatRoom');
                 navigate(`/chat/${encodeURIComponent(createdChatId)}`, { replace: true });
 
-                const clientId = makeClientId();
-                pushOptimisticMessage(createdChatId, clientId);
-                const success = await sendViaWS(createdChatId, text, payload.replyToId, payload.file, clientId);
-                if (!success) {
-                    console.warn('WebSocket not connected, message was not sent');
-                }
+                await dispatch(createdChatId);
 
                 loadChats(false);
                 return;
@@ -2186,13 +2247,8 @@ export function App() {
         const activeChat = chats.find((c) => c.id === activeChatId);
         if (activeChat?.chatType !== 'group' && isBlockedDirectTarget(activeChat?.otherUser)) return;
 
-        const clientId = makeClientId();
-        pushOptimisticMessage(activeChatId, clientId);
-        const success = await sendViaWS(activeChatId, text, payload.replyToId, payload.file, clientId);
-        if (!success) {
-            console.warn('WebSocket not connected, message was not sent');
-        }
-    }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, navigate, chats, isUserBlocked, messages]);
+        await dispatch(activeChatId);
+    }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, navigate, chats, isUserBlocked, messages, authToken, sendUploadStatus]);
 
     const handleDeleteMessage = useCallback((messageId: string) => {
         if (!activeChatId) return;
@@ -2201,6 +2257,7 @@ export function App() {
         const msgToDelete = currentMessages.find(m => m.id === messageId);
 
         if (msgToDelete?.deliveryStatus === 'sending') {
+            cancelUpload(messageId);
             setMessages((prev) => {
                 const nextState = {
                     ...prev,
@@ -2224,6 +2281,7 @@ export function App() {
             const msg = currentMessages.find((m) => m.id === id);
             if (msg?.deliveryStatus === 'sending') {
                 sendingIds.add(id);
+                cancelUpload(id);
             } else {
                 persistedIds.push(id);
             }
@@ -3316,7 +3374,6 @@ export function App() {
                                 typingUserIds={typingUserIdsByChat[activeChatId || 'pending'] || EMPTY_IDS}
                                 uploadingUserIds={uploadingUserIdsByChat[activeChatId || 'pending'] || EMPTY_IDS}
                                 onTypingChange={(targetChatId, isTyping) => sendTyping(targetChatId, isTyping)}
-                                onUploadStatusChange={(targetChatId, isUploading) => sendUploadStatus(targetChatId, isUploading)}
                                 isUserBlocked={isUserBlocked}
                                 onToggleBlockUser={toggleBlockUser}
                                 hasOlderMessages={Boolean(activeRange?.hasOlder)}

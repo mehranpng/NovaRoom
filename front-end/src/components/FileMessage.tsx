@@ -8,7 +8,7 @@ import { decryptFileBytesClientSide } from '../utils/e2ee';
 import { getCachedBlob, getOrCacheBlob, deleteCachedBlob } from '../utils/mediaCache';
 import { autoDownloadCookieKeys, isAutoDownloadEnabled } from '../utils/autoDownloadPrefs';
 
-interface FileMessageProps { file: FileMetadata; token: string; chatId: string; onMediaLoad?: () => void; onMediaError?: () => void; onImageClick?: (imageUrl: string, file: FileMetadata) => void; onVideoClick?: (videoUrl: string, file: FileMetadata) => void; }
+interface FileMessageProps { file: FileMetadata; token: string; chatId: string; upload?: { phase: 'uploading' | 'encrypting'; progress: number }; onCancelUpload?: () => void; onMediaLoad?: () => void; onMediaError?: () => void; onImageClick?: (imageUrl: string, file: FileMetadata) => void; onVideoClick?: (videoUrl: string, file: FileMetadata) => void; }
 type DownloadState = 'idle' | 'downloading' | 'decrypting' | 'done' | 'error';
 type DownloadSubscriber = (state: DownloadState, progress: number) => void;
 type DownloadTask = {
@@ -64,12 +64,12 @@ const observeVisibility = (el: Element, cb: (visible: boolean) => void) => {
   };
 };
 
-export function FileMessage({ file, token, chatId, onMediaLoad, onMediaError, onImageClick, onVideoClick }: FileMessageProps) {
-  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+export function FileMessage({ file, token, chatId, upload, onCancelUpload, onMediaLoad, onMediaError, onImageClick, onVideoClick }: FileMessageProps) {
+  const [mediaUrl, setMediaUrl] = useState<string | null>(file.localUrl ?? null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewAspectRatio, setPreviewAspectRatio] = useState<number | null>(null);
   const [actualAspectRatio, setActualAspectRatio] = useState<number | null>(null);
-  const [downloadState, setDownloadState] = useState<DownloadState>('idle');
+  const [downloadState, setDownloadState] = useState<DownloadState>(file.localUrl ? 'done' : 'idle');
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [cacheChecked, setCacheChecked] = useState(false);
   const [resolvedAudioDuration, setResolvedAudioDuration] = useState(0);
@@ -174,6 +174,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onMediaError, on
   }, []);
 
   useEffect(() => {
+    if (file.localUrl) return;
     if (!nearViewport) return;
     setCacheChecked(false);
     const activeTask = fileDownloadTasks.get(file.fileId);
@@ -195,7 +196,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onMediaError, on
       }
       setCacheChecked(true);
     });
-  }, [cacheKey, file.fileId, nearViewport]);
+  }, [cacheKey, file.fileId, nearViewport, file.localUrl]);
 
   useEffect(() => {
     const taskKey = file.fileId;
@@ -255,24 +256,25 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onMediaError, on
     const oldMediaUrl = mediaUrl;
     const oldPreviewUrl = previewUrl;
     
-    setMediaUrl(null);
+    setMediaUrl(file.localUrl ?? null);
     setPreviewUrl(null);
     setPreviewAspectRatio(null);
     setActualAspectRatio(null);
     setResolvedAudioDuration(0);
     setMediaLoaded(false);
+    setDownloadState(file.localUrl ? 'done' : 'idle');
 
     return () => {
-      if (oldMediaUrl && oldMediaUrl.startsWith('blob:')) URL.revokeObjectURL(oldMediaUrl);
+      if (oldMediaUrl && oldMediaUrl.startsWith('blob:') && oldMediaUrl !== file.localUrl) URL.revokeObjectURL(oldMediaUrl);
       if (oldPreviewUrl && oldPreviewUrl.startsWith('blob:')) URL.revokeObjectURL(oldPreviewUrl);
     };
   }, [file.fileId]);
 
-  const metadataWidth = Number((file as any)?.meta?.width || (file as any)?.metadata?.width || (file as any)?.width || 0);
-  const metadataHeight = Number((file as any)?.meta?.height || (file as any)?.metadata?.height || (file as any)?.height || 0);
+  const metadataWidth = Number(file.width || (file as any)?.meta?.width || (file as any)?.metadata?.width || 0);
+  const metadataHeight = Number(file.height || (file as any)?.meta?.height || (file as any)?.metadata?.height || 0);
   const metadataAspectRatio = metadataWidth > 0 && metadataHeight > 0 ? (metadataWidth / metadataHeight) : null;
   const fallbackRatio = isVideo ? (16 / 9) : 0.75;
-  const rawAspectRatio = actualAspectRatio || previewAspectRatio || metadataAspectRatio || fallbackRatio;
+  const rawAspectRatio = metadataAspectRatio || actualAspectRatio || previewAspectRatio || fallbackRatio;
   
   
   const effectiveAspectRatio = isImage
@@ -333,7 +335,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onMediaError, on
         const nextRatio = w / h;
         
         const currentRatio = rawAspectRatio;
-        if (!actualAspectRatio || Math.abs(nextRatio - currentRatio) > currentRatio * 0.01) {
+        if (metadataAspectRatio === null && (!actualAspectRatio || Math.abs(nextRatio - currentRatio) > currentRatio * 0.01)) {
           setActualAspectRatio(nextRatio);
         }
       }
@@ -350,6 +352,18 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onMediaError, on
   
   const maxWidth = 280;
   const maxHeight = 440;
+  const uploadProgress = upload ? Math.max(0, Math.min(100, upload.progress)) : 0;
+  const uploadActionButton = (margin?: number) => upload ? (
+    <button
+      type="button"
+      className={`manual-download-btn ${upload.phase === 'encrypting' ? 'is-decrypting' : 'is-downloading'}`}
+      style={{ ['--download-progress' as any]: `${uploadProgress}%`, margin }}
+      onClick={(e) => { e.stopPropagation(); onCancelUpload?.(); }}
+      aria-label="لغو آپلود"
+    >
+      <X size={16} />
+    </button>
+  ) : null;
   const containerStyle: React.CSSProperties = {
     background: 'transparent',
     aspectRatio: String(effectiveAspectRatio),
@@ -386,18 +400,19 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onMediaError, on
               <div className="manual-download-size manual-download-size-box">{isVideo ? (downloadState === 'decrypting' ? 'رمزگشایی' : formatFileSize(file.fileSize)) : (downloadState === 'decrypting' ? 'رمزگشایی' : formatFileSize(file.fileSize))}</div>
             </div>
           </>)}
+        {upload && <div className="manual-download-wrap manual-download-wrap--center">{uploadActionButton()}</div>}
       </div>
     )}
 
     {isAudio && <div className="file-audio-card">
-      <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%` }} onClick={(e) => {
+      {upload ? uploadActionButton() : (<button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%` }} onClick={(e) => {
         e.stopPropagation();
         if (!mediaUrl) {
           if (downloadState === 'downloading') cancelDownload(); else startDownload();
           return;
         }
         musicPlayer.playTrack({ fileId: file.fileId, fileName: file.fileName, audioUrl: mediaUrl, mimeType: file.mimeType });
-      }}>{mediaUrl ? (musicPlayer.isPlaying && musicPlayer.track?.fileId === file.fileId ? <Pause size={16} /> : <Play size={16} />) : actionIcon}</button>
+      }}>{mediaUrl ? (musicPlayer.isPlaying && musicPlayer.track?.fileId === file.fileId ? <Pause size={16} /> : <Play size={16} />) : actionIcon}</button>)}
       <div className="file-audio-meta"><div className="file-audio-title">{file.fileName}</div><div className="file-audio-artist">{mediaUrl ? formatDuration(audioTotalDuration) : `${formatFileSize(file.fileSize)} • ${formatDuration(audioTotalDuration)}`}</div></div>
       {mediaUrl && (
         <audio
@@ -415,7 +430,7 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onMediaError, on
     {!isImage && !isVideo && !isAudio && <div className="file-attachment">
       <div className="file-icon" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40 }}>
         <div className="file-icon-box file-icon-box--generic">
-          {(downloadState === 'downloading' || downloadState === 'decrypting' || downloadState === 'idle' || downloadState === 'error') ? (
+          {upload ? uploadActionButton(0) : (downloadState === 'downloading' || downloadState === 'decrypting' || downloadState === 'idle' || downloadState === 'error') ? (
             <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%`, margin: 0 }} onClick={(e) => {
               e.stopPropagation();
               if (downloadState === 'downloading') cancelDownload();
