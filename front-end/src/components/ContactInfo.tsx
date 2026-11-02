@@ -10,7 +10,7 @@ import { Avatar, extractFileIdFromAvatar, getAvatarDisplayUrl } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { apiFetch } from '../config/api';
 import { ImageMediaViewer } from './ImageMediaViewer';
-import { encryptFileBytesClientSide } from '../utils/e2ee';
+import { encryptAvatarBytesClientSide } from '../utils/e2ee';
 import { copyText } from '../utils/clipboard';
 import { formatLastSeen, resolveVerified, toPersianDigits } from '../utils/format';
 
@@ -200,6 +200,11 @@ export function ContactInfo({
     const uploadGroupAvatar = async (file: File) => {
         if (!file) return;
 
+        if (file.type === 'image/gif' || /\.gif$/i.test(file.name)) {
+            setError('فرمت GIF برای عکس گروه پشتیبانی نمی‌شود. لطفاً یک تصویر ثابت انتخاب کنید.');
+            return;
+        }
+
         if (file.size > MAX_IMAGE_BYTES) {
             setError('حجم عکس نباید بیشتر از ۳ مگابایت باشد');
             return;
@@ -211,7 +216,7 @@ export function ContactInfo({
         try {
             const token = localStorage.getItem('token') || '';
             const plainBytes = new Uint8Array(await file.arrayBuffer());
-            const encryptedBytes = await encryptFileBytesClientSide(plainBytes, token, 'profile_avatar_shared');
+            const encryptedBytes = await encryptAvatarBytesClientSide(plainBytes, token);
             const encryptedFile = new window.File([encryptedBytes as BlobPart], file.name, {
                 type: 'application/octet-stream',
                 lastModified: file.lastModified || Date.now(),

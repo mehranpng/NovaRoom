@@ -9,7 +9,7 @@ import { cx } from '../utils/cx';
 import { apiFetch } from '../config/api';
 import { ImageMediaViewer } from './ImageMediaViewer';
 import { ImageEditorModal } from './ImageEditorModal';
-import { encryptFileBytesClientSide } from '../utils/e2ee';
+import { encryptAvatarBytesClientSide } from '../utils/e2ee';
 import { screenVariants } from '../utils/screenMotion';
 import { useScrollFade } from '../hooks/useScrollFade';
 import { copyText } from '../utils/clipboard';
@@ -188,7 +188,7 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
         try {
             const token = localStorage.getItem('token') || '';
             const plainBytes = new Uint8Array(await file.arrayBuffer());
-            const encryptedBytes = await encryptFileBytesClientSide(plainBytes, token, 'profile_avatar_shared');
+            const encryptedBytes = await encryptAvatarBytesClientSide(plainBytes, token);
             const encryptedFile = new window.File([encryptedBytes as BlobPart], file.name, {
                 type: 'application/octet-stream',
                 lastModified: file.lastModified || Date.now(),
@@ -325,7 +325,11 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
                                     onChange={(e) => {
                                         const file = e.target.files?.[0];
                                         if (file) {
-                                            setPendingAvatarFile(file);
+                                            if (file.type === 'image/gif' || /\.gif$/i.test(file.name)) {
+                                                alert('فرمت GIF برای عکس پروفایل پشتیبانی نمی‌شود. لطفاً یک تصویر ثابت انتخاب کنید.');
+                                            } else {
+                                                setPendingAvatarFile(file);
+                                            }
                                             e.currentTarget.value = '';
                                         }
                                     }}

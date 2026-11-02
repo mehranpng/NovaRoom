@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { cx } from '../utils/cx';
 import { API_BASE_URL } from '../config/api';
 import { decryptAvatarBytesClientSide, decryptFileBytesClientSide } from '../utils/e2ee';
-import { getOrCacheBlob } from '../utils/mediaCache';
+import { getOrCacheBlob, deleteCachedBlob } from '../utils/mediaCache';
 
 interface AvatarProps {
   name: string;
@@ -37,6 +37,20 @@ const iconSizeMap = { xs: 14, sm: 20, md: 24, lg: 32, xl: 40 };
 const avatarCache = new Map<string, string>();
 
 const avatarFetching = new Map<string, Promise<string>>();
+
+function looksLikeImage(bytes: Uint8Array): boolean {
+  if (bytes.length < 4) return false;
+  const jpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
+  const png = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+  const gif = bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46;
+  const webp = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+    && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
+  const bmp = bytes[0] === 0x42 && bytes[1] === 0x4d;
+  const isoBmff = bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70;
+  const tiff = (bytes[0] === 0x49 && bytes[1] === 0x49) || (bytes[0] === 0x4d && bytes[1] === 0x4d);
+  const svg = bytes[0] === 0x3c;
+  return jpeg || png || gif || webp || bmp || isoBmff || tiff || svg;
+}
 
 function resolveAvatarUrl(src: string): string {
   if (!src) return '';
@@ -117,6 +131,12 @@ async function fetchAvatar(src: string): Promise<string> {
           return new Blob([plainBytes as BlobPart], { type: response.headers.get('content-type') || 'image/*' });
         },
       });
+      const previewBytes = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+      if (!looksLikeImage(previewBytes)) {
+        void deleteCachedBlob(`avatar:${cacheKey}`);
+        avatarCache.set(cacheKey, '');
+        return '';
+      }
       const blobUrl = URL.createObjectURL(blob);
       avatarCache.set(cacheKey, blobUrl);
       return blobUrl;
