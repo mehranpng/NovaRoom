@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Share2 } from 'lucide-react';
+import { Share2, UserRound } from 'lucide-react';
 import { apiFetch } from '../../config/api';
 import type {
     Chat,
@@ -449,11 +449,15 @@ export function ChessHome({ currentUser, chats, onOpenGame, onSelectUser }: Ches
                                                 onClick={() => openGame(g.id)}
                                             >
                                                 <div className="chess-history__main">
-                                                    <Avatar
-                                                        name={oppInfo?.name || 'حریف'}
-                                                        size="sm"
-                                                        src={oppInfo?.avatar}
-                                                    />
+                                                    {oppInfo?.isGuest ? (
+                                                        <span className="chess__player-placeholder"><UserRound size={18} /></span>
+                                                    ) : (
+                                                        <Avatar
+                                                            name={oppInfo?.name || 'حریف'}
+                                                            size="sm"
+                                                            src={oppInfo?.avatar}
+                                                        />
+                                                    )}
                                                     <div className="chess-history__meta">
                                                         <div className="chess-history__name">
                                                             {oppInfo?.name || 'حریف'}

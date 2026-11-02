@@ -132,7 +132,6 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
     const emoteTimersRef = useRef<Partial<Record<ChessColor, number>>>({});
     const emoteAnchorRef = useRef<HTMLDivElement | null>(null);
     const emoteSeqRef = useRef(0);
-    const lastEmoteSentAtRef = useRef(0);
 
     const fetchDetails = useCallback((id: string, force = false) => {
         fetchChessGameCached(id, { force })
@@ -275,13 +274,9 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
     });
 
     const handleSendEmote = useCallback((emote: ChessEmote) => {
-        const nowTs = Date.now();
-        if (nowTs - lastEmoteSentAtRef.current < 800) return;
-        lastEmoteSentAtRef.current = nowTs;
         setEmotePickerOpen(false);
-        showEmoteForColor(myColor, emote);
         send({ type: 'emote', emote });
-    }, [myColor, send, showEmoteForColor]);
+    }, [send]);
 
     useEffect(() => {
         if (game?.status !== 'active' || !game.clocks) return;
@@ -801,6 +796,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                                         type="button"
                                         className={cx('chess__emote-trigger', emotePickerOpen && 'chess__emote-trigger--open')}
                                         aria-label="ایموت"
+                                        disabled={Boolean(activeEmotes[myColor])}
                                         onClick={() => setEmotePickerOpen((v) => !v)}
                                     >
                                         <Smile size={18} />

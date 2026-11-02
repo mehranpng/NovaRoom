@@ -7551,7 +7551,7 @@ html.no-blur-effect .chat-list__header,
 .chess__player-placeholder {
     width: 36px;
     height: 36px;
-    border-radius: 12px;
+    border-radius: 9999px;
 }
 
 .chess__panel-icon {
@@ -7678,14 +7678,19 @@ html.no-blur-effect .chat-list__header,
     transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease;
 }
 
-.chess__emote-trigger:hover,
+.chess__emote-trigger:hover:not(:disabled),
 .chess__emote-trigger--open {
     background: var(--hover-bg);
     color: var(--text-primary);
 }
 
-.chess__emote-trigger:active {
+.chess__emote-trigger:active:not(:disabled) {
     transform: scale(0.94);
+}
+
+.chess__emote-trigger:disabled {
+    opacity: 0.45;
+    cursor: default;
 }
 
 .chess__emote-picker {
