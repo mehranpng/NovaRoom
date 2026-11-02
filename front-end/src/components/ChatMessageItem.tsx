@@ -347,6 +347,11 @@ export const ChatMessageItem = memo(function ChatMessageItem({
             <div
                 className={`${isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`} ${isHighlighted ? 'message-row--flash' : ''} ${isSelected ? 'message-row--selected' : ''} ${isSelectionModeActive ? 'message-row--selecting' : ''} ${isSwiping ? 'message-row--swiping' : ''}`}
                 onClickCapture={(e) => {
+                    if (consumeSuppressedClick()) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                    }
                     if (!isSelectionModeActive) return;
                     const target = e.target as HTMLElement;
                     if (!target.closest('.message-select-indicator')) {
@@ -493,6 +498,11 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                         const ne = e.nativeEvent as MouseEvent;
                         const hasPointer = typeof ne.clientX === 'number' && typeof ne.clientY === 'number' && (ne.clientX > 0 || ne.clientY > 0);
                         actions.openMenu(message.id, e.currentTarget, hasPointer ? ne.clientX : undefined, hasPointer ? ne.clientY : undefined);
+                    }}
+                    onContextMenu={(e) => {
+                        e.preventDefault();
+                        if (isSelectionModeActive) return;
+                        actions.openMenu(message.id, e.currentTarget, e.clientX, e.clientY);
                     }}
                     role="button" tabIndex={0}
                     onKeyDown={(e) => { if (e.key === 'Enter') actions.openMenu(message.id, e.currentTarget); }}

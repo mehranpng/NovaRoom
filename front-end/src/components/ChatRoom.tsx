@@ -795,7 +795,7 @@ export function ChatRoom({
     };
 
     const openMember = (memberId: string) => {
-        if (!memberId || isOfficialChannel) return;
+        if (!memberId) return;
         maybeSaveScroll(chatId);
         restoringFromInfoRef.current = true;
         if (memberId === currentUserId) {
@@ -1039,8 +1039,8 @@ export function ChatRoom({
                         headers: { Authorization: `Bearer ${token}` },
                     });
                     if (!response.ok) throw new Error('Download failed');
-                    const encryptedBytes = new Uint8Array(await response.arrayBuffer());
-                    const plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, chatId);
+                    const downloadedBytes = new Uint8Array(await response.arrayBuffer());
+                    const plainBytes = isAudio ? downloadedBytes : await decryptFileBytesClientSide(downloadedBytes, token, chatId);
                     return new Blob([plainBytes as BlobPart], { type: m.file?.mimeType || 'application/octet-stream' });
                 },
             });
@@ -1579,7 +1579,8 @@ export function ChatRoom({
                 prevLastMessageIdRef.current = nextLastId;
                 return () => cancelAnimationFrame(raf);
             }
-            const recentlyAddedMessages = messages.slice(Math.max(0, prevLenRef.current));
+            const prevLastIndex = prevLastId ? messages.findIndex((msg) => msg.id === prevLastId) : -1;
+            const recentlyAddedMessages = prevLastIndex >= 0 ? messages.slice(prevLastIndex + 1) : [];
             const incomingCount = recentlyAddedMessages.filter((msg) => msg.senderId !== currentUserId).length;
             if (incomingCount > 0) {
                 setNewMsgCount((c) => c + incomingCount);

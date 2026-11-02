@@ -1,3 +1,5 @@
+import { gcm } from '@noble/ciphers/aes';
+
 const ENC_PREFIX = 'enc:v1:';
 const ENC_NONCE_SIZE = 16;
 const ENC_TAG_SIZE = 16;
@@ -403,18 +405,20 @@ export const decryptFileBytesClientSide = async (raw: Uint8Array, _token: string
     if (!raw.length) return raw;
     const scope = `chat:${chatId}`;
     if (hasMagic(raw, FILE_MAGIC_V2)) {
-        if (typeof crypto === 'undefined' || !crypto.subtle) return raw;
         if (raw.length < FILE_MAGIC_V2.length + FILE_GCM_IV_SIZE + ENC_TAG_SIZE) return raw;
         try {
             const iv = raw.subarray(FILE_MAGIC_V2.length, FILE_MAGIC_V2.length + FILE_GCM_IV_SIZE);
             const body = raw.subarray(FILE_MAGIC_V2.length + FILE_GCM_IV_SIZE);
-            const key = await getAesKey(buildSharedMaterial(scope));
-            const plain = await crypto.subtle.decrypt(
-                { name: 'AES-GCM', iv: asBufferSource(iv) },
-                key,
-                asBufferSource(body),
-            );
-            return new Uint8Array(plain);
+            const key = await deriveKey(buildSharedMaterial(scope));
+            if (typeof crypto !== 'undefined' && crypto.subtle) {
+                const plain = await crypto.subtle.decrypt(
+                    { name: 'AES-GCM', iv: asBufferSource(iv) },
+                    await getAesKey(buildSharedMaterial(scope)),
+                    asBufferSource(body),
+                );
+                return new Uint8Array(plain);
+            }
+            return gcm(key, iv).decrypt(body);
         } catch {
             return raw;
         }

@@ -1766,7 +1766,6 @@ body,
     touch-action: pan-y;
     min-height: 0;
     background: transparent;
-    transition: padding-bottom 0.18s ease;
 }
 
 .chat-room__messages--with-chips {
@@ -2749,7 +2748,7 @@ body,
 .chat-room__reply-edit-box {
     margin: 0 auto 8px;
     padding: 8px 14px;
-    border-radius: 22px;
+    border-radius: 9999px;
     background: var(--glass-surface-elevated);
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
@@ -2870,22 +2869,22 @@ body,
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 32px;
+    height: 32px;
     border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--accent-primary);
+    border: 1px solid var(--glass-border);
+    background: var(--glass-surface-soft);
+    color: var(--text-secondary);
     cursor: pointer;
     transition: all 0.15s ease;
     padding: 0;
+    flex-shrink: 0;
 }
 
 .chat-room__re-edit-btn:hover {
-    background: var(--accent-primary);
-    color: #ffffff;
-    border-color: var(--accent-primary);
-    transform: scale(1.08);
+    background: var(--glass-surface-elevated);
+    color: var(--text-primary);
+    border-color: var(--glass-border);
 }
 
 .chat-room__re-edit-btn:active {
@@ -3086,6 +3085,12 @@ body,
 .contact-info__spacer {
     flex: 1;
     pointer-events: none;
+}
+
+.contact-info__header--centered .contact-info__title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
 }
 
 .contact-info__content {
@@ -6129,15 +6134,15 @@ html.no-blur-effect .chat-room__jump-box {
 
 html.no-blur-effect {
     --glass-blur: none;
-    --glass-surface: color-mix(in srgb, var(--bg-primary) 82%, transparent);
-    --glass-surface-elevated: color-mix(in srgb, var(--bg-primary) 88%, transparent);
-    --glass-surface-soft: color-mix(in srgb, var(--bg-secondary) 80%, transparent);
+    --glass-surface: color-mix(in srgb, var(--bg-primary) 94%, transparent);
+    --glass-surface-elevated: color-mix(in srgb, var(--bg-primary) 97%, transparent);
+    --glass-surface-soft: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
 }
 
 html.dark-mode.no-blur-effect {
-    --glass-surface: color-mix(in srgb, var(--bg-primary) 90%, transparent);
-    --glass-surface-elevated: color-mix(in srgb, var(--bg-primary) 93%, transparent);
-    --glass-surface-soft: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+    --glass-surface: color-mix(in srgb, var(--bg-primary) 96%, transparent);
+    --glass-surface-elevated: color-mix(in srgb, var(--bg-primary) 98%, transparent);
+    --glass-surface-soft: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
 }
 
 html.no-blur-effect *:not(.chat-list *):not(.chat-list) {

@@ -131,8 +131,12 @@ export function FileMessage({ file, token, chatId, onMediaLoad, onMediaError, on
           const res = await fetch(`${API_BASE_URL}/files/${file.fileId}`, { headers: { Authorization: `Bearer ${token}` }, signal: task!.abortController?.signal });
           if (!res.ok) throw new Error('download failed');
           window.clearInterval(progressTimer);
-          task!.progress = 100; task!.state = 'decrypting'; notify(task!);
-          const blob = await decodeResponseBlob(res);
+          if (!isAudio) {
+            task!.progress = 100; task!.state = 'decrypting'; notify(task!);
+          }
+          const blob = isAudio
+            ? new Blob([new Uint8Array(await res.arrayBuffer()) as BlobPart], { type: file.mimeType || res.headers.get('content-type') || 'application/octet-stream' })
+            : await decodeResponseBlob(res);
           task!.blob = blob;
           await getOrCacheBlob({ cacheKey, loadBlob: async () => blob });
           

@@ -73,6 +73,14 @@ const openMediaDb = () => openDb(MEDIA_DB_NAME, MEDIA_STORE_NAME, 'media');
 const openTextDb = () => openDb(TEXT_DB_NAME, TEXT_STORE_NAME, 'text');
 const openSnapshotDb = () => openDb(SNAPSHOT_DB_NAME, SNAPSHOT_STORE_NAME, 'snapshot', 'chatId');
 
+const hasEncryptionMagic = (payload: ArrayBuffer): boolean => {
+    if (payload.byteLength < 4) return false;
+    const bytes = new Uint8Array(payload, 0, 4);
+    if (bytes[0] !== 0x4e || bytes[1] !== 0x43) return false;
+    if (bytes[2] === 0x46) return bytes[3] === 0x31 || bytes[3] === 0x32;
+    return bytes[2] === 0x41 && bytes[3] === 0x31;
+};
+
 const readBlobFromCache = async (cacheKey: string): Promise<Blob | null> => {
     const db = await openMediaDb();
     if (!db) return null;
@@ -85,6 +93,11 @@ const readBlobFromCache = async (cacheKey: string): Promise<Blob | null> => {
         req.onsuccess = () => {
             const record = req.result as CacheRecord | undefined;
             if (!record?.payload) {
+                resolve(null);
+                return;
+            }
+            if (hasEncryptionMagic(record.payload)) {
+                void deleteMediaCacheKey(cacheKey);
                 resolve(null);
                 return;
             }

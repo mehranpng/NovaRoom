@@ -281,19 +281,19 @@ export const ChatComposer = memo(function ChatComposer({
             )}
             {displayedUploadedFile && (
                 <div className="chat-room__reply-edit-box">
+                    {editorAttachmentState?.reEdit && (
+                        <button
+                            type="button"
+                            className="chat-room__re-edit-btn"
+                            onClick={editorAttachmentState.reEdit}
+                            title="ویرایش مجدد تصویر"
+                        >
+                            <Pencil size={17} />
+                        </button>
+                    )}
                     <div style={{ minWidth: 0, flex: 1, textAlign: 'right' }}>
-                        <div className="chat-room__reply-edit-box__title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div className="chat-room__reply-edit-box__title">
                             <span>{editorAttachmentState?.isEdited ? 'فایل ویرایش شده' : 'فایل آپلود شده'}</span>
-                            {editorAttachmentState?.reEdit && (
-                                <button
-                                    type="button"
-                                    className="chat-room__re-edit-btn"
-                                    onClick={editorAttachmentState.reEdit}
-                                    title="ویرایش مجدد تصویر"
-                                >
-                                    <Pencil size={13} />
-                                </button>
-                            )}
                         </div>
                         <div className="chat-room__reply-edit-box__text">{displayedUploadedFile.fileName}</div>
                     </div>

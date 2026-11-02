@@ -115,7 +115,7 @@ export function GroupMembersView({
             animate="visible"
             exit="exit"
         >
-            <div className="contact-info__header">
+            <div className="contact-info__header contact-info__header--centered">
                 <button className="contact-info__back back-icon-btn" onClick={onBack} type="button"><ChevronLeft size={22} /></button>
                 <div className="contact-info__title">اطلاعات گروه</div>
                 <div className="contact-info__spacer" />
