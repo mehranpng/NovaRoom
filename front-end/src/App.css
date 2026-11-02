@@ -7004,7 +7004,7 @@ html.no-blur-effect .chat-list__header,
     justify-content: space-between;
     gap: 10px;
     padding: 8px 12px;
-    border-radius: 18px;
+    border-radius: 999px;
     background: var(--glass-surface-soft);
     border: 1px solid var(--glass-border);
     direction: rtl;
@@ -7547,8 +7547,7 @@ html.no-blur-effect .chat-list__header,
 
 .chess__panel,
 .chess__draw-banner,
-.chess__moves,
-.chess__player {
+.chess__moves {
     border-radius: 24px;
 }
 
@@ -7776,6 +7775,7 @@ html.no-blur-effect .chat-list__header,
 .chess__rating-change {
     display: inline-flex;
     align-items: center;
+    flex: 0 0 auto;
     gap: 6px;
     font-size: 13.5px;
     font-weight: 700;
@@ -7788,6 +7788,10 @@ html.no-blur-effect .chat-list__header,
 
 .chess__rating-change--down {
     color: #ef4444;
+}
+
+.chess-leaderboard__my-card {
+    border-radius: 999px;
 }
 
 .chess-leaderboard__my-stats {
@@ -7880,6 +7884,21 @@ html.no-blur-effect .chat-list__header,
     font-weight: 700;
     color: var(--text-primary);
     min-width: 0;
+}
+
+.chess-leaderboard__my-rank {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-primary);
+    color: var(--text-secondary);
+    font-size: 10.5px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
 
 .chess-leaderboard__name-text {

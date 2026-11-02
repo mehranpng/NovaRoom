@@ -218,6 +218,7 @@ export interface ChessGameView {
 }
 
 export interface ChessLeaderboardStats {
+    rank?: number | null;
     elo: number;
     wins: number;
     losses: number;

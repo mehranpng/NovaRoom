@@ -6946,14 +6946,42 @@ async def get_chess_leaderboard(
             },
         })
     my_stats = current_user.get("chessStats") or {}
+    my_elo = int(my_stats.get("elo", 1200))
+    my_wins = int(my_stats.get("wins", 0))
+    my_games = int(my_stats.get("gamesPlayed", 0))
+    my_rank = None
+    if my_games > 0:
+        better = await cl_users.count_documents(
+            {
+                "chatId": {"$not": {"$regex": "^guest_"}},
+                "chessStats.gamesPlayed": {"$gt": 0},
+                "$or": [
+                    {"chessStats.elo": {"$gt": my_elo}},
+                    {"chessStats.elo": my_elo, "chessStats.wins": {"$gt": my_wins}},
+                    {
+                        "chessStats.elo": my_elo,
+                        "chessStats.wins": my_wins,
+                        "chessStats.gamesPlayed": {"$gt": my_games},
+                    },
+                    {
+                        "chessStats.elo": my_elo,
+                        "chessStats.wins": my_wins,
+                        "chessStats.gamesPlayed": my_games,
+                        "chatId": {"$lt": my_id},
+                    },
+                ],
+            }
+        )
+        my_rank = better + 1
     return {
         "entries": leaderboard,
         "myStats": {
-            "elo": int(my_stats.get("elo", 1200)),
-            "wins": int(my_stats.get("wins", 0)),
+            "rank": my_rank,
+            "elo": my_elo,
+            "wins": my_wins,
             "losses": int(my_stats.get("losses", 0)),
             "draws": int(my_stats.get("draws", 0)),
-            "gamesPlayed": int(my_stats.get("gamesPlayed", 0)),
+            "gamesPlayed": my_games,
         },
     }
 

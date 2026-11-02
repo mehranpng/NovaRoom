@@ -509,17 +509,23 @@ export function ChessHome({ currentUser, chats, onOpenGame, onSelectUser }: Ches
                         </>
                     ) : (
                         <>
-                            <div className="chess-card">
+                            <div className="chess-card chess-leaderboard__my-card">
                                 <div className="chess-leaderboard__my-stats">
                                     <div className="chess-leaderboard__main">
                                         <Avatar
                                             name={currentUser.name}
                                             size="sm"
                                             src={currentUser.avatar}
-                                            online={currentUser.online}
                                         />
                                         <div className="chess-leaderboard__meta">
-                                            <div className="chess-leaderboard__name">{currentUser.name}</div>
+                                            <div className="chess-leaderboard__name">
+                                                <span className="chess-leaderboard__name-text">{currentUser.name}</span>
+                                                {typeof leaderboard?.myStats.rank === 'number' && (
+                                                    <span className="chess-leaderboard__my-rank">
+                                                        {toPersianDigits(leaderboard.myStats.rank)}
+                                                    </span>
+                                                )}
+                                            </div>
                                             <div className="chess-leaderboard__wld">
                                                 <span className="chess-leaderboard__wld--win">
                                                     {`برد: ${toPersianDigits(leaderboard?.myStats.wins ?? 0)}`}
@@ -570,7 +576,6 @@ export function ChessHome({ currentUser, chats, onOpenGame, onSelectUser }: Ches
                                                         name={entry.user.name}
                                                         size="sm"
                                                         src={entry.user.avatar}
-                                                        online={!entry.user.blockedByOther && Boolean(entry.user.online)}
                                                     />
                                                     <div className="chess-leaderboard__meta">
                                                         <div className="chess-leaderboard__name">

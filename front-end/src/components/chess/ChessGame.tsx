@@ -601,6 +601,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
     const resultSub = game.reason && game.reason !== 'aborted' ? REASON_LABELS[game.reason] || '' : '';
 
     const myRatingChange = game.ratingChanges?.[myColor] ?? null;
+    const oppRatingChange = game.ratingChanges?.[oppColor] ?? null;
 
     const winnerColor: ChessColor | null =
         game.status === 'finished' ? (game.result === '1-0' ? 'white' : game.result === '0-1' ? 'black' : null) : null;
@@ -664,6 +665,17 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                                     )}
                                     <span className={cx('chess__color-dot', `chess__color-dot--${oppColor}`)} />
                                     {winnerColor === oppColor && <span className="chess__winner-badge">برنده</span>}
+                                    {oppRatingChange && oppRatingChange.delta !== 0 && (
+                                        <span
+                                            className={cx(
+                                                'chess__rating-change',
+                                                oppRatingChange.delta > 0 && 'chess__rating-change--up',
+                                                oppRatingChange.delta < 0 && 'chess__rating-change--down',
+                                            )}
+                                        >
+                                            {`${oppRatingChange.delta > 0 ? '+' : '−'}${toPersianDigits(Math.abs(oppRatingChange.delta))}`}
+                                        </span>
+                                    )}
                                 </div>
                                 <CapturedRow pieces={captured?.[myColor] ?? []} color={myColor} />
                             </div>
@@ -767,6 +779,17 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                                     )}
                                     <span className={cx('chess__color-dot', `chess__color-dot--${myColor}`)} />
                                     {winnerColor === myColor && <span className="chess__winner-badge">برنده</span>}
+                                    {myRatingChange && myRatingChange.delta !== 0 && (
+                                        <span
+                                            className={cx(
+                                                'chess__rating-change',
+                                                myRatingChange.delta > 0 && 'chess__rating-change--up',
+                                                myRatingChange.delta < 0 && 'chess__rating-change--down',
+                                            )}
+                                        >
+                                            {`${myRatingChange.delta > 0 ? '+' : '−'}${toPersianDigits(Math.abs(myRatingChange.delta))}`}
+                                        </span>
+                                    )}
                                 </div>
                                 <CapturedRow pieces={captured?.[oppColor] ?? []} color={oppColor} />
                             </div>
@@ -930,20 +953,6 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                         <div className="chess__panel">
                             <div className="chess__result-title">{resultTitle}</div>
                             {resultSub && <div className="chess__result-sub">{resultSub}</div>}
-                            {myRatingChange && (
-                                <div
-                                    className={cx(
-                                        'chess__rating-change',
-                                        myRatingChange.delta > 0 && 'chess__rating-change--up',
-                                        myRatingChange.delta < 0 && 'chess__rating-change--down',
-                                    )}
-                                >
-                                    {`امتیاز: ${toPersianDigits(myRatingChange.after)}`}
-                                    <span>
-                                        {`(${myRatingChange.delta > 0 ? '+' : myRatingChange.delta < 0 ? '−' : ''}${toPersianDigits(Math.abs(myRatingChange.delta))})`}
-                                    </span>
-                                </div>
-                            )}
                             <div className="chess__actions">
                                 {isParticipant && !isGuestMode && game.reason !== 'aborted' && (
                                     <button
