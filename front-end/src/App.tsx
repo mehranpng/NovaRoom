@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import type { Message, View, User, Chat, ChatLastMessage, FileMetadata, AIChatSummary, AIModelKey, PendingForwardDraft, AIUsageStatus, AIMemoryItem, AIAttachmentMeta, AISearchSource, PendingAttachment } from './types';
 import { apiFetch, getAuthToken } from './config/api';
-import { cancelUpload, enqueueUpload, registerUpload, releaseUpload, uploadChatFile } from './utils/chatFileUploader';
+import { cancelUpload, enqueueUpload, registerUpload, releaseUpload, uploadChatFile, localBlobUrls, registerLocalBlobUrl } from './utils/chatFileUploader';
+import { clearUploadProgress, setUploadProgress } from './utils/uploadProgressStore';
 import { useWebSocket } from './hooks/useWebSocket';
 import { ChatList } from './components/ChatList';
 import { ChatRoom } from './components/ChatRoom';
@@ -72,8 +73,6 @@ const isSameMessageRecord = (prev: Message, next: Message): boolean => {
         Boolean(prev.edited) === Boolean(next.edited) &&
         (prev as any).editedAt === (next as any).editedAt &&
         prev.deliveryStatus === next.deliveryStatus &&
-        prev.upload?.phase === next.upload?.phase &&
-        prev.upload?.progress === next.upload?.progress &&
         prev.file?.fileId === next.file?.fileId &&
         prev.file?.localUrl === next.file?.localUrl &&
         prev.file?.fileName === next.file?.fileName &&
@@ -2147,21 +2146,20 @@ export function App() {
                         chatId: targetChatId,
                         signal: controller.signal,
                         onPhase: (phase, progress) => {
-                            setMessages((prev) => {
-                                const list = prev[targetChatId] || [];
-                                const idx = list.findIndex((m) => m.id === clientId);
-                                if (idx < 0) return prev;
-                                const nextList = list.slice();
-                                nextList[idx] = { ...nextList[idx], upload: { phase, progress } };
-                                return { ...prev, [targetChatId]: nextList };
-                            });
+                            setUploadProgress(clientId, { phase, progress });
                         },
                     });
+                    registerLocalBlobUrl(file.fileId, localUrl);
                     const success = await sendViaWS(targetChatId, text, payload.replyToId, file, clientId);
                     if (!success) console.warn('WebSocket not connected, message was not sent');
-                    window.setTimeout(() => URL.revokeObjectURL(localUrl), 1500);
+                    clearUploadProgress(clientId);
+                    window.setTimeout(() => {
+                        localBlobUrls.delete(file.fileId);
+                        URL.revokeObjectURL(localUrl);
+                    }, 15000);
                 });
             } catch (error) {
+                clearUploadProgress(clientId);
                 setMessages((prev) => ({
                     ...prev,
                     [targetChatId]: (prev[targetChatId] || []).filter((m) => m.id !== clientId),

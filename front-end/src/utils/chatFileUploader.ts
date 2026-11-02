@@ -7,6 +7,9 @@ export type UploadPhase = 'uploading' | 'encrypting';
 
 const queues = new Map<string, Promise<unknown>>();
 const controllers = new Map<string, AbortController>();
+export const localBlobUrls = new Map<string, string>();
+
+const yieldToMain = () => new Promise<void>((resolve) => window.setTimeout(resolve, 0));
 
 export function enqueueUpload<T>(chatId: string, job: () => Promise<T>): Promise<T> {
     const previous = queues.get(chatId) || Promise.resolve();
@@ -28,77 +31,61 @@ export function cancelUpload(clientId: string) {
     controllers.delete(clientId);
 }
 
-export async function readMediaDimensions(file: File): Promise<{ width: number; height: number }> {
+export function registerLocalBlobUrl(fileId: string, url: string) {
+    localBlobUrls.set(fileId, url);
+}
+
+export function isLocalBlobUrl(url: string) {
+    for (const value of localBlobUrls.values()) {
+        if (value === url) return true;
+    }
+    return false;
+}
+
+export async function readMediaInfo(file: File): Promise<{ width: number; height: number; duration: number }> {
     const type = file.type || '';
     if (type.startsWith('image/')) {
         try {
             const bitmap = await createImageBitmap(file);
-            const size = { width: bitmap.width, height: bitmap.height };
+            const size = { width: bitmap.width, height: bitmap.height, duration: 0 };
             bitmap.close();
             return size;
         } catch {
-            return { width: 0, height: 0 };
+            return { width: 0, height: 0, duration: 0 };
         }
     }
-    if (type.startsWith('video/')) {
-        try {
-            const objectUrl = URL.createObjectURL(file);
-            return await new Promise<{ width: number; height: number }>((resolve) => {
-                const media = document.createElement('video');
-                media.preload = 'metadata';
-                const cleanup = () => URL.revokeObjectURL(objectUrl);
-                const timer = window.setTimeout(() => {
-                    cleanup();
-                    resolve({ width: 0, height: 0 });
-                }, 1500);
-                media.onloadedmetadata = () => {
-                    window.clearTimeout(timer);
-                    cleanup();
-                    resolve({ width: media.videoWidth, height: media.videoHeight });
-                };
-                media.onerror = () => {
-                    window.clearTimeout(timer);
-                    cleanup();
-                    resolve({ width: 0, height: 0 });
-                };
-                media.src = objectUrl;
-            });
-        } catch {
-            return { width: 0, height: 0 };
-        }
+    if (!type.startsWith('video/') && !type.startsWith('audio/')) {
+        return { width: 0, height: 0, duration: 0 };
     }
-    return { width: 0, height: 0 };
-}
-
-export async function readMediaDuration(file: File): Promise<number> {
-    if (!(file.type.startsWith('audio/') || file.type.startsWith('video/'))) return 0;
     try {
         const objectUrl = URL.createObjectURL(file);
-        const duration = await new Promise<number>((resolve) => {
-            const media = document.createElement(file.type.startsWith('audio/') ? 'audio' : 'video');
+        return await new Promise<{ width: number; height: number; duration: number }>((resolve) => {
+            const media = document.createElement(type.startsWith('video/') ? 'video' : 'audio');
             media.preload = 'metadata';
-            const cleanup = () => {
-                URL.revokeObjectURL(objectUrl);
-            };
+            if (media instanceof HTMLVideoElement) media.muted = true;
+            const cleanup = () => URL.revokeObjectURL(objectUrl);
             const timer = window.setTimeout(() => {
                 cleanup();
-                resolve(0);
+                resolve({ width: 0, height: 0, duration: 0 });
             }, 1500);
             media.onloadedmetadata = () => {
                 window.clearTimeout(timer);
                 cleanup();
-                resolve(Number.isFinite(media.duration) ? media.duration : 0);
+                resolve({
+                    width: media instanceof HTMLVideoElement ? media.videoWidth : 0,
+                    height: media instanceof HTMLVideoElement ? media.videoHeight : 0,
+                    duration: Number.isFinite(media.duration) ? media.duration : 0,
+                });
             };
             media.onerror = () => {
                 window.clearTimeout(timer);
                 cleanup();
-                resolve(0);
+                resolve({ width: 0, height: 0, duration: 0 });
             };
             media.src = objectUrl;
         });
-        return duration;
     } catch {
-        return 0;
+        return { width: 0, height: 0, duration: 0 };
     }
 }
 
@@ -153,6 +140,7 @@ export async function uploadChatFile(args: {
     };
 
     try {
+        if (signal.aborted) throw new Error('aborted');
         let imagePreviewBlob: Blob | null = null;
         if (type.startsWith('image/')) {
             imagePreviewBlob = await createBlurredPreview(file);
@@ -161,10 +149,12 @@ export async function uploadChatFile(args: {
         onPhase('uploading', 0);
         warmupTimer = window.setInterval(() => {
             report(Math.min(8, reported + 1));
-        }, 210);
+        }, 400);
 
-        const plainBytes = new Uint8Array(await file.arrayBuffer());
-        const fileBytes = isAudio ? plainBytes : await encryptFileBytesClientSide(plainBytes, token, chatId);
+        await yieldToMain();
+        const plainBytes = isAudio ? null : new Uint8Array(await file.arrayBuffer());
+        await yieldToMain();
+        const fileBytes = plainBytes ? await encryptFileBytesClientSide(plainBytes, token, chatId) : null;
         if (signal.aborted) throw new Error('aborted');
 
         if (warmupTimer != null) {
@@ -172,14 +162,13 @@ export async function uploadChatFile(args: {
             warmupTimer = null;
         }
 
-        const uploadBlob = new Blob([fileBytes as BlobPart], { type: isAudio ? (type || 'audio/mpeg') : 'application/octet-stream' });
-        const uploadFile = new window.File([uploadBlob], file.name, {
-            type: isAudio ? (type || 'audio/mpeg') : 'application/octet-stream',
-            lastModified: file.lastModified,
-        });
-
+        await yieldToMain();
         const formData = new FormData();
-        formData.append('file', uploadFile);
+        if (isAudio) {
+            formData.append('file', file, file.name);
+        } else if (fileBytes) {
+            formData.append('file', new Blob([fileBytes as BlobPart], { type: 'application/octet-stream' }), file.name);
+        }
         if (attachment.duration > 0) formData.append('duration', String(attachment.duration));
         if (imagePreviewBlob) {
             formData.append('preview', new window.File([imagePreviewBlob], `preview-${file.name}.jpg`, { type: 'image/jpeg' }));
@@ -195,7 +184,7 @@ export async function uploadChatFile(args: {
                 if (!e.lengthComputable) return;
                 const progress = (e.loaded / e.total) * 100;
                 const now = performance.now();
-                if (progress === 100 || progress >= reported + 2 || now - lastReportTime > 120) {
+                if (progress === 100 || progress >= reported + 2 || now - lastReportTime > 200) {
                     lastReportTime = now;
                     report(progress);
                 }
@@ -244,7 +233,7 @@ export async function uploadChatFile(args: {
         };
 
         report(100);
-        await saveBlobToCache(`chat:${chatId}:file:${result.fileId}`, file);
+        void saveBlobToCache(`chat:${chatId}:file:${result.fileId}`, file);
 
         if (!isAudio) {
             onPhase('encrypting', 100);

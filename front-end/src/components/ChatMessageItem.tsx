@@ -210,8 +210,6 @@ function shallowRecordEqual(a: object, b: object) {
 
 function chatMessageItemPropsEqual(prev: ChatMessageItemProps, next: ChatMessageItemProps) {
     if (prev.message !== next.message && !shallowRecordEqual(prev.message, next.message)) return false;
-    if (prev.message.upload?.phase !== next.message.upload?.phase) return false;
-    if (prev.message.upload?.progress !== next.message.upload?.progress) return false;
     if (prev.message.file?.fileId !== next.message.file?.fileId) return false;
     if (prev.message.file?.localUrl !== next.message.file?.localUrl) return false;
     const keys = Object.keys(prev) as (keyof ChatMessageItemProps)[];
@@ -260,7 +258,8 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     const longPressTimerRef = useRef<number | null>(null);
     const longPressOriginRef = useRef({ x: 0, y: 0 });
     const suppressClickRef = useRef(false);
-    const swipeEnabled = canSwipeToReply && !isSelectionModeActive;
+    const isUploading = message.deliveryStatus === 'sending' && Boolean(message.file?.localUrl);
+    const swipeEnabled = canSwipeToReply && !isSelectionModeActive && !isUploading;
 
     const setBubbleRef = useCallback((el: HTMLDivElement | null) => {
         bubbleRef.current = el;
@@ -276,6 +275,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     const startLongPress = (x: number, y: number) => {
         cancelLongPress();
         suppressClickRef.current = false;
+        if (isUploading) return;
         if (isSelectionModeActive) return;
         longPressOriginRef.current = { x, y };
         longPressTimerRef.current = window.setTimeout(() => {
@@ -352,6 +352,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
             <div
                 className={`${isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`} ${isHighlighted ? 'message-row--flash' : ''} ${isSelected ? 'message-row--selected' : ''} ${isSelectionModeActive ? 'message-row--selecting' : ''} ${isSwiping ? 'message-row--swiping' : ''}`}
                 onClickCapture={(e) => {
+                    if (isUploading) return;
                     if (consumeSuppressedClick()) {
                         e.preventDefault();
                         e.stopPropagation();
@@ -366,6 +367,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     }
                 }}
                 onClick={(e) => {
+                    if (isUploading) return;
                     if (!isSelectionModeActive) return;
                     if (consumeSuppressedClick()) return;
                     if (Date.now() < swipeRef.current.blockClickUntil) return;
@@ -463,6 +465,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     <div
                         className={`message-select-indicator ${isSelected ? 'message-select-indicator--selected' : ''}`}
                         onClick={(e: ReactMouseEvent) => {
+                            if (isUploading) return;
                             e.stopPropagation();
                             actions.toggleSelect(message.id);
                         }}
@@ -490,9 +493,10 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                 <div
                     ref={setBubbleRef}
                     className={isMine
-                        ? `message-bubble message-bubble--mine ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isSelected ? 'message-bubble--selected' : ''}`
-                        : `message-bubble message-bubble--theirs ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isSelected ? 'message-bubble--selected' : ''}`}
+                        ? `message-bubble message-bubble--mine ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isSelected ? 'message-bubble--selected' : ''} ${isUploading ? 'message-bubble--uploading' : ''}`
+                        : `message-bubble message-bubble--theirs ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isSelected ? 'message-bubble--selected' : ''} ${isUploading ? 'message-bubble--uploading' : ''}`}
                     onClick={(e) => {
+                        if (isUploading) return;
                         e.stopPropagation();
                         if (consumeSuppressedClick()) return;
                         if (Date.now() < swipeRef.current.blockClickUntil) return;
@@ -506,13 +510,13 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     }}
                     onContextMenu={(e) => {
                         e.preventDefault();
-                        if (isSelectionModeActive) return;
+                        if (isSelectionModeActive || isUploading) return;
                         actions.openMenu(message.id, e.currentTarget, e.clientX, e.clientY);
                     }}
-                    role="button" tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === 'Enter') actions.openMenu(message.id, e.currentTarget); }}
+                    role={isUploading ? undefined : 'button'} tabIndex={isUploading ? -1 : 0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !isUploading) actions.openMenu(message.id, e.currentTarget); }}
                     style={{
-                        cursor: 'pointer',
+                        cursor: isUploading ? 'default' : 'pointer',
                         transform: 'translateX(0px)',
                         transition: 'transform 140ms ease-out, box-shadow 220ms ease',
                         touchAction: 'auto',
@@ -550,12 +554,13 @@ export const ChatMessageItem = memo(function ChatMessageItem({
 
                     {message.replyTo && (
                         <div onClick={(e) => {
+                            if (isUploading) return;
                             if (isSelectionModeActive) return;
                             e.stopPropagation();
                             actions.scrollToMessage(message.replyTo!.id);
                         }}
                             role="button" tabIndex={0}
-                            onKeyDown={(e) => { if (e.key === 'Enter' && !isSelectionModeActive) actions.scrollToMessage(message.replyTo!.id); }}
+                            onKeyDown={(e) => { if (e.key === 'Enter' && !isSelectionModeActive && !isUploading) actions.scrollToMessage(message.replyTo!.id); }}
                             className="message-reply-box"
                             style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
                             <div className="message-reply-box__label">
@@ -572,11 +577,13 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                             file={message.file}
                             token={token}
                             chatId={chatId}
-                            upload={message.deliveryStatus === 'sending' && message.file.localUrl ? message.upload : undefined}
+                            uploading={isUploading}
+                            uploadId={message.id}
                             onCancelUpload={() => cancelUpload(message.id)}
                             onMediaLoad={() => actions.mediaReady(message.id)}
                             onMediaError={() => actions.mediaReady(message.id)}
                             onImageClick={(imageUrl, file) => {
+                                if (isUploading) return;
                                 if (isSelectionModeActive) {
                                     actions.toggleSelect(message.id);
                                     return;
@@ -584,6 +591,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                 actions.openImage(imageUrl, file);
                             }}
                             onVideoClick={(videoUrl, file) => {
+                                if (isUploading) return;
                                 if (isSelectionModeActive) {
                                     actions.toggleSelect(message.id);
                                     return;

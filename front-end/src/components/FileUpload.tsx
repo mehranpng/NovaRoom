@@ -3,7 +3,7 @@ import { File as FileIcon, Image, Music2, Paperclip, Video } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion';
 import type { PendingAttachment } from '../types';
 import { validateFileSize } from '../utils/fileUtils';
-import { readMediaDimensions, readMediaDuration } from '../utils/chatFileUploader';
+import { readMediaInfo } from '../utils/chatFileUploader';
 import { ImageEditorModal } from './ImageEditorModal';
 
 interface FileUploadProps {
@@ -60,7 +60,7 @@ export function FileUpload({ onFileSelected, fileAttached = false, onRegisterUpl
     };
 
     const emitAttachment = async (file: File, isEdited: boolean, fromEditor: boolean) => {
-        const [{ width, height }, duration] = await Promise.all([readMediaDimensions(file), readMediaDuration(file)]);
+        const { width, height, duration } = await readMediaInfo(file);
         onFileSelectedRef.current({
             file,
             width,

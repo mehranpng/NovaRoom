@@ -1883,6 +1883,11 @@ body,
     --message-link-color: var(--message-link-color-mine);
 }
 
+.message-bubble--uploading {
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+
 .message-bubble--theirs {
     background: var(--message-theirs-bg);
     color: var(--message-theirs-text);
