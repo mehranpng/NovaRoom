@@ -1,0 +1,641 @@
+/* NovaRoom Image Editor & Send Preview Modal */
+
+.image-editor-overlay {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    width: 100vw !important;
+    height: 100% !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    z-index: 999999 !important;
+    display: flex;
+    flex-direction: column;
+    background: #090b0e !important; /* 100% OPAQUE - completely covers chat & navbars */
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    overflow: hidden !important;
+    touch-action: none !important;
+    direction: rtl;
+    font-family: 'Vazir', 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    animation: imageEditorFadeIn 0.18s ease-out;
+}
+
+.image-editor-overlay * {
+    font-family: 'Vazir', 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+@keyframes imageEditorFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.99);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Header */
+.image-editor-header {
+    height: 54px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #0e1117;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 20;
+    flex-shrink: 0;
+    touch-action: manipulation !important;
+}
+
+.image-editor-header__right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.image-editor-header__info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+}
+
+.image-editor-header__title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #f3f4f6;
+    max-width: 260px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.image-editor-header__meta {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+/* Icon Buttons */
+.image-editor-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+    color: #e5e7eb;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .image-editor-icon-btn:hover {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.25);
+        color: #ffffff;
+        transform: scale(1.04);
+    }
+}
+
+.image-editor-icon-btn:active {
+    transform: scale(0.92) !important;
+    background: rgba(255, 255, 255, 0.18) !important;
+}
+
+.image-editor-icon-btn--active {
+    background: var(--accent-primary, #2563eb) !important;
+    border-color: var(--accent-primary, #2563eb) !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 14px color-mix(in srgb, var(--accent-primary, #2563eb) 60%, transparent);
+}
+
+.image-editor-icon-btn:disabled {
+    opacity: 0.3;
+    pointer-events: none;
+}
+
+/* Body / Viewport */
+.image-editor-body {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 14px;
+    overflow: hidden;
+    touch-action: none !important;
+}
+
+/* Canvas & Crop Container */
+.image-editor-canvas-stage {
+    position: relative;
+    max-width: 100%;
+    max-height: calc(100dvh - 190px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85);
+    border-radius: 10px;
+    overflow: hidden;
+    touch-action: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+}
+
+.image-editor-canvas {
+    display: block;
+    max-width: 100%;
+    max-height: calc(100dvh - 190px);
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    touch-action: none !important; /* CRITICAL FOR MOBILE GESTURES! */
+}
+
+.image-editor-canvas--drawable {
+    cursor: crosshair;
+}
+
+/* Crop Overlay Layer */
+.image-editor-crop-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 15;
+    touch-action: none !important;
+}
+
+/* Dark Shading outside crop box */
+.image-editor-crop-shade {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.65);
+    touch-action: none !important;
+}
+
+/* The Active Crop Box */
+.image-editor-crop-box {
+    position: absolute;
+    box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.95);
+    cursor: move;
+    touch-action: none !important;
+}
+
+.image-editor-crop-box--passive {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.65);
+}
+
+/* Rule of Thirds Grid */
+.image-editor-crop-grid-h1,
+.image-editor-crop-grid-h2,
+.image-editor-crop-grid-v1,
+.image-editor-crop-grid-v2 {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.28);
+    pointer-events: none;
+}
+
+.image-editor-crop-grid-h1 {
+    top: 33.333%;
+    left: 0;
+    right: 0;
+    height: 1px;
+}
+.image-editor-crop-grid-h2 {
+    top: 66.666%;
+    left: 0;
+    right: 0;
+    height: 1px;
+}
+.image-editor-crop-grid-v1 {
+    left: 33.333%;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+}
+.image-editor-crop-grid-v2 {
+    left: 66.666%;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+}
+
+/* Edge handles: Top, Bottom, Left, Right with large touch hit zones */
+.image-editor-crop-edge {
+    position: absolute;
+    pointer-events: auto;
+    z-index: 25;
+    touch-action: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+}
+
+.image-editor-crop-edge--top {
+    top: -16px;
+    left: 24px;
+    right: 24px;
+    height: 32px;
+    cursor: ns-resize;
+}
+
+.image-editor-crop-edge--bottom {
+    bottom: -16px;
+    left: 24px;
+    right: 24px;
+    height: 32px;
+    cursor: ns-resize;
+}
+
+.image-editor-crop-edge--left {
+    left: -16px;
+    top: 24px;
+    bottom: 24px;
+    width: 32px;
+    cursor: ew-resize;
+}
+
+.image-editor-crop-edge--right {
+    right: -16px;
+    top: 24px;
+    bottom: 24px;
+    width: 32px;
+    cursor: ew-resize;
+}
+
+/* Handle bars on edges (centered inside the generous hit zone) */
+.image-editor-crop-edge-bar-h {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 38px;
+    height: 4px;
+    background: #ffffff;
+    border-radius: 999px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+    pointer-events: none;
+}
+
+.image-editor-crop-edge-bar-v {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 38px;
+    width: 4px;
+    background: #ffffff;
+    border-radius: 999px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+    pointer-events: none;
+}
+
+/* Crop Handles: 4 Corners (L-shapes) with 36px touch hit zone */
+.image-editor-crop-corner {
+    position: absolute;
+    width: 36px;
+    height: 36px;
+    pointer-events: auto;
+    z-index: 30;
+    touch-action: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+}
+
+.image-editor-crop-corner--tl {
+    top: -4px;
+    left: -4px;
+    border-top: 4px solid #ffffff;
+    border-left: 4px solid #ffffff;
+    cursor: nwse-resize;
+}
+
+.image-editor-crop-corner--tr {
+    top: -4px;
+    right: -4px;
+    border-top: 4px solid #ffffff;
+    border-right: 4px solid #ffffff;
+    cursor: nesw-resize;
+}
+
+.image-editor-crop-corner--bl {
+    bottom: -4px;
+    left: -4px;
+    border-bottom: 4px solid #ffffff;
+    border-left: 4px solid #ffffff;
+    cursor: nesw-resize;
+}
+
+.image-editor-crop-corner--br {
+    bottom: -4px;
+    right: -4px;
+    border-bottom: 4px solid #ffffff;
+    border-right: 4px solid #ffffff;
+    cursor: nwse-resize;
+}
+
+/* Unified Toolbar Under The Image */
+.image-editor-sub-tools {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    z-index: 20;
+    max-width: 100%;
+    touch-action: manipulation !important;
+}
+
+.image-editor-tools-dock {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #12161f;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    padding: 6px 14px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    touch-action: manipulation !important;
+}
+
+.image-editor-divider {
+    width: 1px;
+    height: 18px;
+    background: rgba(255, 255, 255, 0.15);
+    margin: 0 2px;
+}
+
+/* Crop Controls Dock */
+.image-editor-crop-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 12px;
+    background: rgba(18, 22, 31, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    touch-action: manipulation !important;
+}
+
+.image-editor-crop-tag {
+    font-size: 12px;
+    font-weight: 600;
+    color: #e5e7eb;
+    letter-spacing: 0.5px;
+}
+
+/* Drawing Controls Dock */
+.image-editor-draw-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 14px;
+    background: rgba(18, 22, 31, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    animation: imageEditorSlideUp 0.18s ease-out;
+    touch-action: manipulation !important;
+}
+
+@keyframes imageEditorSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.image-editor-colors {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    touch-action: manipulation !important;
+}
+
+.image-editor-color-circle {
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .image-editor-color-circle:hover {
+        transform: scale(1.15);
+    }
+}
+
+.image-editor-color-circle:active {
+    transform: scale(0.9);
+}
+
+.image-editor-color-circle--selected {
+    transform: scale(1.22);
+    box-shadow: 0 0 0 2.5px #ffffff, 0 0 10px rgba(255, 255, 255, 0.45);
+}
+
+.image-editor-thicknesses {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    touch-action: manipulation !important;
+}
+
+.image-editor-thickness-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .image-editor-thickness-btn:hover {
+        border-color: rgba(255, 255, 255, 0.35);
+        background: rgba(255, 255, 255, 0.08);
+    }
+}
+
+.image-editor-thickness-btn:active {
+    transform: scale(0.9);
+}
+
+.image-editor-thickness-btn--selected {
+    border-color: #ffffff !important;
+    background: rgba(255, 255, 255, 0.18) !important;
+}
+
+.image-editor-thickness-dot {
+    border-radius: 999px;
+}
+
+/* Bottom Action Bar */
+.image-editor-bottom-bar {
+    height: 64px;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0e1117;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 20;
+    flex-shrink: 0;
+    touch-action: manipulation !important;
+}
+
+.image-editor-actions-group {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    touch-action: manipulation !important;
+}
+
+/* Accent Send Button (On Right in RTL) */
+.image-editor-send-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 24px;
+    border-radius: 999px;
+    border: none;
+    background: var(--accent-primary, #2563eb);
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    box-shadow: 0 4px 18px color-mix(in srgb, var(--accent-primary, #2563eb) 45%, transparent);
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .image-editor-send-btn:hover {
+        background: var(--accent-hover, #1d4ed8);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 22px color-mix(in srgb, var(--accent-primary, #2563eb) 65%, transparent);
+    }
+}
+
+.image-editor-send-btn:active {
+    transform: scale(0.94) !important;
+    opacity: 0.9;
+}
+
+/* Red / Danger Cancel Button (On Left in RTL) */
+.image-editor-cancel-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 22px;
+    border-radius: 999px;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    background: rgba(239, 68, 68, 0.12);
+    color: #fca5a5;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .image-editor-cancel-btn:hover {
+        background: rgba(239, 68, 68, 0.22);
+        border-color: rgba(239, 68, 68, 0.65);
+        color: #ffffff;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 16px rgba(239, 68, 68, 0.25);
+    }
+}
+
+.image-editor-cancel-btn:active {
+    transform: scale(0.94) !important;
+    opacity: 0.9;
+}
+
+/* Responsive for Mobile Devices (iPhone, Android) */
+@media (max-width: 640px) {
+    .image-editor-header {
+        height: 48px;
+        padding: 0 10px;
+    }
+    .image-editor-header__title {
+        max-width: 170px;
+        font-size: 13px;
+    }
+    .image-editor-body {
+        padding: 4px 8px;
+    }
+    .image-editor-canvas-stage {
+        max-height: calc(100dvh - 180px);
+        max-width: calc(100vw - 16px);
+    }
+    .image-editor-canvas {
+        max-height: calc(100dvh - 180px);
+    }
+    .image-editor-bottom-bar {
+        height: 56px;
+        padding: 0 10px;
+    }
+    .image-editor-tools-dock {
+        padding: 4px 8px;
+        gap: 6px;
+    }
+    .image-editor-icon-btn {
+        width: 32px;
+        height: 32px;
+    }
+    .image-editor-draw-controls {
+        padding: 4px 8px;
+        gap: 6px;
+        max-width: calc(100vw - 20px);
+        overflow-x: auto;
+    }
+    .image-editor-color-circle {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+    }
+    .image-editor-send-btn,
+    .image-editor-cancel-btn {
+        padding: 7px 16px;
+        font-size: 13px;
+    }
+}

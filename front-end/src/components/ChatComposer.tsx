@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { SendHorizontal, X } from 'lucide-react';
+import { Pencil, SendHorizontal, X } from 'lucide-react';
 import type { FileMetadata, MessageReply, PendingForwardDraft } from '../types';
 import { apiFetch } from '../config/api';
 import { pendingUploadedFileByChat } from '../utils/pendingUploads';
@@ -83,6 +83,7 @@ export const ChatComposer = memo(function ChatComposer({
     const [text, setText] = useState(() => (editingId ? editDraft : ''));
     const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(() => pendingUploadedFileByChat[chatId] ?? null);
     const [uploadComposerState, setUploadComposerState] = useState<UploadComposerState>(EMPTY_UPLOAD_STATE);
+    const [editorAttachmentState, setEditorAttachmentState] = useState<{ isEdited: boolean; reEdit: () => void } | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const uploadCancelRef = useRef<(() => void) | null>(null);
     const typingTimeoutRef = useRef<number | null>(null);
@@ -226,6 +227,7 @@ export const ChatComposer = memo(function ChatComposer({
         pendingUploadedFileByChat[chatId] = null;
         setText('');
         setUploadedFile(null);
+        setEditorAttachmentState(null);
     };
 
     return (
@@ -280,13 +282,26 @@ export const ChatComposer = memo(function ChatComposer({
             {displayedUploadedFile && (
                 <div className="chat-room__reply-edit-box">
                     <div style={{ minWidth: 0, flex: 1, textAlign: 'right' }}>
-                        <div className="chat-room__reply-edit-box__title">فایل آپلود شده</div>
+                        <div className="chat-room__reply-edit-box__title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span>{editorAttachmentState?.isEdited ? 'فایل ویرایش شده' : 'فایل آپلود شده'}</span>
+                            {editorAttachmentState?.reEdit && (
+                                <button
+                                    type="button"
+                                    className="chat-room__re-edit-btn"
+                                    onClick={editorAttachmentState.reEdit}
+                                    title="ویرایش مجدد تصویر"
+                                >
+                                    <Pencil size={13} />
+                                </button>
+                            )}
+                        </div>
                         <div className="chat-room__reply-edit-box__text">{displayedUploadedFile.fileName}</div>
                     </div>
                     <button type="button" className="icon-btn" aria-label="Remove file" onClick={() => {
                         if (displayedUploadedFile) void cleanupUploadedFile(displayedUploadedFile);
                         pendingUploadedFileByChat[chatId] = null;
                         setUploadedFile(null);
+                        setEditorAttachmentState(null);
                     }}><X size={18} /></button>
                 </div>
             )}
@@ -324,6 +339,7 @@ export const ChatComposer = memo(function ChatComposer({
                             fileAttached={Boolean(displayedUploadedFile)}
                             onUploadStateChange={handleUploadStateChange}
                             onRegisterUploadFile={onRegisterUploadFile}
+                            onEditorStateChange={setEditorAttachmentState}
                         />
                         <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
                             wrap="soft"

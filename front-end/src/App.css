@@ -2861,6 +2861,36 @@ body,
     font-weight: 700;
     color: var(--accent-primary);
     text-align: right;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.chat-room__re-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--accent-primary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+}
+
+.chat-room__re-edit-btn:hover {
+    background: var(--accent-primary);
+    color: #ffffff;
+    border-color: var(--accent-primary);
+    transform: scale(1.08);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--accent-primary) 50%, transparent);
+}
+
+.chat-room__re-edit-btn:active {
+    transform: scale(0.92);
 }
 
 .chat-room__reply-edit-box__text {

@@ -6,6 +6,7 @@ import { API_BASE_URL } from '../config/api';
 import { validateFileSize } from '../utils/fileUtils';
 import { encryptFileBytesClientSide } from '../utils/e2ee';
 import { saveBlobToCache } from '../utils/mediaCache';
+import { ImageEditorModal } from './ImageEditorModal';
 
 interface FileUploadProps {
     token: string;
@@ -14,6 +15,7 @@ interface FileUploadProps {
     fileAttached?: boolean;
     onRegisterUploadFile?: (handler: ((file: File) => void) | null) => void;
     onUploadStateChange?: (payload: { isUploading: boolean; progress: number; fileName: string | null; cancelUpload?: () => void; phase?: 'preview' | 'upload' | 'encrypt' }) => void;
+    onEditorStateChange?: (payload: { isEdited: boolean; reEdit: () => void } | null) => void;
 }
 
 type UploadTask = {
@@ -29,9 +31,10 @@ type UploadTask = {
 
 const uploadTasksByChat = new Map<string, UploadTask>();
 
-export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false, onRegisterUploadFile, onUploadStateChange }: FileUploadProps) {
+export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false, onRegisterUploadFile, onUploadStateChange, onEditorStateChange }: FileUploadProps) {
     const [uploading, setUploading] = useState(false);
     const [pickerMenuOpen, setPickerMenuOpen] = useState(false);
+    const [pendingImageForEditor, setPendingImageForEditor] = useState<File | null>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
     const audioInputRef = useRef<HTMLInputElement>(null);
@@ -42,16 +45,33 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
     const xhrRef = useRef<XMLHttpRequest | null>(null);
     const encryptCancelRef = useRef(false);
 
+    const editorSessionRef = useRef<{
+        originalFile: File;
+        strokes: any[];
+        redoStack: any[];
+        cropRect: any;
+        isEdited: boolean;
+    } | null>(null);
+
     const onFileUploadedRef = useRef(onFileUploaded);
     const onUploadStateChangeRef = useRef(onUploadStateChange);
     const onRegisterUploadFileRef = useRef(onRegisterUploadFile);
+    const onEditorStateChangeRef = useRef(onEditorStateChange);
     const taskHandlerRef = useRef<((task: UploadTask) => void) | null>(null);
 
     useEffect(() => {
         onFileUploadedRef.current = onFileUploaded;
         onUploadStateChangeRef.current = onUploadStateChange;
         onRegisterUploadFileRef.current = onRegisterUploadFile;
+        onEditorStateChangeRef.current = onEditorStateChange;
     });
+
+    useEffect(() => {
+        if (!fileAttached) {
+            editorSessionRef.current = null;
+            onEditorStateChangeRef.current?.(null);
+        }
+    }, [fileAttached]);
 
     const clearPickerCloseTimer = () => {
         if (pickerCloseTimerRef.current != null) {
@@ -135,6 +155,22 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
         }
 
         setPickerMenuOpen(false);
+
+        // Intercept image files and open ImageEditorModal (for drag&drop, file picker, or paste)
+        if (file.type.startsWith('image/')) {
+            if (editorSessionRef.current?.originalFile !== file) {
+                editorSessionRef.current = {
+                    originalFile: file,
+                    strokes: [],
+                    redoStack: [],
+                    cropRect: { x: 0, y: 0, width: 0, height: 0 },
+                    isEdited: false,
+                };
+            }
+            setPendingImageForEditor(file);
+            return;
+        }
+
         uploadFile(file);
     };
 
@@ -480,6 +516,39 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                 )}
             </AnimatePresence>
             </div>
+
+            {pendingImageForEditor && (
+                <ImageEditorModal
+                    imageFile={editorSessionRef.current?.originalFile || pendingImageForEditor}
+                    initialStrokes={editorSessionRef.current?.strokes}
+                    initialRedoStack={editorSessionRef.current?.redoStack}
+                    initialCropRect={editorSessionRef.current?.cropRect}
+                    onSend={(fileToSend, isEdited, editorState) => {
+                        setPendingImageForEditor(null);
+                        if (editorSessionRef.current) {
+                            editorSessionRef.current.strokes = editorState.strokes;
+                            editorSessionRef.current.redoStack = editorState.redoStack;
+                            editorSessionRef.current.cropRect = editorState.cropRect;
+                            editorSessionRef.current.isEdited = isEdited;
+                        }
+                        onEditorStateChangeRef.current?.({
+                            isEdited,
+                            reEdit: () => {
+                                if (editorSessionRef.current) {
+                                    setPendingImageForEditor(editorSessionRef.current.originalFile);
+                                }
+                            },
+                        });
+                        uploadFile(fileToSend);
+                    }}
+                    onCancel={() => {
+                        setPendingImageForEditor(null);
+                        if (!fileAttached) {
+                            resetUpload();
+                        }
+                    }}
+                />
+            )}
         </>
     );
 }
