@@ -67,6 +67,10 @@ from file_service import (
     get_file_path,
     encrypt_existing_uploads,
     MAX_FILE_SIZE,
+    read_static_font,
+    save_ai_temp_file,
+    read_ai_temp_file,
+    delete_ai_temp_file,
 )
 
 _root_env = Path(__file__).resolve().parent.parent / ".env"
@@ -3252,6 +3256,21 @@ async def remove_uploaded_file(
 @limiter.limit("60/minute")
 async def get_static_font(filename: str, request: Request):
     safe_name = os.path.basename(filename)
+    media_type = (
+        "font/ttf"
+        if safe_name.endswith(".ttf")
+        else ("font/woff2" if safe_name.endswith(".woff2") else "application/octet-stream")
+    )
+    s3_font = await read_static_font(safe_name)
+    if s3_font is not None:
+        return Response(
+            content=s3_font,
+            media_type=media_type,
+            headers={
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "Access-Control-Allow-Origin": "*",
+            },
+        )
     candidates = [
         UPLOAD_DIR / "static" / "fonts" / safe_name,
         Path("uploads/static/fonts") / safe_name,
@@ -4500,12 +4519,16 @@ async def _prepare_ai_attachment(
         return None
     file_path = Path(str(row.get("filePath") or ""))
     if not file_path.exists():
-        alt_path = Path(__file__).resolve().parent / file_path
-        if alt_path.exists():
-            file_path = alt_path
+        temp_bytes = await read_ai_temp_file(file_path.name)
+        if temp_bytes is not None:
+            file_path = UPLOAD_DIR / "ai_temp" / file_path.name
         else:
-            await cl_ai_temp_files.delete_one({"_id": oid})
-            return None
+            alt_path = Path(__file__).resolve().parent / file_path
+            if alt_path.exists():
+                file_path = alt_path
+            else:
+                await cl_ai_temp_files.delete_one({"_id": oid})
+                return None
     is_image = bool(row.get("isImage"))
     mime_type = str(row.get("mimeType") or "application/octet-stream")
     file_name = str(row.get("fileName") or "")
@@ -6010,7 +6033,8 @@ async def sweep_ai_temp_files(max_age_sec: int = AI_TEMP_FILE_TTL_SEC) -> None:
     stale = await cl_ai_temp_files.find({"createdAt": {"$lt": cutoff_dt}}).to_list(None)
     for row in stale:
         try:
-            Path(str(row.get("filePath") or "")).unlink(missing_ok=True)
+            file_name = Path(str(row.get("filePath") or "")).name
+            await delete_ai_temp_file(file_name)
         except Exception:
             pass
     await cl_ai_temp_files.delete_many({"createdAt": {"$lt": cutoff_dt}})
@@ -6130,9 +6154,8 @@ async def upload_ai_file(
     if len(data) > AI_MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail="حجم فایل بیشتر از ۱۰ مگابایت است.")
 
-    AI_TEMP_DIR.mkdir(parents=True, exist_ok=True)
-    file_path = AI_TEMP_DIR / f"{uuid.uuid4().hex}{extension}"
-    await asyncio.to_thread(file_path.write_bytes, data)
+    unique_name = f"{uuid.uuid4().hex}{extension}"
+    file_path = await save_ai_temp_file(data, unique_name)
     is_image = extension in AI_IMAGE_EXTENSIONS
     mime_type = (
         file.content_type
@@ -6176,7 +6199,8 @@ async def delete_ai_file(
     if not row:
         raise HTTPException(status_code=404, detail="File not found")
     try:
-        await asyncio.to_thread(Path(str(row.get("filePath") or "")).unlink, True)
+        file_name = Path(str(row.get("filePath") or "")).name
+        await delete_ai_temp_file(file_name)
     except Exception:
         pass
     await cl_ai_temp_files.delete_one({"_id": oid})

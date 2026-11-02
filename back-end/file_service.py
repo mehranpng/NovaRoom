@@ -8,6 +8,10 @@ import mimetypes
 import hashlib
 import hmac
 import secrets
+import asyncio
+import boto3
+from botocore.config import Config
+from botocore.exceptions import ClientError
 from dotenv import load_dotenv, find_dotenv
 
 _root_env = Path(__file__).resolve().parent.parent / ".env"
@@ -20,6 +24,56 @@ UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "uploads"))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 MAX_FILE_SIZE = 20 * 1024 * 1024
+
+USE_S3 = os.getenv("USE_S3", "false").lower().strip() in ("true", "1", "yes")
+S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL", "").strip()
+if S3_ENDPOINT_URL and not S3_ENDPOINT_URL.startswith("http://") and not S3_ENDPOINT_URL.startswith("https://"):
+    S3_ENDPOINT_URL = f"https://{S3_ENDPOINT_URL}"
+S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY", "").strip()
+S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "").strip()
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "").strip()
+
+S3_UPLOAD_PREFIX = "upload"
+S3_AI_TEMP_PREFIX = "upload/ai_temp"
+S3_FONTS_PREFIX = "static/fonts"
+
+_s3_client = None
+
+
+def get_s3_client():
+    global _s3_client
+    if _s3_client is None:
+        _s3_client = boto3.client(
+            "s3",
+            endpoint_url=S3_ENDPOINT_URL,
+            aws_access_key_id=S3_ACCESS_KEY,
+            aws_secret_access_key=S3_SECRET_KEY,
+            config=Config(s3={"addressing_style": "path"}),
+        )
+    return _s3_client
+
+
+def is_s3_enabled() -> bool:
+    return (
+        USE_S3
+        and bool(S3_ENDPOINT_URL)
+        and bool(S3_ACCESS_KEY)
+        and bool(S3_SECRET_KEY)
+        and bool(S3_BUCKET_NAME)
+    )
+
+
+def get_s3_upload_key(file_id: str) -> str:
+    return f"{S3_UPLOAD_PREFIX}/{Path(file_id).name}"
+
+
+def get_s3_ai_temp_key(filename: str) -> str:
+    return f"{S3_AI_TEMP_PREFIX}/{Path(filename).name}"
+
+
+def get_s3_font_key(filename: str) -> str:
+    return f"{S3_FONTS_PREFIX}/{Path(filename).name}"
+
 
 DANGEROUS_EXTENSIONS = {
     ".exe",
@@ -108,7 +162,6 @@ def generate_unique_filename(original_filename: str) -> Tuple[str, str]:
 
 
 def get_file_path(file_id: str) -> Path:
-    """Get full path for a file ID"""
     safe_id = Path(file_id).name
     return UPLOAD_DIR / safe_id
 
@@ -123,14 +176,24 @@ async def save_uploaded_file(file_content: bytes, original_filename: str) -> dic
         raise ValueError("File type not allowed")
 
     file_id, sanitized_name = generate_unique_filename(original_filename)
-    file_path = get_file_path(file_id)
-
-    async with aiofiles.open(file_path, "wb") as f:
-        await f.write(file_content)
-
     mime_type, _ = mimetypes.guess_type(sanitized_name)
     if not mime_type:
         mime_type = "application/octet-stream"
+
+    if is_s3_enabled():
+        key = get_s3_upload_key(file_id)
+        client = get_s3_client()
+        await asyncio.to_thread(
+            client.put_object,
+            Bucket=S3_BUCKET_NAME,
+            Key=key,
+            Body=file_content,
+            ContentType=mime_type,
+        )
+    else:
+        file_path = get_file_path(file_id)
+        async with aiofiles.open(file_path, "wb") as f:
+            await f.write(file_content)
 
     return {
         "fileId": file_id,
@@ -142,33 +205,164 @@ async def save_uploaded_file(file_content: bytes, original_filename: str) -> dic
 
 
 async def delete_file(file_id: str) -> bool:
-    file_path = get_file_path(file_id)
+    deleted = False
+    if is_s3_enabled():
+        key = get_s3_upload_key(file_id)
+        client = get_s3_client()
+        try:
+            await asyncio.to_thread(
+                client.delete_object,
+                Bucket=S3_BUCKET_NAME,
+                Key=key,
+            )
+            deleted = True
+        except Exception as e:
+            print(f"Error deleting S3 file {file_id}: {e}")
 
+    file_path = get_file_path(file_id)
     if file_path.exists():
         try:
             file_path.unlink()
-            return True
+            deleted = True
         except Exception as e:
-            print(f"Error deleting file {file_id}: {e}")
-            return False
+            print(f"Error deleting local file {file_id}: {e}")
 
-    return False
+    return deleted
 
 
 def validate_file_access(file_id: str) -> bool:
+    safe_id = Path(file_id).name
+    if not safe_id or safe_id != file_id:
+        return False
+    if is_s3_enabled():
+        return True
     file_path = get_file_path(file_id)
     return file_path.exists() and file_path.is_file()
 
 
 async def read_file_content(file_id: str) -> Optional[bytes]:
-    file_path = get_file_path(file_id)
-    if not file_path.exists() or not file_path.is_file():
+    raw = None
+    if is_s3_enabled():
+        client = get_s3_client()
+        key = get_s3_upload_key(file_id)
+        try:
+            resp = await asyncio.to_thread(
+                client.get_object,
+                Bucket=S3_BUCKET_NAME,
+                Key=key,
+            )
+            raw = await asyncio.to_thread(resp["Body"].read)
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") not in ("404", "NoSuchKey"):
+                print(f"S3 get_object error for {file_id}: {e}")
+        except Exception as e:
+            print(f"S3 read error for {file_id}: {e}")
+
+    if raw is None:
+        file_path = get_file_path(file_id)
+        if file_path.exists() and file_path.is_file():
+            async with aiofiles.open(file_path, "rb") as f:
+                raw = await f.read()
+
+    if raw is None:
+        alt_path = UPLOAD_DIR / S3_UPLOAD_PREFIX / Path(file_id).name
+        if alt_path.exists() and alt_path.is_file():
+            async with aiofiles.open(alt_path, "rb") as f:
+                raw = await f.read()
+
+    if raw is None:
         return None
-    async with aiofiles.open(file_path, "rb") as f:
-        raw = await f.read()
+
     if raw.startswith(FILE_MAGIC):
         return decrypt_file_bytes(raw)
     return raw
+
+
+async def save_ai_temp_file(data: bytes, filename: str) -> Path:
+    ai_temp_dir = UPLOAD_DIR / "ai_temp"
+    ai_temp_dir.mkdir(parents=True, exist_ok=True)
+    local_path = ai_temp_dir / filename
+    await asyncio.to_thread(local_path.write_bytes, data)
+    if is_s3_enabled():
+        key = get_s3_ai_temp_key(filename)
+        client = get_s3_client()
+        mime_type, _ = mimetypes.guess_type(filename)
+        try:
+            await asyncio.to_thread(
+                client.put_object,
+                Bucket=S3_BUCKET_NAME,
+                Key=key,
+                Body=data,
+                ContentType=mime_type or "application/octet-stream",
+            )
+        except Exception as e:
+            print(f"Error uploading AI temp file to S3 {filename}: {e}")
+    return local_path
+
+
+async def read_ai_temp_file(filename: str) -> Optional[bytes]:
+    ai_temp_dir = UPLOAD_DIR / "ai_temp"
+    local_path = ai_temp_dir / filename
+    if local_path.exists() and local_path.is_file():
+        return await asyncio.to_thread(local_path.read_bytes)
+    if is_s3_enabled():
+        key = get_s3_ai_temp_key(filename)
+        client = get_s3_client()
+        try:
+            resp = await asyncio.to_thread(
+                client.get_object,
+                Bucket=S3_BUCKET_NAME,
+                Key=key,
+            )
+            data = await asyncio.to_thread(resp["Body"].read)
+            ai_temp_dir.mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(local_path.write_bytes, data)
+            return data
+        except Exception:
+            return None
+    return None
+
+
+async def delete_ai_temp_file(filename: str) -> bool:
+    deleted = False
+    if is_s3_enabled():
+        key = get_s3_ai_temp_key(filename)
+        client = get_s3_client()
+        try:
+            await asyncio.to_thread(
+                client.delete_object,
+                Bucket=S3_BUCKET_NAME,
+                Key=key,
+            )
+            deleted = True
+        except Exception as e:
+            print(f"Error deleting AI temp file from S3 {filename}: {e}")
+    ai_temp_dir = UPLOAD_DIR / "ai_temp"
+    local_path = ai_temp_dir / filename
+    if local_path.exists():
+        try:
+            local_path.unlink()
+            deleted = True
+        except Exception as e:
+            print(f"Error deleting local AI temp file {filename}: {e}")
+    return deleted
+
+
+async def read_static_font(filename: str) -> Optional[bytes]:
+    safe_name = Path(filename).name
+    if is_s3_enabled():
+        key = get_s3_font_key(safe_name)
+        client = get_s3_client()
+        try:
+            resp = await asyncio.to_thread(
+                client.get_object,
+                Bucket=S3_BUCKET_NAME,
+                Key=key,
+            )
+            return await asyncio.to_thread(resp["Body"].read)
+        except Exception:
+            pass
+    return None
 
 
 async def encrypt_existing_uploads() -> int:
@@ -177,6 +371,8 @@ async def encrypt_existing_uploads() -> int:
 
 async def cleanup_orphaned_files(db_file_ids: set) -> int:
     deleted_count = 0
+    if not UPLOAD_DIR.exists():
+        return deleted_count
 
     for file_path in UPLOAD_DIR.iterdir():
         if file_path.is_file():
