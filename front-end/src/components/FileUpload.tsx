@@ -48,10 +48,12 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
     const editorSessionRef = useRef<{
         originalFile: File;
         strokes: any[];
-        redoStack: any[];
         cropRect: any;
+        undoHistory: any[];
+        redoHistory: any[];
         isEdited: boolean;
     } | null>(null);
+    const editorMountKeyRef = useRef(0);
 
     const onFileUploadedRef = useRef(onFileUploaded);
     const onUploadStateChangeRef = useRef(onUploadStateChange);
@@ -158,11 +160,13 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
 
         if (file.type.startsWith('image/')) {
             if (editorSessionRef.current?.originalFile !== file) {
+                editorMountKeyRef.current += 1;
                 editorSessionRef.current = {
                     originalFile: file,
                     strokes: [],
-                    redoStack: [],
                     cropRect: { x: 0, y: 0, width: 0, height: 0 },
+                    undoHistory: [],
+                    redoHistory: [],
                     isEdited: false,
                 };
             }
@@ -518,16 +522,19 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
 
             {pendingImageForEditor && (
                 <ImageEditorModal
+                    key={editorMountKeyRef.current}
                     imageFile={editorSessionRef.current?.originalFile || pendingImageForEditor}
                     initialStrokes={editorSessionRef.current?.strokes}
-                    initialRedoStack={editorSessionRef.current?.redoStack}
                     initialCropRect={editorSessionRef.current?.cropRect}
+                    initialUndoHistory={editorSessionRef.current?.undoHistory}
+                    initialRedoHistory={editorSessionRef.current?.redoHistory}
                     onSend={(fileToSend, isEdited, editorState) => {
                         setPendingImageForEditor(null);
                         if (editorSessionRef.current) {
                             editorSessionRef.current.strokes = editorState.strokes;
-                            editorSessionRef.current.redoStack = editorState.redoStack;
                             editorSessionRef.current.cropRect = editorState.cropRect;
+                            editorSessionRef.current.undoHistory = editorState.undoHistory;
+                            editorSessionRef.current.redoHistory = editorState.redoHistory;
                             editorSessionRef.current.isEdited = isEdited;
                         }
                         onEditorStateChangeRef.current?.({
@@ -543,6 +550,7 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
                     onCancel={() => {
                         setPendingImageForEditor(null);
                         if (!fileAttached) {
+                            editorSessionRef.current = null;
                             resetUpload();
                         }
                     }}

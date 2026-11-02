@@ -8,6 +8,7 @@ import { VerifiedBadge } from './VerifiedBadge';
 import { cx } from '../utils/cx';
 import { apiFetch } from '../config/api';
 import { ImageMediaViewer } from './ImageMediaViewer';
+import { ImageEditorModal } from './ImageEditorModal';
 import { encryptFileBytesClientSide } from '../utils/e2ee';
 import { screenVariants } from '../utils/screenMotion';
 import { useScrollFade } from '../hooks/useScrollFade';
@@ -42,6 +43,7 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
     const [bio, setBio] = useState(user.bio);
     const [copiedField, setCopiedField] = useState<string | null>(null);
     const [updatingAvatar, setUpdatingAvatar] = useState(false);
+    const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
     const [ownedGroups, setOwnedGroups] = useState<OwnedGroup[]>([]);
     const [openedProfileImage, setOpenedProfileImage] = useState<{ url: string; fileId: string } | null>(null);
     const navigate = useNavigate();
@@ -323,7 +325,7 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
                                     onChange={(e) => {
                                         const file = e.target.files?.[0];
                                         if (file) {
-                                            handleAvatarUpload(file);
+                                            setPendingAvatarFile(file);
                                             e.currentTarget.value = '';
                                         }
                                     }}
@@ -539,6 +541,18 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
                         if (params.has('avatar')) return void navigate(-1);
                         setOpenedProfileImage(null);
                     }}
+                />
+            )}
+
+            {pendingAvatarFile && (
+                <ImageEditorModal
+                    imageFile={pendingAvatarFile}
+                    squareCrop
+                    onSend={(file) => {
+                        setPendingAvatarFile(null);
+                        void handleAvatarUpload(file);
+                    }}
+                    onCancel={() => setPendingAvatarFile(null)}
                 />
             )}
 

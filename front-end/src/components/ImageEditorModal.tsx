@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { Crop, Paintbrush, Send, Trash2, X } from 'lucide-react';
-import { toPersianDigits } from '../utils/format';
+import { Brush, Check, Crop, X } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
 import './ImageEditorModal.css';
 
@@ -33,15 +32,18 @@ function TelegramRedoIcon({ size = 20 }: { size?: number }) {
 export interface ImageEditorModalProps {
     imageFile: File;
     initialStrokes?: Stroke[];
-    initialRedoStack?: Stroke[];
     initialCropRect?: CropRect;
+    initialUndoHistory?: EditorSnapshot[];
+    initialRedoHistory?: EditorSnapshot[];
+    squareCrop?: boolean;
     onSend: (
         fileToSend: File,
         isEdited: boolean,
         editorState: {
             strokes: Stroke[];
-            redoStack: Stroke[];
             cropRect: CropRect;
+            undoHistory: EditorSnapshot[];
+            redoHistory: EditorSnapshot[];
         }
     ) => void;
     onCancel: () => void;
@@ -55,7 +57,102 @@ type CropRect = {
     y: number;
     width: number;
     height: number;
+    naturalWidth?: number;
+    naturalHeight?: number;
 };
+
+type EditorSnapshot = {
+    strokes: Stroke[];
+    cropRect: CropRect;
+};
+
+function getSquareCrop(handle: string, initialCrop: CropRect, dx: number, dy: number, nw: number, nh: number): CropRect {
+    const MIN_DIM = 40;
+
+    if (handle === 'move') {
+        return {
+            x: Math.round(Math.max(0, Math.min(nw - initialCrop.width, initialCrop.x + dx))),
+            y: Math.round(Math.max(0, Math.min(nh - initialCrop.height, initialCrop.y + dy))),
+            width: initialCrop.width,
+            height: initialCrop.height,
+        };
+    }
+
+    const centerX = initialCrop.x + initialCrop.width / 2;
+    const centerY = initialCrop.y + initialCrop.height / 2;
+    const initialSide = Math.min(initialCrop.width, initialCrop.height);
+
+    const isRight = handle === 'right' || handle === 'tr' || handle === 'br';
+    const isLeft = handle === 'left' || handle === 'tl' || handle === 'bl';
+    const isBottom = handle === 'bottom' || handle === 'bl' || handle === 'br';
+    const isTop = handle === 'top' || handle === 'tl' || handle === 'tr';
+
+    const anchorLeft = isRight ? initialCrop.x : isLeft ? initialCrop.x + initialCrop.width : null;
+    const anchorTop = isBottom ? initialCrop.y : isTop ? initialCrop.y + initialCrop.height : null;
+
+    const expansionX = anchorLeft === null ? 0 : anchorLeft === initialCrop.x ? dx : -dx;
+    const expansionY = anchorTop === null ? 0 : anchorTop === initialCrop.y ? dy : -dy;
+    const expansion = anchorLeft !== null && anchorTop !== null
+        ? Math.max(expansionX, expansionY)
+        : anchorLeft !== null ? expansionX : expansionY;
+
+    const horizontalMax = anchorLeft === null
+        ? 2 * Math.min(centerX, nw - centerX)
+        : anchorLeft === initialCrop.x
+            ? nw - anchorLeft
+            : anchorLeft;
+    const verticalMax = anchorTop === null
+        ? 2 * Math.min(centerY, nh - centerY)
+        : anchorTop === initialCrop.y
+            ? nh - anchorTop
+            : anchorTop;
+
+    const maxSide = Math.min(nw, nh, horizontalMax, verticalMax);
+    const side = Math.max(MIN_DIM, Math.min(maxSide, initialSide + expansion));
+
+    const x = anchorLeft === null
+        ? centerX - side / 2
+        : anchorLeft === initialCrop.x ? anchorLeft : anchorLeft - side;
+    const y = anchorTop === null
+        ? centerY - side / 2
+        : anchorTop === initialCrop.y ? anchorTop : anchorTop - side;
+
+    return {
+        x: Math.round(Math.max(0, Math.min(nw - side, x))),
+        y: Math.round(Math.max(0, Math.min(nh - side, y))),
+        width: Math.round(side),
+        height: Math.round(side),
+    };
+}
+
+function drawStroke(ctx: CanvasRenderingContext2D, stroke: Stroke) {
+    const points = stroke.points;
+    if (points.length === 0) return;
+
+    ctx.strokeStyle = stroke.color;
+    ctx.fillStyle = stroke.color;
+    ctx.lineWidth = stroke.width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (points.length === 1) {
+        ctx.beginPath();
+        ctx.arc(points[0].x, points[0].y, stroke.width / 2, 0, Math.PI * 2);
+        ctx.fill();
+        return;
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length - 1; i++) {
+        const midX = (points[i].x + points[i + 1].x) / 2;
+        const midY = (points[i].y + points[i + 1].y) / 2;
+        ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+    }
+    const last = points[points.length - 1];
+    ctx.lineTo(last.x, last.y);
+    ctx.stroke();
+}
 
 const COLOR_PALETTE = [
     { label: 'سفید', value: '#ffffff' },
@@ -68,40 +165,76 @@ const COLOR_PALETTE = [
     { label: 'مشکی', value: '#000000' },
 ];
 
-const THICKNESS_PRESETS = [
-    { label: 'نازک', value: 4, dotSize: 6 },
-    { label: 'متوسط', value: 10, dotSize: 12 },
-    { label: 'ضخیم', value: 22, dotSize: 18 },
-];
-
 export function ImageEditorModal({
     imageFile,
     initialStrokes,
-    initialRedoStack,
     initialCropRect,
+    initialUndoHistory,
+    initialRedoHistory,
+    squareCrop = false,
     onSend,
     onCancel,
 }: ImageEditorModalProps) {
-    const [imageLoaded, setImageLoaded] = useState(false);
+    const [, setImageLoaded] = useState(false);
     const [imgElement, setImgElement] = useState<HTMLImageElement | null>(null);
     const [imgNaturalSize, setImgNaturalSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
 
-    const [activeTool, setActiveTool] = useState<'none' | 'draw' | 'crop'>('none');
+    const [activeTool, setActiveTool] = useState<'none' | 'draw' | 'crop'>(squareCrop ? 'crop' : 'none');
     const [selectedColor, setSelectedColor] = useState<string>('#ffffff');
     const [selectedThickness, setSelectedThickness] = useState<number>(10);
 
     const [strokes, setStrokes] = useState<Stroke[]>(initialStrokes || []);
-    const [redoStack, setRedoStack] = useState<Stroke[]>(initialRedoStack || []);
     const strokesRef = useRef<Stroke[]>(strokes);
     strokesRef.current = strokes;
-    const redoStackRef = useRef<Stroke[]>(redoStack);
-    redoStackRef.current = redoStack;
+
+    const [undoHistory, setUndoHistory] = useState<EditorSnapshot[]>(initialUndoHistory || []);
+    const undoHistoryRef = useRef<EditorSnapshot[]>(undoHistory);
+    undoHistoryRef.current = undoHistory;
+
+    const [redoHistory, setRedoHistory] = useState<EditorSnapshot[]>(initialRedoHistory || []);
+    const redoHistoryRef = useRef<EditorSnapshot[]>(redoHistory);
+    redoHistoryRef.current = redoHistory;
 
     const currentStrokeRef = useRef<Stroke | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const stageRef = useRef<HTMLDivElement | null>(null);
 
     const [cropRect, setCropRect] = useState<CropRect>(initialCropRect || { x: 0, y: 0, width: 0, height: 0 });
+    const cropRectRef = useRef<CropRect>(cropRect);
+    cropRectRef.current = cropRect;
+
+    const onCancelRef = useRef(onCancel);
+    onCancelRef.current = onCancel;
+    const closingRef = useRef(false);
+
+    useEffect(() => {
+        if (!window.history.state?.imageEditor) {
+            window.history.pushState({ ...window.history.state, imageEditor: true }, '');
+        }
+
+        const handleBack = () => {
+            if (closingRef.current) return;
+            onCancelRef.current();
+        };
+
+        window.addEventListener('popstate', handleBack);
+        return () => window.removeEventListener('popstate', handleBack);
+    }, []);
+
+    const closeHistoryEntry = () => {
+        closingRef.current = true;
+        if (window.history.state?.imageEditor) {
+            window.history.back();
+        }
+    };
+
+    const closeEditor = useCallback(() => {
+        closingRef.current = true;
+        if (window.history.state?.imageEditor) {
+            window.history.back();
+        }
+        onCancelRef.current();
+    }, []);
     const isCropped =
         imgNaturalSize.width > 0 &&
         (Math.round(cropRect.x) > 0 ||
@@ -117,6 +250,7 @@ export function ImageEditorModal({
     } | null>(null);
 
     const [canvasDisplaySize, setCanvasDisplaySize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+    const initialCropRef = useRef(initialCropRect);
 
     useEffect(() => {
         let isMounted = true;
@@ -145,11 +279,30 @@ export function ImageEditorModal({
             setImgElement(img);
             setImgNaturalSize({ width: targetW, height: targetH });
 
-            if (initialCropRect && initialCropRect.width > 0 && initialCropRect.height > 0) {
-                setCropRect(initialCropRect);
-            } else {
-                setCropRect({ x: 0, y: 0, width: targetW, height: targetH });
-            }
+            const savedCrop = initialCropRef.current;
+            const cropFits = Boolean(
+                savedCrop
+                && (!savedCrop.naturalWidth || (savedCrop.naturalWidth === targetW && savedCrop.naturalHeight === targetH))
+                && savedCrop.width > 0
+                && savedCrop.height > 0
+                && savedCrop.x >= 0
+                && savedCrop.y >= 0
+                && savedCrop.x + savedCrop.width <= targetW
+                && savedCrop.y + savedCrop.height <= targetH
+            );
+            const centeredSquareSide = Math.min(targetW, targetH);
+            setCropRect(
+                cropFits && savedCrop
+                    ? { x: savedCrop.x, y: savedCrop.y, width: savedCrop.width, height: savedCrop.height }
+                    : squareCrop
+                        ? {
+                            x: Math.round((targetW - centeredSquareSide) / 2),
+                            y: Math.round((targetH - centeredSquareSide) / 2),
+                            width: centeredSquareSide,
+                            height: centeredSquareSide,
+                        }
+                        : { x: 0, y: 0, width: targetW, height: targetH }
+            );
             setImageLoaded(true);
         };
 
@@ -163,7 +316,22 @@ export function ImageEditorModal({
             isMounted = false;
             URL.revokeObjectURL(objectUrl);
         };
-    }, [imageFile]);
+    }, [imageFile, squareCrop]);
+
+    const getRenderRegion = useCallback((): CropRect => {
+        const cropApplied = isCropped && activeTool !== 'crop' && cropRect.width > 0 && cropRect.height > 0;
+        return cropApplied
+            ? { x: cropRect.x, y: cropRect.y, width: cropRect.width, height: cropRect.height }
+            : { x: 0, y: 0, width: imgNaturalSize.width, height: imgNaturalSize.height };
+    }, [isCropped, activeTool, cropRect, imgNaturalSize]);
+
+    const applyRegionTransform = useCallback((ctx: CanvasRenderingContext2D) => {
+        const region = getRenderRegion();
+        ctx.beginPath();
+        ctx.rect(region.x, region.y, region.width, region.height);
+        ctx.clip();
+        ctx.translate(-region.x, -region.y);
+    }, [getRenderRegion]);
 
     const redrawCanvas = useCallback(() => {
         const canvas = canvasRef.current;
@@ -171,9 +339,10 @@ export function ImageEditorModal({
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        const w = imgNaturalSize.width;
-        const h = imgNaturalSize.height;
-        if (w === 0 || h === 0) return;
+        const region = getRenderRegion();
+        const w = Math.round(region.width);
+        const h = Math.round(region.height);
+        if (w <= 0 || h <= 0) return;
 
         if (canvas.width !== w || canvas.height !== h) {
             canvas.width = w;
@@ -181,57 +350,66 @@ export function ImageEditorModal({
         }
 
         ctx.clearRect(0, 0, w, h);
-        ctx.drawImage(imgElement, 0, 0, w, h);
+        const naturalW = imgElement.naturalWidth || imgElement.width || w;
+        const naturalH = imgElement.naturalHeight || imgElement.height || h;
+        const sourceScaleX = naturalW / (imgNaturalSize.width || naturalW);
+        const sourceScaleY = naturalH / (imgNaturalSize.height || naturalH);
+        ctx.drawImage(
+            imgElement,
+            region.x * sourceScaleX,
+            region.y * sourceScaleY,
+            region.width * sourceScaleX,
+            region.height * sourceScaleY,
+            0,
+            0,
+            w,
+            h,
+        );
 
         ctx.save();
-        if (isCropped && cropRect.width > 0 && cropRect.height > 0) {
-            ctx.beginPath();
-            ctx.rect(cropRect.x, cropRect.y, cropRect.width, cropRect.height);
-            ctx.clip();
-        }
+        applyRegionTransform(ctx);
 
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        const strokesToDraw = strokesRef.current;
+        const activeStroke = currentStrokeRef.current;
+        const strokesToDraw = activeStroke ? [...strokesRef.current, activeStroke] : strokesRef.current;
 
         for (const stroke of strokesToDraw) {
-            if (stroke.points.length === 0) continue;
-            ctx.beginPath();
-            ctx.strokeStyle = stroke.color;
-            ctx.lineWidth = stroke.width;
-
-            if (stroke.points.length === 1) {
-                const pt = stroke.points[0];
-                ctx.arc(pt.x, pt.y, stroke.width / 2, 0, Math.PI * 2);
-                ctx.fillStyle = stroke.color;
-                ctx.fill();
-            } else {
-                ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-                for (let i = 1; i < stroke.points.length; i++) {
-                    const pt = stroke.points[i];
-                    ctx.lineTo(pt.x, pt.y);
-                }
-                ctx.stroke();
-            }
+            drawStroke(ctx, stroke);
         }
 
         ctx.restore();
 
         const rect = canvas.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0) {
-            setCanvasDisplaySize({ width: rect.width, height: rect.height });
+            setCanvasDisplaySize((prev) =>
+                Math.abs(prev.width - rect.width) < 0.5 && Math.abs(prev.height - rect.height) < 0.5
+                    ? prev
+                    : { width: rect.width, height: rect.height }
+            );
         }
-    }, [imgElement, imgNaturalSize, isCropped, cropRect]);
+    }, [imgElement, imgNaturalSize, getRenderRegion, applyRegionTransform]);
 
-    useEffect(() => {
-        if (imageLoaded) {
+    const rafRef = useRef<number | null>(null);
+    const scheduleRedraw = useCallback(() => {
+        if (rafRef.current != null) return;
+        rafRef.current = requestAnimationFrame(() => {
+            rafRef.current = null;
             redrawCanvas();
-        }
-    }, [imageLoaded, redrawCanvas]);
+        });
+    }, [redrawCanvas]);
 
     useEffect(() => {
-        const updateSize = () => {
+        return () => {
+            if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!imgElement) return;
+        redrawCanvas();
+    }, [imgElement, redrawCanvas]);
+
+    useEffect(() => {
+        const onResize = () => {
             if (canvasRef.current) {
                 const rect = canvasRef.current.getBoundingClientRect();
                 if (rect.width > 0 && rect.height > 0) {
@@ -239,8 +417,8 @@ export function ImageEditorModal({
                 }
             }
         };
-        window.addEventListener('resize', updateSize);
-        return () => window.removeEventListener('resize', updateSize);
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
     }, []);
 
     const getCanvasCoordinatesFromClient = useCallback(
@@ -250,75 +428,33 @@ export function ImageEditorModal({
             const rect = canvas.getBoundingClientRect();
             if (rect.width === 0 || rect.height === 0) return null;
 
-            const scaleX = imgNaturalSize.width / rect.width;
-            const scaleY = imgNaturalSize.height / rect.height;
+            const region = getRenderRegion();
+            const scaleX = region.width / rect.width;
+            const scaleY = region.height / rect.height;
 
-            const clampedX = Math.max(0, Math.min(rect.width, clientX - rect.left));
-            const clampedY = Math.max(0, Math.min(rect.height, clientY - rect.top));
+            const x = region.x + (clientX - rect.left) * scaleX;
+            const y = region.y + (clientY - rect.top) * scaleY;
 
-            return {
-                x: clampedX * scaleX,
-                y: clampedY * scaleY,
-            };
+            return { x, y };
         },
-        [imgNaturalSize],
+        [getRenderRegion]
     );
 
-    const drawSegmentToCanvas = (p1: Point, p2: Point, color: string, width: number) => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        ctx.save();
-        if (isCropped && cropRect.width > 0 && cropRect.height > 0) {
-            ctx.beginPath();
-            ctx.rect(cropRect.x, cropRect.y, cropRect.width, cropRect.height);
-            ctx.clip();
-        }
-
-        ctx.strokeStyle = color;
-        ctx.lineWidth = width;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.stroke();
-
-        ctx.restore();
-    };
-
-    const drawDotToCanvas = (p: Point, color: string, width: number) => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        ctx.save();
-        if (isCropped && cropRect.width > 0 && cropRect.height > 0) {
-            ctx.beginPath();
-            ctx.rect(cropRect.x, cropRect.y, cropRect.width, cropRect.height);
-            ctx.clip();
-        }
-
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, width / 2, 0, Math.PI * 2);
-        ctx.fillStyle = color;
-        ctx.fill();
-
-        ctx.restore();
+    const recordSnapshot = (snapshot: EditorSnapshot) => {
+        setUndoHistory((prev) => [...prev, snapshot]);
+        redoHistoryRef.current = [];
+        setRedoHistory([]);
     };
 
     const handleDrawingPointerDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
-        if (activeTool !== 'draw') return;
+        if (activeTool !== 'draw' || currentStrokeRef.current) return;
         e.preventDefault();
         e.stopPropagation();
 
         const pt = getCanvasCoordinatesFromClient(e.clientX, e.clientY);
         if (!pt) return;
 
+        const pointerId = e.pointerId;
         const strokeWidth = selectedThickness * (imgNaturalSize.width / 1000 || 1);
         currentStrokeRef.current = {
             points: [pt],
@@ -326,24 +462,35 @@ export function ImageEditorModal({
             width: strokeWidth,
         };
 
-        drawDotToCanvas(pt, selectedColor, strokeWidth);
+        scheduleRedraw();
 
         const onPointerMove = (ev: PointerEvent) => {
+            if (ev.pointerId !== pointerId) return;
             ev.preventDefault();
-            if (!currentStrokeRef.current) return;
-            const movePt = getCanvasCoordinatesFromClient(ev.clientX, ev.clientY);
-            if (!movePt) return;
-
             const stroke = currentStrokeRef.current;
-            const lastPt = stroke.points[stroke.points.length - 1];
-            stroke.points.push(movePt);
+            if (!stroke) return;
 
-            if (lastPt) {
-                drawSegmentToCanvas(lastPt, movePt, stroke.color, stroke.width);
+            const events = ev.getCoalescedEvents?.() ?? [ev];
+            let changed = false;
+            for (const coalesced of events) {
+                const movePt = getCanvasCoordinatesFromClient(coalesced.clientX, coalesced.clientY);
+                if (!movePt) continue;
+
+                const lastPt = stroke.points[stroke.points.length - 1];
+                if (lastPt) {
+                    const dx = movePt.x - lastPt.x;
+                    const dy = movePt.y - lastPt.y;
+                    if (dx * dx + dy * dy < 2.25) continue;
+                }
+                stroke.points.push(movePt);
+                changed = true;
             }
+
+            if (changed) scheduleRedraw();
         };
 
         const onPointerEnd = (ev: PointerEvent) => {
+            if (ev.pointerId !== pointerId) return;
             ev.preventDefault();
             window.removeEventListener('pointermove', onPointerMove);
             window.removeEventListener('pointerup', onPointerEnd);
@@ -352,11 +499,12 @@ export function ImageEditorModal({
             const finished = currentStrokeRef.current;
             currentStrokeRef.current = null;
             if (finished && finished.points.length > 0) {
+                recordSnapshot({ strokes: strokesRef.current, cropRect: cropRectRef.current });
                 const updated = [...strokesRef.current, finished];
                 strokesRef.current = updated;
                 setStrokes(updated);
-                setRedoStack([]);
             }
+            redrawCanvas();
         };
 
         window.addEventListener('pointermove', onPointerMove, { passive: false });
@@ -365,35 +513,38 @@ export function ImageEditorModal({
     };
 
     const handleUndo = useCallback(() => {
-        if (strokesRef.current.length === 0) return;
+        const history = undoHistoryRef.current;
+        if (history.length === 0) return;
         triggerHaptic();
-        const current = strokesRef.current;
-        const last = current[current.length - 1];
-        const updated = current.slice(0, -1);
-        strokesRef.current = updated;
-        setStrokes(updated);
-        setRedoStack((prev) => [...prev, last]);
+        const previous = history[history.length - 1];
+        const remaining = history.slice(0, -1);
+        undoHistoryRef.current = remaining;
+        setUndoHistory(remaining);
+        const currentSnapshot = { strokes: strokesRef.current, cropRect: cropRectRef.current };
+        const redo = [...redoHistoryRef.current, currentSnapshot];
+        redoHistoryRef.current = redo;
+        setRedoHistory(redo);
+        strokesRef.current = previous.strokes;
+        setStrokes(previous.strokes);
+        setCropRect(previous.cropRect);
         redrawCanvas();
     }, [redrawCanvas]);
 
     const handleRedo = useCallback(() => {
-        if (redoStackRef.current.length === 0) return;
+        const history = redoHistoryRef.current;
+        if (history.length === 0) return;
         triggerHaptic();
-        const current = redoStackRef.current;
-        const toRestore = current[current.length - 1];
-        setRedoStack(current.slice(0, -1));
-        const updated = [...strokesRef.current, toRestore];
-        strokesRef.current = updated;
-        setStrokes(updated);
-        redrawCanvas();
-    }, [redrawCanvas]);
-
-    const handleClearStrokes = useCallback(() => {
-        if (strokesRef.current.length === 0) return;
-        triggerHaptic();
-        strokesRef.current = [];
-        setStrokes([]);
-        setRedoStack([]);
+        const next = history[history.length - 1];
+        const remaining = history.slice(0, -1);
+        redoHistoryRef.current = remaining;
+        setRedoHistory(remaining);
+        const currentSnapshot = { strokes: strokesRef.current, cropRect: cropRectRef.current };
+        const undo = [...undoHistoryRef.current, currentSnapshot];
+        undoHistoryRef.current = undo;
+        setUndoHistory(undo);
+        strokesRef.current = next.strokes;
+        setStrokes(next.strokes);
+        setCropRect(next.cropRect);
         redrawCanvas();
     }, [redrawCanvas]);
 
@@ -408,6 +559,8 @@ export function ImageEditorModal({
             startY: e.clientY,
             initialCrop: { ...cropRect },
         };
+
+        let latestCrop: CropRect = { ...cropRect };
 
         const onPointerMove = (ev: PointerEvent) => {
             ev.preventDefault();
@@ -426,6 +579,12 @@ export function ImageEditorModal({
             const MIN_DIM = 40;
             const nw = imgNaturalSize.width;
             const nh = imgNaturalSize.height;
+
+            if (squareCrop) {
+                latestCrop = getSquareCrop(dragHandle, initialCrop, dx, dy, nw, nh);
+                setCropRect(latestCrop);
+                return;
+            }
 
             let newX = initialCrop.x;
             let newY = initialCrop.y;
@@ -457,20 +616,32 @@ export function ImageEditorModal({
                 newW = Math.max(MIN_DIM, Math.min(nw - newX, initialCrop.width + dx));
             }
 
-            setCropRect({
+            latestCrop = {
                 x: Math.round(newX),
                 y: Math.round(newY),
                 width: Math.round(newW),
                 height: Math.round(newH),
-            });
+            };
+            setCropRect(latestCrop);
         };
 
         const onPointerUp = (ev: PointerEvent) => {
             ev.preventDefault();
+            const drag = cropDragRef.current;
             cropDragRef.current = null;
             window.removeEventListener('pointermove', onPointerMove);
             window.removeEventListener('pointerup', onPointerUp);
             window.removeEventListener('pointercancel', onPointerUp);
+
+            if (
+                drag
+                && (latestCrop.x !== drag.initialCrop.x
+                    || latestCrop.y !== drag.initialCrop.y
+                    || latestCrop.width !== drag.initialCrop.width
+                    || latestCrop.height !== drag.initialCrop.height)
+            ) {
+                recordSnapshot({ strokes: strokesRef.current, cropRect: drag.initialCrop });
+            }
         };
 
         window.addEventListener('pointermove', onPointerMove, { passive: false });
@@ -483,7 +654,7 @@ export function ImageEditorModal({
             if (e.key === 'Escape') {
                 e.preventDefault();
                 e.stopPropagation();
-                onCancel();
+                closeEditor();
                 return;
             }
 
@@ -519,7 +690,7 @@ export function ImageEditorModal({
 
         window.addEventListener('keydown', onKeyDown, { capture: true });
         return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
-    }, [handleUndo, handleRedo, onCancel]);
+    }, [handleUndo, handleRedo, closeEditor]);
 
     const handleSend = async () => {
         triggerHaptic();
@@ -529,39 +700,54 @@ export function ImageEditorModal({
 
         const currentEditorState = {
             strokes,
-            redoStack,
-            cropRect,
+            cropRect: {
+                ...cropRect,
+                naturalWidth: imgNaturalSize.width,
+                naturalHeight: imgNaturalSize.height,
+            },
+            undoHistory,
+            redoHistory,
         };
 
         if (!isEdited) {
+            closeHistoryEntry();
             onSend(imageFile, false, currentEditorState);
             return;
         }
 
-        if (!imgElement || !canvasRef.current) {
+        const canvas = canvasRef.current;
+
+        if (!imgElement || !canvas) {
+            closeHistoryEntry();
             onSend(imageFile, isEdited, currentEditorState);
             return;
         }
 
-        const targetW = Math.round(cropRect.width > 0 ? cropRect.width : imgNaturalSize.width);
-        const targetH = Math.round(cropRect.height > 0 ? cropRect.height : imgNaturalSize.height);
-        const sourceX = Math.round(cropRect.x);
-        const sourceY = Math.round(cropRect.y);
+        const cropRendered = isCropped && activeTool !== 'crop';
+        const hasCropRegion = isCropped && cropRect.width > 0 && cropRect.height > 0;
+
+        const targetW = cropRendered || !hasCropRegion ? canvas.width : Math.round(cropRect.width);
+        const targetH = cropRendered || !hasCropRegion ? canvas.height : Math.round(cropRect.height);
+        const sourceX = cropRendered || !hasCropRegion ? 0 : Math.round(cropRect.x);
+        const sourceY = cropRendered || !hasCropRegion ? 0 : Math.round(cropRect.y);
 
         const exportCanvas = document.createElement('canvas');
         exportCanvas.width = targetW;
         exportCanvas.height = targetH;
+
         const ctx = exportCanvas.getContext('2d');
         if (!ctx) {
+            closeHistoryEntry();
             onSend(imageFile, isEdited, currentEditorState);
             return;
         }
 
-        ctx.drawImage(canvasRef.current, sourceX, sourceY, targetW, targetH, 0, 0, targetW, targetH);
+        ctx.drawImage(canvas, sourceX, sourceY, targetW, targetH, 0, 0, targetW, targetH);
 
         exportCanvas.toBlob(
             (blob) => {
                 if (!blob) {
+                    closeHistoryEntry();
                     onSend(imageFile, isEdited, currentEditorState);
                     return;
                 }
@@ -570,14 +756,13 @@ export function ImageEditorModal({
                     type: 'image/jpeg',
                     lastModified: Date.now(),
                 });
+                closeHistoryEntry();
                 onSend(finalFile, true, currentEditorState);
             },
             'image/jpeg',
             0.92,
         );
     };
-
-    const formattedFileSize = (imageFile.size / (1024 * 1024)).toFixed(1);
 
     const scaleToDisplayX = canvasDisplaySize.width / (imgNaturalSize.width || 1);
     const scaleToDisplayY = canvasDisplaySize.height / (imgNaturalSize.height || 1);
@@ -591,28 +776,15 @@ export function ImageEditorModal({
 
     const modalContent = (
         <div className="image-editor-overlay" role="dialog" aria-modal="true">
-            <div className="image-editor-header" onPointerDown={(e) => e.stopPropagation()}>
-                <div className="image-editor-header__right">
-                    <button
-                        type="button"
-                        className="image-editor-icon-btn"
-                        onClick={onCancel}
-                        title="انصراف (Esc)"
-                        aria-label="Close image preview"
-                    >
-                        <X size={20} />
-                    </button>
-                    <div className="image-editor-header__info">
-                        <span className="image-editor-header__title">{imageFile.name}</span>
-                        {imgNaturalSize.width > 0 && (
-                            <span className="image-editor-header__meta">
-                                {toPersianDigits(Math.round(cropRect.width))} × {toPersianDigits(Math.round(cropRect.height))} •{' '}
-                                {toPersianDigits(formattedFileSize)} MB
-                            </span>
-                        )}
-                    </div>
-                </div>
-            </div>
+            <button
+                type="button"
+                className="image-editor-close-btn"
+                onClick={closeEditor}
+                title="بستن (Esc)"
+                aria-label="Close image preview"
+            >
+                <X size={20} />
+            </button>
 
             <div className="image-editor-body">
                 <div className="image-editor-canvas-stage" ref={stageRef}>
@@ -672,7 +844,6 @@ export function ImageEditorModal({
                                     top: `${screenCrop.top}px`,
                                     width: `${screenCrop.width}px`,
                                     height: `${screenCrop.height}px`,
-                                    pointerEvents: 'auto',
                                 }}
                                 onPointerDown={(e) => handleCropPointerDown('move', e)}
                             >
@@ -726,61 +897,51 @@ export function ImageEditorModal({
                         </div>
                     )}
                 </div>
+            </div>
 
-                <div className="image-editor-sub-tools" onPointerDown={(e) => e.stopPropagation()}>
-                    {activeTool === 'draw' && (
-                        <div className="image-editor-draw-controls">
-                            <div className="image-editor-colors">
-                                {COLOR_PALETTE.map((c) => (
-                                    <div
-                                        key={c.value}
-                                        className={`image-editor-color-circle ${selectedColor === c.value ? 'image-editor-color-circle--selected' : ''}`}
-                                        style={{ backgroundColor: c.value }}
-                                        onClick={() => {
-                                            triggerHaptic();
-                                            setSelectedColor(c.value);
-                                        }}
-                                        title={c.label}
-                                    />
-                                ))}
-                            </div>
-
-                            <div className="image-editor-divider" />
-
-                            <div className="image-editor-thicknesses">
-                                {THICKNESS_PRESETS.map((t) => (
-                                    <button
-                                        key={t.value}
-                                        type="button"
-                                        className={`image-editor-thickness-btn ${selectedThickness === t.value ? 'image-editor-thickness-btn--selected' : ''}`}
-                                        onClick={() => {
-                                            triggerHaptic();
-                                            setSelectedThickness(t.value);
-                                        }}
-                                        title={t.label}
-                                    >
-                                        <span
-                                            className="image-editor-thickness-dot"
-                                            style={{
-                                                width: `${t.dotSize}px`,
-                                                height: `${t.dotSize}px`,
-                                                backgroundColor: selectedColor,
-                                            }}
-                                        />
-                                    </button>
-                                ))}
-                            </div>
+            <div className="image-editor-bottom-bar" onPointerDown={(e) => e.stopPropagation()}>
+                {activeTool === 'draw' && (
+                    <div className="image-editor-sub-dock">
+                        <div className="image-editor-colors">
+                            {COLOR_PALETTE.map((c) => (
+                                <div
+                                    key={c.value}
+                                    className={`image-editor-color-circle ${selectedColor === c.value ? 'image-editor-color-circle--selected' : ''}`}
+                                    style={{ backgroundColor: c.value }}
+                                    onClick={() => {
+                                        triggerHaptic();
+                                        setSelectedColor(c.value);
+                                    }}
+                                    title={c.label}
+                                />
+                            ))}
                         </div>
-                    )}
 
-                    {activeTool === 'crop' && (
-                        <div className="image-editor-crop-controls">
-                            <span className="image-editor-crop-tag">
-                                {toPersianDigits(Math.round(cropRect.width))} × {toPersianDigits(Math.round(cropRect.height))}
+                        <div className="image-editor-slider-wrap">
+                            <span className="image-editor-slider-preview-box">
+                                <span
+                                    className="image-editor-slider-preview"
+                                    style={{
+                                        width: `${Math.max(6, Math.min(22, selectedThickness))}px`,
+                                        height: `${Math.max(6, Math.min(22, selectedThickness))}px`,
+                                        backgroundColor: selectedColor,
+                                    }}
+                                />
                             </span>
+                            <input
+                                type="range"
+                                min={3}
+                                max={30}
+                                value={selectedThickness}
+                                onChange={(e) => setSelectedThickness(Number(e.target.value))}
+                                className="image-editor-slider"
+                                aria-label="ضخامت قلم"
+                            />
                         </div>
-                    )}
+                    </div>
+                )}
 
+                <div className="image-editor-bottom-row">
                     <div className="image-editor-tools-dock">
                         <button
                             type="button"
@@ -789,7 +950,7 @@ export function ImageEditorModal({
                                 triggerHaptic();
                                 setActiveTool((prev) => (prev === 'crop' ? 'none' : 'crop'));
                             }}
-                            title="کراپ و برش کادر عکس"
+                            title="کراپ"
                         >
                             <Crop size={18} />
                         </button>
@@ -801,19 +962,17 @@ export function ImageEditorModal({
                                 triggerHaptic();
                                 setActiveTool((prev) => (prev === 'draw' ? 'none' : 'draw'));
                             }}
-                            title="قلم نقاشی روی عکس"
+                            title="قلمو"
                         >
-                            <Paintbrush size={18} />
+                            <Brush size={18} />
                         </button>
-
-                        <div className="image-editor-divider" />
 
                         <button
                             type="button"
                             className="image-editor-icon-btn"
                             onClick={handleUndo}
-                            disabled={strokes.length === 0}
-                            title="واگرد به عقب (Ctrl+Z)"
+                            disabled={undoHistory.length === 0}
+                            title="واگرد (Ctrl+Z)"
                         >
                             <TelegramUndoIcon size={18} />
                         </button>
@@ -822,35 +981,21 @@ export function ImageEditorModal({
                             type="button"
                             className="image-editor-icon-btn"
                             onClick={handleRedo}
-                            disabled={redoStack.length === 0}
-                            title="واگرد به جلو (Ctrl+Y)"
+                            disabled={redoHistory.length === 0}
+                            title="از نو (Ctrl+Y)"
                         >
                             <TelegramRedoIcon size={18} />
                         </button>
-
-                        <button
-                            type="button"
-                            className="image-editor-icon-btn"
-                            onClick={handleClearStrokes}
-                            disabled={strokes.length === 0}
-                            title="پاکسازی تمام نقاشی‌ها"
-                        >
-                            <Trash2 size={18} />
-                        </button>
                     </div>
-                </div>
-            </div>
 
-            <div className="image-editor-bottom-bar" onPointerDown={(e) => e.stopPropagation()}>
-                <div className="image-editor-actions-group">
-                    <button type="button" className="image-editor-send-btn" onClick={handleSend} title="ارسال عکس">
-                        <span>ارسال</span>
-                        <Send size={16} />
-                    </button>
-
-                    <button type="button" className="image-editor-cancel-btn" onClick={onCancel} title="انصراف و بستن">
-                        <X size={16} />
-                        <span>انصراف</span>
+                    <button
+                        type="button"
+                        className="image-editor-check-btn"
+                        onClick={handleSend}
+                        title="تایید و ارسال"
+                        aria-label="تایید و ارسال"
+                    >
+                        <Check size={22} strokeWidth={2.6} />
                     </button>
                 </div>
             </div>
