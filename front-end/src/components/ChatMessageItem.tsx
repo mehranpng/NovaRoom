@@ -258,7 +258,8 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     const longPressTimerRef = useRef<number | null>(null);
     const longPressOriginRef = useRef({ x: 0, y: 0 });
     const suppressClickRef = useRef(false);
-    const isUploading = message.deliveryStatus === 'sending' && Boolean(message.file?.localUrl);
+    const isUploading = message.deliveryStatus === 'sending' && Boolean(message.upload);
+    const isForwardingFile = isUploading && Boolean(message.forwarding);
     const swipeEnabled = canSwipeToReply && !isSelectionModeActive && !isUploading;
 
     const setBubbleRef = useCallback((el: HTMLDivElement | null) => {
@@ -579,6 +580,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                             chatId={chatId}
                             uploading={isUploading}
                             uploadId={message.id}
+                            hideCancel={isForwardingFile}
                             onCancelUpload={() => cancelUpload(message.id)}
                             onMediaLoad={() => actions.mediaReady(message.id)}
                             onMediaError={() => actions.mediaReady(message.id)}

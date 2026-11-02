@@ -2,7 +2,7 @@ import os
 import uuid
 import aiofiles
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 from datetime import datetime, timezone
 import mimetypes
 import hashlib
@@ -205,9 +205,23 @@ async def save_uploaded_file(file_content: bytes, original_filename: str) -> dic
 
 
 async def delete_file(file_id: str) -> bool:
-    deleted = False
+    safe_id = Path(file_id).name
+    if not safe_id or safe_id != file_id:
+        return False
+    ok = True
+    for file_path in (UPLOAD_DIR / safe_id, UPLOAD_DIR / S3_UPLOAD_PREFIX / safe_id):
+        if not file_path.exists():
+            continue
+        try:
+            await asyncio.to_thread(file_path.unlink)
+        except FileNotFoundError:
+            continue
+        except Exception as e:
+            print(f"Error deleting local file {file_id}: {e}")
+            ok = False
+
     if is_s3_enabled():
-        key = get_s3_upload_key(file_id)
+        key = get_s3_upload_key(safe_id)
         client = get_s3_client()
         try:
             await asyncio.to_thread(
@@ -215,19 +229,65 @@ async def delete_file(file_id: str) -> bool:
                 Bucket=S3_BUCKET_NAME,
                 Key=key,
             )
-            deleted = True
+        except ClientError as e:
+            code = str(e.response.get("Error", {}).get("Code") or "")
+            if code not in ("404", "NoSuchKey"):
+                print(f"Error deleting S3 file {file_id}: {e}")
+                ok = False
         except Exception as e:
             print(f"Error deleting S3 file {file_id}: {e}")
+            ok = False
 
-    file_path = get_file_path(file_id)
-    if file_path.exists():
+    return ok
+
+
+async def list_stored_files() -> Dict[str, float]:
+    found: Dict[str, float] = {}
+
+    def _scan_local() -> Dict[str, float]:
+        result: Dict[str, float] = {}
         try:
-            file_path.unlink()
-            deleted = True
+            for entry in UPLOAD_DIR.iterdir():
+                if entry.is_file():
+                    result[entry.name] = entry.stat().st_mtime
         except Exception as e:
-            print(f"Error deleting local file {file_id}: {e}")
+            print(f"Error listing local uploads: {e}")
+        return result
 
-    return deleted
+    for file_id, mtime in (await asyncio.to_thread(_scan_local)).items():
+        found[file_id] = max(found.get(file_id, 0.0), mtime)
+
+    if is_s3_enabled():
+        def _scan_s3() -> Dict[str, float]:
+            result: Dict[str, float] = {}
+            client = get_s3_client()
+            prefix = f"{S3_UPLOAD_PREFIX}/"
+            ai_prefix = f"{S3_AI_TEMP_PREFIX}/"
+            try:
+                paginator = client.get_paginator("list_objects_v2")
+                for page in paginator.paginate(Bucket=S3_BUCKET_NAME, Prefix=prefix):
+                    for obj in page.get("Contents", []) or []:
+                        key = str(obj.get("Key") or "")
+                        if not key.startswith(prefix) or key.startswith(ai_prefix):
+                            continue
+                        name = key[len(prefix):]
+                        if not name or "/" in name:
+                            continue
+                        modified = obj.get("LastModified")
+                        result[name] = (
+                            modified.timestamp()
+                            if modified is not None
+                            else 0.0
+                        )
+            except Exception as e:
+                print(f"Error listing S3 uploads: {e}")
+                raise
+            return result
+
+        for file_id, mtime in (await asyncio.to_thread(_scan_s3)).items():
+            found[file_id] = max(found.get(file_id, 0.0), mtime)
+
+    return found
 
 
 def validate_file_access(file_id: str) -> bool:
@@ -367,21 +427,3 @@ async def read_static_font(filename: str) -> Optional[bytes]:
 
 async def encrypt_existing_uploads() -> int:
     return 0
-
-
-async def cleanup_orphaned_files(db_file_ids: set) -> int:
-    deleted_count = 0
-    if not UPLOAD_DIR.exists():
-        return deleted_count
-
-    for file_path in UPLOAD_DIR.iterdir():
-        if file_path.is_file():
-            file_id = file_path.name
-            if file_id not in db_file_ids:
-                try:
-                    file_path.unlink()
-                    deleted_count += 1
-                except Exception as e:
-                    print(f"Error deleting orphaned file {file_id}: {e}")
-
-    return deleted_count

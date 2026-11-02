@@ -10,7 +10,7 @@ import { autoDownloadCookieKeys, isAutoDownloadEnabled } from '../utils/autoDown
 import { isLocalBlobUrl, localBlobUrls } from '../utils/chatFileUploader';
 import { useUploadProgress } from '../utils/uploadProgressStore';
 
-interface FileMessageProps { file: FileMetadata; token: string; chatId: string; uploading?: boolean; uploadId?: string; onCancelUpload?: () => void; onMediaLoad?: () => void; onMediaError?: () => void; onImageClick?: (imageUrl: string, file: FileMetadata) => void; onVideoClick?: (videoUrl: string, file: FileMetadata) => void; }
+interface FileMessageProps { file: FileMetadata; token: string; chatId: string; uploading?: boolean; uploadId?: string; hideCancel?: boolean; onCancelUpload?: () => void; onMediaLoad?: () => void; onMediaError?: () => void; onImageClick?: (imageUrl: string, file: FileMetadata) => void; onVideoClick?: (videoUrl: string, file: FileMetadata) => void; }
 type DownloadState = 'idle' | 'downloading' | 'decrypting' | 'done' | 'error';
 type DownloadSubscriber = (state: DownloadState, progress: number) => void;
 type DownloadTask = {
@@ -66,7 +66,7 @@ const observeVisibility = (el: Element, cb: (visible: boolean) => void) => {
   };
 };
 
-export function FileMessage({ file, token, chatId, uploading = false, uploadId = '', onCancelUpload, onMediaLoad, onMediaError, onImageClick, onVideoClick }: FileMessageProps) {
+export function FileMessage({ file, token, chatId, uploading = false, uploadId = '', hideCancel = false, onCancelUpload, onMediaLoad, onMediaError, onImageClick, onVideoClick }: FileMessageProps) {
   const upload = useUploadProgress(uploading ? uploadId : '');
   const [mediaUrl, setMediaUrl] = useState<string | null>(file.localUrl ?? null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -367,19 +367,20 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
       type="button"
       className="manual-download-btn"
       style={{ margin }}
-      onPointerDown={(e) => { e.stopPropagation(); }}
-      onTouchStart={(e) => { e.stopPropagation(); }}
-      onClick={(e) => { e.stopPropagation(); onCancelUpload?.(); }}
-      aria-label="لغو آپلود"
+      disabled={hideCancel}
+      onPointerDown={hideCancel ? undefined : (e) => { e.stopPropagation(); }}
+      onTouchStart={hideCancel ? undefined : (e) => { e.stopPropagation(); }}
+      onClick={hideCancel ? undefined : (e) => { e.stopPropagation(); onCancelUpload?.(); }}
+      aria-label={hideCancel ? 'در حال بازنشر' : 'لغو آپلود'}
     >
       <svg className="upload-ring" viewBox="0 0 36 36" aria-hidden>
         <circle
           className={`upload-ring__bar ${upload?.phase === 'encrypting' ? 'upload-ring__bar--spin' : ''}`}
           cx="18" cy="18" r="16"
-          strokeDasharray={`${(upload?.phase === 'encrypting' ? 25 : uploadProgress) * 1.0053} 100.53`}
+          strokeDasharray={upload?.phase === 'encrypting' ? undefined : `${uploadProgress * 1.0053} 100.53`}
         />
       </svg>
-      <X size={16} />
+      {!hideCancel && <X size={16} />}
     </button>
   ) : null;
   const containerStyle: React.CSSProperties = {

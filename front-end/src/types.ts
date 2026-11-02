@@ -96,6 +96,7 @@ export interface Message {
     aiAttachment?: AIAttachmentMeta;
     chessInvite?: ChessInvite;
     upload?: { phase: 'uploading' | 'encrypting'; progress: number };
+    forwarding?: boolean;
 }
 
 export interface ChatLastMessage {

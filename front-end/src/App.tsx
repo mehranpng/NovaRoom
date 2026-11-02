@@ -2130,6 +2130,7 @@ export function App() {
                     }
                     : chat
             )));
+            if (attachment) setUploadProgress(clientId, { phase: 'uploading', progress: 0 });
             return optimisticFile?.localUrl;
         };
 
@@ -2390,6 +2391,8 @@ export function App() {
                 seen: false,
                 deliveryStatus: 'sending',
                 file: sourceMessage.file,
+                upload: sourceMessage.file ? { phase: 'encrypting', progress: 100 } : undefined,
+                forwarding: sourceMessage.file ? true : undefined,
                 replyTo: optimisticReplyTo,
                 forwardedFrom: sourceMessage.forwardedFrom || fallbackForwardedFrom,
                 reasoningContent: sourceMessage.reasoningContent,
@@ -2406,6 +2409,12 @@ export function App() {
         }));
 
         const clientIdsSet = new Set(resolvedEntries.map((e) => e.forwardClientId));
+        for (const entry of resolvedEntries) {
+            if (entry.sourceMessage.file) setUploadProgress(entry.forwardClientId, { phase: 'encrypting', progress: 100 });
+        }
+        const clearForwardProgress = () => {
+            clientIdsSet.forEach((id) => clearUploadProgress(id));
+        };
 
         try {
             const items = await Promise.all(resolvedEntries.map(async ({ id, sourceMessage, forwardClientId }) => {
@@ -2438,6 +2447,12 @@ export function App() {
                 }),
             });
 
+            clearForwardProgress();
+            setMessages((prev) => ({
+                ...prev,
+                [targetChatId]: (prev[targetChatId] || []).filter((m) => !clientIdsSet.has(m.id)),
+            }));
+
             if (activeChatId === targetChatId) {
                 try {
                     await fetchPagedMessages(targetChatId, { direction: 'latest', mode: 'replace' });
@@ -2447,6 +2462,7 @@ export function App() {
             }
         } catch (e) {
             console.error('Failed to forward messages', e);
+            clearForwardProgress();
             setMessages((prev) => ({
                 ...prev,
                 [targetChatId]: (prev[targetChatId] || []).filter((m) => !clientIdsSet.has(m.id)),

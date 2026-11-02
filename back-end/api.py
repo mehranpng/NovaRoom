@@ -66,6 +66,7 @@ from file_service import (
     read_file_content,
     get_file_path,
     encrypt_existing_uploads,
+    list_stored_files,
     MAX_FILE_SIZE,
     read_static_font,
     save_ai_temp_file,
@@ -146,6 +147,7 @@ cl_ai_usage = db["ai_usage"]
 cl_ai_memories = db["ai_memories"]
 cl_ai_temp_files = db["ai_temp_files"]
 cl_chess_games = db["chess_games"]
+cl_pending_file_deletions = db["pending_file_deletions"]
 
 active_connections: Dict[str, List[WebSocket]] = {}
 active_ai_connections: Dict[str, List[WebSocket]] = {}
@@ -487,6 +489,11 @@ async def _remap_forward_file_to_target_chat(
     remapped_meta["fileSize"] = int(
         file_meta.get("fileSize") or remapped_meta.get("fileSize") or 0
     )
+    uploaded_at = remapped_meta.get("uploadedAt")
+    if isinstance(uploaded_at, datetime):
+        remapped_meta["uploadedAt"] = uploaded_at.isoformat()
+
+    id_map: Dict[str, str] = {}
 
     cover_art_id = str(file_meta.get("coverArtFileId") or "").strip()
     if cover_art_id:
@@ -500,6 +507,8 @@ async def _remap_forward_file_to_target_chat(
                 remapped_cover_raw, "cover-art"
             )
             remapped_cover_meta["uploadedBy"] = uploaded_by
+            if remapped_cover_meta.get("fileId"):
+                id_map[cover_art_id] = str(remapped_cover_meta.get("fileId"))
             remapped_meta["coverArtFileId"] = remapped_cover_meta.get("fileId")
             remapped_meta["coverArtUrl"] = (
                 f"/files/{remapped_cover_meta.get('fileId')}"
@@ -507,9 +516,34 @@ async def _remap_forward_file_to_target_chat(
                 else remapped_meta.get("coverArtUrl")
             )
 
-    for key in ("previewUrl", "thumbUrl", "imagePreviewUrl", "previewFileId"):
-        if key in file_meta and file_meta.get(key):
-            remapped_meta[key] = file_meta.get(key)
+    preview_id = str(file_meta.get("previewFileId") or "").strip()
+    if preview_id:
+        preview_raw = await read_file_content(preview_id)
+        if preview_raw is not None:
+            remapped_preview_meta = await save_uploaded_file(
+                preview_raw, "preview.jpg"
+            )
+            remapped_preview_meta["uploadedBy"] = uploaded_by
+            if remapped_preview_meta.get("fileId"):
+                id_map[preview_id] = str(remapped_preview_meta.get("fileId"))
+            remapped_meta["previewFileId"] = remapped_preview_meta.get("fileId")
+            remapped_meta["previewUrl"] = (
+                f"/files/{remapped_preview_meta.get('fileId')}"
+                if remapped_preview_meta.get("fileId")
+                else remapped_meta.get("previewUrl")
+            )
+        else:
+            remapped_meta["previewFileId"] = preview_id
+
+    for key in ("previewUrl", "thumbUrl", "imagePreviewUrl"):
+        value = str(file_meta.get(key) or "").strip()
+        if not value:
+            continue
+        referenced_id = _file_id_from_url(value)
+        if referenced_id and referenced_id in id_map:
+            remapped_meta[key] = f"/files/{id_map[referenced_id]}"
+        else:
+            remapped_meta[key] = value
 
     for key in ("title", "artist"):
         if key in file_meta:
@@ -689,22 +723,196 @@ def validate_username(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9_]+", value))
 
 
-def should_delete_file_with_message(message_doc: Dict[str, Any]) -> bool:
-    file_data = message_doc.get("file") or {}
-    file_id = str(file_data.get("fileId") or "").strip()
-    if not file_id:
-        return False
-    return not bool(message_doc.get("forwardedFrom"))
+def _is_valid_file_id(value: str) -> bool:
+    return bool(value) and Path(value).name == value
 
 
-def extract_message_file_ids(message_doc: Dict[str, Any]) -> List[str]:
+def _file_id_from_url(value: Any) -> str:
+    text = str(value or "").strip()
+    marker = "/files/"
+    idx = text.find(marker)
+    if idx == -1:
+        return ""
+    candidate = text[idx + len(marker):].split("?", 1)[0].split("#", 1)[0].strip("/")
+    return candidate if _is_valid_file_id(candidate) else ""
+
+
+def collect_file_ids(message_doc: Dict[str, Any]) -> set:
+    ids: set = set()
     file_data = message_doc.get("file") or {}
-    ids: List[str] = []
-    for key in ("fileId", "previewFileId"):
+    if not isinstance(file_data, dict):
+        return ids
+    for key in ("fileId", "previewFileId", "coverArtFileId"):
         value = str(file_data.get(key) or "").strip()
+        if _is_valid_file_id(value):
+            ids.add(value)
+    for key in ("previewUrl", "thumbUrl", "imagePreviewUrl", "coverArtUrl"):
+        value = _file_id_from_url(file_data.get(key))
         if value:
-            ids.append(value)
+            ids.add(value)
     return ids
+
+
+async def _file_still_referenced(
+    file_id: str, excluded_message_ids: Optional[set] = None
+) -> bool:
+    excluded = list(excluded_message_ids or [])
+    message_query: Dict[str, Any] = {
+        "$or": [
+            {"file.fileId": file_id},
+            {"file.previewFileId": file_id},
+            {"file.coverArtFileId": file_id},
+            {"file.previewUrl": f"/files/{file_id}"},
+            {"file.thumbUrl": f"/files/{file_id}"},
+            {"file.imagePreviewUrl": f"/files/{file_id}"},
+            {"file.coverArtUrl": f"/files/{file_id}"},
+        ]
+    }
+    if excluded:
+        message_query["_id"] = {"$nin": excluded}
+    if await cl_messages.find_one(message_query, {"_id": 1}):
+        return True
+    if await cl_users.find_one({"profile.avatar": file_id}, {"_id": 1}):
+        return True
+    if await cl_chats.find_one({"groupAvatar": file_id}, {"_id": 1}):
+        return True
+    return False
+
+
+async def record_pending_file_deletion(file_id: str) -> None:
+    await cl_pending_file_deletions.update_one(
+        {"fileId": file_id},
+        {"$inc": {"attempts": 1}, "$set": {"failedAt": utc_now()}},
+        upsert=True,
+    )
+
+
+async def release_files(
+    file_ids: set, excluded_message_ids: Optional[set] = None
+) -> None:
+    for file_id in {fid for fid in file_ids if _is_valid_file_id(fid)}:
+        try:
+            if await _file_still_referenced(file_id, excluded_message_ids):
+                continue
+            if await delete_file(file_id):
+                await cl_pending_file_deletions.delete_one({"fileId": file_id})
+            else:
+                await record_pending_file_deletion(file_id)
+        except Exception as e:
+            print(f"File release warning for {file_id}: {e}")
+
+
+async def retry_pending_file_deletions() -> None:
+    async for record in cl_pending_file_deletions.find({}):
+        file_id = str(record.get("fileId") or "")
+        if not _is_valid_file_id(file_id):
+            await cl_pending_file_deletions.delete_one({"_id": record["_id"]})
+            continue
+        try:
+            if await _file_still_referenced(file_id):
+                await cl_pending_file_deletions.delete_one({"_id": record["_id"]})
+                continue
+            if await delete_file(file_id):
+                await cl_pending_file_deletions.delete_one({"_id": record["_id"]})
+                continue
+        except Exception as e:
+            print(f"Pending file deletion retry warning for {file_id}: {e}")
+        attempts = int(record.get("attempts") or 0) + 1
+        if attempts >= 20:
+            print(f"Dropping pending file deletion for {file_id} after {attempts} attempts")
+            await cl_pending_file_deletions.delete_one({"_id": record["_id"]})
+        else:
+            await cl_pending_file_deletions.update_one(
+                {"_id": record["_id"]},
+                {"$set": {"attempts": attempts, "failedAt": utc_now()}},
+            )
+
+
+async def retry_pending_file_deletions_task() -> None:
+    while True:
+        try:
+            await retry_pending_file_deletions()
+        except Exception as e:
+            print(f"Pending file deletion sweep warning: {e}")
+        await asyncio.sleep(300)
+
+
+async def sweep_orphaned_uploads() -> None:
+    grace_hours = float(os.getenv("ORPHAN_GRACE_HOURS", "24"))
+    dry_run = os.getenv("FILE_SWEEP_DRY_RUN", "true").lower().strip() not in (
+        "false",
+        "0",
+        "no",
+    )
+    stored = await list_stored_files()
+    cutoff = time.time() - grace_hours * 3600
+    candidates = [
+        file_id
+        for file_id, mtime in stored.items()
+        if mtime and mtime < cutoff and _is_valid_file_id(file_id)
+    ]
+    orphans: List[str] = []
+    try:
+        for start in range(0, len(candidates), 500):
+            batch = candidates[start : start + 500]
+            if not batch:
+                continue
+            referenced: set = set()
+            url_values = [f"/files/{file_id}" for file_id in batch]
+            async for row in cl_messages.find(
+                {
+                    "$or": [
+                        {"file.fileId": {"$in": batch}},
+                        {"file.previewFileId": {"$in": batch}},
+                        {"file.coverArtFileId": {"$in": batch}},
+                        {"file.previewUrl": {"$in": url_values}},
+                        {"file.thumbUrl": {"$in": url_values}},
+                        {"file.imagePreviewUrl": {"$in": url_values}},
+                        {"file.coverArtUrl": {"$in": url_values}},
+                    ]
+                },
+                {"file": 1},
+            ):
+                referenced |= collect_file_ids(row) & set(batch)
+            referenced |= set(
+                await cl_users.distinct(
+                    "profile.avatar", {"profile.avatar": {"$in": batch}}
+                )
+            )
+            referenced |= {
+                value
+                for value in await cl_chats.distinct(
+                    "groupAvatar", {"groupAvatar": {"$in": batch}}
+                )
+                if value
+            }
+            orphans.extend(
+                file_id for file_id in batch if file_id not in referenced
+            )
+    except Exception as e:
+        print(f"Orphan file sweep skipped: {e}")
+        return
+    if dry_run:
+        print(
+            f"Orphan file sweep dry run: {len(orphans)} of {len(candidates)} candidates"
+        )
+        if orphans:
+            print(f"Orphan file sweep dry run ids: {orphans[:100]}")
+        return
+    for file_id in orphans:
+        try:
+            await release_files({file_id})
+        except Exception as e:
+            print(f"Orphan file sweep warning for {file_id}: {e}")
+
+
+async def sweep_orphaned_uploads_task() -> None:
+    while True:
+        try:
+            await sweep_orphaned_uploads()
+        except Exception as e:
+            print(f"Orphan file sweep warning: {e}")
+        await asyncio.sleep(86400)
 
 
 async def jwt_encode_async(payload: dict) -> str:
@@ -1425,6 +1633,12 @@ async def startup_db():
             cl_chats.create_index([("updatedAt", -1)]),
             cl_messages.create_index("chatId"),
             cl_messages.create_index([("chatId", 1), ("timestamp", -1)]),
+            cl_messages.create_index("file.fileId"),
+            cl_messages.create_index("file.previewFileId"),
+            cl_messages.create_index("file.coverArtFileId"),
+            cl_users.create_index("profile.avatar"),
+            cl_chats.create_index("groupAvatar"),
+            cl_pending_file_deletions.create_index("fileId", unique=True),
             cl_ai_messages.create_index("userId"),
             cl_ai_messages.create_index(
                 [("userId", 1), ("aiChatId", 1), ("timestamp", -1)]
@@ -1450,6 +1664,8 @@ async def startup_db():
     asyncio.create_task(migrate_unencrypted_messages())
     asyncio.create_task(encrypt_existing_uploads())
     asyncio.create_task(sweep_ai_temp_files_task())
+    asyncio.create_task(retry_pending_file_deletions_task())
+    asyncio.create_task(sweep_orphaned_uploads_task())
     asyncio.create_task(chess_backfill_stats())
 
 
@@ -2276,14 +2492,12 @@ async def leave_group(
     updated = await cl_chats.find_one({"_id": chat_id}, {"participants": 1})
     remaining = (updated or {}).get("participants", []) or []
     if not remaining:
-        messages = await cl_messages.find({"chatId": chat_id}).to_list(None)
-        for msg in messages:
-            if should_delete_file_with_message(msg):
-                for file_id in extract_message_file_ids(msg):
-                    await delete_file(file_id)
-
+        file_ids: set = set()
+        async for msg in cl_messages.find({"chatId": chat_id}, {"file": 1}):
+            file_ids |= collect_file_ids(msg)
         await cl_messages.delete_many({"chatId": chat_id})
         await cl_chats.delete_one({"_id": chat_id})
+        await release_files(file_ids)
         return {"message": "Group deleted (no members left)"}
 
     return {"message": "Left group"}
@@ -2769,14 +2983,13 @@ async def delete_chat(
             status_code=403, detail="Only verified users can delete groups"
         )
 
-    messages = await cl_messages.find({"chatId": chat_id}).to_list(None)
-    for msg in messages:
-        if should_delete_file_with_message(msg):
-            for file_id in extract_message_file_ids(msg):
-                await delete_file(file_id)
+    file_ids: set = set()
+    async for msg in cl_messages.find({"chatId": chat_id}, {"file": 1}):
+        file_ids |= collect_file_ids(msg)
 
     await cl_messages.delete_many({"chatId": chat_id})
     await cl_chats.delete_one({"_id": chat_id})
+    await release_files(file_ids)
     return {"message": "Chat deleted"}
 
 
@@ -2932,6 +3145,7 @@ async def get_messages(
                 "reasoningDurationSec": int(m.get("reasoningDurationSec", 0) or 0),
                 "aiModelKey": m.get("aiModelKey"),
                 "aiModelName": m.get("aiModelName"),
+                "clientId": m.get("clientId"),
             }
             for m in msgs
         ]
@@ -3097,6 +3311,7 @@ async def get_messages(
             "aiModelKey": m.get("aiModelKey"),
             "aiModelName": m.get("aiModelName"),
             "chessInvite": m.get("chessInvite"),
+            "clientId": m.get("clientId"),
         }
         for m in msgs
     ]
@@ -3245,9 +3460,10 @@ async def remove_uploaded_file(
             status_code=409, detail="File is already attached to a message"
         )
 
-    deleted = await delete_file(file_id)
-    if not deleted:
+    if not validate_file_access(file_id):
         raise HTTPException(status_code=404, detail="File not found")
+
+    await release_files({file_id})
     return {"success": True}
 
 
@@ -3684,12 +3900,12 @@ async def batch_delete_messages(
     deleted_ids = [str(m["_id"]) for m in authorized_msgs]
     deleted_id_set = set(deleted_ids)
 
+    file_ids: set = set()
     for m in authorized_msgs:
-        if should_delete_file_with_message(m):
-            for file_id in extract_message_file_ids(m):
-                await delete_file(file_id)
+        file_ids |= collect_file_ids(m)
 
     await cl_messages.delete_many({"_id": {"$in": authorized_oids}})
+    await release_files(file_ids)
 
     participants = [user_id] if is_saved else []
     if is_official:
@@ -4048,6 +4264,7 @@ async def forward_message(
             "reasoningDurationSec": entry["reasoning_duration_sec"],
             "aiModelKey": entry["ai_model_key"],
             "aiModelName": entry["ai_model_name"],
+            "clientId": str(item.clientId or "").strip() or None,
         }
 
         file_data = entry["file_data"]
@@ -4062,7 +4279,14 @@ async def forward_message(
 
         forwarded_docs.append(forwarded_msg)
 
-    await cl_messages.insert_many(forwarded_docs)
+    created_file_ids: set = set()
+    for doc in forwarded_docs:
+        created_file_ids |= collect_file_ids(doc)
+    try:
+        await cl_messages.insert_many(forwarded_docs)
+    except Exception:
+        await release_files(created_file_ids)
+        raise
 
     last_doc = forwarded_docs[-1]
     last_msg = {
@@ -5531,11 +5755,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     if not chat_doc or chat_id not in chat_doc.get("participants", []):
                         continue
 
-                if should_delete_file_with_message(msg):
-                    for file_id in extract_message_file_ids(msg):
-                        await delete_file(file_id)
-
+                file_ids = collect_file_ids(msg)
                 await cl_messages.delete_one({"_id": oid})
+                await release_files(file_ids)
 
                 last_msg = None
                 if not is_saved and not is_official:
