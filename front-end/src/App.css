@@ -2886,7 +2886,6 @@ body,
     color: #ffffff;
     border-color: var(--accent-primary);
     transform: scale(1.08);
-    box-shadow: 0 0 10px color-mix(in srgb, var(--accent-primary) 50%, transparent);
 }
 
 .chat-room__re-edit-btn:active {

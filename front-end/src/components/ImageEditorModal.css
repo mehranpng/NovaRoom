@@ -1,4 +1,3 @@
-/* NovaRoom Image Editor & Send Preview Modal */
 
 .image-editor-overlay {
     position: fixed !important;
@@ -14,7 +13,7 @@
     z-index: 999999 !important;
     display: flex;
     flex-direction: column;
-    background: #090b0e !important; /* 100% OPAQUE - completely covers chat & navbars */
+    background: #090b0e !important; 
     user-select: none !important;
     -webkit-user-select: none !important;
     overflow: hidden !important;
@@ -39,7 +38,6 @@
     }
 }
 
-/* Header */
 .image-editor-header {
     height: 54px;
     padding: 0 16px;
@@ -81,7 +79,6 @@
     color: rgba(255, 255, 255, 0.45);
 }
 
-/* Icon Buttons */
 .image-editor-icon-btn {
     display: inline-flex;
     align-items: center;
@@ -117,7 +114,7 @@
     background: var(--accent-primary, #2563eb) !important;
     border-color: var(--accent-primary, #2563eb) !important;
     color: #ffffff !important;
-    box-shadow: 0 0 14px color-mix(in srgb, var(--accent-primary, #2563eb) 60%, transparent);
+    
 }
 
 .image-editor-icon-btn:disabled {
@@ -125,7 +122,6 @@
     pointer-events: none;
 }
 
-/* Body / Viewport */
 .image-editor-body {
     flex: 1;
     min-height: 0;
@@ -139,7 +135,6 @@
     touch-action: none !important;
 }
 
-/* Canvas & Crop Container */
 .image-editor-canvas-stage {
     position: relative;
     max-width: 100%;
@@ -164,14 +159,13 @@
     object-fit: contain;
     user-select: none !important;
     -webkit-user-select: none !important;
-    touch-action: none !important; /* CRITICAL FOR MOBILE GESTURES! */
+    touch-action: none !important; 
 }
 
 .image-editor-canvas--drawable {
     cursor: crosshair;
 }
 
-/* Crop Overlay Layer */
 .image-editor-crop-overlay {
     position: absolute;
     inset: 0;
@@ -180,14 +174,12 @@
     touch-action: none !important;
 }
 
-/* Dark Shading outside crop box */
 .image-editor-crop-shade {
     position: absolute;
     background: rgba(0, 0, 0, 0.65);
     touch-action: none !important;
 }
 
-/* The Active Crop Box */
 .image-editor-crop-box {
     position: absolute;
     box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.95);
@@ -199,7 +191,6 @@
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.65);
 }
 
-/* Rule of Thirds Grid */
 .image-editor-crop-grid-h1,
 .image-editor-crop-grid-h2,
 .image-editor-crop-grid-v1,
@@ -234,7 +225,6 @@
     width: 1px;
 }
 
-/* Edge handles: Top, Bottom, Left, Right with large touch hit zones */
 .image-editor-crop-edge {
     position: absolute;
     pointer-events: auto;
@@ -276,7 +266,6 @@
     cursor: ew-resize;
 }
 
-/* Handle bars on edges (centered inside the generous hit zone) */
 .image-editor-crop-edge-bar-h {
     position: absolute;
     top: 14px;
@@ -303,7 +292,6 @@
     pointer-events: none;
 }
 
-/* Crop Handles: 4 Corners (L-shapes) with 36px touch hit zone */
 .image-editor-crop-corner {
     position: absolute;
     width: 36px;
@@ -347,7 +335,6 @@
     cursor: nwse-resize;
 }
 
-/* Unified Toolbar Under The Image */
 .image-editor-sub-tools {
     display: flex;
     flex-direction: column;
@@ -380,7 +367,6 @@
     margin: 0 2px;
 }
 
-/* Crop Controls Dock */
 .image-editor-crop-controls {
     display: flex;
     align-items: center;
@@ -400,7 +386,6 @@
     letter-spacing: 0.5px;
 }
 
-/* Drawing Controls Dock */
 .image-editor-draw-controls {
     display: flex;
     align-items: center;
@@ -457,7 +442,7 @@
 
 .image-editor-color-circle--selected {
     transform: scale(1.22);
-    box-shadow: 0 0 0 2.5px #ffffff, 0 0 10px rgba(255, 255, 255, 0.45);
+    box-shadow: 0 0 0 2.5px #ffffff;
 }
 
 .image-editor-thicknesses {
@@ -503,7 +488,6 @@
     border-radius: 999px;
 }
 
-/* Bottom Action Bar */
 .image-editor-bottom-bar {
     height: 64px;
     padding: 0 20px;
@@ -525,7 +509,6 @@
     touch-action: manipulation !important;
 }
 
-/* Accent Send Button (On Right in RTL) */
 .image-editor-send-btn {
     display: flex;
     align-items: center;
@@ -539,7 +522,7 @@
     font-weight: 700;
     cursor: pointer;
     transition: all 0.18s ease;
-    box-shadow: 0 4px 18px color-mix(in srgb, var(--accent-primary, #2563eb) 45%, transparent);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
     touch-action: manipulation !important;
     -webkit-tap-highlight-color: transparent;
 }
@@ -548,7 +531,7 @@
     .image-editor-send-btn:hover {
         background: var(--accent-hover, #1d4ed8);
         transform: translateY(-1px);
-        box-shadow: 0 6px 22px color-mix(in srgb, var(--accent-primary, #2563eb) 65%, transparent);
+        box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
     }
 }
 
@@ -557,7 +540,6 @@
     opacity: 0.9;
 }
 
-/* Red / Danger Cancel Button (On Left in RTL) */
 .image-editor-cancel-btn {
     display: flex;
     align-items: center;
@@ -581,7 +563,7 @@
         border-color: rgba(239, 68, 68, 0.65);
         color: #ffffff;
         transform: translateY(-1px);
-        box-shadow: 0 4px 16px rgba(239, 68, 68, 0.25);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
     }
 }
 
@@ -590,7 +572,6 @@
     opacity: 0.9;
 }
 
-/* Responsive for Mobile Devices (iPhone, Android) */
 @media (max-width: 640px) {
     .image-editor-header {
         height: 48px;

@@ -156,7 +156,6 @@ export function FileUpload({ token, chatId, onFileUploaded, fileAttached = false
 
         setPickerMenuOpen(false);
 
-        // Intercept image files and open ImageEditorModal (for drag&drop, file picker, or paste)
         if (file.type.startsWith('image/')) {
             if (editorSessionRef.current?.originalFile !== file) {
                 editorSessionRef.current = {
