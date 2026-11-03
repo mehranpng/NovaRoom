@@ -32,7 +32,7 @@ async def hash_existing_passwords():
         await cl_users.update_one(
             {"_id": user["_id"]}, {"$set": {"login.password": hashed_str}}
         )
-        print(f"✓ Hashed password for {user['login']['email']}")
+        print(f"✓ Hashed password for {(user.get('profile') or {}).get('username') or user.get('chatId')}")
 
     print("✅ All passwords hashed successfully!")
 

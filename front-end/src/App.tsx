@@ -13,7 +13,7 @@ import { Settings } from './components/Settings';
 import { EmptyState } from './components/EmptyState';
 import { Login } from './components/Login';
 import { Register } from './components/Register';
-import { ForgotPassword } from './components/ForgotPassword';
+import { ResetPasswordLink } from './components/ResetPasswordLink';
 import { NewChatModal } from './components/NewChatModal';
 import { MiniMusicPlayer } from './components/MiniMusicPlayer';
 import { MusicPlayerProvider } from './contexts/MusicPlayerContext';
@@ -159,6 +159,9 @@ export function App() {
     const location = useLocation();
     const isChessGameRoute = location.pathname.startsWith('/chess/game/');
     const chessJoinToken = location.pathname.match(/^\/chess\/join\/([A-Za-z0-9]+)$/)?.[1] ?? null;
+    const adminPanelSection = location.pathname.startsWith('/settings/admin/panel/')
+        ? location.pathname.slice('/settings/admin/panel/'.length).split('/')[0] || 'users'
+        : 'users';
     const [chessContactOpen, setChessContactOpen] = useState(false);
     const [authToken, setAuthToken] = useState<string | null>(() => getAuthToken());
     const [isAuthChecking, setIsAuthChecking] = useState(true);
@@ -1901,7 +1904,7 @@ export function App() {
         if (!isAuthenticated) return;
 
         const pathname = location.pathname;
-        if (pathname.startsWith('/login') || pathname.startsWith('/register') || pathname.startsWith('/forgot-password')) return;
+        if (pathname.startsWith('/login') || pathname.startsWith('/register') || pathname.startsWith('/reset-password')) return;
 
         if (pathname === '/' || pathname === '') {
             setView('chatList');
@@ -1947,6 +1950,21 @@ export function App() {
         }
         if (pathname === '/settings/devices/logs') {
             setView('settingsLogs');
+            return;
+        }
+        if (pathname === '/settings/admin') {
+            if (currentUser?.adminLevel) setView('settingsAdmin');
+            else setView('settings');
+            return;
+        }
+        if (pathname === '/settings/admin/panel' || pathname.startsWith('/settings/admin/panel/')) {
+            if (currentUser?.adminLevel === 'admin0') setView('settingsAdminPanel');
+            else setView('settings');
+            return;
+        }
+        if (pathname === '/settings/admin/links') {
+            if (currentUser?.adminLevel) setView('settingsAdminLinks');
+            else setView('settings');
             return;
         }
 
@@ -3126,27 +3144,22 @@ export function App() {
         return null;
     }
 
+    const resetTokenMatch = location.pathname.match(/^\/reset-password\/([^/]+)$/);
+    if (resetTokenMatch?.[1]) {
+        return <ResetPasswordLink key={resetTokenMatch[1]} token={decodeURIComponent(resetTokenMatch[1])} />;
+    }
+
     
     if (!isAuthenticated) {
         return (
             <Routes>
                 <Route path="/login" element={
-                    <Login
-                        onLoginSuccess={handleLoginSuccess}
-                        onRegisterClick={() => navigate('/register/email')}
-                        onForgotPasswordClick={() => navigate('/forgot-password/request')}
-                    />
+                    <Login onLoginSuccess={handleLoginSuccess} />
                 } />
-                <Route path="/register/*" element={
+                <Route path="/register/:token" element={
                     <Register
                         onRegisterSuccess={handleRegisterSuccess}
                         onBackToLogin={() => navigate('/login')}
-                    />
-                } />
-                <Route path="/forgot-password/*" element={
-                    <ForgotPassword
-                        onBackToLogin={() => navigate('/login')}
-                        onResetSuccess={() => navigate('/login')}
                     />
                 } />
                 <Route path="/chess/join/:inviteToken" element={
@@ -3158,7 +3171,7 @@ export function App() {
     }
 
     
-    const authPages = ['/login', '/register', '/forgot-password'];
+    const authPages = ['/login', '/register'];
     const isOnAuthPage = authPages.some(p => location.pathname.startsWith(p));
     if (isOnAuthPage) {
         return <Navigate to="/" replace />;
@@ -3347,13 +3360,16 @@ export function App() {
                             <>
                                 <Settings
                                     key={view}
-                                    section={view === 'settingsDevices' ? 'devices' : view === 'settingsTheme' ? 'theme' : view === 'settingsLogs' ? 'logs' : view === 'settingsDataStorage' ? 'dataStorage' : view === 'settingsPrivacy' ? 'privacy' : 'menu'}
-                                    onOpenSection={(section) => navigate(section === 'logs' ? '/settings/devices/logs' : section === 'dataStorage' ? '/settings/data-storage' : section === 'privacy' ? '/settings/privacy' : `/settings/${section}`)}
+                                    section={view === 'settingsDevices' ? 'devices' : view === 'settingsTheme' ? 'theme' : view === 'settingsLogs' ? 'logs' : view === 'settingsDataStorage' ? 'dataStorage' : view === 'settingsPrivacy' ? 'privacy' : view === 'settingsAdmin' ? 'adminMenu' : view === 'settingsAdminPanel' ? 'adminPanel' : view === 'settingsAdminLinks' ? 'adminLinks' : 'menu'}
+                                    adminSection={adminPanelSection}
+                                    onAdminSectionChange={(adminSection) => navigate(adminSection === 'users' ? '/settings/admin/panel' : `/settings/admin/panel/${adminSection}`)}
+                                    onOpenSection={(section) => navigate(section === 'logs' ? '/settings/devices/logs' : section === 'dataStorage' ? '/settings/data-storage' : section === 'privacy' ? '/settings/privacy' : section === 'adminMenu' ? '/settings/admin' : section === 'adminPanel' ? '/settings/admin/panel' : section === 'adminLinks' ? '/settings/admin/links' : `/settings/${section}`)}
                                     onBackToMenu={() => navigate('/settings')}
                                     loginEvents={loginEvents}
                                     hasUnseenLoginLogs={unseenLoginCount > 0}
                                     currentUser={currentUser}
                                     onUpdateCurrentUser={(updates) => setCurrentUser((prev) => prev ? { ...prev, ...updates } : prev)}
+                                    onLogout={handleLogout}
                                 />
                                 {view === 'settings' && (
                                     <BottomNavbar

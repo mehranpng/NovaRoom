@@ -10,6 +10,7 @@ export interface User {
     hideOnlineStatus?: boolean;
     verified?: boolean;
     registrationDate?: string;
+    adminLevel?: 'admin0' | 'admin1' | null;
 }
 
 export interface MessageReply {
@@ -265,4 +266,4 @@ export interface ChessInvite {
     shared?: boolean;
 }
 
-export type View = 'chatList' | 'chatRoom' | 'newChat' | 'profile' | 'profileEdit' | 'settings' | 'settingsDevices' | 'settingsTheme' | 'settingsLogs' | 'settingsDataStorage' | 'settingsPrivacy' | 'chess';
+export type View = 'chatList' | 'chatRoom' | 'newChat' | 'profile' | 'profileEdit' | 'settings' | 'settingsDevices' | 'settingsTheme' | 'settingsLogs' | 'settingsDataStorage' | 'settingsPrivacy' | 'settingsAdmin' | 'settingsAdminPanel' | 'settingsAdminLinks' | 'chess';

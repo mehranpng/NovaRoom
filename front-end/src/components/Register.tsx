@@ -1,41 +1,28 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { apiFetch, API_BASE_URL } from '../config/api';
+import { useParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { API_BASE_URL } from '../config/api';
 import { type User } from '../types';
-import { UserPlus, ArrowLeft, Mail, Key, User as UserIcon, CheckCircle, AlertCircle } from 'lucide-react';
+import { UserPlus, Key, User as UserIcon, Link2Off } from 'lucide-react';
 import { DarkModeToggle } from './DarkModeToggle';
+import { PasswordField } from './PasswordField';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { detectDeviceName } from '../utils/device';
+import { screenVariants } from '../utils/screenMotion';
 
 interface RegisterProps {
     onRegisterSuccess: (user: User, token: string) => void;
     onBackToLogin: () => void;
 }
 
-type Step = 'email' | 'code' | 'details';
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
+type LinkState = 'checking' | 'valid' | 'invalid';
 
 export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
-    const navigate = useNavigate();
-    const location = useLocation();
+    const { token } = useParams<{ token: string }>();
     const { themeMode, setThemeMode } = useDarkMode();
 
-    const handleToggleTheme = () => {
-        setThemeMode((prevMode) =>
-            prevMode === 'system' ? 'light' : prevMode === 'light' ? 'dark' : 'system'
-        );
-    };
-
-    
-    const getStepFromPath = (): Step => {
-        if (location.pathname.includes('/verify')) return 'code';
-        if (location.pathname.includes('/complete')) return 'details';
-        return 'email';
-    };
-
-    const [step, setStepState] = useState<Step>(getStepFromPath());
-    const [email, setEmail] = useState(() => sessionStorage.getItem('register_email') || '');
-    const [code, setCode] = useState('');
+    const [linkState, setLinkState] = useState<LinkState>('checking');
     const [name, setName] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -47,46 +34,50 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
     const [usernameHint, setUsernameHint] = useState<string>('');
     const checkTimerRef = useRef<number | null>(null);
 
-    
-    useEffect(() => {
-        const newStep = getStepFromPath();
-        setStepState(newStep);
+    const handleToggleTheme = () => {
+        setThemeMode((prevMode) =>
+            prevMode === 'system' ? 'light' : prevMode === 'light' ? 'dark' : 'system'
+        );
+    };
 
-        
-        const savedEmail = sessionStorage.getItem('register_email');
-        if (savedEmail && (newStep === 'code' || newStep === 'details')) {
-            setEmail(savedEmail);
+    useEffect(() => {
+        if (!token) {
+            setLinkState('invalid');
+            return;
         }
-    }, [location.pathname]);
+        let cancelled = false;
+        fetch(`${API_BASE_URL}/auth/register-link/${encodeURIComponent(token)}`, {
+            headers: { 'ngrok-skip-browser-warning': 'true' },
+        })
+            .then((response) => response.json())
+            .then((data) => {
+                if (!cancelled) setLinkState(data?.valid ? 'valid' : 'invalid');
+            })
+            .catch(() => {
+                if (!cancelled) setLinkState('invalid');
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [token]);
 
-    
     useEffect(() => {
-        if (step !== 'details' || !username) {
+        const trimmed = username.trim();
+        if (!trimmed) {
             setUsernameStatus('idle');
             setUsernameHint('');
             return;
         }
-
-        const trimmed = username.trim();
-
-        if (!trimmed) {
-            setUsernameStatus('invalid');
-            setUsernameHint('نام کاربری الزامی است');
-            return;
-        }
-
         if (trimmed.length < 3) {
             setUsernameStatus('invalid');
             setUsernameHint('نام کاربری باید حداقل ۳ کاراکتر باشد');
             return;
         }
-
         if (trimmed.length > 32) {
             setUsernameStatus('invalid');
             setUsernameHint('حداکثر ۳۲ کاراکتر');
             return;
         }
-
         if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
             setUsernameStatus('invalid');
             setUsernameHint('فقط حروف لاتین، اعداد و آندرلاین');
@@ -132,133 +123,22 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
         return () => {
             if (checkTimerRef.current) window.clearTimeout(checkTimerRef.current);
         };
-    }, [username, step]);
+    }, [username]);
 
-    
-    const setStep = (newStep: Step) => {
-        setStepState(newStep);
-        if (newStep === 'email') {
-            navigate('/register/email', { replace: true });
-        } else if (newStep === 'code') {
-            navigate('/register/verify', { replace: true });
-        } else if (newStep === 'details') {
-            navigate('/register/complete', { replace: true });
-        }
-    };
-
-    
-    const getErrorMessage = (err: any): string => {
-        const message = err.message || '';
-
-        if (message.includes('409') || message.includes('already exists') || message.includes('already registered')) {
-            return 'این ایمیل قبلاً ثبت شده است';
-        }
-        if (message.includes('Invalid email')) {
-            return 'فرمت ایمیل نامعتبر است';
-        }
-        if (message.includes('Invalid') && message.includes('code')) {
-            return 'کد تأیید نامعتبر است';
-        }
-        if (message.includes('expired')) {
-            return 'کد تأیید منقضی شده است';
-        }
-        if (message.includes('Username') && (message.includes('409') || message.includes('taken') || message.includes('exists'))) {
-            return 'این نام کاربری قبلاً گرفته شده است';
-        }
-        if (message.includes('Network') || message.includes('fetch')) {
-            return 'خطا در ارتباط با سرور. لطفاً دوباره تلاش کنید';
-        }
-        if (message.includes('400')) {
-            return 'درخواست نامعتبر است';
-        }
-        if (message.includes('500')) {
-            return 'خطای سرور. لطفاً بعداً تلاش کنید';
-        }
-
-        return 'خطای نامشخص. لطفاً دوباره تلاش کنید';
-    };
-
-    const handleEmailSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
 
-        
-        if (!email) {
-            setError('لطفاً ایمیل خود را وارد کنید');
-            return;
-        }
-        if (!email.includes('@')) {
-            setError('لطفاً یک آدرس ایمیل معتبر وارد کنید');
-            return;
-        }
-
-        setLoading(true);
-
-        try {
-            await apiFetch('/auth/register/email', {
-                method: 'POST',
-                body: JSON.stringify({ email }),
-            });
-
-            
-            sessionStorage.setItem('register_email', email);
-            setStep('code');
-        } catch (err: any) {
-            setError(getErrorMessage(err));
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleCodeSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError('');
-
-        
-        if (!code || code.length !== 6) {
-            setError('لطفاً کد 6 رقمی را وارد کنید');
-            return;
-        }
-
-        setLoading(true);
-
-        try {
-            await apiFetch('/auth/register/verify', {
-                method: 'POST',
-                body: JSON.stringify({ email, code }),
-            });
-
-            setStep('details');
-        } catch (err: any) {
-            setError(getErrorMessage(err));
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleDetailsSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError('');
-
-        
-        if (!name) {
+        if (!name.trim()) {
             setError('لطفاً نام خود را وارد کنید');
-            return;
-        }
-        if (!username) {
-            setError('لطفاً نام کاربری خود را وارد کنید');
             return;
         }
         if (usernameStatus !== 'available') {
             setError('لطفاً یک نام کاربری معتبر و در دسترس وارد کنید');
             return;
         }
-        if (!password) {
-            setError('لطفاً رمز عبور خود را وارد کنید');
-            return;
-        }
-        if (password.length < 6) {
-            setError('رمز عبور باید حداقل 6 کاراکتر باشد');
+        if (password.length < 8) {
+            setError('رمز عبور باید حداقل ۸ کاراکتر باشد');
             return;
         }
         if (password !== confirmPassword) {
@@ -269,51 +149,48 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
         setLoading(true);
 
         try {
-            const data = await apiFetch('/auth/register/complete', {
+            const response = await fetch(`${API_BASE_URL}/auth/register`, {
                 method: 'POST',
-                body: JSON.stringify({ email, name, username: username.trim(), password, deviceName: detectDeviceName() }),
+                headers: {
+                    'Content-Type': 'application/json',
+                    'ngrok-skip-browser-warning': 'true',
+                },
+                body: JSON.stringify({
+                    token,
+                    name: name.trim(),
+                    username: username.trim(),
+                    password,
+                    deviceName: detectDeviceName(),
+                }),
             });
 
-            
-            sessionStorage.removeItem('register_email');
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                const detail = String(body?.detail || '');
+                if (response.status === 409) {
+                    setError('این نام کاربری قبلاً گرفته شده است');
+                } else if (response.status === 400 && detail.toLowerCase().includes('link')) {
+                    setError('این لینک نامعتبر یا منقضی شده است');
+                } else if (response.status === 400) {
+                    setError(detail || 'درخواست نامعتبر است');
+                } else {
+                    setError('خطای سرور. لطفاً بعداً تلاش کنید');
+                }
+                return;
+            }
 
+            const data = await response.json();
             localStorage.setItem('token', data.token);
             onRegisterSuccess(data.user, data.token);
-        } catch (err: any) {
-            setError(getErrorMessage(err));
+        } catch {
+            setError('خطا در ارتباط با سرور. لطفاً دوباره تلاش کنید');
         } finally {
             setLoading(false);
         }
-    };
-
-    const handleResendCode = async () => {
-        setLoading(true);
-        setError('');
-
-        try {
-            await apiFetch('/auth/register/email', {
-                method: 'POST',
-                body: JSON.stringify({ email }),
-            });
-
-            
-            const originalError = error;
-            setError('');
-            setTimeout(() => setError(originalError), 3000);
-        } catch (err: any) {
-            setError(getErrorMessage(err));
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleBackToLogin = () => {
-        sessionStorage.removeItem('register_email');
-        onBackToLogin();
     };
 
     return (
-        <div className="login-page">
+        <motion.div className="login-page" variants={screenVariants} initial="hidden" animate="visible" exit="exit">
             <div className="login-page__dark-toggle">
                 <DarkModeToggle themeMode={themeMode} onToggle={handleToggleTheme} />
             </div>
@@ -322,115 +199,27 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                 <div className="login-header">
                     <UserPlus size={48} strokeWidth={1.5} className="login-header-icon" />
                     <h1>ثبت نام در نوا روم</h1>
-                    <p>
-                        {step === 'email' && 'ایمیل خود را وارد کنید'}
-                        {step === 'code' && 'کد تأیید را وارد کنید'}
-                        {step === 'details' && 'اطلاعات خود را تکمیل کنید'}
-                    </p>
+                    <p>اطلاعات خود را تکمیل کنید</p>
                 </div>
 
-                {}
-                {step === 'email' && (
-                    <form onSubmit={handleEmailSubmit}>
-                        <div className="form-group">
-                            <label>
-                                <Mail size={16} />
-                                ایمیل
-                            </label>
-                            <input
-                                type="email"
-                                value={email}
-                                onChange={(e) => {
-                                    setEmail(e.target.value);
-                                    setError('');
-                                }}
-                                placeholder="example@gmail.com"
-                                autoFocus
-                            />
-                        </div>
+                {linkState === 'checking' && (
+                    <div className="adm-state">
+                        <span className="adm-state__text">در حال بررسی لینک...</span>
+                    </div>
+                )}
 
-                        {error && <div className="error-message">{error}</div>}
-
-                        <button type="submit" className="login-btn" disabled={loading}>
-                            {loading ? 'در حال ارسال...' : 'ارسال کد تأیید'}
-                        </button>
-
-                        <button
-                            type="button"
-                            className="secondary-btn"
-                            onClick={handleBackToLogin}
-                            style={{ marginTop: '10px' }}
-                        >
-                            <ArrowLeft size={16} />
+                {linkState === 'invalid' && (
+                    <div className="adm-state">
+                        <Link2Off size={40} className="adm-state__icon" />
+                        <div className="adm-state__text">این لینک نامعتبر یا منقضی شده است</div>
+                        <button type="button" className="adm-btn adm-btn--primary adm-tap" onClick={onBackToLogin}>
                             بازگشت به ورود
                         </button>
-                    </form>
+                    </div>
                 )}
 
-                {}
-                {step === 'code' && (
-                    <form onSubmit={handleCodeSubmit}>
-                        <div className="form-group">
-                            <label>
-                                <Key size={16} />
-                                کد تأیید 6 رقمی
-                            </label>
-                            <input
-                                type="text"
-                                inputMode="numeric"
-                                value={code}
-                                onChange={(e) => {
-                                    setCode(e.target.value.replace(/\D/g, '').slice(0, 6));
-                                    setError('');
-                                }}
-                                placeholder="123456"
-                                maxLength={6}
-                                autoFocus
-                            />
-                        </div>
-
-                        <div className="success-message">
-                            <CheckCircle size={20} />
-                            <div>
-                                <div>کد تأیید به ایمیل {email} ارسال شد</div>
-                                <div className="info-message" style={{ marginTop: '8px', padding: '8px 10px', marginBottom: 0 }}>
-                                    <AlertCircle size={16} />
-                                    <span>اگر ایمیل دریافت نکردید، پوشه هرزنامه را بررسی کنید</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {error && <div className="error-message">{error}</div>}
-
-                        <button type="submit" className="login-btn" disabled={loading}>
-                            {loading ? 'در حال تأیید...' : 'تأیید کد'}
-                        </button>
-
-                        <button
-                            type="button"
-                            className="secondary-btn"
-                            onClick={handleResendCode}
-                            disabled={loading}
-                            style={{ marginTop: '10px' }}
-                        >
-                            ارسال مجدد کد
-                        </button>
-
-                        <button
-                            type="button"
-                            className="secondary-btn"
-                            onClick={() => setStep('email')}
-                            style={{ marginTop: '10px' }}
-                        >
-                            <ArrowLeft size={16} />
-                            تغییر ایمیل
-                        </button>
-                    </form>
-                )}
-
-                {}
-                {step === 'details' && (
-                    <form onSubmit={handleDetailsSubmit}>
+                {linkState === 'valid' && (
+                    <form onSubmit={handleSubmit}>
                         <div className="form-group">
                             <label>
                                 <UserIcon size={16} />
@@ -462,6 +251,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                                 }}
                                 placeholder="username123"
                                 maxLength={32}
+                                dir="ltr"
                             />
                             {!!usernameHint && (
                                 <small style={{
@@ -479,34 +269,30 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                         </div>
 
                         <div className="form-group">
-                            <label>
-                                <Key size={16} />
-                                رمز عبور
-                            </label>
-                            <input
-                                type="password"
+                            <PasswordField
+                                label="رمز عبور"
+                                icon={<Key size={16} />}
                                 value={password}
-                                onChange={(e) => {
-                                    setPassword(e.target.value);
+                                onChange={(value) => {
+                                    setPassword(value);
                                     setError('');
                                 }}
                                 placeholder="••••••••"
+                                autoComplete="new-password"
                             />
                         </div>
 
                         <div className="form-group">
-                            <label>
-                                <Key size={16} />
-                                تکرار رمز عبور
-                            </label>
-                            <input
-                                type="password"
+                            <PasswordField
+                                label="تکرار رمز عبور"
+                                icon={<Key size={16} />}
                                 value={confirmPassword}
-                                onChange={(e) => {
-                                    setConfirmPassword(e.target.value);
+                                onChange={(value) => {
+                                    setConfirmPassword(value);
                                     setError('');
                                 }}
                                 placeholder="••••••••"
+                                autoComplete="new-password"
                             />
                         </div>
 
@@ -514,7 +300,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
 
                         <button
                             type="submit"
-                            className="login-btn"
+                            className="login-btn adm-tap"
                             disabled={loading || usernameStatus !== 'available'}
                         >
                             {loading ? 'در حال ثبت نام...' : 'ثبت نام'}
@@ -522,21 +308,15 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
 
                         <button
                             type="button"
-                            className="secondary-btn"
-                            onClick={() => setStep('code')}
+                            className="secondary-btn adm-tap"
+                            onClick={onBackToLogin}
                             style={{ marginTop: '10px' }}
                         >
-                            <ArrowLeft size={16} />
-                            بازگشت
+                            بازگشت به ورود
                         </button>
                     </form>
                 )}
-
-                <div className="login-footer">
-                    قبلاً ثبت نام کرده‌اید؟{' '}
-                    <button onClick={handleBackToLogin}>وارد شوید</button>
-                </div>
             </div>
-        </div>
+        </motion.div>
     );
 }

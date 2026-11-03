@@ -332,13 +332,13 @@ export function ThemeSettings() {
                 </div>
                 <div className="profile__chat-id-card profile__chat-id-card--flat">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <p className="profile__field-label" style={{ margin: 0 }}>فونت ایموجی iOS</p>
+                        <p className="profile__field-label" style={{ margin: 0 }}>فونت ایموجی Apple</p>
                         <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 999, background: emojiActive ? 'color-mix(in srgb, var(--accent-primary) 15%, transparent)' : 'var(--bg-tertiary)', color: emojiActive ? 'var(--accent-primary)' : 'var(--text-secondary)' }}>
                             {emojiDownloaded ? (emojiActive ? 'فعال' : 'غیرفعال') : 'دانلود نشده'}
                         </span>
                     </div>
                     <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 12 }}>
-                        اعمال ایموجی‌های سبک iOS بر روی تمام بخش‌های برنامه و پیام‌ها (حجم حدود ۴۱ مگابایت در حافظه مرورگر).
+                        اعمال ایموجی‌های Apple بر روی تمام بخش‌های برنامه.
                     </p>
 
                     <div style={{
@@ -421,7 +421,7 @@ export function ThemeSettings() {
                             }}
                         >
                             <Download size={16} />
-                            دانلود و فعال‌سازی ایموجی‌های iOS
+                            دانلود
                         </button>
                     ) : (
                         <div style={{ display: 'grid', gap: 12 }}>

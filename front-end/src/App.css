@@ -585,9 +585,11 @@ body,
     border-radius: 9999px;
 }
 
-.icon-btn:hover {
-    background: color-mix(in srgb, var(--hover-bg) 82%, transparent);
-    color: var(--text-primary);
+@media (hover: hover) and (pointer: fine) {
+    .icon-btn:hover {
+        background: color-mix(in srgb, var(--hover-bg) 82%, transparent);
+        color: var(--text-primary);
+    }
 }
 
 .icon-btn:active {
@@ -663,28 +665,40 @@ body,
     cursor: pointer;
     color: var(--text-primary);
     font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
     transition: background var(--motion-fast) var(--motion-ease-standard), transform var(--motion-fast) var(--motion-ease-standard);
 }
 
-.popover__item:hover {
-    background: color-mix(in srgb, var(--hover-bg) 85%, transparent);
+@media (hover: hover) and (pointer: fine) {
+    .popover__item:hover {
+        background: color-mix(in srgb, var(--hover-bg) 85%, transparent);
+    }
 }
 
 .popover__item:active {
     transform: scale(0.98);
     transition-duration: 0.06s;
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
 .popover__item--danger {
     color: #dc2626;
 }
 
-.popover__item--danger:hover {
-    background: rgba(239, 68, 68, 0.1);
+@media (hover: hover) and (pointer: fine) {
+    .popover__item--danger:hover {
+        background: rgba(239, 68, 68, 0.1);
+    }
+
+    .dark-mode .popover__item--danger:hover {
+        background: rgba(239, 68, 68, 0.18);
+    }
 }
 
-.dark-mode .popover__item--danger:hover {
-    background: rgba(239, 68, 68, 0.18);
+.popover__item--danger:active {
+    background: rgba(239, 68, 68, 0.12);
 }
 
 .chat-list {
@@ -3560,8 +3574,10 @@ body,
     position: relative;
 }
 
-.profile__header-back:hover {
-    background: var(--glass-surface-elevated);
+@media (hover: hover) and (pointer: fine) {
+    .profile__header-back:hover {
+        background: var(--glass-surface-elevated);
+    }
 }
 
 .profile__header-back:active {
@@ -4390,6 +4406,7 @@ body,
     justify-content: center;
     background: linear-gradient(135deg, color-mix(in srgb, var(--accent-primary) 14%, #ffffff), color-mix(in srgb, var(--accent-primary) 24%, #ffffff));
     padding: 20px;
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
     position: relative;
 }
 
@@ -4462,7 +4479,7 @@ body,
     padding: 12px 18px;
     border: 1px solid var(--glass-border);
     border-radius: 9999px;
-    font-size: 15px;
+    font-size: 16px;
     background: var(--glass-surface);
     color: var(--text-primary);
     font-family: 'Nunito', 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -4501,11 +4518,15 @@ body,
     font-family: 'Nunito', 'Vazir', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     direction: rtl;
     box-shadow: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
     transition: background 0.15s, transform 0.1s;
 }
 
-.login-btn:hover:not(:disabled) {
-    background: var(--accent-hover);
+@media (hover: hover) and (pointer: fine) {
+    .login-btn:hover:not(:disabled) {
+        background: var(--accent-hover);
+    }
 }
 
 .login-btn:active:not(:disabled) {
@@ -4535,14 +4556,18 @@ body,
     justify-content: center;
     gap: 6px;
     direction: rtl;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
 }
 
 .secondary-btn svg {
     flex-shrink: 0;
 }
 
-.secondary-btn:hover:not(:disabled) {
-    background: var(--border-secondary);
+@media (hover: hover) and (pointer: fine) {
+    .secondary-btn:hover:not(:disabled) {
+        background: var(--border-secondary);
+    }
 }
 
 .secondary-btn:active:not(:disabled) {

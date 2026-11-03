@@ -1,19 +1,18 @@
 import { useState } from 'react';
 import { apiFetch } from '../config/api';
 import { type User } from '../types';
-import { LogIn, Mail, Key } from 'lucide-react';
+import { LogIn, User as UserIcon, Key } from 'lucide-react';
 import { DarkModeToggle } from './DarkModeToggle';
+import { PasswordField } from './PasswordField';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { detectDeviceName } from '../utils/device';
 
 interface LoginProps {
     onLoginSuccess: (user: User, token: string) => void;
-    onRegisterClick: () => void;
-    onForgotPasswordClick: () => void;
 }
 
-export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }: LoginProps) {
-    const [email, setEmail] = useState('');
+export function Login({ onLoginSuccess }: LoginProps) {
+    const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -32,13 +31,10 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
         
         if (message.includes('401') || message.includes('Unauthorized') ||
             message.includes('Invalid credentials') || message.includes('incorrect')) {
-            return 'ایمیل یا رمز عبور نامعتبر است';
+            return 'نام کاربری یا رمز عبور نامعتبر است';
         }
         if (message.includes('404') || message.includes('not found') || message.includes('User not found')) {
-            return 'کاربری با این ایمیل یافت نشد';
-        }
-        if (message.includes('Invalid email')) {
-            return 'فرمت ایمیل نامعتبر است';
+            return 'کاربری با این مشخصات یافت نشد';
         }
 
         
@@ -54,7 +50,7 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
             return 'خطای سرور. لطفاً بعداً تلاش کنید';
         }
 
-        return 'ایمیل یا رمز عبور نامعتبر است';
+        return 'نام کاربری یا رمز عبور نامعتبر است';
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -62,12 +58,8 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
         setError('');
 
         
-        if (!email) {
-            setError('لطفاً ایمیل خود را وارد کنید');
-            return;
-        }
-        if (!email.includes('@')) {
-            setError('لطفاً یک آدرس ایمیل معتبر وارد کنید');
+        if (!identifier) {
+            setError('لطفاً نام کاربری یا ایمیل خود را وارد کنید');
             return;
         }
         if (!password) {
@@ -80,7 +72,7 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
         try {
             const data = await apiFetch('/auth/login', {
                 method: 'POST',
-                body: JSON.stringify({ email, password, deviceName: detectDeviceName() }),
+                body: JSON.stringify({ identifier, password, deviceName: detectDeviceName() }),
             });
 
             localStorage.setItem('token', data.token);
@@ -108,53 +100,43 @@ export function Login({ onLoginSuccess, onRegisterClick, onForgotPasswordClick }
                 <form onSubmit={handleSubmit}>
                     <div className="form-group">
                         <label>
-                            <Mail size={16} />
-                            ایمیل
+                            <UserIcon size={16} />
+                            نام کاربری یا ایمیل
                         </label>
                         <input
-                            type="email"
-                            value={email}
+                            type="text"
+                            value={identifier}
                             onChange={(e) => {
-                                setEmail(e.target.value);
+                                setIdentifier(e.target.value);
                                 setError('');
                             }}
-                            placeholder="example@gmail.com"
+                            placeholder="username"
+                            autoComplete="username"
+                            dir="ltr"
                             autoFocus
                         />
                     </div>
 
                     <div className="form-group">
-                        <label>
-                            <Key size={16} />
-                            رمز عبور
-                        </label>
-                        <input
-                            type="password"
+                        <PasswordField
+                            label="رمز عبور"
+                            icon={<Key size={16} />}
                             value={password}
-                            onChange={(e) => {
-                                setPassword(e.target.value);
+                            onChange={(value) => {
+                                setPassword(value);
                                 setError('');
                             }}
                             placeholder="••••••••"
+                            autoComplete="current-password"
                         />
                     </div>
 
                     {error && <div className="error-message">{error}</div>}
 
-                    <button type="submit" className="login-btn" disabled={loading}>
+                    <button type="submit" className="login-btn adm-tap" disabled={loading}>
                         {loading ? 'در حال ورود...' : 'ورود'}
                     </button>
                 </form>
-
-                <div className="login-footer">
-                    رمز عبور خود را فراموش کرده‌اید؟{' '}
-                    <button onClick={onForgotPasswordClick}>بازیابی رمز عبور</button>
-                </div>
-
-                <div className="login-footer" style={{ marginTop: '12px' }}>
-                    حساب کاربری ندارید؟{' '}
-                    <button onClick={onRegisterClick}>ثبت نام کنید</button>
-                </div>
             </div>
         </div>
     );

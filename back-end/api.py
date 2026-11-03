@@ -28,10 +28,11 @@ except ImportError:
     AESGCM = None
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument, UpdateOne
+from pymongo.errors import DuplicateKeyError
 import os
 from pathlib import Path
 from dotenv import load_dotenv, find_dotenv
-from typing import List, Dict, Optional, Any, Iterable
+from typing import List, Dict, Optional, Any, Iterable, Literal
 import traceback
 import asyncio
 import time
@@ -51,13 +52,6 @@ from ai_service import (
     perform_deepseek_url_fetch,
     perform_deepseek_web_search,
     process_post_turn_memory_and_summary,
-)
-from email_service import (
-    send_verification_email,
-    verify_code,
-    send_password_reset_email,
-    verify_reset_code,
-    clear_reset_code,
 )
 from api_reaction_helper import aggregate_reactions
 import chess_service
@@ -152,6 +146,9 @@ cl_ai_memories = db["ai_memories"]
 cl_ai_temp_files = db["ai_temp_files"]
 cl_chess_games = db["chess_games"]
 cl_pending_file_deletions = db["pending_file_deletions"]
+cl_register_links = db["register_links"]
+cl_password_links = db["password_links"]
+cl_app_settings = db["app_settings"]
 
 active_connections: Dict[str, List[WebSocket]] = {}
 active_ai_connections: Dict[str, List[WebSocket]] = {}
@@ -967,7 +964,8 @@ async def bcrypt_checkpw_async(password: str, stored_hash: str) -> bool:
 
 
 class LoginRequest(BaseModel):
-    email: str
+    identifier: Optional[str] = None
+    email: Optional[str] = None
     password: str
     deviceName: Optional[str] = None
 
@@ -1014,31 +1012,38 @@ class GroupJoinRequest(BaseModel):
     inviteCode: str
 
 
-class RegisterEmailRequest(BaseModel):
-    email: str
-
-
-class VerifyCodeRequest(BaseModel):
-    email: str
-    code: str
-
-
-class CompleteRegistrationRequest(BaseModel):
-    email: str
+class RegisterWithLinkRequest(BaseModel):
+    token: str
     name: str
     username: str
     password: str
     deviceName: Optional[str] = None
 
 
-class PasswordResetRequest(BaseModel):
-    email: str
+class ValidateLinkRequest(BaseModel):
+    token: str
 
 
-class PasswordResetVerifyRequest(BaseModel):
-    email: str
-    code: str
-    new_password: str
+class ConsumePasswordLinkRequest(BaseModel):
+    token: str
+    newPassword: str
+
+
+class ChangePasswordRequest(BaseModel):
+    currentPassword: str
+    newPassword: str
+
+
+class VerifyUserRequest(BaseModel):
+    verified: bool
+
+
+class AdminLevelRequest(BaseModel):
+    level: Optional[Literal["admin1"]] = None
+
+
+class RegistrationStateRequest(BaseModel):
+    open: bool
 
 
 class ReactionRequest(BaseModel):
@@ -1319,6 +1324,129 @@ async def get_current_user(
     user["profile"]["bio"] = decrypt_user_bio(user, credentials.credentials)
     user["online"] = resolve_user_online_state(user)
     return user
+
+
+OWNER_USERNAME = "Mehran"
+LINK_TTL = timedelta(minutes=30)
+
+
+def get_admin_level(user: dict) -> Optional[str]:
+    username = str((user.get("profile") or {}).get("username") or "")
+    if username.lower() == OWNER_USERNAME.lower():
+        return "admin0"
+    level = user.get("adminLevel")
+    return level if level == "admin1" else None
+
+
+async def require_admin0(current_user: dict = Depends(get_current_user)):
+    if get_admin_level(current_user) != "admin0":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return current_user
+
+
+async def require_admin(current_user: dict = Depends(get_current_user)):
+    if get_admin_level(current_user) is None:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return current_user
+
+
+def link_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+async def is_registration_open() -> bool:
+    doc = await cl_app_settings.find_one({"_id": "registration"})
+    if not doc:
+        return True
+    return bool(doc.get("open", True))
+
+
+async def consume_link(collection, token: str) -> Optional[dict]:
+    value = str(token or "").strip()
+    if not value or len(value) > 128:
+        return None
+    return await collection.find_one_and_update(
+        {"tokenHash": link_hash(value), "usedAt": None, "expiresAt": {"$gt": utc_now()}},
+        {"$set": {"usedAt": utc_now()}},
+        return_document=ReturnDocument.AFTER,
+    )
+
+
+async def release_link(collection, doc: dict) -> None:
+    if not doc:
+        return
+    await collection.update_one(
+        {"_id": doc["_id"], "usedAt": doc.get("usedAt")},
+        {"$set": {"usedAt": None}},
+    )
+
+
+async def create_register_link(created_by: str, created_by_username: str = "") -> dict:
+    token = secrets.token_urlsafe(32)
+    expires_at = utc_now() + LINK_TTL
+    result = await cl_register_links.insert_one(
+        {
+            "token": token,
+            "tokenHash": link_hash(token),
+            "createdBy": created_by,
+            "createdByUsername": created_by_username,
+            "createdAt": utc_now(),
+            "expiresAt": expires_at,
+            "usedAt": None,
+            "usedBy": None,
+        }
+    )
+    return {
+        "id": str(result.inserted_id),
+        "token": token,
+        "expiresAt": expires_at.isoformat(),
+        "path": f"/register/{token}",
+        "createdByUsername": created_by_username,
+    }
+
+
+async def create_password_link(target_chat_id: str, created_by: str) -> dict:
+    token = secrets.token_urlsafe(32)
+    expires_at = utc_now() + LINK_TTL
+    await cl_password_links.delete_many({"targetChatId": target_chat_id, "usedAt": None})
+    await cl_password_links.insert_one(
+        {
+            "tokenHash": link_hash(token),
+            "targetChatId": target_chat_id,
+            "createdBy": created_by,
+            "createdAt": utc_now(),
+            "expiresAt": expires_at,
+            "usedAt": None,
+        }
+    )
+    return {
+        "token": token,
+        "expiresAt": expires_at.isoformat(),
+        "path": f"/reset-password/{token}",
+    }
+
+
+async def clear_user_sessions(chat_id: str) -> None:
+    await cl_users.update_one(
+        {"chatId": chat_id},
+        {"$set": {"login.sessions": []}, "$unset": {"login.token": ""}},
+    )
+    await _sync_login_seen_by_with_sessions(chat_id, [])
+    for ws in list(active_connections.get(chat_id, [])):
+        try:
+            await ws.close(code=1008)
+        except Exception:
+            pass
+    active_connections.pop(chat_id, None)
+    for ws in list(active_ai_connections.get(chat_id, [])):
+        try:
+            await ws.close(code=1008)
+        except Exception:
+            pass
+    active_ai_connections.pop(chat_id, None)
+    await cl_users.update_one(
+        {"chatId": chat_id}, {"$set": {"online": False, "wsConnectionCount": 0}}
+    )
 
 
 security_optional = HTTPBearer(auto_error=False)
@@ -1659,9 +1787,22 @@ def _user_can_pin_chat(user_id: str, chat_id: str) -> bool:
 @app.on_event("startup")
 async def startup_db():
     try:
+        try:
+            await cl_users.drop_index("login.email_1")
+        except Exception:
+            pass
         await asyncio.gather(
             cl_users.create_index("chatId", unique=True),
-            cl_users.create_index("login.email", unique=True),
+            cl_users.create_index(
+                "login.email",
+                unique=True,
+                partialFilterExpression={"login.email": {"$type": "string"}},
+                name="login_email_partial_unique",
+            ),
+            cl_register_links.create_index("tokenHash", unique=True),
+            cl_register_links.create_index("expiresAt", expireAfterSeconds=86400),
+            cl_password_links.create_index("tokenHash", unique=True),
+            cl_password_links.create_index("expiresAt", expireAfterSeconds=86400),
             cl_users.create_index("login.sessions.tokenHash"),
             cl_users.create_index("profile.username", unique=True),
             cl_chats.create_index([("participants", 1)]),
@@ -1692,6 +1833,10 @@ async def startup_db():
         )
         AI_TEMP_DIR.mkdir(parents=True, exist_ok=True)
         await cl_users.update_many({}, {"$set": {"online": False, "wsConnectionCount": 0}})
+        await cl_users.update_one(
+            {"profile.username": {"$regex": f"^{re.escape(OWNER_USERNAME)}$", "$options": "i"}},
+            {"$set": {"adminLevel": "admin0"}},
+        )
         async for g in cl_chess_games.find({"status": {"$in": ["active", "waiting"]}}):
             chess_schedule(g)
     except Exception as e:
@@ -1946,45 +2091,37 @@ async def unblock_user(
     return {"blockedChatIds": _get_blocked_from_user_doc(user or {})}
 
 
-@app.post("/auth/register/email")
+@app.get("/auth/register-link/{token}")
+@limiter.limit("30/minute")
+async def validate_register_link(request: Request, token: str):
+    value = str(token or "").strip()
+    if not value or len(value) > 128:
+        return {"valid": False}
+    link = await cl_register_links.find_one(
+        {"tokenHash": link_hash(value), "usedAt": None, "expiresAt": {"$gt": utc_now()}},
+        {"_id": 1},
+    )
+    return {"valid": bool(link)}
+
+
+@app.post("/auth/register", response_model=TokenResponse)
 @limiter.limit("5/minute;20/hour")
-async def register_email(request: Request, req: RegisterEmailRequest):
-    """Step 1: Send verification code to email"""
-    existing_user = await cl_users.find_one({"login.email": req.email})
-    if existing_user:
-        raise HTTPException(status_code=409, detail="Email already registered")
-
-    code = await send_verification_email(req.email)
-    if not code:
-        raise HTTPException(status_code=500, detail="Failed to send verification email")
-
-    return {"message": "Verification code sent to email", "email": req.email}
-
-
-@app.post("/auth/register/verify")
-@limiter.limit("5/minute;20/hour")
-async def verify_registration_code(request: Request, req: VerifyCodeRequest):
-    """Step 2: Verify the code sent to email"""
-    is_valid = await verify_code(req.email, req.code)
-    if not is_valid:
-        raise HTTPException(
-            status_code=400, detail="Invalid or expired verification code"
-        )
-
-    return {"message": "Code verified successfully", "email": req.email}
-
-
-@app.post("/auth/register/complete", response_model=TokenResponse)
-@limiter.limit("5/minute;20/hour")
-async def complete_registration(req: CompleteRegistrationRequest, request: Request):
-    """Step 3: Complete registration with name, username and password"""
-    existing_user = await cl_users.find_one({"login.email": req.email})
-    if existing_user:
-        raise HTTPException(status_code=409, detail="Email already registered")
+async def register_with_link(req: RegisterWithLinkRequest, request: Request):
+    name = str(req.name or "").strip()
+    if not name or len(name) > 64:
+        raise HTTPException(status_code=400, detail="Invalid name")
 
     desired_username = normalize_username(req.username)
     if not validate_username(desired_username):
         raise HTTPException(status_code=400, detail="Invalid username format")
+    if desired_username.lower() == OWNER_USERNAME.lower():
+        raise HTTPException(status_code=409, detail="Username already taken")
+    if len(str(req.password or "")) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    link_doc = await consume_link(cl_register_links, req.token)
+    if not link_doc:
+        raise HTTPException(status_code=400, detail="Invalid or expired link")
 
     existing_username = await cl_users.find_one(
         {
@@ -1992,9 +2129,11 @@ async def complete_registration(req: CompleteRegistrationRequest, request: Reque
                 "$regex": f"^{re.escape(desired_username)}$",
                 "$options": "i",
             }
-        }
+        },
+        {"_id": 1},
     )
     if existing_username:
+        await release_link(cl_register_links, link_doc)
         raise HTTPException(status_code=409, detail="Username already taken")
 
     chat_id = f"user_{uuid.uuid4().hex[:16]}"
@@ -2009,9 +2148,9 @@ async def complete_registration(req: CompleteRegistrationRequest, request: Reque
 
     user_doc = {
         "chatId": chat_id,
-        "login": {"email": req.email, "password": hashed_password, "sessions": []},
+        "login": {"password": hashed_password, "sessions": []},
         "profile": {
-            "name": req.name,
+            "name": name,
             "username": desired_username,
             "bio": "",
             "bioEncrypted": False,
@@ -2025,8 +2164,16 @@ async def complete_registration(req: CompleteRegistrationRequest, request: Reque
 
     try:
         await cl_users.insert_one(user_doc)
-    except Exception as e:
+    except DuplicateKeyError:
+        await release_link(cl_register_links, link_doc)
+        raise HTTPException(status_code=409, detail="Username already taken")
+    except Exception:
+        await release_link(cl_register_links, link_doc)
         raise HTTPException(status_code=500, detail="Failed to create user")
+
+    await cl_register_links.update_one(
+        {"_id": link_doc["_id"]}, {"$set": {"usedBy": chat_id}}
+    )
 
     token = await create_access_token({"chatId": chat_id})
 
@@ -2042,65 +2189,382 @@ async def complete_registration(req: CompleteRegistrationRequest, request: Reque
         "user": {
             "chatId": chat_id,
             "username": desired_username,
-            "name": req.name,
+            "name": name,
             "bio": "",
             "avatar": "",
             "online": False,
             "verified": False,
             "registrationDate": registration_date,
+            "adminLevel": get_admin_level(user_doc),
         },
     }
 
 
-@app.post("/auth/password-reset/request")
-@limiter.limit("5/minute;20/hour")
-async def request_password_reset(request: Request, req: PasswordResetRequest):
-    """Request password reset - sends code to email"""
-    user = await cl_users.find_one({"login.email": req.email})
+@app.get("/auth/password-link/{token}")
+@limiter.limit("30/minute")
+async def validate_password_link(request: Request, token: str):
+    value = str(token or "").strip()
+    if not value or len(value) > 128:
+        return {"valid": False, "username": None}
+    link = await cl_password_links.find_one(
+        {"tokenHash": link_hash(value), "usedAt": None, "expiresAt": {"$gt": utc_now()}},
+        {"targetChatId": 1},
+    )
+    if not link:
+        return {"valid": False, "username": None}
+    user = await cl_users.find_one(
+        {"chatId": link.get("targetChatId")}, {"profile.username": 1}
+    )
+    return {
+        "valid": bool(user),
+        "username": ((user or {}).get("profile") or {}).get("username"),
+    }
+
+
+@app.post("/auth/password-link/consume")
+@limiter.limit("10/minute;40/hour")
+async def consume_password_link(req: ConsumePasswordLinkRequest, request: Request):
+    new_password = str(req.newPassword or "")
+    if len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    link_doc = await consume_link(cl_password_links, req.token)
+    if not link_doc:
+        raise HTTPException(status_code=400, detail="Invalid or expired link")
+
+    chat_id = str(link_doc.get("targetChatId") or "")
+    user = await cl_users.find_one({"chatId": chat_id}, {"chatId": 1})
     if not user:
-        return {"message": "If the email exists, a reset code has been sent"}
-
-    code = await send_password_reset_email(req.email)
-    if not code:
-        raise HTTPException(status_code=500, detail="Failed to send reset email")
-
-    return {"message": "Password reset code sent to email"}
-
-
-@app.post("/auth/password-reset/verify")
-@limiter.limit("5/minute;20/hour")
-async def verify_and_reset_password(request: Request, req: PasswordResetVerifyRequest):
-    """Verify reset code and change password"""
-    is_valid = await verify_reset_code(req.email, req.code)
-    if not is_valid:
-        raise HTTPException(status_code=400, detail="Invalid or expired reset code")
-
-    user = await cl_users.find_one({"login.email": req.email})
-    if not user:
+        await release_link(cl_password_links, link_doc)
         raise HTTPException(status_code=404, detail="User not found")
 
     def _hash_password(password: str) -> str:
         return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
-    hashed_password = await asyncio.to_thread(_hash_password, req.new_password)
-
+    hashed_password = await asyncio.to_thread(_hash_password, new_password)
     await cl_users.update_one(
-        {"login.email": req.email},
-        {
-            "$set": {"login.password": hashed_password, "login.sessions": []},
-            "$unset": {"login.token": ""},
-        },
+        {"chatId": chat_id}, {"$set": {"login.password": hashed_password}}
     )
+    await clear_user_sessions(chat_id)
+    return {"message": "ok"}
 
-    await clear_reset_code(req.email)
 
-    return {"message": "Password reset successful"}
+@app.post("/auth/change-password")
+@limiter.limit("5/minute;20/hour")
+async def change_password(
+    req: ChangePasswordRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    new_password = str(req.newPassword or "")
+    if len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    if new_password == req.currentPassword:
+        raise HTTPException(status_code=400, detail="New password must be different")
+
+    stored_hash = (current_user.get("login") or {}).get("password")
+    if not stored_hash or not isinstance(stored_hash, str):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if not await bcrypt_checkpw_async(req.currentPassword, stored_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    def _hash_password(password: str) -> str:
+        return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+    hashed_password = await asyncio.to_thread(_hash_password, new_password)
+    await cl_users.update_one(
+        {"chatId": current_user["chatId"]},
+        {"$set": {"login.password": hashed_password}},
+    )
+    await clear_user_sessions(current_user["chatId"])
+    return {"message": "ok"}
+
+
+@app.get("/admin/me")
+@limiter.limit("60/minute;600/hour")
+async def admin_me(request: Request, current_user: dict = Depends(require_admin)):
+    return {
+        "adminLevel": get_admin_level(current_user),
+        "registrationOpen": await is_registration_open(),
+    }
+
+
+@app.post("/admin/register-links")
+@limiter.limit("60/minute;600/hour")
+async def admin_create_register_link(
+    request: Request, current_user: dict = Depends(require_admin)
+):
+    level = get_admin_level(current_user)
+    if not await is_registration_open() and level != "admin0":
+        raise HTTPException(status_code=403, detail="Registration is closed")
+    active_links = await cl_register_links.count_documents(
+        {
+            "createdBy": current_user["chatId"],
+            "usedAt": None,
+            "expiresAt": {"$gt": utc_now()},
+        }
+    )
+    if active_links >= 20:
+        raise HTTPException(status_code=429, detail="Too many active links")
+    username = (current_user.get("profile") or {}).get("username") or ""
+    return await create_register_link(current_user["chatId"], username)
+
+
+@app.get("/admin/register-links")
+@limiter.limit("60/minute;600/hour")
+async def admin_list_register_links(
+    request: Request, current_user: dict = Depends(require_admin)
+):
+    level = get_admin_level(current_user)
+    query: Dict[str, Any] = {"usedAt": None, "expiresAt": {"$gt": utc_now()}}
+    if level != "admin0":
+        query["createdBy"] = current_user["chatId"]
+    docs = (
+        await cl_register_links.find(query).sort("createdAt", -1).limit(50).to_list(None)
+    )
+    items = [
+        {
+            "id": str(doc["_id"]),
+            "path": f"/register/{doc['token']}",
+            "expiresAt": doc["expiresAt"].isoformat(),
+            "createdAt": doc["createdAt"].isoformat(),
+            "createdBy": doc.get("createdBy"),
+            "createdByUsername": doc.get("createdByUsername") or "",
+            "mine": doc.get("createdBy") == current_user["chatId"],
+        }
+        for doc in docs
+        if doc.get("token")
+    ]
+    return {"items": items}
+
+
+@app.delete("/admin/register-links/{link_id}")
+@limiter.limit("60/minute;600/hour")
+async def admin_delete_register_link(
+    request: Request, link_id: str, current_user: dict = Depends(require_admin)
+):
+    if not ObjectId.is_valid(link_id):
+        raise HTTPException(status_code=400, detail="Invalid link id")
+    query: Dict[str, Any] = {"_id": ObjectId(link_id), "usedAt": None}
+    if get_admin_level(current_user) != "admin0":
+        query["createdBy"] = current_user["chatId"]
+    result = await cl_register_links.delete_one(query)
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Link not found")
+    return {"deleted": True}
+
+
+@app.get("/admin/users")
+@limiter.limit("60/minute;600/hour")
+async def admin_list_users(
+    request: Request,
+    q: str = "",
+    filter: str = "all",
+    limit: int = 20,
+    cursor: Optional[str] = None,
+    current_user: dict = Depends(require_admin0),
+):
+    page_size = max(1, min(50, int(limit)))
+    filter_value = str(filter or "all").strip()
+    owner_username = {"profile.username": {"$regex": f"^{re.escape(OWNER_USERNAME)}$", "$options": "i"}}
+    filter_options: Dict[str, Optional[Dict[str, Any]]] = {
+        "all": None,
+        "verified": {"verified": True},
+        "unverified": {"verified": {"$ne": True}},
+        "admins": {"$or": [{"adminLevel": "admin1"}, owner_username]},
+        "admin1": {"adminLevel": "admin1"},
+        "regular": {
+            "$and": [
+                {"adminLevel": {"$exists": False}},
+                {"$nor": [owner_username]},
+            ]
+        },
+        "online": {"online": True},
+    }
+    if filter_value not in filter_options:
+        raise HTTPException(status_code=400, detail="Invalid filter")
+    conditions: List[Dict[str, Any]] = []
+    text = str(q or "").strip()
+    if text:
+        prefix = f"^{re.escape(text)}"
+        conditions.append(
+            {
+                "$or": [
+                    {"chatId": text},
+                    {"profile.username": {"$regex": prefix, "$options": "i"}},
+                    {"chatId": {"$regex": prefix, "$options": "i"}},
+                ]
+            }
+        )
+    filter_condition = filter_options[filter_value]
+    if filter_condition:
+        conditions.append(filter_condition)
+    if len(conditions) == 1:
+        query: Dict[str, Any] = dict(conditions[0])
+    elif conditions:
+        query = {"$and": conditions}
+    else:
+        query = {}
+
+    cursor_value = str(cursor or "").strip()
+    total: Optional[int] = None
+    if cursor_value:
+        if not ObjectId.is_valid(cursor_value):
+            raise HTTPException(status_code=400, detail="Invalid cursor")
+    else:
+        total = await cl_users.count_documents(query)
+    paged_query: Dict[str, Any] = dict(query)
+    if cursor_value:
+        paged_query["_id"] = {"$lt": ObjectId(cursor_value)}
+
+    docs = (
+        await cl_users.find(
+            paged_query,
+            {
+                "chatId": 1,
+                "profile.name": 1,
+                "profile.username": 1,
+                "profile.avatar": 1,
+                "verified": 1,
+                "adminLevel": 1,
+            },
+        )
+        .sort("_id", -1)
+        .limit(page_size + 1)
+        .to_list(None)
+    )
+    has_more = len(docs) > page_size
+    docs = docs[:page_size]
+    items = [
+        {
+            "chatId": doc.get("chatId"),
+            "name": ((doc.get("profile") or {}).get("name") or ""),
+            "username": ((doc.get("profile") or {}).get("username") or ""),
+            "avatar": ((doc.get("profile") or {}).get("avatar") or ""),
+            "verified": bool(doc.get("verified", False)),
+            "adminLevel": get_admin_level(doc),
+        }
+        for doc in docs
+    ]
+    response = {
+        "items": items,
+        "nextCursor": str(docs[-1]["_id"]) if has_more and docs else None,
+        "hasMore": has_more,
+    }
+    if total is not None:
+        response["total"] = total
+    return response
+
+
+@app.get("/admin/users/{chat_id}")
+@limiter.limit("100/minute;1000/hour")
+async def admin_user_detail(
+    request: Request, chat_id: str, current_user: dict = Depends(require_admin0)
+):
+    user = await cl_users.find_one({"chatId": chat_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    login_data = user.get("login") or {}
+    last_seen = user.get("lastSeen")
+    return {
+        "chatId": user.get("chatId"),
+        "name": ((user.get("profile") or {}).get("name") or ""),
+        "username": ((user.get("profile") or {}).get("username") or ""),
+        "avatar": ((user.get("profile") or {}).get("avatar") or ""),
+        "verified": bool(user.get("verified", False)),
+        "adminLevel": get_admin_level(user),
+        "registrationDate": user.get("registrationDate"),
+        "createdAt": dt_to_epoch_ms(user.get("createdAt")) if user.get("createdAt") else None,
+        "online": resolve_user_online_state(user),
+        "lastSeen": dt_to_epoch_ms(last_seen) if last_seen else None,
+        "email": login_data.get("email"),
+        "sessionsCount": len(login_data.get("sessions") or []),
+        "hasPassword": bool(login_data.get("password")),
+    }
+
+
+@app.post("/admin/users/{chat_id}/verify")
+@limiter.limit("60/minute;600/hour")
+async def admin_set_verified(
+    request: Request,
+    chat_id: str,
+    payload: VerifyUserRequest,
+    current_user: dict = Depends(require_admin0),
+):
+    result = await cl_users.update_one(
+        {"chatId": chat_id}, {"$set": {"verified": bool(payload.verified)}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"verified": bool(payload.verified)}
+
+
+@app.post("/admin/users/{chat_id}/admin-level")
+@limiter.limit("30/minute;200/hour")
+async def admin_set_level(
+    request: Request,
+    chat_id: str,
+    payload: AdminLevelRequest,
+    current_user: dict = Depends(require_admin0),
+):
+    target = await cl_users.find_one({"chatId": chat_id}, {"profile.username": 1, "adminLevel": 1, "chatId": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if get_admin_level(target) == "admin0":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if payload.level == "admin1":
+        await cl_users.update_one({"chatId": chat_id}, {"$set": {"adminLevel": "admin1"}})
+    else:
+        await cl_users.update_one({"chatId": chat_id}, {"$unset": {"adminLevel": ""}})
+    return {"adminLevel": payload.level}
+
+
+@app.post("/admin/users/{chat_id}/password-link")
+@limiter.limit("30/minute;200/hour")
+async def admin_create_password_link(
+    request: Request, chat_id: str, current_user: dict = Depends(require_admin0)
+):
+    target = await cl_users.find_one({"chatId": chat_id}, {"profile.username": 1, "adminLevel": 1, "chatId": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if get_admin_level(target) == "admin0":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return await create_password_link(chat_id, current_user["chatId"])
+
+
+@app.put("/admin/registration")
+@limiter.limit("30/minute;200/hour")
+async def admin_set_registration(
+    request: Request,
+    payload: RegistrationStateRequest,
+    current_user: dict = Depends(require_admin0),
+):
+    await cl_app_settings.update_one(
+        {"_id": "registration"}, {"$set": {"open": bool(payload.open)}}, upsert=True
+    )
+    return {"open": bool(payload.open)}
 
 
 @app.post("/auth/login", response_model=TokenResponse)
 @limiter.limit("5/minute;20/hour")
 async def login(req: LoginRequest, request: Request):
-    user = await cl_users.find_one({"login.email": req.email})
+    ident = str(req.identifier or req.email or "").strip()
+    if not ident:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if "@" in ident:
+        user = await cl_users.find_one(
+            {"$or": [{"login.email": ident}, {"login.email": ident.lower()}]}
+        )
+    else:
+        user = await cl_users.find_one(
+            {
+                "profile.username": {
+                    "$regex": f"^{re.escape(normalize_username(ident))}$",
+                    "$options": "i",
+                }
+            }
+        )
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
@@ -2132,6 +2596,7 @@ async def login(req: LoginRequest, request: Request):
             "online": resolve_user_online_state(user),
             "verified": bool(user.get("verified", False)),
             "registrationDate": user.get("registrationDate"),
+            "adminLevel": get_admin_level(user),
         },
     }
 
@@ -2156,6 +2621,7 @@ async def get_profile(request: Request, current_user: dict = Depends(get_current
         "hideOnlineStatus": bool(user_settings.get("hideOnlineStatus", False)),
         "verified": bool(current_user.get("verified", False)),
         "registrationDate": current_user.get("registrationDate"),
+        "adminLevel": get_admin_level(current_user),
     }
 
 
@@ -2200,6 +2666,10 @@ async def update_profile(
             raise HTTPException(status_code=400, detail="Invalid username")
 
         my_un = normalize_username(current_user.get("profile", {}).get("username"))
+        if my_un.lower() == OWNER_USERNAME.lower() and desired.lower() != OWNER_USERNAME.lower():
+            raise HTTPException(status_code=403, detail="Owner username cannot be changed")
+        if desired.lower() == OWNER_USERNAME.lower() and my_un.lower() != OWNER_USERNAME.lower():
+            raise HTTPException(status_code=409, detail="Username already taken")
         if my_un.lower() != desired.lower():
             exists = await cl_users.find_one(
                 {

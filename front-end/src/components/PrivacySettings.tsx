@@ -1,27 +1,33 @@
 import { useState } from 'react';
-import { ChevronLeft, EyeOff } from 'lucide-react';
+import { ChevronLeft, EyeOff, KeyRound } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { screenVariants } from '../utils/screenMotion';
 import { cx } from '../utils/cx';
 import { useScrollFade } from '../hooks/useScrollFade';
 import { apiFetch } from '../config/api';
 import { notify } from '../utils/notificationBus';
+import { PasswordField } from './PasswordField';
 import type { User } from '../types';
+import './admin/admin.css';
 
 interface PrivacySettingsProps {
     onBack: () => void;
     currentUser: User | null;
     onUpdateCurrentUser?: (updates: Partial<User>) => void;
+    onLogout?: () => void;
 }
 
-export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser }: PrivacySettingsProps) {
+export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLogout }: PrivacySettingsProps) {
     const { scrolled, handleScroll } = useScrollFade();
     const [hideOnline, setHideOnline] = useState<boolean>(Boolean(currentUser?.hideOnlineStatus));
     const [saving, setSaving] = useState(false);
 
-    const isDarkMode = typeof document !== 'undefined' && document.documentElement.classList.contains('dark-mode');
-    const panelBorder = '1px solid var(--glass-border)';
-    const panelBg = 'var(--glass-surface-soft)';
+    const [showPasswordForm, setShowPasswordForm] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [passwordError, setPasswordError] = useState('');
+    const [passwordSaving, setPasswordSaving] = useState(false);
 
     const toggleHideOnline = async () => {
         if (saving) return;
@@ -44,7 +50,7 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser }: Pr
                     ? 'وضعیت آنلاین بودن و آخرین بازدید شما مخفی شد.'
                     : 'وضعیت آنلاین بودن و آخرین بازدید شما قابل مشاهده شد.',
             });
-        } catch (error) {
+        } catch {
             notify({
                 type: 'error',
                 message: 'خطا در ذخیره تنظیمات حریم خصوصی.',
@@ -54,60 +60,140 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser }: Pr
         }
     };
 
+    const submitPasswordChange = async (event: React.FormEvent) => {
+        event.preventDefault();
+        setPasswordError('');
+
+        if (newPassword.length < 8) {
+            setPasswordError('رمز عبور جدید باید حداقل ۸ کاراکتر باشد');
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            setPasswordError('رمز عبور جدید و تکرار آن یکسان نیستند');
+            return;
+        }
+        if (newPassword === currentPassword) {
+            setPasswordError('رمز عبور جدید باید با رمز فعلی متفاوت باشد');
+            return;
+        }
+
+        setPasswordSaving(true);
+        try {
+            await apiFetch('/auth/change-password', {
+                method: 'POST',
+                body: JSON.stringify({ currentPassword, newPassword }),
+            });
+            notify({ type: 'success', message: 'رمز عبور تغییر کرد. دوباره وارد شوید.' });
+            onLogout?.();
+        } catch (error: unknown) {
+            const message = String((error as Error)?.message || '');
+            if (message.includes('Current password is incorrect')) {
+                setPasswordError('رمز عبور فعلی اشتباه است');
+            } else if (message.includes('at least')) {
+                setPasswordError('رمز عبور جدید باید حداقل ۸ کاراکتر باشد');
+            } else {
+                setPasswordError('تغییر رمز عبور ممکن نشد');
+            }
+        } finally {
+            setPasswordSaving(false);
+        }
+    };
+
     return (
-        <motion.div className="profile" variants={screenVariants} initial="hidden" animate="visible" exit="exit">
+        <motion.div key={showPasswordForm ? 'password' : 'privacy'} className="profile" variants={screenVariants} initial="hidden" animate="visible" exit="exit">
             <div className={cx('header-fade', 'header-fade--screen', scrolled && 'header-fade--visible')} aria-hidden="true" />
             <div className="profile__header">
                 <div className="profile__header-side">
-                    <button onClick={onBack} className="profile__header-back back-icon-btn" aria-label="بازگشت به تنظیمات">
+                    <button
+                        type="button"
+                        onClick={() => (showPasswordForm ? setShowPasswordForm(false) : onBack())}
+                        className="profile__header-back back-icon-btn adm-tap"
+                        aria-label="بازگشت"
+                    >
                         <ChevronLeft size={22} />
                     </button>
                 </div>
-                <h1 className="profile__header-title">حریم خصوصی</h1>
+                <h1 className="profile__header-title">{showPasswordForm ? 'تغییر رمز عبور' : 'حریم خصوصی و امنیت'}</h1>
             </div>
 
-            <div className="profile__content" onScroll={handleScroll} style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingInline: 14, paddingTop: 68, flex: '0 0 auto' }}>
-                <div style={{ border: panelBorder, borderRadius: 9999, overflow: 'hidden', background: panelBg, backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', boxShadow: 'var(--shadow-xs), var(--glass-specular)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, direction: 'rtl', padding: '10px 22px', minHeight: 60 }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            {showPasswordForm ? (
+                <div className="adm-content" onScroll={handleScroll}>
+                    <form className="adm-card adm-form" onSubmit={submitPasswordChange}>
+                        <PasswordField
+                            label="رمز عبور فعلی"
+                            icon={<KeyRound size={16} />}
+                            value={currentPassword}
+                            onChange={(value) => {
+                                setCurrentPassword(value);
+                                setPasswordError('');
+                            }}
+                            placeholder="رمز عبور فعلی"
+                            autoComplete="current-password"
+                        />
+                        <PasswordField
+                            label="رمز عبور جدید"
+                            icon={<KeyRound size={16} />}
+                            value={newPassword}
+                            onChange={(value) => {
+                                setNewPassword(value);
+                                setPasswordError('');
+                            }}
+                            placeholder="رمز عبور جدید"
+                            autoComplete="new-password"
+                        />
+                        <PasswordField
+                            label="تکرار رمز عبور جدید"
+                            icon={<KeyRound size={16} />}
+                            value={confirmPassword}
+                            onChange={(value) => {
+                                setConfirmPassword(value);
+                                setPasswordError('');
+                            }}
+                            placeholder="تکرار رمز عبور جدید"
+                            autoComplete="new-password"
+                        />
+                        {passwordError && <div className="adm-field-error">{passwordError}</div>}
+                        <button
+                            type="submit"
+                            className="adm-btn adm-btn--primary adm-btn--block adm-tap"
+                            disabled={passwordSaving || !currentPassword || !newPassword || !confirmPassword}
+                        >
+                            {passwordSaving ? 'در حال ذخیره...' : 'ذخیره رمز عبور'}
+                        </button>
+                    </form>
+                </div>
+            ) : (
+                <div className="adm-content" onScroll={handleScroll}>
+                    <div className="adm-card adm-card--switch">
+                        <div className="adm-card__title">
                             <EyeOff size={18} />
                             بستن آنلاین بودن
-                        </span>
+                        </div>
                         <button
                             type="button"
                             onClick={toggleHideOnline}
                             disabled={saving}
+                            role="switch"
+                            aria-checked={hideOnline}
                             aria-label="بستن آنلاین بودن"
-                            style={{
-                                width: 48,
-                                height: 28,
-                                borderRadius: 999,
-                                border: isDarkMode
-                                    ? (hideOnline ? '1px solid color-mix(in srgb, var(--accent-primary) 70%, var(--border-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 35%, var(--border-primary))')
-                                    : (hideOnline ? '1px solid color-mix(in srgb, var(--text-primary) 28%, var(--accent-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 24%, var(--border-primary))'),
-                                background: hideOnline ? 'var(--accent-primary)' : (isDarkMode ? 'var(--bg-tertiary)' : 'color-mix(in srgb, var(--text-primary) 24%, var(--bg-primary))'),
-                                position: 'relative',
-                                transition: 'all .2s ease',
-                                cursor: saving ? 'wait' : 'pointer',
-                                opacity: saving ? 0.7 : 1,
-                            }}
+                            className={cx('adm-switch', hideOnline && 'adm-switch--on')}
                         >
-                            <span
-                                style={{
-                                    position: 'absolute',
-                                    top: 2,
-                                    right: hideOnline ? 2 : 22,
-                                    width: 22,
-                                    height: 22,
-                                    borderRadius: '50%',
-                                    background: isDarkMode ? '#fff' : (hideOnline ? '#fff' : '#d3d3d3'),
-                                    transition: 'all .2s ease',
-                                }}
-                            />
+                            <span className="adm-switch__thumb" />
                         </button>
                     </div>
+
+                    <button
+                        type="button"
+                        className="adm-settings-row adm-tap"
+                        onClick={() => setShowPasswordForm(true)}
+                    >
+                        <span className="adm-settings-row__label">
+                            <KeyRound size={18} /> تغییر رمز عبور
+                        </span>
+                        <ChevronLeft size={18} className="adm-settings-row__chevron" />
+                    </button>
                 </div>
-            </div>
+            )}
         </motion.div>
     );
 }
