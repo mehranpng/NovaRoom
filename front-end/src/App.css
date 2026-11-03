@@ -1090,8 +1090,8 @@ body,
     color: var(--text-primary);
 }
 
-.bottom-navbar__tab:active {
-    transform: scale(0.95);
+.bottom-navbar__tab:active .bottom-navbar__icon {
+    transform: scale(0.88);
 }
 
 .bottom-navbar__tab--active {
@@ -1115,12 +1115,17 @@ body,
     height: 24px;
     position: relative;
     z-index: 1;
+    transition: transform var(--motion-fast) var(--motion-ease-standard);
 }
 
 .bottom-navbar__icon svg {
     width: 24px;
     height: 24px;
     display: block;
+}
+
+.bottom-navbar__icon--avatar .avatar {
+    transform: scale(0.92);
 }
 
 .bottom-navbar__badge {
@@ -1233,6 +1238,11 @@ body,
 }
 
 .chat-room {
+    --chat-room-bg:
+        radial-gradient(ellipse 36% 26% at 5% -12%, color-mix(in srgb, var(--accent-primary) 8%, transparent), transparent 62%),
+        radial-gradient(ellipse 52% 38% at -6% 64%, color-mix(in srgb, var(--accent-primary) 4%, transparent), transparent 68%),
+        radial-gradient(ellipse 46% 34% at 104% 80%, color-mix(in srgb, var(--accent-primary) 4%, transparent), transparent 64%),
+        linear-gradient(155deg, color-mix(in srgb, var(--accent-soft) 24%, var(--bg-secondary)), var(--bg-secondary) 58%);
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -1240,13 +1250,25 @@ body,
     overflow: hidden;
     overscroll-behavior-y: none;
     background-color: var(--bg-secondary);
-    background-image:
-        radial-gradient(ellipse 36% 26% at 5% -12%, color-mix(in srgb, var(--accent-primary) 8%, transparent), transparent 62%),
-        radial-gradient(ellipse 52% 38% at -6% 64%, color-mix(in srgb, var(--accent-primary) 4%, transparent), transparent 68%),
-        radial-gradient(ellipse 46% 34% at 104% 80%, color-mix(in srgb, var(--accent-primary) 4%, transparent), transparent 64%),
-        linear-gradient(155deg, color-mix(in srgb, var(--accent-soft) 24%, var(--bg-secondary)), var(--bg-secondary) 58%);
+    background-image: var(--chat-room-bg);
+    background-size: 100% var(--app-height-full, 100%);
+    background-repeat: no-repeat;
     animation: screen-soft-in var(--motion-slow) var(--motion-ease-standard);
     position: relative;
+}
+
+.chat-room::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none;
+    background-color: var(--bg-secondary);
+    background-image: var(--chat-room-bg);
+    background-size: 100% var(--app-height-full, 100%);
+    background-repeat: no-repeat;
+    -webkit-mask-image: linear-gradient(to bottom, #000 0, transparent 76px, transparent calc(100% - 76px), #000 100%);
+    mask-image: linear-gradient(to bottom, #000 0, transparent 76px, transparent calc(100% - 76px), #000 100%);
 }
 
 .chat-room__header {
@@ -1769,8 +1791,6 @@ body,
     touch-action: pan-y;
     min-height: 0;
     background: transparent;
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 76px, #000 calc(100% - 76px), transparent 100%);
-    mask-image: linear-gradient(to bottom, transparent 0, #000 76px, #000 calc(100% - 76px), transparent 100%);
 }
 
 .chat-room__messages--with-chips {
@@ -1816,9 +1836,7 @@ body,
 
 .chat-room__date-label {
     border-radius: 9999px;
-    background: var(--glass-surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    background: var(--bg-secondary);
     border: 1px solid var(--glass-border);
     padding: 5px 16px;
     font-size: 12px;
@@ -5962,7 +5980,6 @@ html.no-blur-effect .chat-room__jump-box {
     .popover__item:active,
     .chat-list__header-actions .icon-btn:active,
     .chat-list__search-clear:active,
-    .bottom-navbar__tab:active,
     .chat-room__header-clickable:active,
     .chat-room__header-actions > .icon-btn:active,
     .ai-chat-drawer__icon-btn:active,

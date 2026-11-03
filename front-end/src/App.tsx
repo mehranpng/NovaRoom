@@ -469,12 +469,24 @@ export function App() {
 
     
     useEffect(() => {
+        const isCoarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+        let lastWidth = window.innerWidth;
+        let fullHeight = Math.round(window.visualViewport?.height ?? window.innerHeight);
+
         const apply = () => {
             const vv = window.visualViewport;
             const height = Math.round(vv?.height ?? window.innerHeight);
             const kb = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
 
+            if (!isCoarsePointer || window.innerWidth !== lastWidth) {
+                lastWidth = window.innerWidth;
+                fullHeight = height;
+            } else if (height > fullHeight) {
+                fullHeight = height;
+            }
+
             document.documentElement.style.setProperty('--app-height', `${height}px`);
+            document.documentElement.style.setProperty('--app-height-full', `${fullHeight}px`);
             document.documentElement.style.setProperty('--keyboard-offset', `${kb}px`);
         };
 

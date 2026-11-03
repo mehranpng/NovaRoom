@@ -25,6 +25,9 @@ const surfaceStyle = {
     borderRadius: 20,
 } as const;
 
+const textDirection = (value: string): 'rtl' | 'ltr' =>
+    value && /^[\x00-\x7F]*$/.test(value) ? 'ltr' : 'rtl';
+
 const extractInviteCode = (rawValue: string): string => {
     const value = rawValue.trim();
     if (!value) return '';
@@ -135,6 +138,8 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
 
     const isVerified = Boolean(currentUser?.verified);
     const trimmedQuery = query.trim().replace(/^@+/, '');
+    const searchDirection = textDirection(query.trim());
+    const groupNameDirection = textDirection(groupName.trim());
 
     const tabs: Array<{ key: 'chat' | 'group'; label: string; icon: typeof Search }> = [
         { key: 'chat', label: 'چت خصوصی', icon: Search },
@@ -189,7 +194,7 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
                             transition={navigationTabTransition}
                             style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
                         >
-                            <div className="new-chat-screen__search">
+                            <div className="new-chat-screen__search" style={{ direction: searchDirection }}>
                                 <Search size={18} />
                                 <input
                                     type="text"
@@ -197,6 +202,7 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
                                     placeholder="جستجو با نام کاربری..."
                                     value={query}
                                     onChange={(e) => setQuery(e.target.value)}
+                                    style={{ direction: searchDirection, textAlign: searchDirection === 'rtl' ? 'right' : 'left' }}
                                 />
                             </div>
 
@@ -248,11 +254,10 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
                                 {isVerified ? (
                                     <>
                                         <div style={{ position: 'relative' }}>
-                                            <Users size={16} style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
                                             <input
                                                 type="text"
                                                 className="profile__field-input"
-                                                style={{ paddingRight: 40, borderRadius: 9999, background: 'var(--bg-primary)' }}
+                                                style={{ borderRadius: 9999, background: 'var(--bg-primary)', direction: groupNameDirection, textAlign: groupNameDirection === 'rtl' ? 'right' : 'left' }}
                                                 placeholder="نام گروه"
                                                 value={groupName}
                                                 onChange={(e) => {

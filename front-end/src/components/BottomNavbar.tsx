@@ -180,7 +180,7 @@ export function BottomNavbar({ activeTab, onSelectTab, currentUser, hasUnseenSet
                             />
                         )}
                     </AnimatePresence>
-                    <span className="bottom-navbar__icon">
+                    <span className="bottom-navbar__icon bottom-navbar__icon--avatar">
                         {currentUser ? (
                             <Avatar
                                 name={currentUser.name}

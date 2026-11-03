@@ -515,9 +515,7 @@
     padding: 3px 8px;
     border-radius: 999px;
     color: #fff;
-    background: rgba(0, 0, 0, 0.56);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    background: rgba(0, 0, 0, 0.7);
     z-index: 2;
 }
 
@@ -532,9 +530,7 @@
     align-items: center;
     justify-content: center;
     color: #fff;
-    background: rgba(0, 0, 0, 0.48);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: rgba(0, 0, 0, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.32);
     z-index: 2;
     pointer-events: none;
