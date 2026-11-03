@@ -164,10 +164,10 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
                 </div>
             ) : (
                 <div className="adm-content" onScroll={handleScroll}>
-                    <div className="adm-card adm-card--switch">
+                    <div className="adm-card adm-card--switch adm-card--pill">
                         <div className="adm-card__title">
                             <EyeOff size={18} />
-                            بستن آنلاین بودن
+                            مخفی کردن آخرین بازدید
                         </div>
                         <button
                             type="button"
@@ -175,7 +175,7 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
                             disabled={saving}
                             role="switch"
                             aria-checked={hideOnline}
-                            aria-label="بستن آنلاین بودن"
+                            aria-label="مخفی کردن آخرین بازدید"
                             className={cx('adm-switch', hideOnline && 'adm-switch--on')}
                         >
                             <span className="adm-switch__thumb" />

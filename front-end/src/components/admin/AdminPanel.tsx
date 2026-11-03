@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, ChevronLeft, Link2, Menu, UserPlus, Users } from 'lucide-react';
+import { Check, ChevronLeft, Menu, Settings as SettingsIcon, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { MutableRefObject, ReactElement } from 'react';
 import { screenVariants } from '../../utils/screenMotion';
 import { cx } from '../../utils/cx';
 import { AdminUsersSection } from './AdminUsersSection';
-import { AdminLinksSection } from './AdminLinksSection';
 import { AdminRegistrationSection } from './AdminRegistrationSection';
 import './admin.css';
 
@@ -19,9 +18,8 @@ interface AdminPanelProps {
 type AdminSectionComponent = (props: { backRef: MutableRefObject<() => boolean> }) => ReactElement;
 
 const adminSections: { id: string; label: string; icon: LucideIcon; Component: AdminSectionComponent }[] = [
+    { id: 'settings', label: 'تنظیمات', icon: SettingsIcon, Component: AdminRegistrationSection },
     { id: 'users', label: 'کاربران', icon: Users, Component: AdminUsersSection },
-    { id: 'links', label: 'لینک‌ های دعوت', icon: Link2, Component: AdminLinksSection },
-    { id: 'registration', label: 'ثبت‌ نام', icon: UserPlus, Component: AdminRegistrationSection },
 ];
 
 export function AdminPanel({ section, onSectionChange, onBack }: AdminPanelProps) {

@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronLeft, Search, Users, X } from 'lucide-react';
+import { ChevronLeft, Loader2, Search, Users, X } from 'lucide-react';
 import type { MutableRefObject } from 'react';
 import { apiFetch } from '../../config/api';
 import { screenVariants } from '../../utils/screenMotion';
 import { cx } from '../../utils/cx';
 import { useScrollFade } from '../../hooks/useScrollFade';
 import { notify } from '../../utils/notificationBus';
-import { Avatar } from '../Avatar';
 import { VerifiedBadge } from '../VerifiedBadge';
 import { AdminUserDetail } from './AdminUserDetail';
 import type { AdminUserItem } from './adminTypes';
@@ -15,6 +14,7 @@ import './admin.css';
 
 const userFilters = [
     { id: 'all', label: 'همه' },
+    { id: 'newest', label: 'جدیدترین' },
     { id: 'verified', label: 'تایید شده' },
     { id: 'unverified', label: 'تایید نشده' },
     { id: 'admins', label: 'ادمین‌ها' },
@@ -34,6 +34,7 @@ export function AdminUsersSection({ backRef }: AdminUsersSectionProps) {
     const [items, setItems] = useState<AdminUserItem[]>([]);
     const [total, setTotal] = useState<number | null>(null);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
 
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -50,11 +51,14 @@ export function AdminUsersSection({ backRef }: AdminUsersSectionProps) {
         if (reset) {
             requestIdRef.current = requestId;
             loadingRef.current = false;
+            setLoading(true);
+            setLoadingMore(false);
         } else if (loadingRef.current) {
             return;
+        } else {
+            setLoadingMore(true);
         }
         loadingRef.current = true;
-        setLoading(true);
 
         const params = new URLSearchParams();
         params.set('limit', '20');
@@ -77,6 +81,7 @@ export function AdminUsersSection({ backRef }: AdminUsersSectionProps) {
         } finally {
             if (requestId === requestIdRef.current) {
                 setLoading(false);
+                setLoadingMore(false);
                 loadingRef.current = false;
             }
         }
@@ -120,6 +125,23 @@ export function AdminUsersSection({ backRef }: AdminUsersSectionProps) {
         setItems((prev) => prev.map((item) => (item.chatId === chatId ? { ...item, ...patch } : item)));
     }, []);
 
+    const handleFilterSelect = (nextFilter: string) => {
+        if (nextFilter === filter) return;
+        setFilter(nextFilter);
+        setItems([]);
+        setTotal(null);
+        setLoading(true);
+        setLoadingMore(false);
+    };
+
+    const handleQueryChange = (nextQuery: string) => {
+        setQuery(nextQuery);
+        setItems([]);
+        setTotal(null);
+        setLoading(true);
+        setLoadingMore(false);
+    };
+
     return (
         <>
             <div className={cx('header-fade', 'header-fade--screen', scrolled && 'header-fade--visible')} aria-hidden="true" />
@@ -134,7 +156,7 @@ export function AdminUsersSection({ backRef }: AdminUsersSectionProps) {
                     <input
                         type="text"
                         value={query}
-                        onChange={(event) => setQuery(event.target.value)}
+                        onChange={(event) => handleQueryChange(event.target.value)}
                         placeholder="جستجو با آیدی چت یا نام کاربری"
                         dir="rtl"
                         aria-label="جستجوی کاربر"
@@ -143,7 +165,7 @@ export function AdminUsersSection({ backRef }: AdminUsersSectionProps) {
                         <button
                             type="button"
                             className="adm-search__clear adm-tap"
-                            onClick={() => setQuery('')}
+                            onClick={() => handleQueryChange('')}
                             aria-label="پاک کردن جستجو"
                         >
                             <X size={18} />
@@ -157,7 +179,7 @@ export function AdminUsersSection({ backRef }: AdminUsersSectionProps) {
                             key={option.id}
                             type="button"
                             className={cx('adm-chip', 'adm-tap', filter === option.id && 'adm-chip--active')}
-                            onClick={() => setFilter(option.id)}
+                            onClick={() => handleFilterSelect(option.id)}
                             aria-pressed={filter === option.id}
                         >
                             {option.label}
@@ -165,41 +187,66 @@ export function AdminUsersSection({ backRef }: AdminUsersSectionProps) {
                     ))}
                 </div>
 
-                {total !== null && <div className="adm-count">{total} کاربر</div>}
+                {!loading && total !== null && <div className="adm-count">{total} کاربر</div>}
 
-                {items.map((item) => (
+                {loading && (
+                    <div className="adm-center-loader">
+                        <Loader2 size={24} className="adm-spin" />
+                    </div>
+                )}
+
+                {!loading && items.map((item) => (
                     <button
                         key={item.chatId}
                         type="button"
                         className="adm-row adm-tap"
                         onClick={() => setSelectedChatId(item.chatId)}
                     >
-                        <Avatar name={item.name || item.username} src={item.avatar} size="sm" />
                         <span className="adm-row__text">
-                            <span className="adm-row__name">
-                                <span>{item.name || item.username}</span>
-                                {item.verified && <VerifiedBadge size={14} />}
+                            <span className="adm-row__top">
+                                <span className="adm-row__name">
+                                    <span>{item.name || item.username}</span>
+                                    {item.verified && <VerifiedBadge size={14} />}
+                                </span>
+                                <span className="adm-row__username">@{item.username}</span>
+                                {item.adminLevel === 'admin0' && <span className="adm-badge">ادمین ۰</span>}
+                                {item.adminLevel === 'admin1' && <span className="adm-badge">ادمین ۱</span>}
                             </span>
-                            <span className="adm-row__username">@{item.username}</span>
+                            <span className="adm-row__meta">
+                                <span className="adm-row__status">
+                                    <span className={cx('adm-status-dot', item.online && 'adm-status-dot--online')} />
+                                    {item.online ? 'آنلاین' : 'آفلاین'}
+                                </span>
+                                <span className="adm-row__sep">•</span>
+                                <span className="adm-row__id">{item.chatId}</span>
+                                {item.registrationDate && (
+                                    <>
+                                        <span className="adm-row__sep">•</span>
+                                        <span className="adm-row__date">{item.registrationDate}</span>
+                                    </>
+                                )}
+                                {typeof item.sessionsCount === 'number' && (
+                                    <>
+                                        <span className="adm-row__sep">•</span>
+                                        <span>{item.sessionsCount} نشست</span>
+                                    </>
+                                )}
+                            </span>
                         </span>
-                        {item.adminLevel === 'admin0' && <span className="adm-badge">ادمین ۰</span>}
-                        {item.adminLevel === 'admin1' && <span className="adm-badge">ادمین ۱</span>}
                         <ChevronLeft size={18} className="adm-row__chevron" />
                     </button>
                 ))}
-
-                {loading && items.length === 0 && (
-                    <>
-                        {[1, 2, 3, 4].map((index) => (
-                            <div key={index} className="adm-skeleton adm-skeleton--row" />
-                        ))}
-                    </>
-                )}
 
                 {!loading && items.length === 0 && (
                     <div className="adm-empty">
                         <Users size={28} />
                         <span>کاربری پیدا نشد</span>
+                    </div>
+                )}
+
+                {loadingMore && (
+                    <div className="adm-more-loader">
+                        <Loader2 size={20} className="adm-spin" />
                     </div>
                 )}
 

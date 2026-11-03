@@ -5,6 +5,9 @@ export interface AdminUserItem {
     avatar: string;
     verified: boolean;
     adminLevel: 'admin0' | 'admin1' | null;
+    online?: boolean;
+    registrationDate?: string;
+    sessionsCount?: number;
 }
 
 export interface AdminUserDetailData extends AdminUserItem {

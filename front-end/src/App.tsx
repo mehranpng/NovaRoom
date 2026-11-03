@@ -160,8 +160,8 @@ export function App() {
     const isChessGameRoute = location.pathname.startsWith('/chess/game/');
     const chessJoinToken = location.pathname.match(/^\/chess\/join\/([A-Za-z0-9]+)$/)?.[1] ?? null;
     const adminPanelSection = location.pathname.startsWith('/settings/admin/panel/')
-        ? location.pathname.slice('/settings/admin/panel/'.length).split('/')[0] || 'users'
-        : 'users';
+        ? location.pathname.slice('/settings/admin/panel/'.length).split('/')[0] || 'settings'
+        : 'settings';
     const [chessContactOpen, setChessContactOpen] = useState(false);
     const [authToken, setAuthToken] = useState<string | null>(() => getAuthToken());
     const [isAuthChecking, setIsAuthChecking] = useState(true);
@@ -3362,7 +3362,7 @@ export function App() {
                                     key={view}
                                     section={view === 'settingsDevices' ? 'devices' : view === 'settingsTheme' ? 'theme' : view === 'settingsLogs' ? 'logs' : view === 'settingsDataStorage' ? 'dataStorage' : view === 'settingsPrivacy' ? 'privacy' : view === 'settingsAdmin' ? 'adminMenu' : view === 'settingsAdminPanel' ? 'adminPanel' : view === 'settingsAdminLinks' ? 'adminLinks' : 'menu'}
                                     adminSection={adminPanelSection}
-                                    onAdminSectionChange={(adminSection) => navigate(adminSection === 'users' ? '/settings/admin/panel' : `/settings/admin/panel/${adminSection}`)}
+                                    onAdminSectionChange={(adminSection) => navigate(adminSection === 'settings' ? '/settings/admin/panel' : `/settings/admin/panel/${adminSection}`)}
                                     onOpenSection={(section) => navigate(section === 'logs' ? '/settings/devices/logs' : section === 'dataStorage' ? '/settings/data-storage' : section === 'privacy' ? '/settings/privacy' : section === 'adminMenu' ? '/settings/admin' : section === 'adminPanel' ? '/settings/admin/panel' : section === 'adminLinks' ? '/settings/admin/links' : `/settings/${section}`)}
                                     onBackToMenu={() => navigate('/settings')}
                                     loginEvents={loginEvents}

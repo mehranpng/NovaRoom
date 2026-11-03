@@ -1,4 +1,4 @@
-import { ChevronLeft, HardDrive, Laptop, Palette, Shield, ShieldCheck } from 'lucide-react';
+import { ChevronLeft, HardDrive, Laptop, LayoutDashboard, Link2, Palette, Shield, ShieldCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Devices } from './Devices';
 import { ThemeSettings } from './ThemeSettings';
@@ -83,7 +83,7 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
                         onClick={() => onOpenSection('adminLinks')}
                     >
                         <span className="adm-settings-row__label">
-                            <ShieldCheck size={18} /> ساخت لینک ثبت‌ نام
+                            <Link2 size={18} /> ساخت لینک ثبت‌ نام
                         </span>
                         <ChevronLeft size={18} className="adm-settings-row__chevron" />
                     </button>
@@ -127,7 +127,7 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
                         onClick={() => onOpenSection('adminMenu')}
                     >
                         <span className="adm-settings-row__label">
-                            <ShieldCheck size={18} /> داشبورد ادمین
+                            <LayoutDashboard size={18} /> داشبورد ادمین
                         </span>
                         <ChevronLeft size={18} className="adm-settings-row__chevron" />
                     </button>

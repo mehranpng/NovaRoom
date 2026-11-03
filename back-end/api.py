@@ -1046,6 +1046,13 @@ class RegistrationStateRequest(BaseModel):
     open: bool
 
 
+ALLOWED_LINK_TTL_MINUTES = {30, 60, 180, 360, 720, 1440}
+
+
+class CreateLinkRequest(BaseModel):
+    expiresInMinutes: int = 30
+
+
 class ReactionRequest(BaseModel):
     emoji: str
 
@@ -1381,9 +1388,22 @@ async def release_link(collection, doc: dict) -> None:
     )
 
 
-async def create_register_link(created_by: str, created_by_username: str = "") -> dict:
+def dt_to_utc_iso(dt: Any) -> str:
+    if isinstance(dt, datetime):
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+        return dt.isoformat().replace("+00:00", "Z")
+    return str(dt or "")
+
+
+async def create_register_link(
+    created_by: str, created_by_username: str = "", ttl_minutes: int = 30
+) -> dict:
+    minutes = ttl_minutes if ttl_minutes in ALLOWED_LINK_TTL_MINUTES else 30
     token = secrets.token_urlsafe(32)
-    expires_at = utc_now() + LINK_TTL
+    expires_at = utc_now() + timedelta(minutes=minutes)
     result = await cl_register_links.insert_one(
         {
             "token": token,
@@ -1399,15 +1419,18 @@ async def create_register_link(created_by: str, created_by_username: str = "") -
     return {
         "id": str(result.inserted_id),
         "token": token,
-        "expiresAt": expires_at.isoformat(),
+        "expiresAt": dt_to_utc_iso(expires_at),
         "path": f"/register/{token}",
         "createdByUsername": created_by_username,
     }
 
 
-async def create_password_link(target_chat_id: str, created_by: str) -> dict:
+async def create_password_link(
+    target_chat_id: str, created_by: str, ttl_minutes: int = 30
+) -> dict:
+    minutes = ttl_minutes if ttl_minutes in ALLOWED_LINK_TTL_MINUTES else 30
     token = secrets.token_urlsafe(32)
-    expires_at = utc_now() + LINK_TTL
+    expires_at = utc_now() + timedelta(minutes=minutes)
     await cl_password_links.delete_many({"targetChatId": target_chat_id, "usedAt": None})
     await cl_password_links.insert_one(
         {
@@ -1421,7 +1444,7 @@ async def create_password_link(target_chat_id: str, created_by: str) -> dict:
     )
     return {
         "token": token,
-        "expiresAt": expires_at.isoformat(),
+        "expiresAt": dt_to_utc_iso(expires_at),
         "path": f"/reset-password/{token}",
     }
 
@@ -2292,11 +2315,16 @@ async def admin_me(request: Request, current_user: dict = Depends(require_admin)
 @app.post("/admin/register-links")
 @limiter.limit("60/minute;600/hour")
 async def admin_create_register_link(
-    request: Request, current_user: dict = Depends(require_admin)
+    request: Request,
+    payload: Optional[CreateLinkRequest] = None,
+    current_user: dict = Depends(require_admin),
 ):
     level = get_admin_level(current_user)
     if not await is_registration_open() and level != "admin0":
         raise HTTPException(status_code=403, detail="Registration is closed")
+    ttl_minutes = payload.expiresInMinutes if payload else 30
+    if ttl_minutes not in ALLOWED_LINK_TTL_MINUTES:
+        raise HTTPException(status_code=400, detail="Invalid expiration duration")
     active_links = await cl_register_links.count_documents(
         {
             "createdBy": current_user["chatId"],
@@ -2307,7 +2335,7 @@ async def admin_create_register_link(
     if active_links >= 20:
         raise HTTPException(status_code=429, detail="Too many active links")
     username = (current_user.get("profile") or {}).get("username") or ""
-    return await create_register_link(current_user["chatId"], username)
+    return await create_register_link(current_user["chatId"], username, ttl_minutes)
 
 
 @app.get("/admin/register-links")
@@ -2315,10 +2343,11 @@ async def admin_create_register_link(
 async def admin_list_register_links(
     request: Request, current_user: dict = Depends(require_admin)
 ):
-    level = get_admin_level(current_user)
-    query: Dict[str, Any] = {"usedAt": None, "expiresAt": {"$gt": utc_now()}}
-    if level != "admin0":
-        query["createdBy"] = current_user["chatId"]
+    query: Dict[str, Any] = {
+        "createdBy": current_user["chatId"],
+        "usedAt": None,
+        "expiresAt": {"$gt": utc_now()},
+    }
     docs = (
         await cl_register_links.find(query).sort("createdAt", -1).limit(50).to_list(None)
     )
@@ -2326,11 +2355,11 @@ async def admin_list_register_links(
         {
             "id": str(doc["_id"]),
             "path": f"/register/{doc['token']}",
-            "expiresAt": doc["expiresAt"].isoformat(),
-            "createdAt": doc["createdAt"].isoformat(),
+            "expiresAt": dt_to_utc_iso(doc["expiresAt"]),
+            "createdAt": dt_to_utc_iso(doc.get("createdAt")),
             "createdBy": doc.get("createdBy"),
             "createdByUsername": doc.get("createdByUsername") or "",
-            "mine": doc.get("createdBy") == current_user["chatId"],
+            "mine": True,
         }
         for doc in docs
         if doc.get("token")
@@ -2345,13 +2374,25 @@ async def admin_delete_register_link(
 ):
     if not ObjectId.is_valid(link_id):
         raise HTTPException(status_code=400, detail="Invalid link id")
-    query: Dict[str, Any] = {"_id": ObjectId(link_id), "usedAt": None}
-    if get_admin_level(current_user) != "admin0":
-        query["createdBy"] = current_user["chatId"]
+    query: Dict[str, Any] = {
+        "_id": ObjectId(link_id),
+        "createdBy": current_user["chatId"],
+        "usedAt": None,
+    }
     result = await cl_register_links.delete_one(query)
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Link not found")
     return {"deleted": True}
+
+
+def parse_registration_date_key(value: Any) -> Tuple[int, int, int]:
+    parts = [int(x) for x in re.findall(r"\d+", str(value or ""))]
+    if len(parts) >= 3:
+        if parts[0] > 1000:
+            return (parts[0], parts[1], parts[2])
+        if parts[2] > 1000:
+            return (parts[2], parts[1], parts[0])
+    return (0, 0, 0)
 
 
 @app.get("/admin/users")
@@ -2369,6 +2410,7 @@ async def admin_list_users(
     owner_username = {"profile.username": {"$regex": f"^{re.escape(OWNER_USERNAME)}$", "$options": "i"}}
     filter_options: Dict[str, Optional[Dict[str, Any]]] = {
         "all": None,
+        "newest": None,
         "verified": {"verified": True},
         "unverified": {"verified": {"$ne": True}},
         "admins": {"$or": [{"adminLevel": "admin1"}, owner_username]},
@@ -2407,34 +2449,46 @@ async def admin_list_users(
         query = {}
 
     cursor_value = str(cursor or "").strip()
-    total: Optional[int] = None
+    offset = 0
     if cursor_value:
-        if not ObjectId.is_valid(cursor_value):
+        if cursor_value.isdigit():
+            offset = int(cursor_value)
+        else:
             raise HTTPException(status_code=400, detail="Invalid cursor")
-    else:
-        total = await cl_users.count_documents(query)
-    paged_query: Dict[str, Any] = dict(query)
-    if cursor_value:
-        paged_query["_id"] = {"$lt": ObjectId(cursor_value)}
 
-    docs = (
-        await cl_users.find(
-            paged_query,
-            {
-                "chatId": 1,
-                "profile.name": 1,
-                "profile.username": 1,
-                "profile.avatar": 1,
-                "verified": 1,
-                "adminLevel": 1,
-            },
-        )
-        .sort("_id", -1)
-        .limit(page_size + 1)
-        .to_list(None)
+    docs = await cl_users.find(
+        query,
+        {
+            "chatId": 1,
+            "profile.name": 1,
+            "profile.username": 1,
+            "profile.avatar": 1,
+            "verified": 1,
+            "adminLevel": 1,
+            "online": 1,
+            "wsConnectionCount": 1,
+            "registrationDate": 1,
+            "createdAt": 1,
+            "login.sessions": 1,
+        },
+    ).to_list(None)
+
+    newest_first = filter_value == "newest"
+    fallback_date = (0, 0, 0) if newest_first else (9999, 99, 99)
+    docs.sort(
+        key=lambda doc: (
+            parse_registration_date_key(doc.get("registrationDate"))
+            if parse_registration_date_key(doc.get("registrationDate")) != (0, 0, 0)
+            else fallback_date,
+            dt_to_epoch_ms(doc.get("createdAt")) if doc.get("createdAt") else 0,
+            str(doc.get("_id") or ""),
+        ),
+        reverse=newest_first,
     )
-    has_more = len(docs) > page_size
-    docs = docs[:page_size]
+
+    total: Optional[int] = len(docs) if offset == 0 else None
+    page_docs = docs[offset : offset + page_size]
+    has_more = offset + page_size < len(docs)
     items = [
         {
             "chatId": doc.get("chatId"),
@@ -2443,12 +2497,15 @@ async def admin_list_users(
             "avatar": ((doc.get("profile") or {}).get("avatar") or ""),
             "verified": bool(doc.get("verified", False)),
             "adminLevel": get_admin_level(doc),
+            "online": resolve_user_online_state(doc),
+            "registrationDate": doc.get("registrationDate"),
+            "sessionsCount": len(((doc.get("login") or {}).get("sessions")) or []),
         }
-        for doc in docs
+        for doc in page_docs
     ]
     response = {
         "items": items,
-        "nextCursor": str(docs[-1]["_id"]) if has_more and docs else None,
+        "nextCursor": str(offset + page_size) if has_more else None,
         "hasMore": has_more,
     }
     if total is not None:
@@ -2522,14 +2579,20 @@ async def admin_set_level(
 @app.post("/admin/users/{chat_id}/password-link")
 @limiter.limit("30/minute;200/hour")
 async def admin_create_password_link(
-    request: Request, chat_id: str, current_user: dict = Depends(require_admin0)
+    request: Request,
+    chat_id: str,
+    payload: Optional[CreateLinkRequest] = None,
+    current_user: dict = Depends(require_admin0),
 ):
+    ttl_minutes = payload.expiresInMinutes if payload else 30
+    if ttl_minutes not in ALLOWED_LINK_TTL_MINUTES:
+        raise HTTPException(status_code=400, detail="Invalid expiration duration")
     target = await cl_users.find_one({"chatId": chat_id}, {"profile.username": 1, "adminLevel": 1, "chatId": 1})
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
     if get_admin_level(target) == "admin0":
         raise HTTPException(status_code=403, detail="Forbidden")
-    return await create_password_link(chat_id, current_user["chatId"])
+    return await create_password_link(chat_id, current_user["chatId"], ttl_minutes)
 
 
 @app.put("/admin/registration")

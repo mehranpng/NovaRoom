@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Check, Copy, Link2, Loader2, Plus, Trash2, X } from 'lucide-react';
+import { Check, Clock, Copy, Link2, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { apiFetch } from '../../config/api';
 import { useScrollFade } from '../../hooks/useScrollFade';
 import { cx } from '../../utils/cx';
@@ -9,15 +8,35 @@ import { copyText } from '../../utils/clipboard';
 import type { RegisterLink } from './adminTypes';
 import './admin.css';
 
+const expiryOptions = [
+    { value: 30, label: '۳۰ دقیقه' },
+    { value: 60, label: '۱ ساعت' },
+    { value: 180, label: '۳ ساعت' },
+    { value: 360, label: '۶ ساعت' },
+    { value: 720, label: '۱۲ ساعت' },
+    { value: 1440, label: '۲۴ ساعت' },
+];
+
+const parseUtcMillis = (iso: string) => {
+    const raw = String(iso || '').trim();
+    if (!raw) return NaN;
+    const normalized = /(?:Z|[+-]\d{2}:\d{2})$/i.test(raw) ? raw : `${raw}Z`;
+    return Date.parse(normalized);
+};
+
 const remainingSeconds = (expiresAt: string, now: number) => {
-    const target = Date.parse(expiresAt);
+    const target = parseUtcMillis(expiresAt);
     if (!Number.isFinite(target)) return 0;
     return Math.max(0, Math.floor((target - now) / 1000));
 };
 
 const formatRemaining = (seconds: number) => {
-    const minutes = String(Math.floor(seconds / 60)).padStart(2, '0');
+    const hours = Math.floor(seconds / 3600);
+    const minutes = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
     const rest = String(seconds % 60).padStart(2, '0');
+    if (hours > 0) {
+        return `${String(hours).padStart(2, '0')}:${minutes}:${rest}`;
+    }
     return `${minutes}:${rest}`;
 };
 
@@ -26,18 +45,18 @@ export function AdminLinksSection() {
     const [links, setLinks] = useState<RegisterLink[]>([]);
     const [loading, setLoading] = useState(true);
     const [creating, setCreating] = useState(false);
-    const [isOwner, setIsOwner] = useState(false);
+    const [expiresInMinutes, setExpiresInMinutes] = useState(30);
     const [now, setNow] = useState(() => Date.now());
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [confirmId, setConfirmId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
     useEffect(() => {
-        apiFetch('/admin/me')
-            .then((data) => setIsOwner(data?.adminLevel === 'admin0'))
-            .catch(() => { });
         apiFetch('/admin/register-links')
-            .then((data) => setLinks(Array.isArray(data?.items) ? data.items : []))
+            .then((data) => {
+                setNow(Date.now());
+                setLinks(Array.isArray(data?.items) ? data.items : []);
+            })
             .catch(() => notify({ type: 'error', message: 'دریافت لینک‌ های فعال ممکن نشد' }))
             .finally(() => setLoading(false));
     }, []);
@@ -58,7 +77,10 @@ export function AdminLinksSection() {
         if (creating) return;
         setCreating(true);
         try {
-            const data = await apiFetch('/admin/register-links', { method: 'POST' });
+            const data = await apiFetch('/admin/register-links', {
+                method: 'POST',
+                body: JSON.stringify({ expiresInMinutes }),
+            });
             setLinks((prev) => [
                 {
                     id: data.id,
@@ -113,6 +135,8 @@ export function AdminLinksSection() {
         }
     };
 
+    const selectedLabel = expiryOptions.find((opt) => opt.value === expiresInMinutes)?.label || '۳۰ دقیقه';
+
     return (
         <>
             <div className={cx('header-fade', 'header-fade--screen', scrolled && 'header-fade--visible')} aria-hidden="true" />
@@ -123,7 +147,28 @@ export function AdminLinksSection() {
                         <Link2 size={18} />
                         لینک ثبت‌ نام
                     </div>
-                    <p className="adm-card__text">هر لینک فقط برای یک نفر و ۳۰ دقیقه معتبر است.</p>
+                    <p className="adm-card__text">هر لینک فقط برای یک نفر و تا {selectedLabel} معتبر است.</p>
+
+                    <div className="adm-duration">
+                        <span className="adm-duration__label">
+                            <Clock size={14} />
+                            مدت اعتبار
+                        </span>
+                        <div className="adm-chips adm-chips--wrap">
+                            {expiryOptions.map((option) => (
+                                <button
+                                    key={option.value}
+                                    type="button"
+                                    className={cx('adm-chip', 'adm-tap', expiresInMinutes === option.value && 'adm-chip--active')}
+                                    onClick={() => setExpiresInMinutes(option.value)}
+                                    aria-pressed={expiresInMinutes === option.value}
+                                >
+                                    {option.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                     <button
                         type="button"
                         className="adm-btn adm-btn--primary adm-btn--block adm-tap adm-card__action"
@@ -135,12 +180,24 @@ export function AdminLinksSection() {
                     </button>
                 </div>
 
-                <div className="adm-count">لینک‌ های فعال</div>
+                <div className="adm-count">لینک‌ های فعال شما</div>
 
                 {loading && (
                     <>
                         {[1, 2].map((index) => (
-                            <div key={index} className="adm-skeleton adm-skeleton--card" />
+                            <div key={index} className="adm-card adm-link-item">
+                                <div className="adm-link-item__top">
+                                    <div className="skeleton adm-skeleton-line adm-skeleton-line--url" />
+                                    <div className="skeleton adm-skeleton-line adm-skeleton-line--timer" />
+                                </div>
+                                <div className="adm-link-item__bottom">
+                                    <div className="skeleton adm-skeleton-line adm-skeleton-line--meta" />
+                                    <div className="adm-link-item__actions">
+                                        <div className="skeleton adm-skeleton-circle" />
+                                        <div className="skeleton adm-skeleton-circle" />
+                                    </div>
+                                </div>
+                            </div>
                         ))}
                     </>
                 )}
@@ -152,79 +209,62 @@ export function AdminLinksSection() {
                     </div>
                 )}
 
-                <AnimatePresence initial={false}>
-                    {links.map((link) => {
-                        const remaining = remainingSeconds(link.expiresAt, now);
-                        return (
-                            <motion.div
-                                key={link.id}
-                                layout
-                                initial={{ opacity: 0, y: 6 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, height: 0 }}
-                                transition={{ duration: 0.18, ease: 'easeOut' }}
-                                className="adm-card adm-link-item"
-                            >
-                                <div className="adm-link-item__top">
-                                    <input
-                                        className="adm-link-item__url"
-                                        readOnly
-                                        dir="ltr"
-                                        value={`${window.location.origin}${link.path}`}
-                                        onFocus={(event) => event.currentTarget.select()}
-                                        aria-label="لینک ثبت‌ نام"
-                                    />
-                                    <span className="adm-link-item__timer">{formatRemaining(remaining)}</span>
-                                </div>
-                                <div className="adm-link-item__bottom">
-                                    <span className="adm-link-item__meta">
-                                        {isOwner && link.createdByUsername ? `توسط @${link.createdByUsername}` : ''}
-                                    </span>
-                                    <span className="adm-link-item__actions">
-                                        <button
-                                            type="button"
-                                            className="adm-icon-btn adm-tap"
-                                            onClick={() => handleCopy(link)}
-                                            aria-label="کپی لینک"
-                                        >
-                                            {copiedId === link.id ? <Check size={16} /> : <Copy size={16} />}
-                                        </button>
-                                        {confirmId === link.id ? (
-                                            <>
-                                                <button
-                                                    type="button"
-                                                    className="adm-icon-btn adm-icon-btn--danger adm-tap"
-                                                    onClick={() => handleDelete(link)}
-                                                    disabled={deletingId === link.id}
-                                                    aria-label="تایید حذف لینک"
-                                                >
-                                                    {deletingId === link.id ? <Loader2 size={16} className="adm-spin" /> : <Check size={16} />}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="adm-icon-btn adm-tap"
-                                                    onClick={() => setConfirmId(null)}
-                                                    aria-label="انصراف از حذف"
-                                                >
-                                                    <X size={16} />
-                                                </button>
-                                            </>
-                                        ) : (
+                {!loading && links.map((link) => {
+                    const remaining = remainingSeconds(link.expiresAt, now);
+                    return (
+                        <div key={link.id} className="adm-card adm-link-item">
+                            <div className="adm-link-item__top">
+                                <span className="adm-link-item__url" dir="ltr">
+                                    {`${window.location.origin}${link.path}`}
+                                </span>
+                                <span className="adm-link-item__timer">{formatRemaining(remaining)}</span>
+                            </div>
+                            <div className="adm-link-item__bottom">
+                                <span className="adm-link-item__meta">لینک ثبت‌ نام</span>
+                                <span className="adm-link-item__actions">
+                                    <button
+                                        type="button"
+                                        className="adm-icon-btn adm-tap"
+                                        onClick={() => handleCopy(link)}
+                                        aria-label="کپی لینک"
+                                    >
+                                        {copiedId === link.id ? <Check size={15} /> : <Copy size={15} />}
+                                    </button>
+                                    {confirmId === link.id ? (
+                                        <>
                                             <button
                                                 type="button"
                                                 className="adm-icon-btn adm-icon-btn--danger adm-tap"
-                                                onClick={() => setConfirmId(link.id)}
-                                                aria-label="حذف لینک"
+                                                onClick={() => handleDelete(link)}
+                                                disabled={deletingId === link.id}
+                                                aria-label="تایید حذف لینک"
                                             >
-                                                <Trash2 size={16} />
+                                                {deletingId === link.id ? <Loader2 size={15} className="adm-spin" /> : <Check size={15} />}
                                             </button>
-                                        )}
-                                    </span>
-                                </div>
-                            </motion.div>
-                        );
-                    })}
-                </AnimatePresence>
+                                            <button
+                                                type="button"
+                                                className="adm-icon-btn adm-tap"
+                                                onClick={() => setConfirmId(null)}
+                                                aria-label="انصراف از حذف"
+                                            >
+                                                <X size={15} />
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            className="adm-icon-btn adm-icon-btn--danger adm-tap"
+                                            onClick={() => setConfirmId(link.id)}
+                                            aria-label="حذف لینک"
+                                        >
+                                            <Trash2 size={15} />
+                                        </button>
+                                    )}
+                                </span>
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
         </>
     );
