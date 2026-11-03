@@ -22,6 +22,10 @@ from pydantic import BaseModel
 from datetime import datetime, timedelta, timezone
 import jwt
 import bcrypt
+try:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+except ImportError:
+    AESGCM = None
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument, UpdateOne
 import os
@@ -238,6 +242,8 @@ ENC_PREFIX = "enc:v1:"
 ENC_NONCE_SIZE = 16
 ENC_TAG_SIZE = 16
 FILE_MAGIC = b"NCF1"
+FILE_MAGIC_V2 = b"NCF2"
+FILE_GCM_IV_SIZE = 12
 FILE_TEXT_PREFIX = "ncf:v1:"
 LEGACY_BOOTSTRAP_TOKEN = "__bootstrap_migration__"
 
@@ -428,6 +434,19 @@ def _try_unpack_client_file_packet(raw: bytes) -> Optional[bytes]:
 
 
 def decrypt_client_file_bytes(raw: bytes, chat_scope: str) -> Optional[bytes]:
+    if not raw:
+        return None
+    if raw.startswith(FILE_MAGIC_V2):
+        if len(raw) < len(FILE_MAGIC_V2) + FILE_GCM_IV_SIZE + ENC_TAG_SIZE:
+            return None
+        try:
+            iv = raw[len(FILE_MAGIC_V2) : len(FILE_MAGIC_V2) + FILE_GCM_IV_SIZE]
+            body = raw[len(FILE_MAGIC_V2) + FILE_GCM_IV_SIZE :]
+            key = _derive_client_shared_key(chat_scope)
+            if AESGCM is not None:
+                return AESGCM(key).decrypt(iv, body, None)
+        except Exception:
+            return None
     packed = _try_unpack_client_file_packet(raw)
     if not packed:
         return None
@@ -447,6 +466,10 @@ def encrypt_client_file_bytes(plain: bytes, chat_scope: str) -> bytes:
     if not plain:
         return plain
     key = _derive_client_shared_key(chat_scope)
+    if AESGCM is not None:
+        iv = secrets.token_bytes(FILE_GCM_IV_SIZE)
+        encrypted = AESGCM(key).encrypt(iv, plain, None)
+        return FILE_MAGIC_V2 + iv + encrypted
     nonce = secrets.token_bytes(ENC_NONCE_SIZE)
     encrypted = _xor_stream(plain, key, nonce)
     tag = hmac.new(key, nonce + encrypted, hashlib.sha256).digest()[:ENC_TAG_SIZE]
@@ -468,10 +491,18 @@ async def _remap_forward_file_to_target_chat(
 
     source_scope = f"chat:{source_chat_id}"
     target_scope = f"chat:{target_chat_id}"
-    plain = decrypt_client_file_bytes(source_raw, source_scope)
-    if plain is None:
-        plain = source_raw
-    remapped_raw = encrypt_client_file_bytes(plain, target_scope)
+    mime_type = str(file_meta.get("mimeType") or "").strip().lower()
+    is_audio = mime_type.startswith("audio/") and not (
+        source_raw.startswith(FILE_MAGIC) or source_raw.startswith(FILE_MAGIC_V2)
+    )
+
+    if is_audio:
+        remapped_raw = source_raw
+    else:
+        plain = decrypt_client_file_bytes(source_raw, source_scope)
+        if plain is None:
+            plain = source_raw
+        remapped_raw = encrypt_client_file_bytes(plain, target_scope)
 
     remapped_meta = await save_uploaded_file(
         remapped_raw,
@@ -496,6 +527,8 @@ async def _remap_forward_file_to_target_chat(
     id_map: Dict[str, str] = {}
 
     cover_art_id = str(file_meta.get("coverArtFileId") or "").strip()
+    if not cover_art_id:
+        cover_art_id = _file_id_from_url(file_meta.get("coverArtUrl"))
     if cover_art_id:
         cover_raw = await read_file_content(cover_art_id)
         if cover_raw is not None:
@@ -517,6 +550,8 @@ async def _remap_forward_file_to_target_chat(
             )
 
     preview_id = str(file_meta.get("previewFileId") or "").strip()
+    if not preview_id:
+        preview_id = _file_id_from_url(file_meta.get("previewUrl"))
     if preview_id:
         preview_raw = await read_file_content(preview_id)
         if preview_raw is not None:
