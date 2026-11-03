@@ -23,7 +23,7 @@ import { notify } from './utils/notificationBus';
 import { decryptBioClientSide, decryptMessageClientSide, encryptChatTextClientSide } from './utils/e2ee';
 import { clearCachedTextValues, clearChatSnapshots, getChatSnapshot, saveChatSnapshot } from './utils/mediaCache';
 import { clearChessCache } from './utils/chessCache';
-import { useDarkMode } from './hooks/useDarkMode';
+import { useDarkMode, syncThemeColor } from './hooks/useDarkMode';
 import { BottomNavbar } from './components/BottomNavbar';
 import { ChessScreen } from './components/chess/ChessScreen';
 import { ChessJoinPage } from './components/chess/ChessJoinPage';
@@ -328,6 +328,10 @@ export function App() {
     const aiSendInFlightRef = useRef(false);
     useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
     useEffect(() => { viewRef.current = view; }, [view]);
+
+    useEffect(() => {
+        syncThemeColor(view === 'chatRoom' || showAIChat ? '--bg-secondary' : '--bg-primary');
+    }, [view, showAIChat]);
 
     useEffect(() => {
         if (!isAuthenticated || isAuthChecking) return;

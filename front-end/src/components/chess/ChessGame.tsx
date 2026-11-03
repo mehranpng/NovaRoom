@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, type Square } from 'chess.js';
-import { Chessboard } from 'react-chessboard';
+import { Chessboard, defaultPieces } from 'react-chessboard';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, Check, Hourglass, Link2, Smile, UserRound, Volume2, VolumeX } from 'lucide-react';
 import { apiFetch } from '../../config/api';
@@ -64,7 +64,6 @@ const formatTimeControl = (tc: string): string => {
     return toPersianDigits(tc);
 };
 
-const CAPTURE_ICONS: Record<string, string> = { q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
 const CAPTURE_ORDER = ['q', 'r', 'b', 'n', 'p'];
 
 const CHESS_EMOTES: { id: ChessEmote; label: string; src: string }[] = [
@@ -98,9 +97,9 @@ function CapturedRow({ pieces, color }: { pieces: { piece: string; count: number
         <span className="chess__captured">
             {pieces.map(({ piece, count }) => (
                 <span key={piece} className="chess__captured-item">
-                    <span className="chess__captured-count">×{toPersianDigits(count)}</span>
+                    <span className="chess__captured-count" dir="ltr">×{toPersianDigits(count)}</span>
                     <span className={cx('chess__captured-piece', `chess__captured-piece--${color}`)}>
-                        {CAPTURE_ICONS[piece]}
+                        {defaultPieces[`${color === 'white' ? 'w' : 'b'}${piece.toUpperCase()}`]()}
                     </span>
                 </span>
             ))}

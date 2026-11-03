@@ -76,9 +76,16 @@ export function Devices({ onBack, onOpenLogs, hasUnseenLoginLogs }: DevicesProps
         };
     }, [confirmAction]);
 
-    const hasOtherSessions = useMemo(() => sessions.some((s) => !s.current), [sessions]);
-    const currentSession = useMemo(() => sessions.find((s) => s.current) || null, [sessions]);
-    const otherSessions = useMemo(() => sessions.filter((s) => !s.current), [sessions]);
+    const formattedSessions = useMemo(() => sessions.map((session) => ({
+        session,
+        deviceName: session.deviceName || 'نامشخص',
+        ip: toPersianDigits(session.ipAddress || '-'),
+        lastUsed: toPersianDigits(toJalaliTehran(session.lastUsedAt)),
+        created: toPersianDigits(toJalaliTehran(session.createdAt)),
+    })), [sessions]);
+    const currentSession = useMemo(() => formattedSessions.find((s) => s.session.current) || null, [formattedSessions]);
+    const otherSessions = useMemo(() => formattedSessions.filter((s) => !s.session.current), [formattedSessions]);
+    const hasOtherSessions = otherSessions.length > 0;
 
     const runConfirmAction = async () => {
         if (!confirmAction) return;
@@ -160,8 +167,8 @@ export function Devices({ onBack, onOpenLogs, hasUnseenLoginLogs }: DevicesProps
                     <>
                         {currentSession && (
                             <div
-                                key={currentSession.tokenHash}
-                                className="profile__chat-id-card"
+                                key={currentSession.session.tokenHash}
+                                className="profile__chat-id-card profile__chat-id-card--flat"
                                 style={{
                                     border: '1px solid color-mix(in srgb, var(--accent-primary) 24%, var(--border-primary))',
                                     background: 'color-mix(in srgb, var(--accent-primary) 6%, var(--bg-secondary))',
@@ -170,12 +177,12 @@ export function Devices({ onBack, onOpenLogs, hasUnseenLoginLogs }: DevicesProps
                                 <div className="profile__chat-id-row" style={{ alignItems: 'center', justifyContent: 'space-between', direction: 'rtl', textAlign: 'right', minHeight: 62 }}>
                                     <div style={{ display: 'grid', gap: 3 }}>
                                         <p className="profile__chat-id-value" style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'Vazir, sans-serif' }}>
-                                            <Laptop size={16} /> {currentSession.deviceName || 'نامشخص'}
+                                            <Laptop size={16} /> {currentSession.deviceName}
                                             <span style={{ fontSize: 12, opacity: 0.85, fontFamily: 'Vazir, sans-serif' }}>(دستگاه فعلی)</span>
                                         </p>
-                                        <p className="profile__field-label">آی‌پی: {toPersianDigits(currentSession.ipAddress || '-')}</p>
-                                        <p className="profile__field-label">آخرین استفاده: {toPersianDigits(toJalaliTehran(currentSession.lastUsedAt))}</p>
-                                        <p className="profile__field-label">ایجاد نشست: {toPersianDigits(toJalaliTehran(currentSession.createdAt))}</p>
+                                        <p className="profile__field-label">آی‌پی: {currentSession.ip}</p>
+                                        <p className="profile__field-label">آخرین استفاده: {currentSession.lastUsed}</p>
+                                        <p className="profile__field-label">ایجاد نشست: {currentSession.created}</p>
                                     </div>
                                 </div>
                             </div>
@@ -199,19 +206,19 @@ export function Devices({ onBack, onOpenLogs, hasUnseenLoginLogs }: DevicesProps
                             </button>
                         )}
 
-                        {otherSessions.map((session) => (
+                        {otherSessions.map(({ session, deviceName, ip, lastUsed, created }) => (
                             <div
                                 key={session.tokenHash}
-                                className="profile__chat-id-card"
+                                className="profile__chat-id-card profile__chat-id-card--flat"
                             >
                                 <div className="profile__chat-id-row" style={{ alignItems: 'center', justifyContent: 'space-between', direction: 'rtl', textAlign: 'right', minHeight: 62 }}>
                                     <div style={{ display: 'grid', gap: 3 }}>
                                         <p className="profile__chat-id-value" style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'Vazir, sans-serif' }}>
-                                            <Laptop size={16} /> {session.deviceName || 'نامشخص'}
+                                            <Laptop size={16} /> {deviceName}
                                         </p>
-                                        <p className="profile__field-label">آی‌پی: {toPersianDigits(session.ipAddress || '-')}</p>
-                                        <p className="profile__field-label">آخرین استفاده: {toPersianDigits(toJalaliTehran(session.lastUsedAt))}</p>
-                                        <p className="profile__field-label">ایجاد نشست: {toPersianDigits(toJalaliTehran(session.createdAt))}</p>
+                                        <p className="profile__field-label">آی‌پی: {ip}</p>
+                                        <p className="profile__field-label">آخرین استفاده: {lastUsed}</p>
+                                        <p className="profile__field-label">ایجاد نشست: {created}</p>
                                     </div>
                                     <button
                                         className="profile__avatar-btn profile__avatar-btn--danger"

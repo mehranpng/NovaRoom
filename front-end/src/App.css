@@ -47,7 +47,6 @@ body,
     --scrollbar-thumb: rgba(15, 23, 42, 0.13);
     --scrollbar-thumb-hover: rgba(15, 23, 42, 0.24);
     --header-fade: color-mix(in srgb, var(--bg-primary) 44%, transparent);
-    --header-fade-room: color-mix(in srgb, var(--bg-secondary) 58%, transparent);
     --hover-bg: #f3f4f6;
     --hover-bg-light: #f9fafb;
     --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.05);
@@ -104,7 +103,6 @@ body,
     --scrollbar-thumb: rgba(255, 255, 255, 0.14);
     --scrollbar-thumb-hover: rgba(255, 255, 255, 0.26);
     --header-fade: color-mix(in srgb, var(--bg-primary) 54%, transparent);
-    --header-fade-room: color-mix(in srgb, var(--bg-secondary) 64%, transparent);
     --hover-bg: #323846;
     --hover-bg-light: #2a303b;
     --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.28);
@@ -1242,6 +1240,11 @@ body,
     overflow: hidden;
     overscroll-behavior-y: none;
     background-color: var(--bg-secondary);
+    background-image:
+        radial-gradient(ellipse 36% 26% at 5% -12%, color-mix(in srgb, var(--accent-primary) 8%, transparent), transparent 62%),
+        radial-gradient(ellipse 52% 38% at -6% 64%, color-mix(in srgb, var(--accent-primary) 4%, transparent), transparent 68%),
+        radial-gradient(ellipse 46% 34% at 104% 80%, color-mix(in srgb, var(--accent-primary) 4%, transparent), transparent 64%),
+        linear-gradient(155deg, color-mix(in srgb, var(--accent-soft) 24%, var(--bg-secondary)), var(--bg-secondary) 58%);
     animation: screen-soft-in var(--motion-slow) var(--motion-ease-standard);
     position: relative;
 }
@@ -1766,6 +1769,8 @@ body,
     touch-action: pan-y;
     min-height: 0;
     background: transparent;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 76px, #000 calc(100% - 76px), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 76px, #000 calc(100% - 76px), transparent 100%);
 }
 
 .chat-room__messages--with-chips {
@@ -4076,6 +4081,12 @@ body,
     padding: 16px;
 }
 
+.profile__chat-id-card--flat {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    contain: content;
+}
+
 .profile__chat-id-row {
     display: flex;
     align-items: flex-start;
@@ -6074,23 +6085,6 @@ html.no-blur-effect .chat-room__jump-box {
     opacity: 1;
 }
 
-.chat-room .header-fade {
-    background: linear-gradient(to bottom, var(--header-fade-room) 0%, color-mix(in srgb, var(--header-fade-room) 52%, transparent) 58%, transparent 100%);
-}
-
-.chat-room .header-fade--bottom {
-    background: linear-gradient(to top, var(--header-fade-room) 0%, color-mix(in srgb, var(--header-fade-room) 52%, transparent) 58%, transparent 100%);
-    height: 70px;
-}
-
-.header-fade--room {
-    height: 84px;
-}
-
-.header-fade--room.header-fade--compact {
-    height: 62px;
-}
-
 .header-fade--screen {
     height: 84px;
     z-index: 20;
@@ -7120,18 +7114,21 @@ html.no-blur-effect .chat-list__header,
 }
 
 .chess__captured-piece {
-    font-size: 15px;
-    line-height: 1;
+    display: inline-flex;
+    width: 15px;
+    height: 15px;
 }
 
-.chess__captured-piece--white {
-    color: #ffffff;
-    -webkit-text-stroke: 0.8px rgba(0, 0, 0, 0.6);
+.chess__captured-piece--white svg * {
+    stroke: #111111 !important;
+    stroke-width: 3px !important;
+    paint-order: stroke !important;
 }
 
-.chess__captured-piece--black {
-    color: #2b2b2b;
-    -webkit-text-stroke: 0.6px rgba(255, 255, 255, 0.35);
+.chess__captured-piece--black svg * {
+    stroke: #f2f2f2 !important;
+    stroke-width: 3px !important;
+    paint-order: stroke !important;
 }
 
 .chess__player-name {

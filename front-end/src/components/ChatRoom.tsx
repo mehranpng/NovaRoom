@@ -2324,9 +2324,6 @@ export function ChatRoom({
                 }
             }}
         >
-            {!isSelectionModeActive && (
-                <div className="header-fade header-fade--room header-fade--visible" aria-hidden="true" />
-            )}
             {isSelectionModeActive ? (
                 <div className="chat-room__header chat-room__header--selection">
                     <div className="chat-room__selection-left">
@@ -2834,14 +2831,6 @@ export function ChatRoom({
                     onInputFocus={handleInputFocus}
                 />
             </div>
-
-            {!isSelectionModeActive && (
-                <div
-                    className="header-fade header-fade--bottom header-fade--visible"
-                    aria-hidden="true"
-                    style={{ height: `${(composerHeight || 54) + 12}px` }}
-                />
-            )}
 
             <ForwardModal
                 isOpen={forwardModalOpen}

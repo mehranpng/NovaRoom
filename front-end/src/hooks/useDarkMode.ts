@@ -235,6 +235,53 @@ const createCustomSurfaceVars = (isDarkMode: boolean): Record<string, string> =>
   };
 };
 
+export function syncThemeColor(surface?: string) {
+  const root = document.documentElement;
+  const computed = getComputedStyle(root);
+  const targetSurface = surface || (document.querySelector('.chat-room') ? '--bg-secondary' : '--bg-primary');
+  const themeColor = computed.getPropertyValue(targetSurface).trim()
+    || computed.getPropertyValue('--bg-primary').trim()
+    || (root.classList.contains('dark-mode') ? '#1b1d21' : '#ffffff');
+  const themeMetas = Array.from(document.querySelectorAll('meta[name="theme-color"]')) as HTMLMetaElement[];
+  if (themeMetas.length === 0) {
+    const m = document.createElement('meta');
+    m.name = 'theme-color';
+    document.head.appendChild(m);
+    themeMetas.push(m);
+  }
+  themeMetas.forEach((m) => {
+    m.setAttribute('content', themeColor);
+    m.removeAttribute('media');
+  });
+
+  const ensureThemeMetaForScheme = (scheme: 'dark' | 'light') => {
+    let m = document.querySelector(`meta[name="theme-color"][media="(prefers-color-scheme: ${scheme})"]`) as HTMLMetaElement | null;
+    if (!m) {
+      m = document.createElement('meta');
+      m.name = 'theme-color';
+      m.setAttribute('media', `(prefers-color-scheme: ${scheme})`);
+      document.head.appendChild(m);
+    }
+    m.setAttribute('content', themeColor);
+  };
+
+  ensureThemeMetaForScheme('light');
+  ensureThemeMetaForScheme('dark');
+  document.body.style.backgroundColor = themeColor;
+
+  const ensureMeta = (name: string) => {
+    let m = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
+    if (!m) {
+      m = document.createElement('meta');
+      m.name = name;
+      document.head.appendChild(m);
+    }
+    m.setAttribute('content', themeColor);
+  };
+
+  ensureMeta('msapplication-navbutton-color');
+}
+
 export function useDarkMode() {
   const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode);
   const [themeTone, setThemeTone] = useState<ThemeTone>(getInitialTone);
@@ -308,49 +355,7 @@ export function useDarkMode() {
       Object.entries(ultraDarkVars).forEach(([key, value]) => root.style.setProperty(key, value));
     }
 
-    const computed = getComputedStyle(root);
-    const headerColor = computed.getPropertyValue('--bg-secondary').trim()
-      || computed.getPropertyValue('--bg-primary').trim()
-      || (isDarkMode ? '#22252b' : '#f9fafb');
-    const themeColor = headerColor;
-    const themeMetas = Array.from(document.querySelectorAll('meta[name="theme-color"]')) as HTMLMetaElement[];
-    if (themeMetas.length === 0) {
-      const m = document.createElement('meta');
-      m.name = 'theme-color';
-      document.head.appendChild(m);
-      themeMetas.push(m);
-    }
-    themeMetas.forEach((m) => {
-      m.setAttribute('content', themeColor);
-      m.removeAttribute('media');
-    });
-
-    const ensureThemeMetaForScheme = (scheme: 'dark' | 'light') => {
-      let m = document.querySelector(`meta[name="theme-color"][media="(prefers-color-scheme: ${scheme})"]`) as HTMLMetaElement | null;
-      if (!m) {
-        m = document.createElement('meta');
-        m.name = 'theme-color';
-        m.setAttribute('media', `(prefers-color-scheme: ${scheme})`);
-        document.head.appendChild(m);
-      }
-      m.setAttribute('content', themeColor);
-    };
-
-    ensureThemeMetaForScheme('light');
-    ensureThemeMetaForScheme('dark');
-    document.body.style.backgroundColor = themeColor;
-
-    const ensureMeta = (name: string) => {
-      let m = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
-      if (!m) {
-        m = document.createElement('meta');
-        m.name = name;
-        document.head.appendChild(m);
-      }
-      m.setAttribute('content', themeColor);
-    };
-
-    ensureMeta('msapplication-navbutton-color');
+    syncThemeColor();
     (root.style as any).colorScheme = isDarkMode ? 'dark' : 'light';
   }, [isDarkMode, themeMode, themeTone, themePalette, accentIntensity, ultraDarkMode, blurEffect]);
 

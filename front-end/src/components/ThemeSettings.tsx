@@ -138,7 +138,7 @@ export function ThemeSettings() {
                     <span className="profile__section-icon"><Sun size={15} /></span>
                     حالت و پوسته
                 </div>
-                <div className="profile__chat-id-card">
+                <div className="profile__chat-id-card profile__chat-id-card--flat">
                     <p className="profile__field-label" style={{ marginBottom: 10 }}>حالت نمایش</p>
                     <div style={{ display: 'grid', gap: 8 }}>
                         {modeOptions.map(({ value, label, icon: Icon }) => (
@@ -222,7 +222,7 @@ export function ThemeSettings() {
                     رنگ‌بندی و پالت
                 </div>
 
-                <div className="profile__chat-id-card">
+                <div className="profile__chat-id-card profile__chat-id-card--flat">
                     <p className="profile__field-label" style={{ marginBottom: 10 }}>رنگ‌بندی تم</p>
                     <div style={{ display: 'grid', gap: 8 }}>
                         {toneOptions.map((option) => (
@@ -263,7 +263,7 @@ export function ThemeSettings() {
                     </div>
                 </div>
 
-                <div className="profile__chat-id-card">
+                <div className="profile__chat-id-card profile__chat-id-card--flat">
                     <p className="profile__field-label" style={{ marginBottom: 10 }}>شدت رنگ ها</p>
                     <div style={{ display: 'grid', gap: 8 }}>
                         <input
@@ -291,7 +291,7 @@ export function ThemeSettings() {
                     </div>
                 </div>
 
-                <div className="profile__chat-id-card">
+                <div className="profile__chat-id-card profile__chat-id-card--flat">
                     <p className="profile__field-label" style={{ marginBottom: 10 }}>پالت‌های رنگی</p>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
                         {(Object.entries(paletteOptions) as Array<[ThemePalette, { label: string; color: string }]>).map(([palette, meta]) => (
@@ -330,7 +330,7 @@ export function ThemeSettings() {
                     <span className="profile__section-icon"><Smile size={15} /></span>
                     فونت و ایموجی
                 </div>
-                <div className="profile__chat-id-card">
+                <div className="profile__chat-id-card profile__chat-id-card--flat">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                         <p className="profile__field-label" style={{ margin: 0 }}>فونت ایموجی iOS</p>
                         <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 999, background: emojiActive ? 'color-mix(in srgb, var(--accent-primary) 15%, transparent)' : 'var(--bg-tertiary)', color: emojiActive ? 'var(--accent-primary)' : 'var(--text-secondary)' }}>

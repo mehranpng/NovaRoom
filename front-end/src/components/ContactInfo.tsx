@@ -2,6 +2,7 @@ import { ChevronLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Sa
 import { motion } from "framer-motion";
 import { screenVariants } from '../utils/screenMotion';
 import { useScrollFade } from '../hooks/useScrollFade';
+import { syncThemeColor } from '../hooks/useDarkMode';
 import { cx } from '../utils/cx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -61,6 +62,11 @@ export function ContactInfo({
     const navigate = useNavigate();
     const location = useLocation();
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    useEffect(() => {
+        syncThemeColor('--bg-primary');
+        return () => syncThemeColor();
+    }, []);
 
     useEffect(() => {
         setCopiedField(null);
@@ -370,7 +376,6 @@ export function ContactInfo({
                         <Avatar
                             name={user.name}
                             size="xl"
-                            online={(isBlocked || hideOnlineStatus) ? undefined : (isInteractiveOnline || user.online)}
                             src={user.avatar}
                         />
                     </button>

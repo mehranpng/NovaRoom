@@ -1179,9 +1179,6 @@ export function AIChatRoom({
             animate="visible"
             exit="exit"
         >
-            {!isSelectionModeActive && (
-                <div className="header-fade header-fade--room header-fade--visible" aria-hidden="true" />
-            )}
             {isSelectionModeActive ? (
                 <div className="chat-room__header chat-room__header--selection">
                     <div className="chat-room__selection-left">
@@ -2233,8 +2230,6 @@ export function AIChatRoom({
                     </button>
                 </div>
             </div>
-            <div className="header-fade header-fade--bottom header-fade--visible" aria-hidden="true" />
-
             <style>{`
                 .ai-chat-room .chat-room__header {
                     padding: 0;
