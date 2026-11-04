@@ -32,7 +32,7 @@ from pymongo.errors import DuplicateKeyError
 import os
 from pathlib import Path
 from dotenv import load_dotenv, find_dotenv
-from typing import List, Dict, Optional, Any, Iterable, Literal
+from typing import List, Dict, Optional, Any, Iterable, Literal, Tuple
 import traceback
 import asyncio
 import time
