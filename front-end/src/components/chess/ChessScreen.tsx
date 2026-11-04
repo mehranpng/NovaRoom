@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Chat, User } from '../../types';
 import { ContactInfo } from '../ContactInfo';
+import { ChessAIGame } from './ai/ChessAIGame';
 import { ChessGame } from './ChessGame';
 import { ChessHome, resetChessLobbyScroll } from './ChessHome';
 
@@ -9,6 +10,7 @@ type ChessContactUser = User & { blockedByMe?: boolean; blockedByOther?: boolean
 interface ChessScreenProps {
     currentUser: User;
     gameId: string | null;
+    aiMode?: boolean;
     authToken: string | null;
     chats: Chat[];
     interactiveOnlineUsers?: Record<string, number>;
@@ -18,12 +20,14 @@ interface ChessScreenProps {
     onOpenProfile?: () => void;
     onContactOpenChange?: (open: boolean) => void;
     onOpenGame: (gameId: string) => void;
+    onOpenAiGame: () => void;
     onExitGame: () => void;
 }
 
 export function ChessScreen({
     currentUser,
     gameId,
+    aiMode,
     authToken,
     chats,
     interactiveOnlineUsers,
@@ -33,6 +37,7 @@ export function ChessScreen({
     onOpenProfile,
     onContactOpenChange,
     onOpenGame,
+    onOpenAiGame,
     onExitGame,
 }: ChessScreenProps) {
     const [selectedContact, setSelectedContact] = useState<ChessContactUser | null>(null);
@@ -44,6 +49,10 @@ export function ChessScreen({
     }, [selectedContact, onContactOpenChange]);
 
     useEffect(() => () => onContactOpenChange?.(false), [onContactOpenChange]);
+
+    if (aiMode) {
+        return <ChessAIGame currentUser={currentUser} onExitGame={onExitGame} />;
+    }
 
     if (gameId) {
         return (
@@ -93,6 +102,7 @@ export function ChessScreen({
             currentUser={currentUser}
             chats={chats}
             onOpenGame={onOpenGame}
+            onOpenAiGame={onOpenAiGame}
             onSelectUser={(user) => {
                 if (user.chatId === currentUser.chatId) return;
                 setSelectedContact(user);

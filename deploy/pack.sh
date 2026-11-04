@@ -26,6 +26,7 @@ if ! command -v zip &> /dev/null; then
 fi
 
 INCLUDE_FONT=""
+INCLUDE_ENGINE=""
 for arg in "$@"; do
   case "$arg" in
     --with-emoji|--include-font)
@@ -33,6 +34,12 @@ for arg in "$@"; do
       ;;
     --no-emoji|--skip-font)
       INCLUDE_FONT="no"
+      ;;
+    --with-stockfish|--include-engine)
+      INCLUDE_ENGINE="yes"
+      ;;
+    --no-stockfish|--skip-engine)
+      INCLUDE_ENGINE="no"
       ;;
   esac
 done
@@ -50,6 +57,22 @@ if [ -z "${INCLUDE_FONT}" ]; then
     fi
   else
     INCLUDE_FONT="no"
+  fi
+fi
+
+if [ -z "${INCLUDE_ENGINE}" ]; then
+  if [ -n "${INCLUDE_STOCKFISH_ENGINE}" ]; then
+    INCLUDE_ENGINE="${INCLUDE_STOCKFISH_ENGINE}"
+  elif [ -t 0 ]; then
+    echo ""
+    read -r -p "Include Stockfish chess engine (~2MB) in this deployment? [Y/n]: " answer
+    if [[ "$answer" =~ ^[Nn]$ ]]; then
+      INCLUDE_ENGINE="no"
+    else
+      INCLUDE_ENGINE="yes"
+    fi
+  else
+    INCLUDE_ENGINE="yes"
   fi
 fi
 
@@ -110,6 +133,29 @@ else
   echo "[*] Skipping iOS emoji font (lightweight deployment)."
 fi
 
+if [ "${INCLUDE_ENGINE}" = "yes" ] || [ "${INCLUDE_ENGINE}" = "1" ] || [ "${INCLUDE_ENGINE}" = "true" ]; then
+  ENGINE_SRC=""
+  for candidate in \
+    "${ROOT_DIR}/back-end/uploads/static/stockfish" \
+    "${ROOT_DIR}/uploads/static/stockfish"
+  do
+    if [ -d "${candidate}" ]; then
+      ENGINE_SRC="${candidate}"
+      break
+    fi
+  done
+
+  if [ -n "${ENGINE_SRC}" ]; then
+    mkdir -p "${STAGE_DIR}/back-end/uploads/static/stockfish"
+    cp -r "${ENGINE_SRC}/." "${STAGE_DIR}/back-end/uploads/static/stockfish/"
+    echo "[*] Included Stockfish engine in deployment package."
+  else
+    echo "[!] Warning: Stockfish engine folder not found in uploads/static/stockfish!"
+  fi
+else
+  echo "[*] Skipping Stockfish engine (lightweight deployment)."
+fi
+
 cp "${ROOT_DIR}/docker/nginx.conf" "${STAGE_DIR}/docker/"
 cp "${ROOT_DIR}/docker/supervisord.conf" "${STAGE_DIR}/docker/"
 
@@ -160,6 +206,11 @@ if [ "${INCLUDE_FONT}" = "yes" ] || [ "${INCLUDE_FONT}" = "1" ] || [ "${INCLUDE_
   echo "Emoji Font  : Included (~40MB)"
 else
   echo "Emoji Font  : Excluded (lightweight update)"
+fi
+if [ "${INCLUDE_ENGINE}" = "yes" ] || [ "${INCLUDE_ENGINE}" = "1" ] || [ "${INCLUDE_ENGINE}" = "true" ]; then
+  echo "Stockfish   : Included (~2MB)"
+else
+  echo "Stockfish   : Excluded (lightweight update)"
 fi
 echo "----------------------------------------------"
 echo "Ready to upload to Runflare Docker service!"

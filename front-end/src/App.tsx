@@ -158,6 +158,7 @@ export function App() {
     const navigate = useNavigate();
     const location = useLocation();
     const isChessGameRoute = location.pathname.startsWith('/chess/game/');
+    const isChessAIRoute = /^\/chess\/ai\/?$/.test(location.pathname);
     const chessJoinToken = location.pathname.match(/^\/chess\/join\/([A-Za-z0-9]+)$/)?.[1] ?? null;
     const adminPanelSection = location.pathname.startsWith('/settings/admin/panel/')
         ? location.pathname.slice('/settings/admin/panel/'.length).split('/')[0] || 'settings'
@@ -1984,6 +1985,8 @@ export function App() {
         if (
             pathname === '/chess' ||
             pathname === '/chess/' ||
+            pathname === '/chess/ai' ||
+            pathname === '/chess/ai/' ||
             /^\/chess\/game\/[A-Za-z0-9]+$/.test(pathname) ||
             /^\/chess\/join\/[A-Za-z0-9]+$/.test(pathname)
         ) {
@@ -3320,6 +3323,7 @@ export function App() {
                                     <ChessScreen
                                         currentUser={currentUser}
                                         gameId={location.pathname.match(/^\/chess\/game\/([A-Za-z0-9]+)$/)?.[1] ?? null}
+                                        aiMode={isChessAIRoute}
                                         authToken={authToken}
                                         chats={chats}
                                         interactiveOnlineUsers={interactiveOnlineUsers}
@@ -3329,10 +3333,11 @@ export function App() {
                                         onOpenProfile={handleOpenProfile}
                                         onContactOpenChange={setChessContactOpen}
                                         onOpenGame={(id) => navigate(`/chess/game/${id}`)}
+                                        onOpenAiGame={() => navigate('/chess/ai')}
                                         onExitGame={() => navigate('/chess')}
                                     />
                                 )}
-                                {!isChessGameRoute && !chessJoinToken && !chessContactOpen && (
+                                {!isChessGameRoute && !isChessAIRoute && !chessJoinToken && !chessContactOpen && (
                                     <BottomNavbar
                                         activeTab={activeNavTab}
                                         onSelectTab={handleSelectNavTab}

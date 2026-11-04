@@ -67,6 +67,7 @@ from file_service import (
     list_stored_files,
     MAX_FILE_SIZE,
     read_static_font,
+    read_static_stockfish,
     save_ai_temp_file,
     read_ai_temp_file,
     delete_ai_temp_file,
@@ -4485,6 +4486,38 @@ async def get_static_font(filename: str, request: Request):
                 },
             )
     raise HTTPException(status_code=404, detail="Font not found")
+
+
+STOCKFISH_MEDIA_TYPES = {
+    ".js": "text/javascript",
+    ".wasm": "application/wasm",
+    ".txt": "text/plain; charset=utf-8",
+}
+
+
+@app.get("/static/stockfish/{filename}")
+@limiter.limit("120/minute")
+async def get_static_stockfish(filename: str, request: Request):
+    safe_name = os.path.basename(filename)
+    media_type = STOCKFISH_MEDIA_TYPES.get(Path(safe_name).suffix, "application/octet-stream")
+    headers = {
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "Access-Control-Allow-Origin": "*",
+    }
+    s3_engine = await read_static_stockfish(safe_name)
+    if s3_engine is not None:
+        return Response(content=s3_engine, media_type=media_type, headers=headers)
+    candidates = [
+        UPLOAD_DIR / "static" / "stockfish" / safe_name,
+        Path("uploads/static/stockfish") / safe_name,
+        Path("back-end/uploads/static/stockfish") / safe_name,
+        Path(__file__).resolve().parent / "uploads" / "static" / "stockfish" / safe_name,
+        Path("/app/back-end/uploads/static/stockfish") / safe_name,
+    ]
+    for path in candidates:
+        if path.is_file():
+            return FileResponse(path=str(path), media_type=media_type, headers=headers)
+    raise HTTPException(status_code=404, detail="Engine file not found")
 
 
 @app.post("/chats/{chat_id}/messages/{message_id}/react")

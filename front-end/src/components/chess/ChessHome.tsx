@@ -26,6 +26,7 @@ import { notify } from '../../utils/notificationBus';
 import { screenVariants } from '../../utils/screenMotion';
 import { Avatar } from '../Avatar';
 import { PlumpyChessIcon } from '../BottomNavbar';
+import { hasSavedAiGame } from './ai/chessAiStorage';
 import { ForwardModal } from '../ForwardModal';
 import { VerifiedBadge } from '../VerifiedBadge';
 
@@ -33,6 +34,7 @@ interface ChessHomeProps {
     currentUser: User;
     chats: Chat[];
     onOpenGame: (gameId: string) => void;
+    onOpenAiGame: () => void;
     onSelectUser: (user: User) => void;
 }
 
@@ -95,7 +97,7 @@ export function resetChessLobbyScroll() {
     lobbyTab = 'play';
 }
 
-export function ChessHome({ currentUser, chats, onOpenGame, onSelectUser }: ChessHomeProps) {
+export function ChessHome({ currentUser, chats, onOpenGame, onOpenAiGame, onSelectUser }: ChessHomeProps) {
     const initialSnapshot = getChessLobbySnapshot();
     const [currentGame, setCurrentGame] = useState<ChessGameView | null>(() => initialSnapshot?.currentGame ?? null);
     const [history, setHistory] = useState<ChessGameView[]>(() => initialSnapshot?.history ?? []);
@@ -110,6 +112,7 @@ export function ChessHome({ currentUser, chats, onOpenGame, onSelectUser }: Ches
     const [timeControl, setTimeControl] = useState<string>('10+0');
     const [color, setColor] = useState<'white' | 'black' | 'random'>('random');
     const [creating, setCreating] = useState(false);
+    const [hasAiGame] = useState(() => hasSavedAiGame());
     const [shareGameId, setShareGameId] = useState<string | null>(null);
     const sentinelRef = useRef<HTMLDivElement | null>(null);
     const loadingMoreRef = useRef(false);
@@ -134,9 +137,8 @@ export function ChessHome({ currentUser, chats, onOpenGame, onSelectUser }: Ches
     };
 
     const selectTab = (next: 'play' | 'leaderboard') => {
+        if (next === tab) return;
         lobbyTab = next;
-        lobbyScrollTop = null;
-        if (contentRef.current) contentRef.current.scrollTop = 0;
         setTab(next);
     };
 
@@ -316,50 +318,7 @@ export function ChessHome({ currentUser, chats, onOpenGame, onSelectUser }: Ches
 
             <div className="profile__content" ref={contentRef}>
                 <div className="chess-lobby__inner">
-                    <div className="chess-tabs">
-                        <button
-                            type="button"
-                            className={cx('chess-tab', tab === 'play' && 'chess-tab--active')}
-                            onClick={() => selectTab('play')}
-                        >
-                            بازی و سابقه
-                        </button>
-                        <button
-                            type="button"
-                            className={cx('chess-tab', tab === 'leaderboard' && 'chess-tab--active')}
-                            onClick={() => selectTab('leaderboard')}
-                        >
-                            لیدربرد
-                        </button>
-                    </div>
-
-                    {tab === 'play' ? (
-                        <>
-                    {loading ? (
-                        <>
-                            <div className="chess-card">
-                                <div className="skeleton" style={{ height: 18, width: 110, borderRadius: 8 }} />
-                                <div className="chess-chips">
-                                    <div className="skeleton" style={{ height: 34, width: 76, borderRadius: 9999 }} />
-                                    <div className="skeleton" style={{ height: 34, width: 76, borderRadius: 9999 }} />
-                                    <div className="skeleton" style={{ height: 34, width: 76, borderRadius: 9999 }} />
-                                    <div className="skeleton" style={{ height: 34, width: 76, borderRadius: 9999 }} />
-                                </div>
-                                <div className="skeleton" style={{ height: 18, width: 90, borderRadius: 8 }} />
-                                <div className="chess-chips">
-                                    <div className="skeleton" style={{ height: 34, width: 72, borderRadius: 9999 }} />
-                                    <div className="skeleton" style={{ height: 34, width: 72, borderRadius: 9999 }} />
-                                    <div className="skeleton" style={{ height: 34, width: 72, borderRadius: 9999 }} />
-                                </div>
-                                <div className="skeleton" style={{ height: 46, width: '100%', borderRadius: 9999 }} />
-                            </div>
-                            <div className="chess-card">
-                                <div className="skeleton" style={{ height: 18, width: 100, borderRadius: 8 }} />
-                                <div className="skeleton" style={{ height: 54, width: '100%', borderRadius: 14 }} />
-                                <div className="skeleton" style={{ height: 54, width: '100%', borderRadius: 14 }} />
-                            </div>
-                        </>
-                    ) : currentGame ? (
+                    {currentGame ? (
                         <div className="chess-card">
                             <div className="chess-card__header">
                                 <span className="chess-card__icon">
@@ -433,7 +392,55 @@ export function ChessHome({ currentUser, chats, onOpenGame, onSelectUser }: Ches
                         </div>
                     )}
 
-                    {!loading && (
+                    <div className="chess-card chess-bot-card">
+                        <div className="chess-card__header">
+                            <Avatar
+                                name="استاک‌فیش"
+                                size="sm"
+                                src={`${import.meta.env.BASE_URL}logo/stockfish-logo.webp`}
+                            />
+                            <div>
+                                <div className="chess-card__title">استاک‌فیش</div>
+                                <div className="chess-card__sub">موتور Stockfish 19 Lite • بازی با ربات</div>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            className="chess-primary-btn"
+                            onClick={() => {
+                                rememberScroll();
+                                onOpenAiGame();
+                            }}
+                        >
+                            {hasAiGame ? 'ادامه بازی با ربات' : 'بازی با ربات'}
+                        </button>
+                    </div>
+
+                    <div className="chess-tabs">
+                        <button
+                            type="button"
+                            className={cx('chess-tab', tab === 'play' && 'chess-tab--active')}
+                            onClick={() => selectTab('play')}
+                        >
+                            سابقه
+                        </button>
+                        <button
+                            type="button"
+                            className={cx('chess-tab', tab === 'leaderboard' && 'chess-tab--active')}
+                            onClick={() => selectTab('leaderboard')}
+                        >
+                            لیدربرد
+                        </button>
+                    </div>
+
+                    {tab === 'play' ? (
+                        loading ? (
+                            <div className="chess-card">
+                                <div className="skeleton" style={{ height: 18, width: 100, borderRadius: 8 }} />
+                                <div className="skeleton" style={{ height: 54, width: '100%', borderRadius: 14 }} />
+                                <div className="skeleton" style={{ height: 54, width: '100%', borderRadius: 14 }} />
+                            </div>
+                        ) : (
                         <div className="chess-card">
                             <div className="chess-section__label">سابقه بازی‌ها</div>
                             {history.length === 0 ? (
@@ -515,8 +522,7 @@ export function ChessHome({ currentUser, chats, onOpenGame, onSelectUser }: Ches
                                 </div>
                             )}
                         </div>
-                    )}
-                        </>
+                        )
                     ) : (
                         <>
                             <div className="chess-card chess-leaderboard__my-card">

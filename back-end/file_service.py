@@ -36,6 +36,7 @@ S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "").strip()
 S3_UPLOAD_PREFIX = "upload"
 S3_AI_TEMP_PREFIX = "upload/ai_temp"
 S3_FONTS_PREFIX = "static/fonts"
+S3_STOCKFISH_PREFIX = "static/stockfish"
 
 _s3_client = None
 
@@ -73,6 +74,10 @@ def get_s3_ai_temp_key(filename: str) -> str:
 
 def get_s3_font_key(filename: str) -> str:
     return f"{S3_FONTS_PREFIX}/{Path(filename).name}"
+
+
+def get_s3_stockfish_key(filename: str) -> str:
+    return f"{S3_STOCKFISH_PREFIX}/{Path(filename).name}"
 
 
 DANGEROUS_EXTENSIONS = {
@@ -412,6 +417,23 @@ async def read_static_font(filename: str) -> Optional[bytes]:
     safe_name = Path(filename).name
     if is_s3_enabled():
         key = get_s3_font_key(safe_name)
+        client = get_s3_client()
+        try:
+            resp = await asyncio.to_thread(
+                client.get_object,
+                Bucket=S3_BUCKET_NAME,
+                Key=key,
+            )
+            return await asyncio.to_thread(resp["Body"].read)
+        except Exception:
+            pass
+    return None
+
+
+async def read_static_stockfish(filename: str) -> Optional[bytes]:
+    safe_name = Path(filename).name
+    if is_s3_enabled():
+        key = get_s3_stockfish_key(safe_name)
         client = get_s3_client()
         try:
             resp = await asyncio.to_thread(

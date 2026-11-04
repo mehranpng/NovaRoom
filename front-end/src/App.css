@@ -7129,6 +7129,16 @@ html.no-blur-effect .chat-list__header,
     color: #e53935;
 }
 
+.chess-bot-card {
+    gap: 12px;
+    padding: 14px;
+    border-radius: 18px;
+}
+
+.chess-bot-card .chess-card__title {
+    font-size: 15px;
+}
+
 .chess__body {
     flex: 1;
     overflow-y: auto;
@@ -7996,6 +8006,7 @@ html.no-blur-effect .chat-list__header,
 }
 
 .chess-tabs {
+    margin-top: 16px;
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 6px;
