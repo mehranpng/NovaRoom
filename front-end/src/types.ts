@@ -184,7 +184,7 @@ export interface AIMemoryItem {
 
 export type ChessColor = 'white' | 'black';
 
-export type ChessEmote = 'cry' | 'laugh' | 'mad' | 'nice';
+export type ChessEmote = 'cry' | 'laugh' | 'mad' | 'nice' | 'cunning' | 'trol';
 
 export interface ChessPlayerInfo {
     chatId: string;

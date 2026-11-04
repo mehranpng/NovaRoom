@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { Check, Download, Loader2, Monitor, Moon, Sun, Trash2, Smile, Palette, Wallpaper } from 'lucide-react';
 import { cx } from '../utils/cx';
 import { useScrollFade } from '../hooks/useScrollFade';
@@ -52,15 +52,27 @@ export function ThemeSettings() {
         setChatWallpaper,
         chatWallpaperIntensity,
         setChatWallpaperIntensity,
+        chatWallpaperScale,
+        setChatWallpaperScale,
     } = useDarkMode();
     const ultraDarkAvailable = isDarkMode;
     const shouldDisableCustomTone = isDarkMode && ultraDarkMode;
 
     const activeAccentColor = paletteOptions[themePalette]?.color || '#3b82f6';
-    const previewPatternUri = generateWallpaperDataUri(
-        chatWallpaper,
-        activeAccentColor,
-        scaleWallpaperOpacity(isDarkMode ? 0.18 : 0.12, chatWallpaperIntensity)
+    const previewPatternUri = useMemo(
+        () => generateWallpaperDataUri(
+            chatWallpaper,
+            activeAccentColor,
+            scaleWallpaperOpacity(isDarkMode ? 0.18 : 0.12, chatWallpaperIntensity)
+        ),
+        [chatWallpaper, activeAccentColor, isDarkMode, chatWallpaperIntensity]
+    );
+    const cardPatternUris = useMemo(
+        () => new Map(WALLPAPER_OPTIONS.map((option) => [
+            option.id,
+            option.id === 'none' ? null : generateWallpaperDataUri(option.id, activeAccentColor, isDarkMode ? 0.32 : 0.22),
+        ])),
+        [activeAccentColor, isDarkMode]
     );
 
     const [emojiDownloaded, setEmojiDownloaded] = useState<boolean>(false);
@@ -366,7 +378,7 @@ export function ThemeSettings() {
                             pointerEvents: 'none',
                             backgroundImage: previewPatternUri ? `url("${previewPatternUri}")` : 'none',
                             backgroundRepeat: 'repeat',
-                            backgroundSize: getWallpaperSize(chatWallpaper),
+                            backgroundSize: getWallpaperSize(chatWallpaper, chatWallpaperScale),
                         }} />
 
                         <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', gap: 4, direction: 'ltr' }}>
@@ -426,13 +438,35 @@ export function ThemeSettings() {
                         }}
                     />
 
+                    <p className="profile__field-label" style={{ marginTop: 16, marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+                        <span>اندازه الگو</span>
+                        <span style={{ fontFamily: 'Vazir, sans-serif' }}>{toPersianDigits(chatWallpaperScale)}٪</span>
+                    </p>
+                    <input
+                        type="range"
+                        min={50}
+                        max={200}
+                        step={5}
+                        className="theme-intensity-slider"
+                        dir="rtl"
+                        value={chatWallpaperScale}
+                        disabled={chatWallpaper === 'none'}
+                        aria-label="اندازه الگو"
+                        onChange={(e) => setChatWallpaperScale(Number(e.currentTarget.value))}
+                        style={{
+                            width: '100%',
+                            border: 'none',
+                            outline: 'none',
+                            boxShadow: 'none',
+                            background: `linear-gradient(270deg, var(--accent-primary) 0%, var(--accent-primary) ${((chatWallpaperScale - 50) / 150) * 100}%, var(--border-secondary) ${((chatWallpaperScale - 50) / 150) * 100}%, var(--border-secondary) 100%)`,
+                        }}
+                    />
+
                     <p className="profile__field-label" style={{ marginTop: 16, marginBottom: 10 }}>انتخاب الگو</p>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
                         {WALLPAPER_OPTIONS.map((option) => {
                             const isSelected = chatWallpaper === option.id;
-                            const cardPatternUri = option.id === 'none'
-                                ? null
-                                : generateWallpaperDataUri(option.id, activeAccentColor, isDarkMode ? 0.32 : 0.22);
+                            const cardPatternUri = cardPatternUris.get(option.id);
 
                             return (
                                 <button
@@ -448,11 +482,15 @@ export function ThemeSettings() {
                                     style={{
                                         position: 'relative',
                                         overflow: 'hidden',
+                                        contain: 'paint',
                                         fontFamily: "'Nunito', 'Vazir', sans-serif",
                                         border: `1px solid ${isSelected ? 'var(--accent-primary)' : 'var(--glass-border)'}`,
-                                        background: isSelected
+                                        backgroundColor: isSelected
                                             ? 'color-mix(in srgb, var(--accent-primary) 12%, var(--glass-surface-soft))'
                                             : 'var(--glass-surface-soft)',
+                                        backgroundImage: cardPatternUri ? `url("${cardPatternUri}")` : 'none',
+                                        backgroundRepeat: 'repeat',
+                                        backgroundSize: getWallpaperSize(option.id, chatWallpaperScale),
                                         color: 'var(--text-primary)',
                                         borderRadius: 14,
                                         minHeight: 48,
@@ -464,24 +502,8 @@ export function ThemeSettings() {
                                         transition: 'border-color .15s ease, background .15s ease',
                                     }}
                                 >
-                                    {cardPatternUri ? (
-                                        <span
-                                            aria-hidden="true"
-                                            style={{
-                                                position: 'absolute',
-                                                inset: 0,
-                                                pointerEvents: 'none',
-                                                backgroundImage: `url("${cardPatternUri}")`,
-                                                backgroundRepeat: 'repeat',
-                                                backgroundSize: getWallpaperSize(option.id),
-                                                opacity: isSelected ? 1 : 0.85,
-                                            }}
-                                        />
-                                    ) : null}
-
                                     <span style={{
                                         position: 'relative',
-                                        zIndex: 2,
                                         display: 'inline-flex',
                                         alignItems: 'center',
                                         justifyContent: 'space-between',

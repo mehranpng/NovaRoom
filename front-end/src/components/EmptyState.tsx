@@ -39,9 +39,9 @@ export function EmptyState() {
             </div>
             <div className="empty-state__content">
                 <div className="empty-state__icon">
-                    <img src="/logo/logo-white.svg" alt="نوا روم" className="empty-state__logo" />
+                    <img src="/logo/logo-white.svg" alt="نواروم" className="empty-state__logo" />
                 </div>
-                <h2 className="empty-state__title">به نوا روم خوش آمدید</h2>
+                <h2 className="empty-state__title">به نواروم خوش آمدید</h2>
                 <p className="empty-state__description">برای شروع صحبت یک گفتگو انتخاب کنید یا کاربری را جستوجو کنید.</p>
 
                 <div

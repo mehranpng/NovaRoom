@@ -67,10 +67,12 @@ const formatTimeControl = (tc: string): string => {
 const CAPTURE_ORDER = ['q', 'r', 'b', 'n', 'p'];
 
 const CHESS_EMOTES: { id: ChessEmote; label: string; src: string }[] = [
-    { id: 'nice', label: 'آفرین', src: '/gifs/chess/nice.gif' },
-    { id: 'laugh', label: 'خنده', src: '/gifs/chess/laugh.gif' },
-    { id: 'cry', label: 'گریه', src: '/gifs/chess/cry.gif' },
-    { id: 'mad', label: 'عصبانی', src: '/gifs/chess/mad.gif' },
+    { id: 'trol', label: 'ترول', src: '/gifs/chess/trol.webp' },
+    { id: 'cunning', label: 'حیله‌گر', src: '/gifs/chess/cunning.webp' },
+    { id: 'nice', label: 'آفرین', src: '/gifs/chess/nice.webp' },
+    { id: 'mad', label: 'عصبانی', src: '/gifs/chess/mad.webp' },
+    { id: 'cry', label: 'گریه', src: '/gifs/chess/cry.webp' },
+    { id: 'laugh', label: 'خنده', src: '/gifs/chess/laugh.webp' },
 ];
 
 function capturedPieces(moves: ChessGameView['moves']): Record<ChessColor, { piece: string; count: number }[]> {
@@ -641,7 +643,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                                             transition={{ type: 'spring', stiffness: 380, damping: 22 }}
                                         >
                                             <img
-                                                src={`/gifs/chess/${activeEmotes[oppColor]!.emote}.gif`}
+                                                src={`/gifs/chess/${activeEmotes[oppColor]!.emote}.webp`}
                                                 alt={activeEmotes[oppColor]!.emote}
                                                 className="chess__emote-gif"
                                             />
@@ -713,22 +715,40 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                             }}
                         />
 
-                        {promotion && (
-                            <div className="chess__promotion-backdrop" onClick={() => setPromotion(null)}>
-                                <div className="chess__promotion" onClick={(e) => e.stopPropagation()}>
-                                    {(['q', 'r', 'b', 'n'] as const).map((p) => (
-                                        <button
-                                            key={p}
-                                            type="button"
-                                            className="chess__promotion-btn"
-                                            onClick={() => commitMove(promotion.from, promotion.to, p)}
-                                        >
-                                            {p === 'q' ? '♕' : p === 'r' ? '♖' : p === 'b' ? '♗' : '♘'}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+                        <AnimatePresence>
+                            {promotion && (
+                                <motion.div
+                                    className="chess__promotion-backdrop"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    transition={{ duration: 0.15 }}
+                                    onClick={() => setPromotion(null)}
+                                >
+                                    <motion.div
+                                        className="chess__promotion"
+                                        initial={{ opacity: 0, scale: 0.9, y: 8 }}
+                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                        exit={{ opacity: 0, scale: 0.9, y: 8 }}
+                                        transition={{ duration: 0.15 }}
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        {(['q', 'r', 'b', 'n'] as const).map((p) => (
+                                            <button
+                                                key={p}
+                                                type="button"
+                                                className="chess__promotion-btn"
+                                                onClick={() => commitMove(promotion.from, promotion.to, p)}
+                                            >
+                                                <span className={cx('chess__promotion-piece', `chess__promotion-piece--${myColor}`)}>
+                                                    {defaultPieces[`${myColor === 'white' ? 'w' : 'b'}${p.toUpperCase()}`]()}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </motion.div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
 
                     <div className="chess__player">
@@ -757,7 +777,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                                             transition={{ type: 'spring', stiffness: 380, damping: 22 }}
                                         >
                                             <img
-                                                src={`/gifs/chess/${activeEmotes[myColor]!.emote}.gif`}
+                                                src={`/gifs/chess/${activeEmotes[myColor]!.emote}.webp`}
                                                 alt={activeEmotes[myColor]!.emote}
                                                 className="chess__emote-gif"
                                             />
@@ -816,8 +836,9 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                                                         className="chess__emote-option"
                                                         title={item.label}
                                                         onClick={() => handleSendEmote(item.id)}
+                                                        onContextMenu={(e) => e.preventDefault()}
                                                     >
-                                                        <img src={item.src} alt={item.label} className="chess__emote-option-img" />
+                                                        <img src={item.src} alt={item.label} className="chess__emote-option-img" draggable={false} />
                                                     </button>
                                                 ))}
                                                 <button

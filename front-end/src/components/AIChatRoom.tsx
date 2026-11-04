@@ -328,8 +328,8 @@ export function AIChatRoom({
     useEffect(() => { resizeTextarea(); }, [text]);
 
     useEffect(() => {
-        sendSoundRef.current = new Audio('/sounds/send.mp3');
-        receiveSoundRef.current = new Audio('/sounds/receive.mp3');
+        sendSoundRef.current = new Audio('/sounds/send.ogg');
+        receiveSoundRef.current = new Audio('/sounds/receive.ogg');
         return () => {
             sendSoundRef.current = null;
             receiveSoundRef.current = null;

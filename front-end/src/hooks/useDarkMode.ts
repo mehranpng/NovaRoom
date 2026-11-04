@@ -4,6 +4,8 @@ import {
   WALLPAPER_STORAGE_KEY,
   WALLPAPER_INTENSITY_STORAGE_KEY,
   DEFAULT_WALLPAPER_INTENSITY,
+  WALLPAPER_SCALE_STORAGE_KEY,
+  DEFAULT_WALLPAPER_SCALE,
   WALLPAPER_OPTIONS,
   generateWallpaperDataUri,
   getWallpaperSize,
@@ -231,6 +233,15 @@ function getInitialChatWallpaperIntensity(): number {
     : DEFAULT_WALLPAPER_INTENSITY;
 }
 
+function getInitialChatWallpaperScale(): number {
+  if (typeof window === 'undefined') return DEFAULT_WALLPAPER_SCALE;
+  const raw = localStorage.getItem(WALLPAPER_SCALE_STORAGE_KEY);
+  const stored = Number(raw);
+  return raw !== null && Number.isFinite(stored)
+    ? Math.min(200, Math.max(50, Math.round(stored)))
+    : DEFAULT_WALLPAPER_SCALE;
+}
+
 const createCustomSurfaceVars = (isDarkMode: boolean): Record<string, string> => {
   if (!isDarkMode) {
     return {
@@ -321,6 +332,7 @@ export function useDarkMode() {
   const [blurEffect, setBlurEffect] = useState<boolean>(getInitialBlurEffect);
   const [chatWallpaper, setChatWallpaper] = useState<ChatWallpaperPattern>(getInitialChatWallpaper);
   const [chatWallpaperIntensity, setChatWallpaperIntensity] = useState<number>(getInitialChatWallpaperIntensity);
+  const [chatWallpaperScale, setChatWallpaperScale] = useState<number>(getInitialChatWallpaperScale);
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
@@ -389,15 +401,16 @@ export function useDarkMode() {
 
     localStorage.setItem(WALLPAPER_STORAGE_KEY, chatWallpaper);
     localStorage.setItem(WALLPAPER_INTENSITY_STORAGE_KEY, String(chatWallpaperIntensity));
+    localStorage.setItem(WALLPAPER_SCALE_STORAGE_KEY, String(chatWallpaperScale));
     const wallpaperColor = accentVars['--accent-primary'] || (isDarkMode ? '#3b82f6' : '#2563eb');
     const wallpaperOpacity = scaleWallpaperOpacity(isDarkMode ? 0.16 : 0.09, chatWallpaperIntensity);
     const wallpaperUri = generateWallpaperDataUri(chatWallpaper, wallpaperColor, wallpaperOpacity);
     root.style.setProperty('--chat-wallpaper-pattern', wallpaperUri ? `url("${wallpaperUri}")` : 'none');
-    root.style.setProperty('--chat-wallpaper-size', getWallpaperSize(chatWallpaper));
+    root.style.setProperty('--chat-wallpaper-size', getWallpaperSize(chatWallpaper, chatWallpaperScale));
 
     syncThemeColor();
     (root.style as any).colorScheme = isDarkMode ? 'dark' : 'light';
-  }, [isDarkMode, themeMode, themeTone, themePalette, accentIntensity, ultraDarkMode, blurEffect, chatWallpaper, chatWallpaperIntensity]);
+  }, [isDarkMode, themeMode, themeTone, themePalette, accentIntensity, ultraDarkMode, blurEffect, chatWallpaper, chatWallpaperIntensity, chatWallpaperScale]);
 
   return {
     themeMode,
@@ -418,5 +431,7 @@ export function useDarkMode() {
     setChatWallpaper,
     chatWallpaperIntensity,
     setChatWallpaperIntensity,
+    chatWallpaperScale,
+    setChatWallpaperScale,
   };
 }

@@ -115,7 +115,7 @@ export const playChessEmoteSound = (emote: ChessEmote) => {
     try {
         let audio = emoteAudio.get(emote);
         if (!audio) {
-            audio = new Audio(`/sounds/chess/${emote}.mp3`);
+            audio = new Audio(`/sounds/chess/${emote}.ogg`);
             emoteAudio.set(emote, audio);
         }
         audio.currentTime = 0;

@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { API_BASE_URL } from '../config/api';
 import { type User } from '../types';
-import { UserPlus, Key, User as UserIcon, Link2Off } from 'lucide-react';
+import { Key, User as UserIcon, Link2Off } from 'lucide-react';
 import { DarkModeToggle } from './DarkModeToggle';
 import { PasswordField } from './PasswordField';
 import { useDarkMode } from '../hooks/useDarkMode';
@@ -197,8 +197,8 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
 
             <div className="login-container">
                 <div className="login-header">
-                    <UserPlus size={48} strokeWidth={1.5} className="login-header-icon" />
-                    <h1>ثبت نام در نوا روم</h1>
+                    <img src="/logo/logo.svg" alt="نواروم" className="login-logo" />
+                    <h1>ثبت نام در نواروم</h1>
                     <p>اطلاعات خود را تکمیل کنید</p>
                 </div>
 
@@ -300,7 +300,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
 
                         <button
                             type="submit"
-                            className="login-btn adm-tap"
+                            className={loading ? 'login-btn login-btn--loading' : 'login-btn'}
                             disabled={loading || usernameStatus !== 'available'}
                         >
                             {loading ? 'در حال ثبت نام...' : 'ثبت نام'}

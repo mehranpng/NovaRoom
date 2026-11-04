@@ -166,7 +166,7 @@ export function ResetPasswordLink({ token }: ResetPasswordLinkProps) {
 
                         {error && <div className="error-message">{error}</div>}
 
-                        <button type="submit" className="login-btn adm-tap" disabled={loading}>
+                        <button type="submit" className="login-btn" disabled={loading}>
                             {loading ? 'در حال ذخیره...' : 'ذخیره رمز جدید'}
                         </button>
                     </form>

@@ -107,7 +107,7 @@ export function ChessHome({ currentUser, chats, onOpenGame, onSelectUser }: Ches
     } | null>(() => getChessLeaderboardSnapshot());
     const [loadingMore, setLoadingMore] = useState(false);
     const [loading, setLoading] = useState<boolean>(() => !initialSnapshot);
-    const [timeControl, setTimeControl] = useState<string>('3+2');
+    const [timeControl, setTimeControl] = useState<string>('10+0');
     const [color, setColor] = useState<'white' | 'black' | 'random'>('random');
     const [creating, setCreating] = useState(false);
     const [shareGameId, setShareGameId] = useState<string | null>(null);

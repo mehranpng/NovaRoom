@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { apiFetch } from '../config/api';
 import { type User } from '../types';
-import { LogIn, User as UserIcon, Key } from 'lucide-react';
+import { User as UserIcon, Key } from 'lucide-react';
 import { DarkModeToggle } from './DarkModeToggle';
 import { PasswordField } from './PasswordField';
 import { useDarkMode } from '../hooks/useDarkMode';
@@ -95,8 +95,8 @@ export function Login({ onLoginSuccess }: LoginProps) {
 
             <div className="login-container">
                 <div className="login-header">
-                    <LogIn size={48} strokeWidth={1.5} className="login-header-icon" />
-                    <h1>نوا روم</h1>
+                    <img src="/logo/logo.svg" alt="نواروم" className="login-logo" />
+                    <h1>نواروم</h1>
                     <p>برای ادامه وارد شوید</p>
                 </div>
 
@@ -136,7 +136,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
 
                     {error && <div className="error-message">{error}</div>}
 
-                    <button type="submit" className="login-btn adm-tap" disabled={loading}>
+                    <button type="submit" className={loading ? 'login-btn login-btn--loading' : 'login-btn'} disabled={loading}>
                         {loading ? 'در حال ورود...' : 'ورود'}
                     </button>
                 </form>

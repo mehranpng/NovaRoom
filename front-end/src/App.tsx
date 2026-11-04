@@ -339,8 +339,8 @@ export function App() {
     useEffect(() => {
         if (!isAuthenticated || isAuthChecking) return;
 
-        sendSoundRef.current = new Audio('/sounds/send.mp3');
-        receiveSoundRef.current = new Audio('/sounds/receive.mp3');
+        sendSoundRef.current = new Audio('/sounds/send.ogg');
+        receiveSoundRef.current = new Audio('/sounds/receive.ogg');
         sendSoundRef.current.preload = 'auto';
         receiveSoundRef.current.preload = 'auto';
         sendSoundRef.current.load();

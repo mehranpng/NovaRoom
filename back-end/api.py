@@ -8304,7 +8304,7 @@ async def chess_websocket(
             if kind == "emote":
                 emote = str(data.get("emote") or "")
                 color = chess_service.color_of(game, user_id)
-                if emote in ("cry", "laugh", "mad", "nice") and color in ("white", "black"):
+                if emote in ("cry", "laugh", "mad", "nice", "cunning", "trol") and color in ("white", "black"):
                     payload = {"type": "emote", "by": color, "emote": emote}
                     sockets = [ws for conns in chess_rooms.get(gameId, {}).values() for ws in conns]
                     await asyncio.gather(*(ws.send_json(payload) for ws in sockets), return_exceptions=True)
