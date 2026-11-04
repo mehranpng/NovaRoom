@@ -1252,11 +1252,15 @@ body,
 }
 
 .chat-room {
-    --chat-room-bg:
+    --chat-room-gradient:
         radial-gradient(ellipse 36% 26% at 5% -12%, color-mix(in srgb, var(--accent-primary) 8%, transparent), transparent 62%),
         radial-gradient(ellipse 52% 38% at -6% 64%, color-mix(in srgb, var(--accent-primary) 4%, transparent), transparent 68%),
         radial-gradient(ellipse 46% 34% at 104% 80%, color-mix(in srgb, var(--accent-primary) 4%, transparent), transparent 64%),
         linear-gradient(155deg, color-mix(in srgb, var(--accent-soft) 24%, var(--bg-secondary)), var(--bg-secondary) 58%);
+    --chat-room-fill-size: 100% var(--app-height-full, 100%);
+    --chat-room-bg: var(--chat-room-gradient);
+    --chat-room-bg-size: var(--chat-room-fill-size);
+    --chat-room-bg-repeat: no-repeat;
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -1265,8 +1269,8 @@ body,
     overscroll-behavior-y: none;
     background-color: var(--bg-secondary);
     background-image: var(--chat-room-bg);
-    background-size: 100% var(--app-height-full, 100%);
-    background-repeat: no-repeat;
+    background-size: var(--chat-room-bg-size);
+    background-repeat: var(--chat-room-bg-repeat);
     animation: screen-soft-in var(--motion-slow) var(--motion-ease-standard);
     position: relative;
 }
@@ -1279,10 +1283,135 @@ body,
     pointer-events: none;
     background-color: var(--bg-secondary);
     background-image: var(--chat-room-bg);
-    background-size: 100% var(--app-height-full, 100%);
-    background-repeat: no-repeat;
+    background-size: var(--chat-room-bg-size);
+    background-repeat: var(--chat-room-bg-repeat);
     -webkit-mask-image: linear-gradient(to bottom, #000 0, transparent 76px, transparent calc(100% - 76px), #000 100%);
     mask-image: linear-gradient(to bottom, #000 0, transparent 76px, transparent calc(100% - 76px), #000 100%);
+}
+
+/* ---- Chat background patterns (selected in Settings -> Theme) ---- */
+:root {
+    --chat-bg-url-doodles: url('/chat-bg/doodles-light.svg');
+    --chat-bg-url-cosmos: url('/chat-bg/cosmos-light.svg');
+    --chat-bg-url-hearts: url('/chat-bg/hearts-light.svg');
+    --chat-bg-url-nature: url('/chat-bg/nature-light.svg');
+    --chat-bg-url-music: url('/chat-bg/music-light.svg');
+    --chat-bg-url-geometric: url('/chat-bg/geometric-light.svg');
+    --chat-bg-url-dots: url('/chat-bg/dots-light.svg');
+    --chat-bg-url-waves: url('/chat-bg/waves-light.svg');
+}
+
+:root.dark-mode {
+    --chat-bg-url-doodles: url('/chat-bg/doodles-dark.svg');
+    --chat-bg-url-cosmos: url('/chat-bg/cosmos-dark.svg');
+    --chat-bg-url-hearts: url('/chat-bg/hearts-dark.svg');
+    --chat-bg-url-nature: url('/chat-bg/nature-dark.svg');
+    --chat-bg-url-music: url('/chat-bg/music-dark.svg');
+    --chat-bg-url-geometric: url('/chat-bg/geometric-dark.svg');
+    --chat-bg-url-dots: url('/chat-bg/dots-dark.svg');
+    --chat-bg-url-waves: url('/chat-bg/waves-dark.svg');
+}
+
+:root[data-chat-bg='doodles'] {
+    --chat-pattern-url: var(--chat-bg-url-doodles);
+    --chat-pattern-size: 260px 260px;
+}
+
+:root[data-chat-bg='cosmos'] {
+    --chat-pattern-url: var(--chat-bg-url-cosmos);
+    --chat-pattern-size: 260px 260px;
+}
+
+:root[data-chat-bg='hearts'] {
+    --chat-pattern-url: var(--chat-bg-url-hearts);
+    --chat-pattern-size: 260px 260px;
+}
+
+:root[data-chat-bg='nature'] {
+    --chat-pattern-url: var(--chat-bg-url-nature);
+    --chat-pattern-size: 260px 260px;
+}
+
+:root[data-chat-bg='music'] {
+    --chat-pattern-url: var(--chat-bg-url-music);
+    --chat-pattern-size: 260px 260px;
+}
+
+:root[data-chat-bg='geometric'] {
+    --chat-pattern-url: var(--chat-bg-url-geometric);
+    --chat-pattern-size: 260px 260px;
+}
+
+:root[data-chat-bg='dots'] {
+    --chat-pattern-url: var(--chat-bg-url-dots);
+    --chat-pattern-size: 26px 26px;
+}
+
+:root[data-chat-bg='waves'] {
+    --chat-pattern-url: var(--chat-bg-url-waves);
+    --chat-pattern-size: 64px 28px;
+}
+
+:root[data-chat-bg]:not([data-chat-bg='none']) .chat-room {
+    --chat-room-bg: var(--chat-pattern-url), var(--chat-room-gradient);
+    --chat-room-bg-size:
+        var(--chat-pattern-size),
+        var(--chat-room-fill-size),
+        var(--chat-room-fill-size),
+        var(--chat-room-fill-size),
+        var(--chat-room-fill-size);
+    --chat-room-bg-repeat: repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+}
+
+/* Small live previews shown in the theme settings picker */
+.chat-bg-preview {
+    position: relative;
+    width: 100%;
+    height: 64px;
+    border-radius: 14px;
+    overflow: hidden;
+    background-color: var(--bg-secondary);
+    background-repeat: repeat;
+}
+
+.chat-bg-preview[data-pattern='doodles'] {
+    background-image: var(--chat-bg-url-doodles);
+    background-size: 130px 130px;
+}
+
+.chat-bg-preview[data-pattern='cosmos'] {
+    background-image: var(--chat-bg-url-cosmos);
+    background-size: 130px 130px;
+}
+
+.chat-bg-preview[data-pattern='hearts'] {
+    background-image: var(--chat-bg-url-hearts);
+    background-size: 130px 130px;
+}
+
+.chat-bg-preview[data-pattern='nature'] {
+    background-image: var(--chat-bg-url-nature);
+    background-size: 130px 130px;
+}
+
+.chat-bg-preview[data-pattern='music'] {
+    background-image: var(--chat-bg-url-music);
+    background-size: 130px 130px;
+}
+
+.chat-bg-preview[data-pattern='geometric'] {
+    background-image: var(--chat-bg-url-geometric);
+    background-size: 130px 130px;
+}
+
+.chat-bg-preview[data-pattern='dots'] {
+    background-image: var(--chat-bg-url-dots);
+    background-size: 26px 26px;
+}
+
+.chat-bg-preview[data-pattern='waves'] {
+    background-image: var(--chat-bg-url-waves);
+    background-size: 64px 28px;
 }
 
 .chat-room__header {

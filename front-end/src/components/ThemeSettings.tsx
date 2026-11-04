@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
-import { Check, Download, Loader2, Monitor, Moon, Sun, Trash2, Smile, Palette } from 'lucide-react';
+import { Check, Download, Image as ImageIcon, Loader2, Monitor, Moon, Sun, Trash2, Smile, Palette } from 'lucide-react';
 import { cx } from '../utils/cx';
 import { useScrollFade } from '../hooks/useScrollFade';
-import { useDarkMode, type AccentIntensity, type ThemeMode, type ThemePalette, type ThemeTone } from '../hooks/useDarkMode';
+import { useDarkMode, type AccentIntensity, type ChatBackground, type ThemeMode, type ThemePalette, type ThemeTone } from '../hooks/useDarkMode';
 import {
     isEmojiFontDownloaded,
     isEmojiFontActive,
@@ -46,6 +46,9 @@ export function ThemeSettings() {
         setUltraDarkMode,
         blurEffect,
         setBlurEffect,
+        chatBackground,
+        setChatBackground,
+        chatBackgroundOptions,
     } = useDarkMode();
     const ultraDarkAvailable = isDarkMode;
     const shouldDisableCustomTone = isDarkMode && ultraDarkMode;
@@ -321,6 +324,52 @@ export function ThemeSettings() {
                                 {themePalette === palette ? <Check size={15} /> : null}
                             </button>
                         ))}
+                    </div>
+                </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, direction: 'rtl', textAlign: 'right' }}>
+                <div className="profile__section-title">
+                    <span className="profile__section-icon"><ImageIcon size={15} /></span>
+                    پس‌زمینه چت
+                </div>
+                <div className="profile__chat-id-card profile__chat-id-card--flat">
+                    <p className="profile__field-label" style={{ marginBottom: 10 }}>الگوی پس‌زمینه گفتگو</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+                        {(Object.entries(chatBackgroundOptions) as Array<[ChatBackground, { label: string }]>).map(([value, meta]) => {
+                            const selected = chatBackground === value;
+                            return (
+                                <button
+                                    key={value}
+                                    type="button"
+                                    aria-pressed={selected}
+                                    onClick={() => {
+                                        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                                            navigator.vibrate(10);
+                                        }
+                                        setChatBackground(value);
+                                    }}
+                                    style={{
+                                        fontFamily: 'Vazir, sans-serif',
+                                        border: `1px solid ${selected ? 'var(--accent-primary)' : 'var(--glass-border)'}`,
+                                        background: 'var(--glass-surface-soft)',
+                                        color: 'var(--text-primary)',
+                                        borderRadius: 18,
+                                        padding: 8,
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: 8,
+                                        cursor: 'pointer',
+                                    }}
+                                >
+                                    <span className="chat-bg-preview" data-pattern={value === 'none' ? undefined : value} />
+                                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px 2px', fontSize: 13 }}>
+                                        <span>{meta.label}</span>
+                                        {selected ? <Check size={15} /> : null}
+                                    </span>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
             </div>

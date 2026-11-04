@@ -4,6 +4,7 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 export type ThemeTone = 'neutral' | 'custom';
 export type ThemePalette = 'blue' | 'green' | 'purple' | 'orange' | 'rose' | 'teal' | 'amber' | 'red' | 'pink' | 'cyan';
 export type AccentIntensity = 'low' | 'medium' | 'high';
+export type ChatBackground = 'none' | 'doodles' | 'cosmos' | 'hearts' | 'nature' | 'music' | 'geometric' | 'dots' | 'waves';
 
 const STORAGE_KEY = 'themeMode';
 const TONE_STORAGE_KEY = 'themeTone';
@@ -12,6 +13,19 @@ const LEGACY_DARK_MODE_KEY = 'darkMode';
 const INTENSITY_STORAGE_KEY = 'themeAccentIntensityV2';
 const ULTRA_DARK_STORAGE_KEY = 'themeUltraDarkV2';
 const BLUR_EFFECT_STORAGE_KEY = 'themeBlurEffect';
+const CHAT_BG_STORAGE_KEY = 'themeChatBackground';
+
+const chatBackgroundMeta: Record<ChatBackground, { label: string }> = {
+  none: { label: 'بدون الگو' },
+  doodles: { label: 'دودل' },
+  cosmos: { label: 'کیهان' },
+  hearts: { label: 'قلب' },
+  nature: { label: 'طبیعت' },
+  music: { label: 'موسیقی' },
+  geometric: { label: 'هندسی' },
+  dots: { label: 'نقطه‌ای' },
+  waves: { label: 'موج' },
+};
 
 
 
@@ -191,6 +205,12 @@ function getInitialPalette(): ThemePalette {
   return stored && stored in paletteMeta ? stored : 'blue';
 }
 
+function getInitialChatBackground(): ChatBackground {
+  if (typeof window === 'undefined') return 'none';
+  const stored = localStorage.getItem(CHAT_BG_STORAGE_KEY) as ChatBackground | null;
+  return stored && stored in chatBackgroundMeta ? stored : 'none';
+}
+
 function getInitialUltraDark(): boolean {
   if (typeof window === 'undefined') return true;
   return localStorage.getItem(ULTRA_DARK_STORAGE_KEY) !== 'false';
@@ -289,6 +309,7 @@ export function useDarkMode() {
   const [accentIntensity, setAccentIntensity] = useState<AccentIntensity>(getInitialIntensity);
   const [ultraDarkMode, setUltraDarkMode] = useState<boolean>(getInitialUltraDark);
   const [blurEffect, setBlurEffect] = useState<boolean>(getInitialBlurEffect);
+  const [chatBackground, setChatBackground] = useState<ChatBackground>(getInitialChatBackground);
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
@@ -359,6 +380,13 @@ export function useDarkMode() {
     (root.style as any).colorScheme = isDarkMode ? 'dark' : 'light';
   }, [isDarkMode, themeMode, themeTone, themePalette, accentIntensity, ultraDarkMode, blurEffect]);
 
+  // Kept in its own effect so that hook instances living elsewhere in the tree
+  // never overwrite the chosen chat background when only the colour scheme changes.
+  useEffect(() => {
+    localStorage.setItem(CHAT_BG_STORAGE_KEY, chatBackground);
+    document.documentElement.dataset.chatBg = chatBackground;
+  }, [chatBackground]);
+
   return {
     themeMode,
     setThemeMode,
@@ -374,5 +402,8 @@ export function useDarkMode() {
     setUltraDarkMode,
     blurEffect,
     setBlurEffect,
+    chatBackground,
+    setChatBackground,
+    chatBackgroundOptions: chatBackgroundMeta,
   };
 }
