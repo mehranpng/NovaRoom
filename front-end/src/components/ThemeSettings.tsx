@@ -369,7 +369,7 @@ export function ThemeSettings() {
                             backgroundSize: getWallpaperSize(chatWallpaper),
                         }} />
 
-                        <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', gap: 4, direction: 'ltr' }}>
                             <div className="message-item">
                                 <div className="message-row message-row--mine">
                                     <div className="message-bubble message-bubble--mine msg-shape--single">
