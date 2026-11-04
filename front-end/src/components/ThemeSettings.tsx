@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
-import { Check, Download, Loader2, Monitor, Moon, Sun, Trash2, Smile, Palette } from 'lucide-react';
+import { Check, Download, Loader2, Monitor, Moon, Sun, Trash2, Smile, Palette, Wallpaper } from 'lucide-react';
 import { cx } from '../utils/cx';
 import { useScrollFade } from '../hooks/useScrollFade';
 import { useDarkMode, type AccentIntensity, type ThemeMode, type ThemePalette, type ThemeTone } from '../hooks/useDarkMode';
+import { WALLPAPER_OPTIONS, generateWallpaperDataUri, getWallpaperSize } from '../utils/chatWallpapers';
 import {
     isEmojiFontDownloaded,
     isEmojiFontActive,
@@ -46,9 +47,18 @@ export function ThemeSettings() {
         setUltraDarkMode,
         blurEffect,
         setBlurEffect,
+        chatWallpaper,
+        setChatWallpaper,
     } = useDarkMode();
     const ultraDarkAvailable = isDarkMode;
     const shouldDisableCustomTone = isDarkMode && ultraDarkMode;
+
+    const activeAccentColor = paletteOptions[themePalette]?.color || '#3b82f6';
+    const previewPatternUri = generateWallpaperDataUri(
+        chatWallpaper,
+        activeAccentColor,
+        isDarkMode ? 0.18 : 0.12
+    );
 
     const [emojiDownloaded, setEmojiDownloaded] = useState<boolean>(false);
     const [emojiActive, setEmojiActive] = useState<boolean>(false);
@@ -321,6 +331,179 @@ export function ThemeSettings() {
                                 {themePalette === palette ? <Check size={15} /> : null}
                             </button>
                         ))}
+                    </div>
+                </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, direction: 'rtl', textAlign: 'right' }}>
+                <div className="profile__section-title">
+                    <span className="profile__section-icon"><Wallpaper size={15} /></span>
+                    طرح پس‌زمینه چت
+                </div>
+
+                <div className="profile__chat-id-card profile__chat-id-card--flat">
+                    <p className="profile__field-label" style={{ marginBottom: 10 }}>پیش‌نمایش زنده</p>
+
+                    <div style={{
+                        position: 'relative',
+                        height: 124,
+                        borderRadius: 18,
+                        overflow: 'hidden',
+                        border: '1px solid var(--glass-border)',
+                        backgroundColor: 'var(--bg-secondary)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center',
+                        padding: '12px 14px',
+                        gap: 8,
+                        boxShadow: 'inset 0 0 12px rgba(0,0,0,0.1)',
+                    }}>
+                        <div style={{
+                            position: 'absolute',
+                            inset: 0,
+                            pointerEvents: 'none',
+                            backgroundImage: previewPatternUri ? `url("${previewPatternUri}")` : 'none',
+                            backgroundRepeat: 'repeat',
+                            backgroundSize: getWallpaperSize(chatWallpaper),
+                        }} />
+
+                        <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'flex-start' }}>
+                            <div style={{
+                                maxWidth: '82%',
+                                padding: '7px 12px',
+                                borderRadius: '14px 14px 14px 4px',
+                                background: 'var(--message-theirs-bg)',
+                                color: 'var(--message-theirs-text)',
+                                fontSize: 12.5,
+                                fontWeight: 500,
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                            }}>
+                                بهترین ادمین نواروم کیه به نظرت؟
+                            </div>
+                        </div>
+
+                        <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'flex-end' }}>
+                            <div style={{
+                                maxWidth: '82%',
+                                padding: '7px 12px',
+                                borderRadius: '14px 14px 4px 14px',
+                                background: 'var(--accent-primary)',
+                                color: 'var(--message-mine-text, #ffffff)',
+                                fontSize: 12.5,
+                                fontWeight: 600,
+                                boxShadow: '0 2px 6px color-mix(in srgb, var(--accent-primary) 30%, transparent)',
+                            }}>
+                                قطعاً طاها
+                            </div>
+                        </div>
+                    </div>
+
+                    <p className="profile__field-label" style={{ marginTop: 16, marginBottom: 10 }}>انتخاب الگو</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+                        {WALLPAPER_OPTIONS.map((option) => {
+                            const isSelected = chatWallpaper === option.id;
+                            const cardPatternUri = option.id === 'none'
+                                ? null
+                                : generateWallpaperDataUri(option.id, activeAccentColor, isDarkMode ? 0.32 : 0.22);
+
+                            return (
+                                <button
+                                    key={option.id}
+                                    type="button"
+                                    onClick={() => {
+                                        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                                            navigator.vibrate(10);
+                                        }
+                                        setChatWallpaper(option.id);
+                                    }}
+                                    style={{
+                                        position: 'relative',
+                                        overflow: 'hidden',
+                                        fontFamily: 'Vazir, sans-serif',
+                                        border: `1px solid ${isSelected ? 'var(--accent-primary)' : 'var(--glass-border)'}`,
+                                        background: isSelected
+                                            ? 'color-mix(in srgb, var(--accent-primary) 12%, var(--glass-surface-soft))'
+                                            : 'var(--glass-surface-soft)',
+                                        color: 'var(--text-primary)',
+                                        borderRadius: 14,
+                                        minHeight: 48,
+                                        padding: '8px 14px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        cursor: 'pointer',
+                                        transition: 'border-color .15s ease, background .15s ease',
+                                    }}
+                                >
+                                    {/* Pattern texture inside the button (Second Preview) */}
+                                    {cardPatternUri ? (
+                                        <span
+                                            aria-hidden="true"
+                                            style={{
+                                                position: 'absolute',
+                                                inset: 0,
+                                                pointerEvents: 'none',
+                                                backgroundImage: `url("${cardPatternUri}")`,
+                                                backgroundRepeat: 'repeat',
+                                                backgroundSize: getWallpaperSize(option.id),
+                                                opacity: isSelected ? 1 : 0.85,
+                                            }}
+                                        />
+                                    ) : (
+                                        <span
+                                            aria-hidden="true"
+                                            style={{
+                                                position: 'absolute',
+                                                inset: 0,
+                                                pointerEvents: 'none',
+                                                background: 'linear-gradient(135deg, transparent 48%, color-mix(in srgb, var(--text-secondary) 25%, transparent) 50%, transparent 52%)',
+                                                opacity: 0.6,
+                                            }}
+                                        />
+                                    )}
+
+                                    {/* English Name & Checkmark */}
+                                    <span style={{
+                                        position: 'relative',
+                                        zIndex: 2,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        width: '100%',
+                                    }}>
+                                        <span style={{
+                                            fontSize: 13,
+                                            fontWeight: isSelected ? 700 : 500,
+                                            color: 'var(--text-primary)',
+                                            textShadow: isDarkMode ? '0 1px 3px rgba(0,0,0,0.85)' : '0 1px 2px rgba(255,255,255,0.9)',
+                                            letterSpacing: '0.2px',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
+                                            paddingLeft: 4,
+                                        }}>
+                                            {option.label}
+                                        </span>
+                                        {isSelected ? (
+                                            <span style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                width: 20,
+                                                height: 20,
+                                                borderRadius: '50%',
+                                                background: 'var(--accent-primary)',
+                                                color: '#ffffff',
+                                                boxShadow: '0 1px 4px color-mix(in srgb, var(--accent-primary) 40%, transparent)',
+                                                flexShrink: 0,
+                                            }}>
+                                                <Check size={12} strokeWidth={3} />
+                                            </span>
+                                        ) : null}
+                                    </span>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
             </div>

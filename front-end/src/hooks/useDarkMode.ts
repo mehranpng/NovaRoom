@@ -1,4 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import {
+  type ChatWallpaperPattern,
+  WALLPAPER_STORAGE_KEY,
+  generateWallpaperDataUri,
+  getWallpaperSize,
+} from '../utils/chatWallpapers';
+
+export type { ChatWallpaperPattern } from '../utils/chatWallpapers';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type ThemeTone = 'neutral' | 'custom';
@@ -201,6 +209,20 @@ function getInitialBlurEffect(): boolean {
   return localStorage.getItem(BLUR_EFFECT_STORAGE_KEY) !== 'false';
 }
 
+function getInitialChatWallpaper(): ChatWallpaperPattern {
+  if (typeof window === 'undefined') return 'none';
+  const stored = localStorage.getItem(WALLPAPER_STORAGE_KEY) as ChatWallpaperPattern | null;
+  const validPatterns: ChatWallpaperPattern[] = [
+    'none', 'circuit-board', 'polka-dots', 'tic-tac-toe',
+    'jigsaw', 'topography', 'hideout', 'yyy',
+    'hexagons', 'i-like-food', 'glamorous', 'aztec'
+  ];
+  if (stored && validPatterns.includes(stored)) {
+    return stored;
+  }
+  return 'none';
+}
+
 const createCustomSurfaceVars = (isDarkMode: boolean): Record<string, string> => {
   if (!isDarkMode) {
     return {
@@ -289,6 +311,7 @@ export function useDarkMode() {
   const [accentIntensity, setAccentIntensity] = useState<AccentIntensity>(getInitialIntensity);
   const [ultraDarkMode, setUltraDarkMode] = useState<boolean>(getInitialUltraDark);
   const [blurEffect, setBlurEffect] = useState<boolean>(getInitialBlurEffect);
+  const [chatWallpaper, setChatWallpaper] = useState<ChatWallpaperPattern>(getInitialChatWallpaper);
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
@@ -355,9 +378,16 @@ export function useDarkMode() {
       Object.entries(ultraDarkVars).forEach(([key, value]) => root.style.setProperty(key, value));
     }
 
+    localStorage.setItem(WALLPAPER_STORAGE_KEY, chatWallpaper);
+    const wallpaperColor = accentVars['--accent-primary'] || (isDarkMode ? '#3b82f6' : '#2563eb');
+    const wallpaperOpacity = isDarkMode ? 0.16 : 0.09;
+    const wallpaperUri = generateWallpaperDataUri(chatWallpaper, wallpaperColor, wallpaperOpacity);
+    root.style.setProperty('--chat-wallpaper-pattern', wallpaperUri ? `url("${wallpaperUri}")` : 'none');
+    root.style.setProperty('--chat-wallpaper-size', getWallpaperSize(chatWallpaper));
+
     syncThemeColor();
     (root.style as any).colorScheme = isDarkMode ? 'dark' : 'light';
-  }, [isDarkMode, themeMode, themeTone, themePalette, accentIntensity, ultraDarkMode, blurEffect]);
+  }, [isDarkMode, themeMode, themeTone, themePalette, accentIntensity, ultraDarkMode, blurEffect, chatWallpaper]);
 
   return {
     themeMode,
@@ -374,5 +404,7 @@ export function useDarkMode() {
     setUltraDarkMode,
     blurEffect,
     setBlurEffect,
+    chatWallpaper,
+    setChatWallpaper,
   };
 }
