@@ -5750,7 +5750,7 @@ body[data-music-player='active'] .app {
 }
 
 html.no-blur-effect .chat-room__jump-box {
-    background: transparent;
+    background: var(--bg-secondary);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     box-shadow: none;
