@@ -7200,6 +7200,61 @@ html.no-blur-effect .chat-list__header,
     min-width: 0;
 }
 
+.chess__ping {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 1px;
+    height: 10px;
+    flex: 0 0 auto;
+    direction: ltr;
+    order: 1;
+}
+
+.chess__ping-bar {
+    width: 2px;
+    border-radius: 1px;
+    background: rgba(140, 140, 140, 0.35);
+}
+
+.chess__ping-bar:nth-child(1) {
+    height: 3px;
+}
+
+.chess__ping-bar:nth-child(2) {
+    height: 5px;
+}
+
+.chess__ping-bar:nth-child(3) {
+    height: 7px;
+}
+
+.chess__ping-bar:nth-child(4) {
+    height: 10px;
+}
+
+.chess__ping--1 .chess__ping-bar:nth-child(1),
+.chess__ping--2 .chess__ping-bar:nth-child(-n + 2),
+.chess__ping--3 .chess__ping-bar:nth-child(-n + 3),
+.chess__ping--4 .chess__ping-bar:nth-child(-n + 4) {
+    background: currentColor;
+}
+
+.chess__ping--1 {
+    color: #e5484d;
+}
+
+.chess__ping--2 {
+    color: #ef8c2b;
+}
+
+.chess__ping--3 {
+    color: #c9a227;
+}
+
+.chess__ping--4 {
+    color: #4caf50;
+}
+
 .chess__winner-badge {
     flex: 0 0 auto;
     padding: 1px 8px;

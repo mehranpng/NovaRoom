@@ -154,6 +154,7 @@ active_connections: Dict[str, List[WebSocket]] = {}
 active_ai_connections: Dict[str, List[WebSocket]] = {}
 active_ai_stream_tasks: Dict[str, asyncio.Task] = {}
 chess_rooms: Dict[str, Dict[str, List[WebSocket]]] = {}
+chess_latency: Dict[str, Dict[str, int]] = {}
 chess_locks: Dict[str, asyncio.Lock] = {}
 chess_timers: Dict[str, asyncio.TimerHandle] = {}
 chess_abandon_tasks: Dict[str, asyncio.Task] = {}
@@ -1875,6 +1876,7 @@ async def _drop_chess_game(game_id: str) -> None:
         if task:
             task.cancel()
     chess_locks.pop(game_id, None)
+    chess_latency.pop(game_id, None)
     sockets = [ws for conns in chess_rooms.pop(game_id, {}).values() for ws in conns]
     await cl_chess_games.delete_one({"_id": game_id})
     for ws in sockets:
@@ -5378,6 +5380,21 @@ async def chess_send_all(game_id: str, game: dict, event: Optional[dict]):
     await asyncio.gather(*(ws.send_json(payload) for ws in sockets), return_exceptions=True)
 
 
+async def chess_send_latency(game_id: str):
+    payload = {"type": "latency", "latency": chess_latency.get(game_id, {})}
+    sockets = [ws for conns in chess_rooms.get(game_id, {}).values() for ws in conns]
+    await asyncio.gather(*(ws.send_json(payload) for ws in sockets), return_exceptions=True)
+
+
+async def chess_ping_loop(websocket: WebSocket):
+    try:
+        while True:
+            await websocket.send_json({"type": "ping", "ts": now_ms()})
+            await asyncio.sleep(3)
+    except Exception:
+        return
+
+
 def chess_schedule(game: dict):
     game_id = game["_id"]
     handle = chess_timers.pop(game_id, None)
@@ -8283,6 +8300,7 @@ async def chess_websocket(
         pending.cancel()
     await chess_send_all(gameId, game, {"kind": "presence"})
     chess_schedule(game)
+    ping_task = asyncio.create_task(chess_ping_loop(websocket))
     stamps = []
     try:
         while True:
@@ -8300,6 +8318,12 @@ async def chess_websocket(
             kind = data.get("type") if isinstance(data, dict) else None
             if kind == "ping":
                 await websocket.send_json({"type": "pong"})
+                continue
+            if kind == "pong":
+                sent_at = data.get("ts")
+                if isinstance(sent_at, (int, float)):
+                    chess_latency.setdefault(gameId, {})[user_id] = max(0, now_ms() - int(sent_at))
+                    await chess_send_latency(gameId)
                 continue
             if kind == "emote":
                 emote = str(data.get("emote") or "")
@@ -8328,13 +8352,16 @@ async def chess_websocket(
     except WebSocketDisconnect:
         pass
     finally:
+        ping_task.cancel()
         conns = chess_rooms.get(gameId, {}).get(user_id, [])
         if websocket in conns:
             conns.remove(websocket)
         if not conns:
             chess_rooms.get(gameId, {}).pop(user_id, None)
+            chess_latency.get(gameId, {}).pop(user_id, None)
             if not chess_rooms.get(gameId):
                 chess_rooms.pop(gameId, None)
+                chess_latency.pop(gameId, None)
             latest = await cl_chess_games.find_one({"_id": gameId})
             if latest:
                 await chess_send_all(gameId, latest, {"kind": "presence"})

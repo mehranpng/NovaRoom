@@ -75,6 +75,25 @@ const CHESS_EMOTES: { id: ChessEmote; label: string; src: string }[] = [
     { id: 'laugh', label: 'خنده', src: '/gifs/chess/laugh.webp' },
 ];
 
+function PingBars({ online, latency }: { online: boolean; latency?: number }) {
+    const level = !online || typeof latency !== 'number'
+        ? 0
+        : latency <= 80 ? 4 : latency <= 160 ? 3 : latency <= 300 ? 2 : 1;
+    return (
+        <span
+            className={cx('chess__ping', `chess__ping--${level}`)}
+            title={level ? `${toPersianDigits(latency!)} میلی‌ثانیه` : 'آفلاین'}
+            aria-label={level ? `پینگ ${toPersianDigits(latency!)} میلی‌ثانیه` : 'آفلاین'}
+        >
+            <span className="chess__ping-bar" />
+            <span className="chess__ping-bar" />
+            <span className="chess__ping-bar" />
+            <span className="chess__ping-bar" />
+        </span>
+    );
+}
+
+
 function capturedPieces(moves: ChessGameView['moves']): Record<ChessColor, { piece: string; count: number }[]> {
     const lost: Record<ChessColor, Record<string, number>> = { white: {}, black: {} };
     const board = new Chess();
@@ -265,7 +284,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
         return () => document.removeEventListener('pointerdown', onDocPointerDown, true);
     }, [emotePickerOpen]);
 
-    const { connected, send } = useChessSocket({
+    const { connected, latencies, send } = useChessSocket({
         token: authToken,
         guestToken,
         gameId: socketGameId,
@@ -653,6 +672,9 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                             </div>
                             <div className="chess__player-text">
                                 <div className="chess__player-line">
+                                    {game.status !== 'finished' && (
+                                        <PingBars online={Boolean(oppId) && game.online[oppColor]} latency={oppId ? latencies[oppId] : undefined} />
+                                    )}
                                     <span className="chess__player-name">
                                         {oppInfo?.name || (game.status === 'waiting' ? 'منتظر حریف…' : 'حریف')}
                                     </span>
@@ -804,6 +826,9 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                             </div>
                             <div className="chess__player-text">
                                 <div className="chess__player-line">
+                                    {game.status !== 'finished' && (
+                                        <PingBars online={game.online[myColor]} latency={bottomId ? latencies[bottomId] : undefined} />
+                                    )}
                                     <span className="chess__player-name">{bottomInfo?.name || currentUser.name}</span>
                                     {typeof bottomInfo?.elo === 'number' && !bottomInfo.isGuest && (
                                         <span className="chess__player-elo">({toPersianDigits(bottomInfo.elo)})</span>

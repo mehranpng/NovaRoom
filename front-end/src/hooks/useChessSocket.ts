@@ -13,6 +13,7 @@ interface Options {
 
 export function useChessSocket({ token, guestToken, gameId, onState, onError, onEmote }: Options) {
     const [connected, setConnected] = useState(false);
+    const [latencies, setLatencies] = useState<Record<string, number>>({});
     const socketRef = useRef<WebSocket | null>(null);
     const onStateRef = useRef(onState);
     const onErrorRef = useRef(onError);
@@ -29,7 +30,6 @@ export function useChessSocket({ token, guestToken, gameId, onState, onError, on
         let closed = false;
         let attempts = 0;
         let retryTimer: number | null = null;
-        let heartbeat: number | null = null;
 
         const params = new URLSearchParams({ gameId });
         if (token) params.set('token', token);
@@ -49,6 +49,12 @@ export function useChessSocket({ token, guestToken, gameId, onState, onError, on
                     else if (data.type === 'emote' && data.by && data.emote) {
                         onEmoteRef.current?.(data.by as ChessColor, data.emote as ChessEmote);
                     }
+                    else if (data.type === 'ping' && data.ts !== undefined) {
+                        ws.send(JSON.stringify({ type: 'pong', ts: data.ts }));
+                    }
+                    else if (data.type === 'latency' && data.latency) {
+                        setLatencies(data.latency as Record<string, number>);
+                    }
                     else if (data.type === 'error') onErrorRef.current(String(data.code || 'error'));
                 } catch {
                     return;
@@ -56,6 +62,7 @@ export function useChessSocket({ token, guestToken, gameId, onState, onError, on
             };
             ws.onclose = (event) => {
                 setConnected(false);
+                setLatencies({});
                 if (closed) return;
                 if (event.code === 1008) {
                     onErrorRef.current('forbidden');
@@ -68,16 +75,10 @@ export function useChessSocket({ token, guestToken, gameId, onState, onError, on
         };
 
         connect();
-        heartbeat = window.setInterval(() => {
-            if (socketRef.current?.readyState === WebSocket.OPEN) {
-                socketRef.current.send(JSON.stringify({ type: 'ping' }));
-            }
-        }, 25000);
 
         return () => {
             closed = true;
             if (retryTimer) window.clearTimeout(retryTimer);
-            if (heartbeat) window.clearInterval(heartbeat);
             socketRef.current?.close();
             socketRef.current = null;
         };
@@ -90,5 +91,5 @@ export function useChessSocket({ token, guestToken, gameId, onState, onError, on
         return true;
     }, []);
 
-    return { connected, send };
+    return { connected, latencies, send };
 }
