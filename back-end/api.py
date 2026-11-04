@@ -1347,7 +1347,7 @@ async def get_current_user(
     return user
 
 
-OWNER_USERNAME = "Mehran"
+OWNER_USERNAME = os.getenv("ADMIN0_USERNAME", "").strip()
 LINK_TTL = timedelta(minutes=30)
 
 
@@ -3546,9 +3546,6 @@ async def get_chat_list(
     saved_count = await cl_messages.count_documents({"chatId": saved_chat_id})
 
     result = []
-
-    if not chats and saved_count == 0:
-        return result
 
     chat_ids = [c["_id"] for c in chats]
 
