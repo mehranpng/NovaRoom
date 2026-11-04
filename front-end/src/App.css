@@ -7295,6 +7295,31 @@ html.no-blur-effect .chat-list__header,
     -webkit-user-select: none;
 }
 
+.chess__connecting {
+    position: absolute;
+    inset: 0;
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: rgba(0, 0, 0, 0.35);
+    color: #ffffff;
+    direction: rtl;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.chess__connecting-spinner {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2.5px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #ffffff;
+    animation: spin 0.8s linear infinite;
+}
+
 .chess__promotion-backdrop {
     position: absolute;
     inset: 0;
@@ -7717,9 +7742,12 @@ html.no-blur-effect .chat-list__header,
 }
 
 .chess__panel,
-.chess__draw-banner,
 .chess__moves {
     border-radius: 24px;
+}
+
+.chess__draw-banner {
+    border-radius: 9999px;
 }
 
 .chess__panel {

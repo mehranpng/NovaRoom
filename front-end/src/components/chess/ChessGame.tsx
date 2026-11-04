@@ -265,7 +265,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
         return () => document.removeEventListener('pointerdown', onDocPointerDown, true);
     }, [emotePickerOpen]);
 
-    const { send } = useChessSocket({
+    const { connected, send } = useChessSocket({
         token: authToken,
         guestToken,
         gameId: socketGameId,
@@ -714,6 +714,23 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                                 onSquareClick: handleSquareClick,
                             }}
                         />
+
+                        <AnimatePresence>
+                            {socketGameId && !connected && (
+                                <motion.div
+                                    className="chess__connecting"
+                                    role="status"
+                                    aria-live="polite"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    transition={{ duration: 0.22, ease: 'easeOut' }}
+                                >
+                                    <span className="chess__connecting-spinner" aria-hidden="true" />
+                                    <span>در حال اتصال…</span>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
 
                         <AnimatePresence>
                             {promotion && (

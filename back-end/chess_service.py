@@ -26,7 +26,7 @@ TIME_CONTROLS = {
 }
 
 UCI_RE = re.compile(r"^[a-h][1-8][a-h][1-8][qrbn]?$")
-FIRST_MOVE_WINDOW_MS = 60000
+FIRST_MOVE_WINDOW_MS = 2 * 60 * 1000
 DISCONNECT_GRACE_MS = 60000
 WAITING_TTL_MS = 10 * 60 * 1000
 OTHER = {"white": "black", "black": "white"}

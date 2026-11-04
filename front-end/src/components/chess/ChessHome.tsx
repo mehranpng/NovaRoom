@@ -124,13 +124,19 @@ export function ChessHome({ currentUser, chats, onOpenGame, onSelectUser }: Ches
         lobbyScrollTop = null;
     }, [loading]);
 
-    const openGame = (id: string) => {
+    const rememberScroll = () => {
         lobbyScrollTop = contentRef.current?.scrollTop ?? 0;
+    };
+
+    const openGame = (id: string) => {
+        rememberScroll();
         onOpenGame(id);
     };
 
     const selectTab = (next: 'play' | 'leaderboard') => {
         lobbyTab = next;
+        lobbyScrollTop = null;
+        if (contentRef.current) contentRef.current.scrollTop = 0;
         setTab(next);
     };
 
@@ -565,7 +571,10 @@ export function ChessHome({ currentUser, chats, onOpenGame, onSelectUser }: Ches
                                                 key={entry.user.chatId}
                                                 type="button"
                                                 className="chess-leaderboard__item"
-                                                onClick={() => onSelectUser(entry.user)}
+                                                onClick={() => {
+                                                    rememberScroll();
+                                                    onSelectUser(entry.user);
+                                                }}
                                             >
                                                 <div className="chess-leaderboard__main">
                                                     <span
