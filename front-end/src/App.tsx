@@ -488,9 +488,16 @@ export function App() {
                 fullHeight = height;
             }
 
+            // iOS Safari pans the page when the keyboard opens instead of resizing it, so the
+            // layout viewport and the visible (visual) viewport drift apart. Track the offset so
+            // `.app` can stay pinned to what the user actually sees.
+            const offsetTop = vv ? Math.max(0, Math.round(vv.offsetTop)) : 0;
+
             document.documentElement.style.setProperty('--app-height', `${height}px`);
             document.documentElement.style.setProperty('--app-height-full', `${fullHeight}px`);
+            document.documentElement.style.setProperty('--app-offset-top', `${offsetTop}px`);
             document.documentElement.style.setProperty('--keyboard-offset', `${kb}px`);
+            document.documentElement.classList.toggle('keyboard-open', isCoarsePointer && kb > 80);
         };
 
         apply();

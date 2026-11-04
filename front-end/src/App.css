@@ -143,6 +143,11 @@ body,
 
 .app {
     display: flex;
+    /* Pinned to the visual viewport so the iOS keyboard can't push the app out of view. */
+    position: fixed;
+    top: var(--app-offset-top, 0px);
+    left: 0;
+    right: 0;
     height: var(--app-height, 100dvh);
     width: 100%;
     background: var(--bg-primary);
@@ -1350,6 +1355,25 @@ body,
 :root[data-chat-bg='waves'] {
     --chat-pattern-url: var(--chat-bg-url-waves);
     --chat-pattern-size: 64px 28px;
+}
+
+@media (min-width: 1024px) {
+    :root[data-chat-bg='doodles'],
+    :root[data-chat-bg='cosmos'],
+    :root[data-chat-bg='hearts'],
+    :root[data-chat-bg='nature'],
+    :root[data-chat-bg='music'],
+    :root[data-chat-bg='geometric'] {
+        --chat-pattern-size: 312px 312px;
+    }
+
+    :root[data-chat-bg='dots'] {
+        --chat-pattern-size: 30px 30px;
+    }
+
+    :root[data-chat-bg='waves'] {
+        --chat-pattern-size: 80px 35px;
+    }
 }
 
 :root[data-chat-bg]:not([data-chat-bg='none']) .chat-room {
@@ -2776,6 +2800,17 @@ body,
 
 .chat-room__input-area > * {
     pointer-events: auto;
+}
+
+html.keyboard-open .chat-room__input-area {
+    bottom: 10px;
+}
+
+@supports (-webkit-touch-callout: none) {
+    /* iOS zooms into inputs with a font size below 16px, which makes the keyboard cover the page */
+    .chat-room__text-input {
+        font-size: 16px;
+    }
 }
 
 .chat-room__input-wrapper {
