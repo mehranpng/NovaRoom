@@ -29,6 +29,9 @@ export function Login({ onLoginSuccess }: LoginProps) {
         const message = err.message || '';
 
         
+        if (message.includes('Account is being deleted')) {
+            return 'این حساب در حال حذف است و امکان ورود وجود ندارد';
+        }
         if (message.includes('401') || message.includes('Unauthorized') ||
             message.includes('Invalid credentials') || message.includes('incorrect')) {
             return 'نام کاربری یا رمز عبور نامعتبر است';

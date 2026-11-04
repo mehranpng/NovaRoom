@@ -1153,6 +1153,25 @@ body,
     border: 1.5px solid var(--bg-primary);
 }
 
+.bottom-navbar__deletion {
+    position: absolute;
+    top: -3px;
+    right: -7px;
+    min-width: 16px;
+    height: 12px;
+    padding: 0 3px;
+    border-radius: 5px;
+    background: #e11919;
+    color: #ffffff;
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 12px;
+    text-align: center;
+    border: 1.5px solid var(--bg-primary);
+    box-sizing: content-box;
+    pointer-events: none;
+}
+
 .ai-chat-room .chat-room__back-btn {
     display: flex !important;
 }

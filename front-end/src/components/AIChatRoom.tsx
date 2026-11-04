@@ -1148,6 +1148,7 @@ export function AIChatRoom({
     const activeMsg = msgMenu ? messages.find((m) => m.id === msgMenu.id) : null;
     const hasComposerChips = Boolean(reasoningEnabled || webSearchEnabled || stagedAttachment || attachmentUploading);
     const isInAIChat = Boolean(temporaryMode || activeAIChatId || messages.length > 0 || isResponding || isTyping);
+    const isEmptyChatState = messages.length === 0 && !isResponding && !isTyping;
 
     useLayoutEffect(() => {
         const el = inputAreaRef.current;
@@ -1160,7 +1161,7 @@ export function AIChatRoom({
     }, [hasComposerChips]);
 
     useEffect(() => {
-        if (hasComposerChips && isAtBottomRef.current) {
+        if (!isEmptyChatState && hasComposerChips && isAtBottomRef.current) {
             requestAnimationFrame(() => scrollToBottom(true));
         }
     }, [hasComposerChips]);
@@ -1308,7 +1309,7 @@ export function AIChatRoom({
                 style={{ paddingBottom: (composerHeight || 56) + 26 }}
             >
                 <div className="chat-room__messages-inner">
-                    {loading ? null : messages.length === 0 && !isResponding && !isTyping ? (
+                    {loading ? null : isEmptyChatState ? (
                         <div className="ai-chat-empty-state">
                             {temporaryMode ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>

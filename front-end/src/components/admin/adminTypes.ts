@@ -8,6 +8,7 @@ export interface AdminUserItem {
     online?: boolean;
     registrationDate?: string;
     sessionsCount?: number;
+    deletionStatus?: 'scheduled' | 'purging' | null;
 }
 
 export interface AdminUserDetailData extends AdminUserItem {

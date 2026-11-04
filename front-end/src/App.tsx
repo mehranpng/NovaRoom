@@ -1742,6 +1742,15 @@ export function App() {
         };
     }, [isAuthenticated, loadChats]);
 
+    useEffect(() => {
+        const handler = (event: Event) => {
+            const scheduledFor = (event as CustomEvent<{ scheduledFor: number | null }>).detail?.scheduledFor ?? null;
+            setCurrentUser((prev) => (prev ? { ...prev, deletionScheduledFor: scheduledFor } : prev));
+        };
+        window.addEventListener('novaroom:account_deletion', handler);
+        return () => window.removeEventListener('novaroom:account_deletion', handler);
+    }, []);
+
     const handleSelectChat = useCallback(async (chatId: string, options?: { navigateToRoute?: boolean }) => {
         const shouldNavigate = options?.navigateToRoute ?? true;
         const requestId = ++chatLoadRequestRef.current;
@@ -3230,6 +3239,7 @@ export function App() {
                             onSelectTab={handleSelectNavTab}
                             currentUser={currentUser}
                             hasUnseenSettings={unseenLoginCount > 0}
+                            deletionScheduledFor={currentUser?.deletionScheduledFor ?? null}
                         />
                     </div>
                 )}
@@ -3324,6 +3334,7 @@ export function App() {
                                         onSelectTab={handleSelectNavTab}
                                         currentUser={currentUser}
                                         hasUnseenSettings={unseenLoginCount > 0}
+                                        deletionScheduledFor={currentUser?.deletionScheduledFor ?? null}
                                     />
                                 )}
                             </>
@@ -3353,6 +3364,7 @@ export function App() {
                                         onSelectTab={handleSelectNavTab}
                                         currentUser={currentUser}
                                         hasUnseenSettings={unseenLoginCount > 0}
+                                        deletionScheduledFor={currentUser?.deletionScheduledFor ?? null}
                                     />
                                 )}
                             </>
@@ -3377,6 +3389,7 @@ export function App() {
                                         onSelectTab={handleSelectNavTab}
                                         currentUser={currentUser}
                                         hasUnseenSettings={unseenLoginCount > 0}
+                                        deletionScheduledFor={currentUser?.deletionScheduledFor ?? null}
                                     />
                                 )}
                             </>

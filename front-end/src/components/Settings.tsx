@@ -148,11 +148,12 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
                     type="button"
                     className="popover__item"
                     onClick={() => onOpenSection('privacy')}
-                    style={{ border: '1px solid var(--glass-border)', background: 'var(--glass-surface-soft)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', boxShadow: 'var(--shadow-xs), var(--glass-specular)', borderRadius: 9999, height: 60, justifyContent: 'space-between', direction: 'rtl', padding: '6px 22px' }}
+                    style={{ border: '1px solid var(--glass-border)', background: 'var(--glass-surface-soft)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', boxShadow: 'var(--shadow-xs), var(--glass-specular)', borderRadius: 9999, height: 60, justifyContent: 'space-between', direction: 'rtl', padding: '6px 22px', position: 'relative' }}
                 >
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textAlign: 'right' }}>
                         <Shield size={18} /> حریم خصوصی و امنیت
                     </span>
+                    {currentUser?.deletionScheduledFor && <span className="adm-dot-danger" aria-hidden="true" />}
                     <ChevronLeft size={18} style={{ marginInlineStart: 8 }} />
                 </button>
 

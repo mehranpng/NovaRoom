@@ -1,5 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { cx } from '../utils/cx';
+import { useNow } from '../hooks/useNow';
+import { formatDeletionRemaining } from '../utils/deletionTimer';
 import { Avatar } from './Avatar';
 import type { User } from '../types';
 
@@ -62,9 +64,13 @@ export interface BottomNavbarProps {
     onSelectTab: (tab: 'ai' | 'chess' | 'chats' | 'settings' | 'profile') => void;
     currentUser?: User | null;
     hasUnseenSettings?: boolean;
+    deletionScheduledFor?: number | null;
 }
 
-export function BottomNavbar({ activeTab, onSelectTab, currentUser, hasUnseenSettings }: BottomNavbarProps) {
+export function BottomNavbar({ activeTab, onSelectTab, currentUser, hasUnseenSettings, deletionScheduledFor }: BottomNavbarProps) {
+    const now = useNow(Boolean(deletionScheduledFor));
+    const deletionRemaining = deletionScheduledFor ? formatDeletionRemaining(deletionScheduledFor, now) : '';
+
     return (
         <>
             <div className="bottom-navbar-scrim" aria-hidden="true" />
@@ -158,7 +164,17 @@ export function BottomNavbar({ activeTab, onSelectTab, currentUser, hasUnseenSet
                     </AnimatePresence>
                     <span className="bottom-navbar__icon" style={{ position: 'relative' }}>
                         <PlumpySettingsIcon />
-                        {hasUnseenSettings && <span className="bottom-navbar__badge" />}
+                        {deletionScheduledFor ? (
+                            <span
+                                className="bottom-navbar__deletion"
+                                role="status"
+                                aria-label={`حذف حساب تا ${deletionRemaining} دیگر`}
+                            >
+                                {deletionRemaining}
+                            </span>
+                        ) : hasUnseenSettings ? (
+                            <span className="bottom-navbar__badge" />
+                        ) : null}
                     </span>
                 </button>
 

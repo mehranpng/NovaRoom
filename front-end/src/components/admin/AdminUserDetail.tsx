@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, Clock, Copy, KeyRound, Loader2, ShieldCheck, UserCheck, X } from 'lucide-react';
+import { Check, Clock, Copy, KeyRound, Loader2, ShieldCheck, Trash2, UserCheck, X } from 'lucide-react';
 import { apiFetch } from '../../config/api';
 import { cx } from '../../utils/cx';
 import { notify } from '../../utils/notificationBus';
@@ -29,7 +29,7 @@ const expiryOptions = [
     { value: 1440, label: '۲۴ ساعت' },
 ];
 
-type ConfirmModalKind = null | 'verify' | 'unverify' | 'promote' | 'demote';
+type ConfirmModalKind = null | 'verify' | 'unverify' | 'promote' | 'demote' | 'delete';
 
 export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
     const [detail, setDetail] = useState<AdminUserDetailData | null>(null);
@@ -41,6 +41,9 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
     const [passwordLoading, setPasswordLoading] = useState(false);
     const [expiresInMinutes, setExpiresInMinutes] = useState(30);
     const [passwordLink, setPasswordLink] = useState<PasswordLink | null>(null);
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [deleteTyped, setDeleteTyped] = useState('');
+    const [deleteLoading, setDeleteLoading] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -49,6 +52,8 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
         setPasswordLink(null);
         setPasswordModalOpen(false);
         setConfirmModal(null);
+        setDeleteModalOpen(false);
+        setDeleteTyped('');
         apiFetch(`/admin/users/${encodeURIComponent(chatId)}`)
             .then((data) => {
                 if (!cancelled) setDetail(data);
@@ -65,16 +70,17 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
     }, [chatId]);
 
     useEffect(() => {
-        if (!passwordModalOpen && !confirmModal) return;
+        if (!passwordModalOpen && !confirmModal && !deleteModalOpen) return;
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
                 setPasswordModalOpen(false);
                 setConfirmModal(null);
+                setDeleteModalOpen(false);
             }
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, [passwordModalOpen, confirmModal]);
+    }, [passwordModalOpen, confirmModal, deleteModalOpen]);
 
     const toggleVerified = async () => {
         if (!detail || actionLoading) return;
@@ -131,8 +137,32 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
         }
     };
 
-    const copyChatId = async () => {
-        if (!detail) return;
+    const confirmDeleteUser = async () => {
+        if (!detail || deleteLoading) return;
+        setDeleteLoading(true);
+        try {
+            await apiFetch(`/admin/users/${encodeURIComponent(detail.chatId)}/delete`, {
+                method: 'POST',
+                body: JSON.stringify({ confirmUsername: deleteTyped }),
+            });
+            setDetail({ ...detail, deletionStatus: 'purging' });
+            onUpdated(detail.chatId, { deletionStatus: 'purging' });
+            setDeleteModalOpen(false);
+            setDeleteTyped('');
+            notify({ type: 'success', message: 'حذف حساب آغاز شد' });
+        } catch (error: unknown) {
+            const message = String((error as { message?: string })?.message || '');
+            if (message.includes('Confirmation does not match')) {
+                notify({ type: 'error', message: 'نام کاربری وارد شده مطابقت ندارد' });
+            } else {
+                notify({ type: 'error', message: 'حذف حساب ممکن نشد' });
+            }
+        } finally {
+            setDeleteLoading(false);
+        }
+    };
+
+    const copyChatId = async () => {        if (!detail) return;
         try {
             await copyText(detail.chatId);
             setCopiedChatId(true);
@@ -144,6 +174,7 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
     };
 
     const targetIsOwner = detail?.adminLevel === 'admin0';
+    const isPurging = detail?.deletionStatus === 'purging';
     const selectedLabel = expiryOptions.find((opt) => opt.value === expiresInMinutes)?.label || '۳۰ دقیقه';
 
     const confirmMeta =
@@ -172,7 +203,19 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
                           danger: false,
                           onConfirm: () => setAdminLevel('admin1'),
                       }
-                    : {
+                    : confirmModal === 'delete'
+                      ? {
+                            title: 'حذف دائمی حساب کاربر؟',
+                            text: `حساب @${detail.username} و تمام پیام‌ها، فایل‌ها و اطلاعات هوش مصنوعی آن برای همیشه حذف می‌شود. این کار قابل بازگشت نیست و بلافاصله آغاز می‌شود.`,
+                            confirmLabel: 'ادامه',
+                            danger: true,
+                            onConfirm: () => {
+                                setConfirmModal(null);
+                                setDeleteTyped('');
+                                setDeleteModalOpen(true);
+                            },
+                        }
+                      : {
                           title: 'حذف دسترسی ادمین؟',
                           text: `آیا مطمئنی که می‌خواهی دسترسی ادمین را از @${detail.username} بگیری؟`,
                           confirmLabel: 'حذف دسترسی',
@@ -218,6 +261,7 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
                             {detail.adminLevel && (
                                 <span className="adm-badge">{detail.adminLevel === 'admin0' ? 'ادمین ۰' : 'ادمین ۱'}</span>
                             )}
+                            {isPurging && <span className="adm-badge adm-badge--danger">در حال حذف</span>}
                         </div>
                     </div>
 
@@ -263,7 +307,7 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
                             type="button"
                             className="adm-btn adm-btn--block adm-tap"
                             onClick={() => setConfirmModal(detail.verified ? 'unverify' : 'verify')}
-                            disabled={actionLoading}
+                            disabled={actionLoading || isPurging}
                         >
                             {actionLoading ? <Loader2 size={18} className="adm-spin" /> : <UserCheck size={18} />}
                             {detail.verified ? 'لغو تایید حساب' : 'تایید حساب'}
@@ -275,7 +319,7 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
                                     type="button"
                                     className="adm-btn adm-btn--block adm-tap"
                                     onClick={() => setConfirmModal(detail.adminLevel === 'admin1' ? 'demote' : 'promote')}
-                                    disabled={actionLoading}
+                                    disabled={actionLoading || isPurging}
                                 >
                                     <ShieldCheck size={18} />
                                     {detail.adminLevel === 'admin1' ? 'حذف دسترسی ادمین' : 'ارتقا به ادمین ۱'}
@@ -285,10 +329,23 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
                                     type="button"
                                     className="adm-btn adm-btn--block adm-tap"
                                     onClick={() => setPasswordModalOpen(true)}
+                                    disabled={isPurging}
                                 >
                                     <KeyRound size={18} />
                                     ساخت لینک تغییر رمز
                                 </button>
+
+                                {!isPurging && (
+                                    <button
+                                        type="button"
+                                        className="adm-btn adm-btn--danger adm-btn--block adm-tap"
+                                        onClick={() => setConfirmModal('delete')}
+                                        disabled={actionLoading}
+                                    >
+                                        <Trash2 size={18} />
+                                        حذف حساب کاربر
+                                    </button>
+                                )}
                             </>
                         )}
                     </div>
@@ -420,6 +477,77 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
                                 >
                                     {passwordLoading ? <Loader2 size={16} className="adm-spin" /> : <KeyRound size={16} />}
                                     {passwordLink ? 'ساخت لینک جدید' : 'ساخت لینک'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+
+                {deleteModalOpen && detail && (
+                    <motion.div
+                        className="chat-room-modal-overlay"
+                        style={{ zIndex: 120 }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                        onClick={() => !deleteLoading && setDeleteModalOpen(false)}
+                    >
+                        <motion.div
+                            className="chat-room-confirm-modal adm-modal"
+                            onClick={(event) => event.stopPropagation()}
+                            initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                        >
+                            <div className="adm-modal__header">
+                                <h3 className="chat-room-confirm-modal__title adm-modal__title">
+                                    <Trash2 size={18} />
+                                    حذف دائمی حساب
+                                </h3>
+                                <button
+                                    type="button"
+                                    className="adm-copy-btn adm-tap"
+                                    onClick={() => setDeleteModalOpen(false)}
+                                    aria-label="بستن"
+                                    disabled={deleteLoading}
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+
+                            <p className="chat-room-confirm-modal__text adm-modal__text">
+                                برای تایید، نام کاربری <span dir="ltr">@{detail.username}</span> را دقیقاً تایپ کنید.
+                            </p>
+
+                            <input
+                                type="text"
+                                className="adm-input"
+                                value={deleteTyped}
+                                onChange={(event) => setDeleteTyped(event.target.value)}
+                                dir="ltr"
+                                autoComplete="off"
+                                aria-label="نام کاربری برای تایید حذف"
+                            />
+
+                            <div className="chat-room-confirm-modal__actions adm-modal__actions">
+                                <button
+                                    type="button"
+                                    className="adm-btn adm-tap"
+                                    onClick={() => setDeleteModalOpen(false)}
+                                    disabled={deleteLoading}
+                                >
+                                    لغو
+                                </button>
+                                <button
+                                    type="button"
+                                    className="adm-btn adm-btn--danger adm-tap"
+                                    onClick={confirmDeleteUser}
+                                    disabled={deleteLoading || deleteTyped !== detail.username}
+                                >
+                                    {deleteLoading ? <Loader2 size={16} className="adm-spin" /> : <Trash2 size={16} />}
+                                    حذف دائمی
                                 </button>
                             </div>
                         </motion.div>

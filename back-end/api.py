@@ -227,6 +227,10 @@ AI_HISTORY_CHAR_BUDGET = 12000
 OFFICIAL_CHANNEL_CHAT_ID = "official-channel"
 OFFICIAL_CHANNEL_NAME = "کانال نواروم"
 OFFICIAL_CHANNEL_AVATAR = "/logo/ch.png"
+ACCOUNT_DELETION_GRACE_SECONDS = int(os.getenv("ACCOUNT_DELETION_GRACE_SECONDS", "86400"))
+ACCOUNT_DELETION_LEASE_SECONDS = 300
+ACCOUNT_DELETION_POLL_SECONDS = 30
+ACCOUNT_PURGE_BATCH = 500
 
 
 def is_official_channel_chat(chat_id: str) -> bool:
@@ -1034,6 +1038,14 @@ class ChangePasswordRequest(BaseModel):
     newPassword: str
 
 
+class DeleteAccountRequest(BaseModel):
+    password: str
+
+
+class AdminDeleteUserRequest(BaseModel):
+    confirmUsername: str
+
+
 class VerifyUserRequest(BaseModel):
     verified: bool
 
@@ -1295,6 +1307,8 @@ async def get_user_from_session_token(token: str) -> Optional[dict]:
     user = await cl_users.find_one({"chatId": chat_id})
     if not user:
         return None
+    if is_purging(user):
+        return None
 
     raw_sessions = (user.get("login") or {}).get("sessions") or []
     if not isinstance(raw_sessions, list):
@@ -1470,6 +1484,20 @@ async def clear_user_sessions(chat_id: str) -> None:
     await cl_users.update_one(
         {"chatId": chat_id}, {"$set": {"online": False, "wsConnectionCount": 0}}
     )
+
+
+NOT_PURGING = {"deletion.status": {"$ne": "purging"}}
+
+
+def is_purging(user: Optional[dict]) -> bool:
+    return ((user or {}).get("deletion") or {}).get("status") == "purging"
+
+
+def deletion_scheduled_for_ms(user: dict) -> Optional[int]:
+    deletion = (user or {}).get("deletion") or {}
+    if deletion.get("status") != "scheduled":
+        return None
+    return dt_to_epoch_ms(deletion.get("scheduledFor")) if deletion.get("scheduledFor") else None
 
 
 security_optional = HTTPBearer(auto_error=False)
@@ -1807,6 +1835,252 @@ def _user_can_pin_chat(user_id: str, chat_id: str) -> bool:
     )
 
 
+async def _extend_purge_lease(user_id: str) -> None:
+    await cl_users.update_one(
+        {"chatId": user_id, "deletion.status": "purging"},
+        {
+            "$set": {
+                "deletion.leaseUntil": utc_now()
+                + timedelta(seconds=ACCOUNT_DELETION_LEASE_SECONDS)
+            }
+        },
+    )
+
+
+async def _purge_messages(query: Dict[str, Any], user_id: str) -> None:
+    while True:
+        rows = (
+            await cl_messages.find(query, {"_id": 1, "file": 1})
+            .limit(ACCOUNT_PURGE_BATCH)
+            .to_list(ACCOUNT_PURGE_BATCH)
+        )
+        if not rows:
+            return
+        file_ids: set = set()
+        for row in rows:
+            file_ids |= collect_file_ids(row)
+        for file_id in file_ids:
+            await record_pending_file_deletion(file_id)
+        await cl_messages.delete_many({"_id": {"$in": [row["_id"] for row in rows]}})
+        await release_files(file_ids)
+        await _extend_purge_lease(user_id)
+
+
+async def _drop_chess_game(game_id: str) -> None:
+    handle = chess_timers.pop(game_id, None)
+    if handle:
+        handle.cancel()
+    for key in [k for k in chess_abandon_tasks if k.startswith(f"{game_id}:")]:
+        task = chess_abandon_tasks.pop(key, None)
+        if task:
+            task.cancel()
+    chess_locks.pop(game_id, None)
+    sockets = [ws for conns in chess_rooms.pop(game_id, {}).values() for ws in conns]
+    await cl_chess_games.delete_one({"_id": game_id})
+    for ws in sockets:
+        try:
+            await ws.close(code=1008)
+        except Exception:
+            pass
+
+
+async def _purge_user_chess(user_id: str) -> None:
+    games = await cl_chess_games.find(
+        {
+            "$or": [
+                {"players.white": user_id},
+                {"players.black": user_id},
+                {"creatorId": user_id},
+                {"invitedChatId": user_id},
+            ]
+        }
+    ).to_list(None)
+    for game in games:
+        game_id = str(game.get("_id"))
+        players = game.get("players") or {}
+        white = players.get("white")
+        black = players.get("black")
+        guest_involved = any(
+            chess_service.is_guest_id(value)
+            for value in (white, black, game.get("guestId"))
+            if value
+        )
+        status = game.get("status")
+        if status == "finished" and not guest_involved:
+            continue
+        if status == "active" and not guest_involved and chess_service.color_of(game, user_id):
+            try:
+                await chess_run(
+                    game_id, lambda g, n: chess_service.resign(g, user_id, n)
+                )
+                continue
+            except ChessError:
+                pass
+        await _drop_chess_game(game_id)
+
+
+async def run_account_purge(user_id: str) -> None:
+    now = utc_now()
+    claimed = await cl_users.find_one_and_update(
+        {
+            "chatId": user_id,
+            "deletion.status": "purging",
+            "$or": [{"deletion.leaseUntil": None}, {"deletion.leaseUntil": {"$lt": now}}],
+        },
+        {
+            "$set": {
+                "deletion.leaseUntil": now
+                + timedelta(seconds=ACCOUNT_DELETION_LEASE_SECONDS)
+            },
+            "$inc": {"deletion.attempts": 1},
+        },
+        return_document=ReturnDocument.AFTER,
+    )
+    if not claimed:
+        return
+
+    try:
+        task = active_ai_stream_tasks.pop(user_id, None)
+        if task:
+            task.cancel()
+        await clear_user_sessions(user_id)
+        await _extend_purge_lease(user_id)
+
+        await _purge_user_chess(user_id)
+        await _extend_purge_lease(user_id)
+
+        dm_chats = await cl_chats.find(
+            {"participants": user_id, "chatType": {"$ne": "group"}}, {"_id": 1}
+        ).to_list(None)
+        dm_chat_ids = [str(chat["_id"]) for chat in dm_chats]
+
+        message_query: Dict[str, Any] = {"$or": [{"senderId": user_id}]}
+        if dm_chat_ids:
+            message_query = {
+                "$or": [
+                    {"chatId": {"$in": dm_chat_ids}},
+                    {"senderId": user_id},
+                ]
+            }
+        await _purge_messages(message_query, user_id)
+
+        await cl_messages.update_many(
+            {"reactions.userId": user_id},
+            {"$pull": {"reactions": {"userId": user_id}}},
+        )
+        await cl_messages.update_many(
+            {"seenBy": user_id}, {"$pull": {"seenBy": user_id}}
+        )
+        await cl_messages.update_many(
+            {"replyTo.senderId": user_id}, {"$unset": {"replyTo": ""}}
+        )
+        await cl_messages.update_many(
+            {"forwardedFrom.originalSenderId": user_id},
+            {"$unset": {"forwardedFrom": ""}},
+        )
+        await cl_chats.update_many(
+            {"pinnedMessage.senderId": user_id}, {"$unset": {"pinnedMessage": ""}}
+        )
+        last_message_chats = await cl_chats.find(
+            {"lastMessage.senderId": user_id}, {"_id": 1}
+        ).to_list(None)
+        for chat in last_message_chats:
+            await cl_chats.update_one(
+                {"_id": chat["_id"]},
+                {"$set": {"lastMessage": await build_last_message(str(chat["_id"]))}},
+            )
+        await _extend_purge_lease(user_id)
+
+        await cl_chats.delete_many(
+            {"_id": {"$in": dm_chat_ids}, "chatType": {"$ne": "group"}}
+        )
+
+        groups = await cl_chats.find(
+            {"chatType": "group", "participants": user_id}
+        ).to_list(None)
+        for group in groups:
+            group_id = str(group["_id"])
+            remaining = [
+                p for p in (group.get("participants") or []) if p != user_id
+            ]
+            if not remaining:
+                await _purge_messages({"chatId": group_id}, user_id)
+                await cl_chats.delete_one({"_id": group_id})
+                continue
+            update: Dict[str, Any] = {
+                "$pull": {"participants": user_id},
+                "$set": {"updatedAt": utc_now()},
+            }
+            if group.get("createdBy") == user_id:
+                update["$set"]["createdBy"] = remaining[0]
+            await cl_chats.update_one({"_id": group_id}, update)
+
+        await cl_users.update_many(
+            {"settings.blockedChatIds": user_id},
+            {"$pull": {"settings.blockedChatIds": user_id}},
+        )
+        if dm_chat_ids:
+            await cl_users.update_many(
+                {"settings.pinnedChatIds": {"$in": dm_chat_ids}},
+                {"$pullAll": {"settings.pinnedChatIds": dm_chat_ids}},
+            )
+        await _extend_purge_lease(user_id)
+
+        await cl_ai_messages.delete_many({"userId": user_id})
+        await cl_ai_chats.delete_many({"userId": user_id})
+        await cl_ai_memories.delete_many({"userId": user_id})
+        await cl_ai_usage.delete_many({"userId": user_id})
+        async for row in cl_ai_temp_files.find({"userId": user_id}):
+            try:
+                await delete_ai_temp_file(Path(str(row.get("filePath") or "")).name)
+            except Exception as e:
+                print(f"AI temp file purge warning: {e}")
+        await cl_ai_temp_files.delete_many({"userId": user_id})
+
+        await cl_register_links.delete_many({"createdBy": user_id})
+        await cl_password_links.delete_many(
+            {"$or": [{"createdBy": user_id}, {"targetChatId": user_id}]}
+        )
+        await _extend_purge_lease(user_id)
+
+        doc = await cl_users.find_one({"chatId": user_id}, {"profile.avatar": 1})
+        await cl_users.delete_one({"chatId": user_id, "deletion.status": "purging"})
+        avatar = _file_id_from_url(((doc or {}).get("profile") or {}).get("avatar"))
+        if not avatar:
+            raw_avatar = str(((doc or {}).get("profile") or {}).get("avatar") or "")
+            if _is_valid_file_id(raw_avatar):
+                avatar = raw_avatar
+        if avatar:
+            await release_files({avatar})
+    except Exception as e:
+        print(f"Account purge warning for {user_id}: {e}")
+
+
+async def account_deletion_worker() -> None:
+    while True:
+        try:
+            now = utc_now()
+            await cl_users.update_many(
+                {
+                    "deletion.status": "scheduled",
+                    "deletion.scheduledFor": {"$lte": now},
+                },
+                {
+                    "$set": {
+                        "deletion.status": "purging",
+                        "deletion.startedAt": now,
+                        "deletion.leaseUntil": None,
+                        "deletion.attempts": 0,
+                    }
+                },
+            )
+            async for row in cl_users.find({"deletion.status": "purging"}, {"chatId": 1}):
+                await run_account_purge(row["chatId"])
+        except Exception as e:
+            print(f"Account deletion worker warning: {e}")
+        await asyncio.sleep(ACCOUNT_DELETION_POLL_SECONDS)
+
+
 @app.on_event("startup")
 async def startup_db():
     try:
@@ -1852,6 +2126,10 @@ async def startup_db():
             cl_chess_games.create_index("inviteToken", unique=True, sparse=True),
             cl_users.create_index([("chessStats.gamesPlayed", -1), ("chessStats.elo", -1)]),
             cl_users.create_index([("chessStats.elo", -1)]),
+            cl_users.create_index("deletion.status", sparse=True),
+            cl_users.create_index("deletion.scheduledFor", sparse=True),
+            cl_messages.create_index("senderId"),
+            cl_ai_temp_files.create_index("userId"),
             return_exceptions=True,
         )
         AI_TEMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -1870,6 +2148,7 @@ async def startup_db():
     asyncio.create_task(retry_pending_file_deletions_task())
     asyncio.create_task(sweep_orphaned_uploads_task())
     asyncio.create_task(chess_backfill_stats())
+    asyncio.create_task(account_deletion_worker())
 
 
 async def migrate_unencrypted_messages():
@@ -2303,6 +2582,73 @@ async def change_password(
     return {"message": "ok"}
 
 
+@app.post("/account/deletion")
+@limiter.limit("5/minute;20/hour")
+async def request_account_deletion(
+    request: Request,
+    req: DeleteAccountRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    if get_admin_level(current_user) == "admin0":
+        raise HTTPException(status_code=403, detail="Owner account cannot be deleted")
+
+    stored_hash = (current_user.get("login") or {}).get("password")
+    if not stored_hash or not isinstance(stored_hash, str):
+        raise HTTPException(status_code=400, detail="Password is incorrect")
+    if not await bcrypt_checkpw_async(req.password, stored_hash):
+        raise HTTPException(status_code=400, detail="Password is incorrect")
+
+    uid = current_user["chatId"]
+    now = utc_now()
+    scheduled_for = now + timedelta(seconds=ACCOUNT_DELETION_GRACE_SECONDS)
+    result = await cl_users.update_one(
+        {"chatId": uid, "deletion": {"$exists": False}},
+        {
+            "$set": {
+                "deletion": {
+                    "status": "scheduled",
+                    "source": "self",
+                    "requestedAt": now,
+                    "scheduledFor": scheduled_for,
+                    "startedAt": None,
+                    "leaseUntil": None,
+                    "attempts": 0,
+                }
+            }
+        },
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=409, detail="Deletion already requested")
+
+    scheduled_ms = dt_to_epoch_ms(scheduled_for)
+    await safe_send(uid, {"type": "account_deletion", "scheduledFor": scheduled_ms})
+    return {"scheduledFor": scheduled_ms}
+
+
+@app.post("/account/deletion/cancel")
+@limiter.limit("10/minute")
+async def cancel_account_deletion(
+    request: Request, current_user: dict = Depends(get_current_user)
+):
+    uid = current_user["chatId"]
+    result = await cl_users.update_one(
+        {"chatId": uid, "deletion.status": "scheduled"},
+        {"$unset": {"deletion": ""}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=409, detail="No scheduled deletion")
+    await safe_send(uid, {"type": "account_deletion", "scheduledFor": None})
+    return {"message": "ok"}
+
+
+@app.get("/account/deletion")
+@limiter.limit("60/minute;1000/hour")
+async def get_account_deletion(
+    request: Request, current_user: dict = Depends(get_current_user)
+):
+    return {"scheduledFor": deletion_scheduled_for_ms(current_user)}
+
+
 @app.get("/admin/me")
 @limiter.limit("60/minute;600/hour")
 async def admin_me(request: Request, current_user: dict = Depends(require_admin)):
@@ -2470,6 +2816,7 @@ async def admin_list_users(
             "registrationDate": 1,
             "createdAt": 1,
             "login.sessions": 1,
+            "deletion": 1,
         },
     ).to_list(None)
 
@@ -2500,6 +2847,7 @@ async def admin_list_users(
             "online": resolve_user_online_state(doc),
             "registrationDate": doc.get("registrationDate"),
             "sessionsCount": len(((doc.get("login") or {}).get("sessions")) or []),
+            "deletionStatus": (doc.get("deletion") or {}).get("status"),
         }
         for doc in page_docs
     ]
@@ -2537,6 +2885,7 @@ async def admin_user_detail(
         "email": login_data.get("email"),
         "sessionsCount": len(login_data.get("sessions") or []),
         "hasPassword": bool(login_data.get("password")),
+        "deletionStatus": (user.get("deletion") or {}).get("status"),
     }
 
 
@@ -2548,6 +2897,11 @@ async def admin_set_verified(
     payload: VerifyUserRequest,
     current_user: dict = Depends(require_admin0),
 ):
+    target = await cl_users.find_one({"chatId": chat_id}, {"deletion": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if is_purging(target):
+        raise HTTPException(status_code=409, detail="Account is being deleted")
     result = await cl_users.update_one(
         {"chatId": chat_id}, {"$set": {"verified": bool(payload.verified)}}
     )
@@ -2564,11 +2918,13 @@ async def admin_set_level(
     payload: AdminLevelRequest,
     current_user: dict = Depends(require_admin0),
 ):
-    target = await cl_users.find_one({"chatId": chat_id}, {"profile.username": 1, "adminLevel": 1, "chatId": 1})
+    target = await cl_users.find_one({"chatId": chat_id}, {"profile.username": 1, "adminLevel": 1, "chatId": 1, "deletion": 1})
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
     if get_admin_level(target) == "admin0":
         raise HTTPException(status_code=403, detail="Forbidden")
+    if is_purging(target):
+        raise HTTPException(status_code=409, detail="Account is being deleted")
     if payload.level == "admin1":
         await cl_users.update_one({"chatId": chat_id}, {"$set": {"adminLevel": "admin1"}})
     else:
@@ -2587,12 +2943,51 @@ async def admin_create_password_link(
     ttl_minutes = payload.expiresInMinutes if payload else 30
     if ttl_minutes not in ALLOWED_LINK_TTL_MINUTES:
         raise HTTPException(status_code=400, detail="Invalid expiration duration")
-    target = await cl_users.find_one({"chatId": chat_id}, {"profile.username": 1, "adminLevel": 1, "chatId": 1})
+    target = await cl_users.find_one({"chatId": chat_id}, {"profile.username": 1, "adminLevel": 1, "chatId": 1, "deletion": 1})
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
     if get_admin_level(target) == "admin0":
         raise HTTPException(status_code=403, detail="Forbidden")
+    if is_purging(target):
+        raise HTTPException(status_code=409, detail="Account is being deleted")
     return await create_password_link(chat_id, current_user["chatId"], ttl_minutes)
+
+
+@app.post("/admin/users/{chat_id}/delete")
+@limiter.limit("10/minute;60/hour")
+async def admin_delete_user(
+    request: Request,
+    chat_id: str,
+    payload: AdminDeleteUserRequest,
+    current_user: dict = Depends(require_admin0),
+):
+    target = await cl_users.find_one({"chatId": chat_id})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if get_admin_level(target) == "admin0" or chat_id == current_user["chatId"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if str(payload.confirmUsername or "") != str((target.get("profile") or {}).get("username") or ""):
+        raise HTTPException(status_code=400, detail="Confirmation does not match")
+
+    now = utc_now()
+    await cl_users.update_one(
+        {"chatId": chat_id, "deletion.status": {"$ne": "purging"}},
+        {
+            "$set": {
+                "deletion": {
+                    "status": "purging",
+                    "source": "admin",
+                    "requestedAt": now,
+                    "scheduledFor": now,
+                    "startedAt": now,
+                    "leaseUntil": None,
+                    "attempts": 0,
+                }
+            }
+        },
+    )
+    asyncio.create_task(run_account_purge(chat_id))
+    return {"status": "purging"}
 
 
 @app.put("/admin/registration")
@@ -2638,6 +3033,9 @@ async def login(req: LoginRequest, request: Request):
     ok = await bcrypt_checkpw_async(req.password, stored_hash)
     if not ok:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if is_purging(user):
+        raise HTTPException(status_code=403, detail="Account is being deleted")
 
     token = await create_access_token({"chatId": user["chatId"]})
 
@@ -2685,6 +3083,7 @@ async def get_profile(request: Request, current_user: dict = Depends(get_current
         "verified": bool(current_user.get("verified", False)),
         "registrationDate": current_user.get("registrationDate"),
         "adminLevel": get_admin_level(current_user),
+        "deletionScheduledFor": deletion_scheduled_for_ms(current_user),
     }
 
 
@@ -2887,6 +3286,7 @@ async def search_users(
     users = (
         await cl_users.find(
             {
+                **NOT_PURGING,
                 "profile.username": {"$regex": re.escape(q), "$options": "i"},
                 "chatId": {"$ne": current_user["chatId"]},
             }
@@ -2934,6 +3334,12 @@ async def create_or_get_chat(
 ):
     my_id = current_user["chatId"]
     target_id = req.targetChatId
+
+    target_user = await cl_users.find_one(
+        {"chatId": target_id, "deletion.status": {"$ne": "purging"}}, {"chatId": 1}
+    )
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
 
     chat_id = get_chat_id_for_two(my_id, target_id)
     chat = await cl_chats.find_one({"_id": chat_id})
@@ -5180,6 +5586,15 @@ async def chess_player_info(game: dict) -> dict:
                 "elo": None,
                 "verified": False,
                 "isGuest": True,
+            }
+        elif i not in info:
+            info[i] = {
+                "chatId": i,
+                "name": "حساب حذف‌شده",
+                "avatar": "",
+                "elo": None,
+                "verified": False,
+                "isGuest": False,
             }
     return info
 
@@ -7438,7 +7853,9 @@ async def invite_to_chess_game(
     target_id = str(body.targetChatId or "").strip()
     if not target_id or target_id == me:
         raise HTTPException(status_code=400, detail="bad_request")
-    target_user = await cl_users.find_one({"chatId": target_id}, {"chatId": 1})
+    target_user = await cl_users.find_one(
+        {"chatId": target_id, "deletion.status": {"$ne": "purging"}}, {"chatId": 1}
+    )
     if not target_user:
         raise HTTPException(status_code=404, detail="not_found")
     if await _is_direct_blocked_between(me, target_id):
@@ -7544,7 +7961,9 @@ async def share_chess_game(
                 raise HTTPException(status_code=403, detail="forbidden")
         chat_id = target_id
     else:
-        target_user = await cl_users.find_one({"chatId": target_id}, {"chatId": 1})
+        target_user = await cl_users.find_one(
+            {"chatId": target_id, "deletion.status": {"$ne": "purging"}}, {"chatId": 1}
+        )
         if not target_user:
             raise HTTPException(status_code=404, detail="not_found")
         if await _is_direct_blocked_between(me, target_id):
@@ -7733,6 +8152,7 @@ async def get_chess_leaderboard(
     cursor = (
         cl_users.find(
             {
+                **NOT_PURGING,
                 "chatId": {"$not": {"$regex": "^guest_"}},
                 "chessStats.gamesPlayed": {"$gt": 0},
             }
@@ -7784,6 +8204,7 @@ async def get_chess_leaderboard(
     if my_games > 0:
         better = await cl_users.count_documents(
             {
+                **NOT_PURGING,
                 "chatId": {"$not": {"$regex": "^guest_"}},
                 "chessStats.gamesPlayed": {"$gt": 0},
                 "$or": [

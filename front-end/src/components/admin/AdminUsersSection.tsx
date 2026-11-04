@@ -46,12 +46,12 @@ export function AdminUsersSection({ backRef }: AdminUsersSectionProps) {
     const queryRef = useRef('');
     const filterRef = useRef('all');
 
-    const loadUsers = useCallback(async (reset: boolean) => {
+    const loadUsers = useCallback(async (reset: boolean, silent = false) => {
         const requestId = reset ? requestIdRef.current + 1 : requestIdRef.current;
         if (reset) {
             requestIdRef.current = requestId;
             loadingRef.current = false;
-            setLoading(true);
+            if (!silent) setLoading(true);
             setLoadingMore(false);
         } else if (loadingRef.current) {
             return;
@@ -116,6 +116,16 @@ export function AdminUsersSection({ backRef }: AdminUsersSectionProps) {
             return true;
         };
     }, [backRef, selectedChatId]);
+
+    const hasPurgingUsers = items.some((item) => item.deletionStatus === 'purging');
+
+    useEffect(() => {
+        if (!hasPurgingUsers) return;
+        const timer = window.setInterval(() => {
+            void loadUsers(true, true);
+        }, 10000);
+        return () => window.clearInterval(timer);
+    }, [hasPurgingUsers, loadUsers]);
 
     useEffect(() => () => {
         backRef.current = () => false;
@@ -199,7 +209,7 @@ export function AdminUsersSection({ backRef }: AdminUsersSectionProps) {
                     <button
                         key={item.chatId}
                         type="button"
-                        className="adm-row adm-tap"
+                        className={cx('adm-row', 'adm-tap', item.deletionStatus === 'purging' && 'adm-row--purging')}
                         onClick={() => setSelectedChatId(item.chatId)}
                     >
                         <span className="adm-row__text">
@@ -211,6 +221,8 @@ export function AdminUsersSection({ backRef }: AdminUsersSectionProps) {
                                 <span className="adm-row__username">@{item.username}</span>
                                 {item.adminLevel === 'admin0' && <span className="adm-badge">ادمین ۰</span>}
                                 {item.adminLevel === 'admin1' && <span className="adm-badge">ادمین ۱</span>}
+                                {item.deletionStatus === 'purging' && <span className="adm-badge adm-badge--danger">در حال حذف</span>}
+                                {item.deletionStatus === 'scheduled' && <span className="adm-badge">حذف زمان‌بندی‌شده</span>}
                             </span>
                             <span className="adm-row__meta">
                                 <span className="adm-row__status">

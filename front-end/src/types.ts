@@ -11,6 +11,7 @@ export interface User {
     verified?: boolean;
     registrationDate?: string;
     adminLevel?: 'admin0' | 'admin1' | null;
+    deletionScheduledFor?: number | null;
 }
 
 export interface MessageReply {

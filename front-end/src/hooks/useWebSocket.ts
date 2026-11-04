@@ -347,6 +347,8 @@ export function useWebSocket({
                     });
                 } else if (data.type === 'block_status_changed') {
                     window.dispatchEvent(new Event('novaroom:block_status_changed'));
+                } else if (data.type === 'account_deletion') {
+                    window.dispatchEvent(new CustomEvent('novaroom:account_deletion', { detail: { scheduledFor: data.scheduledFor ?? null } }));
                 } else if (data.type === 'ping') {
                     lastPongAtRef.current = Date.now();
                     send({ type: 'pong' });
