@@ -143,6 +143,10 @@ body,
 
 .app {
     display: flex;
+    position: fixed;
+    top: var(--app-offset-top, 0px);
+    left: 0;
+    right: 0;
     height: var(--app-height, 100dvh);
     width: 100%;
     background: var(--bg-primary);
@@ -1290,6 +1294,17 @@ body,
     position: relative;
 }
 
+.chat-room::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background-image: var(--chat-wallpaper-pattern, none);
+    background-repeat: repeat;
+    background-size: var(--chat-wallpaper-size, auto);
+}
+
 .chat-room::after {
     content: '';
     position: absolute;
@@ -1824,6 +1839,8 @@ body,
     touch-action: pan-y;
     min-height: 0;
     background: transparent;
+    position: relative;
+    z-index: 2;
 }
 
 .chat-room__messages--with-chips {
@@ -2666,6 +2683,16 @@ body,
 
 .chat-room__input-area > * {
     pointer-events: auto;
+}
+
+html.keyboard-open .chat-room__input-area {
+    bottom: 10px;
+}
+
+@supports (-webkit-touch-callout: none) {
+    .chat-room__text-input {
+        font-size: 16px;
+    }
 }
 
 .chat-room__input-wrapper {

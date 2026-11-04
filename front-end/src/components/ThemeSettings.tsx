@@ -1,8 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
-import { Check, Download, Loader2, Monitor, Moon, Sun, Trash2, Smile, Palette } from 'lucide-react';
+import { Check, Download, Loader2, Monitor, Moon, Sun, Trash2, Smile, Palette, Wallpaper } from 'lucide-react';
 import { cx } from '../utils/cx';
 import { useScrollFade } from '../hooks/useScrollFade';
 import { useDarkMode, type AccentIntensity, type ThemeMode, type ThemePalette, type ThemeTone } from '../hooks/useDarkMode';
+import { WALLPAPER_OPTIONS, generateWallpaperDataUri, getWallpaperSize, scaleWallpaperOpacity } from '../utils/chatWallpapers';
+import { toPersianDigits } from '../utils/format';
 import {
     isEmojiFontDownloaded,
     isEmojiFontActive,
@@ -46,9 +48,20 @@ export function ThemeSettings() {
         setUltraDarkMode,
         blurEffect,
         setBlurEffect,
+        chatWallpaper,
+        setChatWallpaper,
+        chatWallpaperIntensity,
+        setChatWallpaperIntensity,
     } = useDarkMode();
     const ultraDarkAvailable = isDarkMode;
     const shouldDisableCustomTone = isDarkMode && ultraDarkMode;
+
+    const activeAccentColor = paletteOptions[themePalette]?.color || '#3b82f6';
+    const previewPatternUri = generateWallpaperDataUri(
+        chatWallpaper,
+        activeAccentColor,
+        scaleWallpaperOpacity(isDarkMode ? 0.18 : 0.12, chatWallpaperIntensity)
+    );
 
     const [emojiDownloaded, setEmojiDownloaded] = useState<boolean>(false);
     const [emojiActive, setEmojiActive] = useState<boolean>(false);
@@ -321,6 +334,193 @@ export function ThemeSettings() {
                                 {themePalette === palette ? <Check size={15} /> : null}
                             </button>
                         ))}
+                    </div>
+                </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, direction: 'rtl', textAlign: 'right' }}>
+                <div className="profile__section-title">
+                    <span className="profile__section-icon"><Wallpaper size={15} /></span>
+                    طرح پس‌زمینه چت
+                </div>
+
+                <div className="profile__chat-id-card profile__chat-id-card--flat">
+                    <p className="profile__field-label" style={{ marginBottom: 10 }}>پیش‌نمایش</p>
+
+                    <div style={{
+                        position: 'relative',
+                        minHeight: 124,
+                        borderRadius: 18,
+                        overflow: 'hidden',
+                        border: '1px solid var(--glass-border)',
+                        background: 'var(--chat-room-bg, var(--bg-secondary))',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center',
+                        padding: '12px 14px',
+                        gap: 8,
+                    }}>
+                        <div style={{
+                            position: 'absolute',
+                            inset: 0,
+                            pointerEvents: 'none',
+                            backgroundImage: previewPatternUri ? `url("${previewPatternUri}")` : 'none',
+                            backgroundRepeat: 'repeat',
+                            backgroundSize: getWallpaperSize(chatWallpaper),
+                        }} />
+
+                        <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', gap: 4, direction: 'ltr' }}>
+                            <div className="message-item">
+                                <div className="message-row message-row--mine">
+                                    <div className="message-bubble message-bubble--mine msg-shape--single">
+                                        <div className="message-text">بهترین ادمین نواروم کیه به نظرت؟</div>
+                                        <div className="message-meta message-meta--mine">
+                                            <span className="message-time">۱۲:۳۰</span>
+                                            <span className="message-seen message-seen--double" aria-label="seen">
+                                                <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--first" />
+                                                <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--second" />
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="message-item">
+                                <div className="message-row message-row--theirs">
+                                    <div className="message-bubble message-bubble--theirs msg-shape--single">
+                                        <div className="message-text">قطعاً طاها</div>
+                                        <div className="message-reactions">
+                                            <span className="message-reaction">
+                                                <span className="message-reaction__emoji">🤣</span>
+                                            </span>
+                                        </div>
+                                        <div className="message-meta message-meta--theirs">
+                                            <span className="message-time">۱۲:۳۱</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p className="profile__field-label" style={{ marginTop: 16, marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+                        <span>شدت الگو</span>
+                        <span style={{ fontFamily: 'Vazir, sans-serif' }}>{toPersianDigits(chatWallpaperIntensity)}٪</span>
+                    </p>
+                    <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        className="theme-intensity-slider"
+                        dir="rtl"
+                        value={chatWallpaperIntensity}
+                        disabled={chatWallpaper === 'none'}
+                        aria-label="شدت الگو"
+                        onChange={(e) => setChatWallpaperIntensity(Number(e.currentTarget.value))}
+                        style={{
+                            width: '100%',
+                            border: 'none',
+                            outline: 'none',
+                            boxShadow: 'none',
+                            background: `linear-gradient(270deg, var(--accent-primary) 0%, var(--accent-primary) ${chatWallpaperIntensity}%, var(--border-secondary) ${chatWallpaperIntensity}%, var(--border-secondary) 100%)`,
+                        }}
+                    />
+
+                    <p className="profile__field-label" style={{ marginTop: 16, marginBottom: 10 }}>انتخاب الگو</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+                        {WALLPAPER_OPTIONS.map((option) => {
+                            const isSelected = chatWallpaper === option.id;
+                            const cardPatternUri = option.id === 'none'
+                                ? null
+                                : generateWallpaperDataUri(option.id, activeAccentColor, isDarkMode ? 0.32 : 0.22);
+
+                            return (
+                                <button
+                                    key={option.id}
+                                    type="button"
+                                    aria-label={option.label}
+                                    onClick={() => {
+                                        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                                            navigator.vibrate(10);
+                                        }
+                                        setChatWallpaper(option.id);
+                                    }}
+                                    style={{
+                                        position: 'relative',
+                                        overflow: 'hidden',
+                                        fontFamily: "'Nunito', 'Vazir', sans-serif",
+                                        border: `1px solid ${isSelected ? 'var(--accent-primary)' : 'var(--glass-border)'}`,
+                                        background: isSelected
+                                            ? 'color-mix(in srgb, var(--accent-primary) 12%, var(--glass-surface-soft))'
+                                            : 'var(--glass-surface-soft)',
+                                        color: 'var(--text-primary)',
+                                        borderRadius: 14,
+                                        minHeight: 48,
+                                        padding: '8px 14px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        cursor: 'pointer',
+                                        transition: 'border-color .15s ease, background .15s ease',
+                                    }}
+                                >
+                                    {cardPatternUri ? (
+                                        <span
+                                            aria-hidden="true"
+                                            style={{
+                                                position: 'absolute',
+                                                inset: 0,
+                                                pointerEvents: 'none',
+                                                backgroundImage: `url("${cardPatternUri}")`,
+                                                backgroundRepeat: 'repeat',
+                                                backgroundSize: getWallpaperSize(option.id),
+                                                opacity: isSelected ? 1 : 0.85,
+                                            }}
+                                        />
+                                    ) : null}
+
+                                    <span style={{
+                                        position: 'relative',
+                                        zIndex: 2,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        width: '100%',
+                                    }}>
+                                        {option.id === 'none' ? (
+                                            <span style={{
+                                                fontSize: 13,
+                                                fontWeight: isSelected ? 700 : 500,
+                                                color: 'var(--text-primary)',
+                                                letterSpacing: '0.2px',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                whiteSpace: 'nowrap',
+                                                paddingLeft: 4,
+                                            }}>
+                                                {option.label}
+                                            </span>
+                                        ) : null}
+                                        {isSelected ? (
+                                            <span style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                width: 20,
+                                                height: 20,
+                                                borderRadius: '50%',
+                                                background: 'var(--accent-primary)',
+                                                color: '#ffffff',
+                                                flexShrink: 0,
+                                                marginInlineStart: 'auto',
+                                            }}>
+                                                <Check size={12} strokeWidth={3} />
+                                            </span>
+                                        ) : null}
+                                    </span>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
             </div>

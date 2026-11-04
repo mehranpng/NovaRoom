@@ -488,9 +488,13 @@ export function App() {
                 fullHeight = height;
             }
 
+            const offsetTop = vv ? Math.max(0, Math.round(vv.offsetTop)) : 0;
+
             document.documentElement.style.setProperty('--app-height', `${height}px`);
             document.documentElement.style.setProperty('--app-height-full', `${fullHeight}px`);
+            document.documentElement.style.setProperty('--app-offset-top', `${offsetTop}px`);
             document.documentElement.style.setProperty('--keyboard-offset', `${kb}px`);
+            document.documentElement.classList.toggle('keyboard-open', isCoarsePointer && kb > 80);
         };
 
         apply();
