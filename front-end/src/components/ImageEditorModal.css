@@ -1,0 +1,544 @@
+.image-editor-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    z-index: 999999 !important;
+    display: flex;
+    flex-direction: column;
+    background: radial-gradient(120% 80% at 50% 0%, #17171c 0%, #0b0b0e 55%, #000000 100%) !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    overflow: hidden !important;
+    touch-action: none !important;
+    direction: rtl;
+    font-family: 'Vazir', 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    animation: imageEditorFadeIn 0.18s ease-out;
+}
+
+.image-editor-overlay * {
+    font-family: 'Vazir', 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+@keyframes imageEditorFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.99);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.image-editor-close-btn {
+    position: absolute;
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    right: 12px;
+    z-index: 120;
+    width: 40px;
+    height: 40px;
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(28, 28, 32, 0.78);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    color: #f4f4f5;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.12s ease;
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .image-editor-close-btn:hover {
+        background: rgba(255, 255, 255, 0.14);
+    }
+}
+
+.image-editor-close-btn:active {
+    transform: scale(0.92);
+}
+
+.image-editor-body {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 28px 170px;
+    overflow: hidden;
+    touch-action: none !important;
+}
+
+.image-editor-canvas-stage {
+    position: relative;
+    max-width: 100%;
+    max-height: calc(100dvh - 250px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
+    overflow: visible;
+    touch-action: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+}
+
+.image-editor-canvas {
+    display: block;
+    max-width: 100%;
+    max-height: calc(100dvh - 250px);
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 4px;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    touch-action: none !important;
+}
+
+.image-editor-canvas--drawable {
+    cursor: crosshair;
+}
+
+.image-editor-crop-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 15;
+    touch-action: none !important;
+}
+
+.image-editor-crop-shade {
+    position: absolute;
+    z-index: 1;
+    background: rgba(0, 0, 0, 0.62);
+    touch-action: none !important;
+}
+
+.image-editor-crop-box {
+    position: absolute;
+    z-index: 2;
+    box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.95);
+    cursor: move;
+    touch-action: none !important;
+}
+
+.image-editor-crop-grid-h1,
+.image-editor-crop-grid-h2,
+.image-editor-crop-grid-v1,
+.image-editor-crop-grid-v2 {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.24);
+    pointer-events: none;
+}
+
+.image-editor-crop-grid-h1 {
+    top: 33.333%;
+    left: 0;
+    right: 0;
+    height: 1px;
+}
+.image-editor-crop-grid-h2 {
+    top: 66.666%;
+    left: 0;
+    right: 0;
+    height: 1px;
+}
+.image-editor-crop-grid-v1 {
+    left: 33.333%;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+}
+.image-editor-crop-grid-v2 {
+    left: 66.666%;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+}
+
+.image-editor-crop-edge {
+    position: absolute;
+    z-index: 3;
+    pointer-events: auto;
+    touch-action: none !important;
+}
+
+.image-editor-crop-edge--top {
+    top: -16px;
+    left: 20px;
+    right: 20px;
+    height: 32px;
+    cursor: ns-resize;
+}
+
+.image-editor-crop-edge--bottom {
+    bottom: -16px;
+    left: 20px;
+    right: 20px;
+    height: 32px;
+    cursor: ns-resize;
+}
+
+.image-editor-crop-edge--left {
+    left: -16px;
+    top: 20px;
+    bottom: 20px;
+    width: 32px;
+    cursor: ew-resize;
+}
+
+.image-editor-crop-edge--right {
+    right: -16px;
+    top: 20px;
+    bottom: 20px;
+    width: 32px;
+    cursor: ew-resize;
+}
+
+.image-editor-crop-edge-bar-h {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 34px;
+    height: 3px;
+    background: #ffffff;
+    border-radius: 999px;
+    pointer-events: none;
+}
+
+.image-editor-crop-edge-bar-v {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 34px;
+    background: #ffffff;
+    border-radius: 999px;
+    pointer-events: none;
+}
+
+.image-editor-crop-corner {
+    position: absolute;
+    z-index: 4;
+    width: 36px;
+    height: 36px;
+    pointer-events: auto;
+    touch-action: none !important;
+}
+
+.image-editor-crop-corner--tl {
+    top: -6px;
+    left: -6px;
+    border-top: 3px solid #ffffff;
+    border-left: 3px solid #ffffff;
+    border-top-left-radius: 2px;
+    cursor: nwse-resize;
+}
+
+.image-editor-crop-corner--tr {
+    top: -6px;
+    right: -6px;
+    border-top: 3px solid #ffffff;
+    border-right: 3px solid #ffffff;
+    border-top-right-radius: 2px;
+    cursor: nesw-resize;
+}
+
+.image-editor-crop-corner--bl {
+    bottom: -6px;
+    left: -6px;
+    border-bottom: 3px solid #ffffff;
+    border-left: 3px solid #ffffff;
+    border-bottom-left-radius: 2px;
+    cursor: nesw-resize;
+}
+
+.image-editor-crop-corner--br {
+    bottom: -6px;
+    right: -6px;
+    border-bottom: 3px solid #ffffff;
+    border-right: 3px solid #ffffff;
+    border-bottom-right-radius: 2px;
+    cursor: nwse-resize;
+}
+
+.image-editor-bottom-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 10px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    z-index: 60;
+    pointer-events: none;
+}
+
+.image-editor-bottom-bar > * {
+    pointer-events: auto;
+}
+
+.image-editor-sub-dock {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    width: min(420px, calc(100vw - 40px));
+    box-sizing: border-box;
+    padding: 12px 14px;
+    background: rgba(26, 26, 30, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    animation: imageEditorSlideUp 0.16s ease-out;
+}
+
+@keyframes imageEditorSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.image-editor-colors {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    justify-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    min-width: 0;
+}
+
+.image-editor-color-circle {
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+    transition: box-shadow 0.15s ease;
+    flex-shrink: 0;
+}
+
+.image-editor-color-circle--selected {
+    outline: 2px solid #ffffff;
+    outline-offset: 2px;
+}
+
+.image-editor-slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+}
+
+.image-editor-slider-preview-box {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.image-editor-slider-preview {
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+    transition: width 0.1s ease, height 0.1s ease;
+}
+
+.image-editor-slider {
+    flex: 1;
+    min-width: 0;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.22);
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+}
+
+.image-editor-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: #ffffff;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+    transition: transform 0.1s ease;
+}
+
+.image-editor-slider::-webkit-slider-thumb:active {
+    transform: scale(1.2);
+}
+
+.image-editor-slider::-moz-range-thumb {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: #ffffff;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.image-editor-bottom-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 54px;
+    padding: 0 54px;
+}
+
+.image-editor-tools-dock {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.image-editor-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(26, 26, 30, 0.82);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    color: #f4f4f5;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .image-editor-icon-btn:hover {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.18);
+        color: #ffffff;
+        transform: scale(1.04);
+    }
+}
+
+.image-editor-icon-btn:active {
+    transform: scale(0.92) !important;
+}
+
+.image-editor-icon-btn--active {
+    background: var(--accent-primary, #2563eb) !important;
+    border-color: var(--accent-primary, #2563eb) !important;
+    color: #ffffff !important;
+}
+
+.image-editor-icon-btn:disabled {
+    opacity: 0.32;
+    pointer-events: none;
+}
+
+.image-editor-check-btn {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    transform: translateY(-50%);
+    width: 54px;
+    height: 54px;
+    border-radius: 9999px;
+    border: none;
+    background: var(--accent-primary, #2563eb);
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.15s ease;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .image-editor-check-btn:hover {
+        background: var(--accent-hover, #1d4ed8);
+        transform: translateY(-50%) scale(1.05);
+    }
+}
+
+.image-editor-check-btn:active {
+    transform: translateY(-50%) scale(0.93);
+}
+
+@media (max-width: 640px) {
+    .image-editor-body {
+        padding: 52px 20px 156px;
+    }
+    .image-editor-canvas-stage {
+        max-height: calc(100dvh - 226px);
+        max-width: 100%;
+    }
+    .image-editor-canvas {
+        max-height: calc(100dvh - 226px);
+    }
+    .image-editor-bottom-bar {
+        padding: 8px 10px calc(12px + env(safe-area-inset-bottom, 0px));
+        gap: 8px;
+    }
+    .image-editor-sub-dock {
+        width: min(420px, calc(100vw - 32px));
+        padding: 10px 12px;
+        gap: 10px;
+    }
+    .image-editor-colors {
+        gap: 4px;
+    }
+    .image-editor-color-circle {
+        width: 22px;
+        height: 22px;
+    }
+    .image-editor-bottom-row {
+        min-height: 50px;
+        padding: 0 46px;
+    }
+    .image-editor-tools-dock {
+        gap: 8px;
+    }
+    .image-editor-icon-btn {
+        width: 40px;
+        height: 40px;
+    }
+    .image-editor-check-btn {
+        right: 0;
+        width: 48px;
+        height: 48px;
+    }
+}

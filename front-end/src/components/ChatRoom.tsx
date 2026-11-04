@@ -1,0 +1,2955 @@
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { ChevronLeft, Copy, Eye, MoreVertical, Pencil, Smile, Trash2, X, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload, Download, Pin } from 'lucide-react';
+import { AnimatePresence, motion } from "framer-motion";
+import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata, PendingAttachment, PendingForwardDraft, PinnedMessage } from '../types';
+import { Avatar } from './Avatar';
+import { VerifiedBadge } from './VerifiedBadge';
+import { API_BASE_URL, apiFetch, getMessageSeenBy } from '../config/api';
+import { ContactInfo } from './ContactInfo';
+import { cx } from '../utils/cx';
+import { isElementScrolled } from '../utils/scrollFade';
+import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
+import { ReactionPicker } from './ReactionPicker';
+import { ForwardModal } from './ForwardModal';
+import { ImageMediaViewer } from './ImageMediaViewer';
+import { VideoMediaViewer } from './VideoMediaViewer';
+import { decryptFileBytesClientSide } from '../utils/e2ee';
+import { screenVariants } from '../utils/screenMotion';
+import { deleteCachedBlob, getCachedBlob, getOrCacheBlob } from '../utils/mediaCache';
+import { pendingUploadedFileByChat } from '../utils/pendingUploads';
+import { formatDayLabel, formatLastSeen, formatMessageTime, messageDayKey, resolveVerified, toPersianDigits } from '../utils/format';
+import { copyText } from '../utils/clipboard';
+import { triggerHaptic } from '../utils/haptics';
+import { ChatMessageItem, type ReactionEntry } from './ChatMessageItem';
+import { ChatComposer, type ChatComposerSendPayload } from './ChatComposer';
+import { GroupMembersView, type GroupMember } from './GroupMembersView';
+import './FileComponents.css';
+
+const EMPTY_REACTIONS: ReactionEntry[] = [];
+const MAX_SELECTED_MESSAGES = 30;
+
+// shortcut: group member cache skips payloads over 200KB; move it to IndexedDB when huge groups show up.
+const groupMemberCacheKey = (chatId: string) => `novaroom:group-members:v1:${chatId}`;
+
+function readCachedGroupMembers(chatId: string): Record<string, GroupMember> {
+    if (!chatId) return {};
+    try {
+        const raw = localStorage.getItem(groupMemberCacheKey(chatId));
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed as Record<string, GroupMember> : {};
+    } catch {
+        return {};
+    }
+}
+
+function writeCachedGroupMembers(chatId: string, members: Record<string, GroupMember>) {
+    if (!chatId) return;
+    try {
+        const raw = JSON.stringify(members);
+        if (raw.length > 200_000) return;
+        localStorage.setItem(groupMemberCacheKey(chatId), raw);
+    } catch {
+        return;
+    }
+}
+
+interface ChatRoomProps {
+    chatId: string;
+    contact: User;
+    messages: Message[];
+    currentUserId: string;
+    currentUser?: User | null;
+    onSendMessage: (payload: { text: string; replyToId?: string; editMessageId?: string; attachment?: PendingAttachment }) => void;
+    onDeleteMessage: (messageId: string) => void;
+    onDeleteMessages?: (messageIds: string[]) => void | Promise<void>;
+    onBack: () => void;
+    onCloseChat: () => void;
+    onChatDeleted?: (chatId: string) => void;
+    loading?: boolean;
+    chats: Chat[];
+    onSelectChat?: (chatId: string) => void;
+    onOpenDirectChat?: (user: User) => void;
+    onOpenProfile?: () => void;
+    onOpenAIChat?: () => void;
+    onOpenContactInfo?: (chatId: string) => void;
+    forceContactInfoOpen?: boolean;
+    onCloseForcedContactInfo?: (chatId: string) => void;
+    initialUnreadCount?: number;
+    onConsumeInitialUnread?: (chatId: string) => void;
+    onReactMessage?: (chatId: string, messageId: string, emoji: string) => Promise<void>;
+    onUnreactMessage?: (chatId: string, messageId: string) => Promise<void>;
+    onForwardMessage?: (sourceChatId: string, messageIdOrIds: string | string[], targetChatId: string) => Promise<void>;
+    pendingForwardDraft?: PendingForwardDraft | null;
+    onSetPendingForwardDraft?: (targetChatId: string, draft: PendingForwardDraft) => void;
+    onClearPendingForwardDraft?: (targetChatId: string) => void;
+    typingUserIds?: string[];
+    uploadingUserIds?: string[];
+    onTypingChange?: (chatId: string, isTyping: boolean) => void;
+    isUserBlocked?: (user: User) => boolean;
+    onToggleBlockUser?: (user: User) => void | Promise<void>;
+    hasOlderMessages?: boolean;
+    hasNewerMessages?: boolean;
+    loadingOlderMessages?: boolean;
+    loadingNewerMessages?: boolean;
+    onLoadOlderMessages?: (chatId: string) => void | Promise<void>;
+    onLoadNewerMessages?: (chatId: string) => void | Promise<void>;
+    onJumpToLatestMessages?: (chatId: string) => void | Promise<void>;
+    pinnedMessage?: PinnedMessage | null;
+    interactiveOnlineUsers?: Record<string, number>;
+    onPinMessage?: (chatId: string, messageId: string) => void | Promise<void>;
+    onUnpinMessage?: (chatId: string) => void | Promise<void>;
+    onJumpToMessage?: (chatId: string, messageId: string) => void | Promise<void>;
+    targetScrollMessage?: { chatId: string; messageId: string; timestamp: number } | null;
+    jumpingToMessage?: boolean;
+    onJumpToMessageSettled?: () => void;
+    onCancelJumpToMessage?: () => void;
+}
+
+function bubbleShape(prevSameSender: boolean, nextSameSender: boolean) {
+    if (!prevSameSender && !nextSameSender) return 'msg-shape--single';
+    if (!prevSameSender && nextSameSender) return 'msg-shape--first';
+    if (prevSameSender && nextSameSender) return 'msg-shape--middle';
+    if (prevSameSender && !nextSameSender) return 'msg-shape--last';
+    return 'msg-shape--single';
+}
+
+function ConfirmDialog({
+    title,
+    text,
+    confirmLabel,
+    onCancel,
+    onConfirm,
+    overlayRef,
+}: {
+    title: string;
+    text: string;
+    confirmLabel: string;
+    onCancel: () => void;
+    onConfirm: () => void;
+    overlayRef?: RefObject<HTMLDivElement | null>;
+}) {
+    return (
+        <motion.div className="chat-room-modal-overlay" ref={overlayRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16, ease: 'easeOut' }}>
+            <motion.div className="chat-room-confirm-modal" initial={{ opacity: 0, y: 12, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.985 }} transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}>
+                <h3 className="chat-room-confirm-modal__title">{title}</h3>
+                <p className="chat-room-confirm-modal__text">{text}</p>
+                <div className="chat-room-confirm-modal__actions">
+                    <button className="chat-room-confirm-modal__btn" onClick={onCancel} type="button">لغو</button>
+                    <button className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger" onClick={onConfirm} type="button">{confirmLabel}</button>
+                </div>
+            </motion.div>
+        </motion.div>
+    );
+}
+
+function getPureEmojiCount(input: string): number {
+    const value = String(input || '').trim();
+    if (!value) return 0;
+    const emojiMatches = value.match(/\p{Extended_Pictographic}/gu) || [];
+    if (!emojiMatches.length) return 0;
+    const nonEmojiParts = value
+        .replace(/\p{Extended_Pictographic}/gu, '')
+        .replace(/[\u200D\uFE0E\uFE0F\u{1F3FB}-\u{1F3FF}\s]/gu, '');
+    if (nonEmojiParts.length > 0) return 0;
+    return emojiMatches.length;
+}
+
+type SeenByUser = {
+    chatId: string;
+    name: string;
+    username?: string;
+    avatar?: string;
+    verified?: boolean;
+};
+
+
+
+function applyOptimisticReactions(
+    reactions: ReactionEntry[] | undefined,
+    userId: string,
+    emoji?: string,
+): ReactionEntry[] {
+    const base: ReactionEntry[] = (reactions || []).map((r) => ({ ...r, userIds: [...r.userIds] }));
+    base.forEach((r) => {
+        const idx = r.userIds.indexOf(userId);
+        if (idx !== -1) { r.userIds.splice(idx, 1); r.count = Math.max(0, r.count - 1); }
+    });
+    if (emoji) {
+        const existing = base.find((r) => r.emoji === emoji);
+        if (existing) { existing.userIds.push(userId); existing.count += 1; }
+        else base.push({ emoji, count: 1, userIds: [userId] });
+    }
+    return base.filter((r) => r.count > 0);
+}
+
+function reactionsEqual(a: ReactionEntry[], b: ReactionEntry[]): boolean {
+    if (a.length !== b.length) return false;
+    const byEmoji = new Map(b.map((r) => [r.emoji, r]));
+    return a.every((ra) => {
+        const rb = byEmoji.get(ra.emoji);
+        if (!rb || ra.count !== rb.count) return false;
+        const aIds = Array.isArray(ra.userIds) ? ra.userIds : [];
+        const bIds = Array.isArray(rb.userIds) ? rb.userIds : [];
+        if (aIds.length !== bIds.length) return false;
+        const ids = new Set(bIds);
+        return aIds.every((id) => ids.has(id));
+    });
+}
+
+function membersEqual(a: Record<string, GroupMember>, b: Record<string, GroupMember>): boolean {
+    const aKeys = Object.keys(a);
+    if (aKeys.length !== Object.keys(b).length) return false;
+    return aKeys.every((key) => {
+        const left = a[key];
+        const right = b[key];
+        return Boolean(right)
+            && left.name === right.name
+            && left.username === right.username
+            && left.avatar === right.avatar
+            && left.bio === right.bio
+            && left.verified === right.verified
+            && left.online === right.online;
+    });
+}
+
+
+export function ChatRoom({
+    chatId,
+    contact,
+    messages,
+    currentUserId,
+    currentUser,
+    onSendMessage,
+    onDeleteMessage,
+    onDeleteMessages,
+    onBack,
+    onCloseChat,
+    onChatDeleted,
+    loading = false,
+    chats,
+    onSelectChat,
+    onOpenDirectChat,
+    onOpenProfile,
+    onOpenAIChat,
+    onOpenContactInfo,
+    forceContactInfoOpen = false,
+    onCloseForcedContactInfo,
+    initialUnreadCount = 0,
+    onConsumeInitialUnread,
+    onReactMessage,
+    onUnreactMessage,
+    onForwardMessage,
+    pendingForwardDraft = null,
+    onSetPendingForwardDraft,
+    onClearPendingForwardDraft,
+    typingUserIds = [],
+    uploadingUserIds = [],
+    onTypingChange,
+    isUserBlocked,
+    onToggleBlockUser,
+    hasOlderMessages = false,
+    hasNewerMessages = false,
+    loadingOlderMessages = false,
+    loadingNewerMessages = false,
+    onLoadOlderMessages,
+    onLoadNewerMessages,
+    onJumpToLatestMessages,
+    pinnedMessage = null,
+    interactiveOnlineUsers,
+    onPinMessage,
+    onUnpinMessage,
+    onJumpToMessage,
+    targetScrollMessage = null,
+    jumpingToMessage = false,
+    onJumpToMessageSettled,
+    onCancelJumpToMessage,
+}: ChatRoomProps) {
+    const currentChat = useMemo(
+        () => chats.find((c) => c.id === chatId) || null,
+        [chats, chatId]
+    );
+    const isOfficialChannel = chatId === 'official-channel';
+    const isGroupChat = isOfficialChannel || currentChat?.chatType === 'group';
+    const isDirectChat = !isGroupChat;
+    const isVerifiedUser = resolveVerified(currentUser?.verified);
+    const canSendInOfficialChannel = !isOfficialChannel || isVerifiedUser;
+    const canSwipeToReply = !(isOfficialChannel && !isVerifiedUser);
+    const blockedByOther = Boolean((contact as any)?.blockedByOther);
+    const isContactBlocked = isDirectChat && !chatId.startsWith('saved_messages_') && (blockedByOther || Boolean(isUserBlocked?.(contact)));
+
+    const [chatMenuOpen, setChatMenuOpen] = useState(false);
+    const [confirmDeleteChat, setConfirmDeleteChat] = useState(false);
+    const [confirmLeaveGroup, setConfirmLeaveGroup] = useState(false);
+    const [confirmDeleteMsg, setConfirmDeleteMsg] = useState<string | null>(null);
+    const [confirmPin, setConfirmPin] = useState<null | { action: 'pin' | 'unpin'; messageId?: string }>(null);
+    const [showContactInfo, setShowContactInfo] = useState(false);
+    const [forwardModalOpen, setForwardModalOpen] = useState(false);
+    const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
+    const [forwardingMessageIds, setForwardingMessageIds] = useState<string[]>([]);
+    const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
+    const [confirmDeleteSelected, setConfirmDeleteSelected] = useState(false);
+    const [copyToast, setCopyToast] = useState<string | null>(null);
+    const [forwardSourceUser, setForwardSourceUser] = useState<User | null>(null);
+    const forwardingInFlightRef = useRef(false);
+
+    const [replyTo, setReplyTo] = useState<MessageReplyType | null>(null);
+    const [messagesScrolled, setMessagesScrolled] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
+
+    const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number; isFileDownloaded?: boolean }>(null);
+    const [reactionMenu, setReactionMenu] = useState<null | { id: string; top: number; left: number }>(null);
+    const [seenByMenu, setSeenByMenu] = useState<null | { id: string; top: number; left: number }>(null);
+    const [seenByUsersByMessage, setSeenByUsersByMessage] = useState<Record<string, SeenByUser[]>>({});
+    const [seenByLoadingMessageId, setSeenByLoadingMessageId] = useState<string | null>(null);
+    const [reasoningPanelByMessage, setReasoningPanelByMessage] = useState<Record<string, boolean>>({});
+    const [composerHeight, setComposerHeight] = useState(0);
+    const [selectionShake, setSelectionShake] = useState(0);
+    const composerHostRef = useRef<HTMLDivElement | null>(null);
+
+    
+    const [optimisticReactions, setOptimisticReactions] = useState<Record<string, ReactionEntry[]>>({});
+
+    const menuRef = useRef<HTMLDivElement | null>(null);
+    const msgMenuRef = useRef<HTMLDivElement | null>(null);
+    const reactionMenuRef = useRef<HTMLDivElement | null>(null);
+    const seenByMenuRef = useRef<HTMLDivElement | null>(null);
+    const confirmDeleteChatRef = useRef<HTMLDivElement | null>(null);
+    const confirmPinRef = useRef<HTMLDivElement | null>(null);
+    const confirmDeleteMsgRef = useRef<HTMLDivElement | null>(null);
+    const confirmLeaveGroupRef = useRef<HTMLDivElement | null>(null);
+
+    const messagesEndRef = useRef<HTMLDivElement | null>(null);
+    const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+    const roomRef = useRef<HTMLDivElement | null>(null);
+    const topSentinelRef = useRef<HTMLDivElement | null>(null);
+
+    const messageElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+    const unreadSeparatorRef = useRef<HTMLDivElement | null>(null);
+    const [highlightId, setHighlightId] = useState<string | null>(null);
+    const highlightTimeoutRef = useRef<number | null>(null);
+    const highlightRafRef = useRef<number | null>(null);
+    const missingJumpAttemptRef = useRef<{ id: string; at: number } | null>(null);
+
+    const [replySwipeLocked, setReplySwipeLocked] = useState(false);
+
+    const [newMsgCount, setNewMsgCount] = useState(0);
+    const [showScrollBtn, setShowScrollBtn] = useState(false);
+    const [isJumpingToLatest, setIsJumpingToLatest] = useState(false);
+    const [localLoadingOlder, setLocalLoadingOlder] = useState(false);
+    const [localLoadingNewer, setLocalLoadingNewer] = useState(false);
+    const [chatStats, setChatStats] = useState<{ totalMembers: number; onlineMembers: number } | null>(null);
+    const [groupMembers, setGroupMembers] = useState<Record<string, GroupMember>>(() => (isGroupChat ? readCachedGroupMembers(chatId) : {}));
+    const groupMembersSnapshotRef = useRef<Record<string, GroupMember> | null>(null);
+    const [membersResolved, setMembersResolved] = useState<boolean>(() => !isGroupChat || Object.keys(readCachedGroupMembers(chatId)).length > 0);
+    const [membersLoading, setMembersLoading] = useState(false);
+    const [viewingMemberId, setViewingMemberId] = useState<string | null>(null);
+    const [showMembersList, setShowMembersList] = useState(false);
+    const [openGroupEditorFromMembers, setOpenGroupEditorFromMembers] = useState(false);
+    const [externalFileUploadHandler, setExternalFileUploadHandler] = useState<((file: File) => void) | null>(null);
+    const [dragUploadActive, setDragUploadActive] = useState(false);
+    const [chatContentReady, setChatContentReady] = useState(true);
+    const isAtBottomRef = useRef(true);
+
+    const prevLenRef = useRef(0);
+    const prevFirstMessageIdRef = useRef<string | null>(null);
+    const prevLastMessageIdRef = useRef<string | null>(null);
+    const pendingOlderAdjustRef = useRef<{ prevHeight: number; prevTop: number } | null>(null);
+    const pendingRangeLoadTypeRef = useRef<'older' | 'newer' | null>(null);
+    const openedAtRef = useRef<number>(Date.now());
+    const initialScrollDoneRef = useRef(false);
+    const initialMediaPendingIdsRef = useRef<Set<string>>(new Set());
+    const initialMediaFollowupDoneRef = useRef(false);
+    const initialMediaReadyTimeoutRef = useRef<number | null>(null);
+    const restoringFromInfoRef = useRef(false);
+    const restoreTopAfterInfoRef = useRef<number | null>(null);
+    const restoreBottomAfterInfoRef = useRef(false);
+    const lastScrollTopRef = useRef(0);
+    const userReadingOlderRef = useRef(false);
+    const scrollRafRef = useRef<number | null>(null);
+
+    
+    
+    const scrollMemoryRef = useRef<Record<string, { top: number; atBottom: boolean; userInteracted: boolean }>>({});
+    const forceInfoRouteActiveRef = useRef(false);
+
+    useEffect(() => {
+        if (forceContactInfoOpen && !isOfficialChannel) {
+            forceInfoRouteActiveRef.current = true;
+            restoringFromInfoRef.current = true;
+            setOpenGroupEditorFromMembers(false);
+            setShowContactInfo(true);
+            return;
+        }
+        if (forceInfoRouteActiveRef.current) {
+            forceInfoRouteActiveRef.current = false;
+            setShowContactInfo(false);
+            setShowMembersList(false);
+            setViewingMemberId(null);
+            setOpenGroupEditorFromMembers(false);
+        }
+    }, [forceContactInfoOpen, chatId, isOfficialChannel]);
+
+    const userHasScrolledRef = useRef(false);
+
+    
+    const [unreadAnchorId, setUnreadAnchorId] = useState<string | null>(null);
+
+    
+    const [displayUnreadCount, setDisplayUnreadCount] = useState<number>(initialUnreadCount);
+    const [openedImage, setOpenedImage] = useState<{ url: string; file: FileMetadata | null } | null>(null);
+    const [openedVideo, setOpenedVideo] = useState<{ url: string; file: FileMetadata | null } | null>(null);
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    const openImageViewer = (imageUrl: string, file: FileMetadata | null) => {
+        const params = new URLSearchParams(location.search);
+        params.set('media', 'image');
+        navigate({ pathname: location.pathname, search: `?${params.toString()}` });
+        setOpenedVideo(null);
+        setOpenedImage({ url: imageUrl, file });
+    };
+
+    const openVideoViewer = (videoUrl: string, file: FileMetadata | null) => {
+        const params = new URLSearchParams(location.search);
+        params.set('media', 'video');
+        navigate({ pathname: location.pathname, search: `?${params.toString()}` });
+        setOpenedImage(null);
+        setOpenedVideo({ url: videoUrl, file });
+    };
+
+    const closeMediaViewer = () => {
+        setOpenedImage(null);
+        setOpenedVideo(null);
+        const params = new URLSearchParams(location.search);
+        if (params.has('media')) {
+            navigate(-1);
+            return;
+        }
+        params.delete('media');
+        const nextSearch = params.toString();
+        navigate({ pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : '' }, { replace: true });
+    };
+
+    useEffect(() => {
+        const mediaType = new URLSearchParams(location.search).get('media');
+        if (mediaType === 'image' || mediaType === 'video') return;
+        if (openedImage || openedVideo) {
+            setOpenedImage(null);
+            setOpenedVideo(null);
+        }
+    }, [location.search, openedImage, openedVideo]);
+    
+    const autoJumpedToUnreadRef = useRef(false);
+    const userScrolledAfterAutoJumpRef = useRef(false);
+    const programmaticScrollEventsRef = useRef(0);
+    const consumedInitialUnreadRef = useRef(false);
+    const rangeMediaPendingIdsRef = useRef<Set<string>>(new Set());
+
+    useEffect(() => {
+        if (!isContactBlocked) return;
+        pendingUploadedFileByChat[chatId] = null;
+        setReplyTo(null);
+        setEditingId(null);
+    }, [isContactBlocked, chatId]);
+
+    const markProgrammaticScroll = () => {
+        programmaticScrollEventsRef.current += 2;
+    };
+
+    const collectMediaIds = (msgs: Message[]) => new Set(
+        msgs
+            .filter((m) => {
+                const mt = (m.file?.mimeType || '').toLowerCase();
+                if (!m.file || (!mt.startsWith('image/') && !mt.startsWith('video/'))) return false;
+                
+                if (m.senderId === currentUserId) return false;
+                
+                const hasPreview = Boolean(
+                    (m.file as any).previewUrl
+                    || (m.file as any).thumbUrl
+                    || (m.file as any).imagePreviewUrl
+                );
+                return hasPreview;
+            })
+            .map((m) => m.id)
+    );
+
+    const collectInitialMediaPendingIds = () => collectMediaIds(messages);
+
+    const handleInitialMediaReady = (messageId: string) => {
+        
+        if (!shouldPreserveExactScroll() && isAtBottomRef.current && !userHasScrolledRef.current) {
+            requestAnimationFrame(() => scrollToBottom(false));
+        }
+        if (restoringFromInfoRef.current && restoreTopAfterInfoRef.current !== null) {
+            const container = messagesContainerRef.current;
+            if (container) {
+                markProgrammaticScroll();
+                container.scrollTop = restoreTopAfterInfoRef.current;
+            }
+        }
+        if (restoringFromInfoRef.current && restoreBottomAfterInfoRef.current) {
+            scrollToBottom(false);
+            restoreBottomAfterInfoRef.current = false;
+            restoringFromInfoRef.current = false;
+        }
+
+        
+        if (rangeMediaPendingIdsRef.current.has(messageId)) {
+            rangeMediaPendingIdsRef.current.delete(messageId);
+            if (rangeMediaPendingIdsRef.current.size === 0) {
+                setLocalLoadingOlder(false);
+                setLocalLoadingNewer(false);
+            }
+        }
+
+        if (initialMediaFollowupDoneRef.current) return;
+        if (!initialMediaPendingIdsRef.current.has(messageId)) return;
+        initialMediaPendingIdsRef.current.delete(messageId);
+        if (initialMediaPendingIdsRef.current.size === 0) {
+            initialMediaFollowupDoneRef.current = true;
+            if (initialMediaReadyTimeoutRef.current != null) {
+                window.clearTimeout(initialMediaReadyTimeoutRef.current);
+                initialMediaReadyTimeoutRef.current = null;
+            }
+            setChatContentReady(true);
+            requestAnimationFrame(() => {
+                if (displayUnreadCount > 0) {
+                    const anchor = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
+                    if (anchor) {
+                        scrollToUnreadAnchor(anchor);
+                        return;
+                    }
+                }
+                scrollToBottom(false);
+            });
+        }
+    };
+
+    const scrollToBottom = (smooth = false) => {
+        const container = messagesContainerRef.current;
+        if (container) {
+            markProgrammaticScroll();
+            container.scrollTo({ top: Math.max(0, container.scrollHeight - container.clientHeight), behavior: smooth ? 'smooth' : 'auto' });
+            return;
+        }
+        markProgrammaticScroll();
+        messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
+    };
+
+    const pinToBottomSync = () => {
+        const container = messagesContainerRef.current;
+        if (!container) {
+            scrollToBottom(false);
+            return;
+        }
+        markProgrammaticScroll();
+        container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+        isAtBottomRef.current = true;
+    };
+
+    const computeNearBottom = () => {
+        const container = messagesContainerRef.current;
+        if (!container) return true;
+        return container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+    };
+
+    useLayoutEffect(() => {
+        if (!initialScrollDoneRef.current) return;
+        if (!isAtBottomRef.current) return;
+        if (unreadAnchorId) return;
+        if (autoJumpedToUnreadRef.current && !userScrolledAfterAutoJumpRef.current) return;
+        pinToBottomSync();
+    }, [composerHeight]);
+
+    const saveScroll = (id: string) => {
+        const container = messagesContainerRef.current;
+        if (!container) return;
+        scrollMemoryRef.current[id] = {
+            top: container.scrollTop,
+            atBottom: computeNearBottom(),
+            userInteracted: Boolean(userHasScrolledRef.current),
+        };
+    };
+
+    const maybeSaveScroll = (id: string) => {
+        
+        
+        if (autoJumpedToUnreadRef.current && !userScrolledAfterAutoJumpRef.current) return;
+        saveScroll(id);
+    };
+
+    const restoreScroll = (id: string): boolean => {
+        const container = messagesContainerRef.current;
+        const mem = scrollMemoryRef.current[id];
+        if (!container || !mem) return false;
+        isAtBottomRef.current = Boolean(mem.atBottom);
+        if (mem.atBottom) {
+            pinToBottomSync();
+        } else {
+            markProgrammaticScroll();
+            container.scrollTop = mem.top;
+        }
+        return true;
+    };
+
+    const scrollToUnreadAnchor = (messageId: string) => {
+        const doScroll = () => {
+            const container = messagesContainerRef.current;
+            if (!container) return false;
+            const separator = unreadSeparatorRef.current;
+            const msgEl = messageElsRef.current.get(messageId);
+            const targetEl = separator || msgEl;
+            if (!targetEl) return false;
+            const cr = container.getBoundingClientRect();
+            const tr = targetEl.getBoundingClientRect();
+            if (cr.height === 0) return false;
+            const delta = tr.top - cr.top;
+            markProgrammaticScroll();
+            container.scrollTop = Math.max(0, container.scrollTop + delta - 12);
+            isAtBottomRef.current = computeNearBottom();
+            return true;
+        };
+
+        if (!doScroll()) {
+            requestAnimationFrame(() => {
+                if (!doScroll()) {
+                    window.setTimeout(doScroll, 60);
+                }
+            });
+        }
+    };
+
+    const messagesById = useMemo(() => new Map(messages.map((msg) => [msg.id, msg])), [messages]);
+
+    const computeUnreadAnchorId = (unreadCount: number): string | null => {
+        const incoming = messages.filter((m: any) => m && m.senderId !== currentUserId);
+        if (incoming.length === 0) return null;
+
+        let cnt = Number(unreadCount || 0);
+        if (!Number.isFinite(cnt) || cnt <= 0) {
+            let unreadFromEnd = 0;
+            for (let i = incoming.length - 1; i >= 0; i--) {
+                if (incoming[i]?.seen === false) {
+                    unreadFromEnd++;
+                } else {
+                    break;
+                }
+            }
+            cnt = unreadFromEnd;
+        }
+
+        if (cnt > 0) {
+            const clamped = Math.min(incoming.length, Math.max(1, Math.floor(cnt)));
+            const target = incoming[incoming.length - clamped];
+            return target?.id || null;
+        }
+
+        return null;
+    };
+
+    const isUnreadAnchorValid = (messageId: string | null): boolean => {
+        if (!messageId) return false;
+        const message = messagesById.get(messageId);
+        if (!message) return false;
+        if (message.senderId === currentUserId) return false;
+        return true;
+    };
+
+    const applyInitialScroll = () => {
+        const mem = scrollMemoryRef.current[chatId];
+
+        
+        const unreadAnchor = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
+        if (unreadAnchor) {
+            autoJumpedToUnreadRef.current = true;
+            userScrolledAfterAutoJumpRef.current = false;
+
+            scrollToUnreadAnchor(unreadAnchor);
+
+            if (!consumedInitialUnreadRef.current) {
+                consumedInitialUnreadRef.current = true;
+                
+                window.setTimeout(() => onConsumeInitialUnread?.(chatId), 0);
+            }
+
+            return;
+        }
+
+        
+        
+        if (mem && mem.userInteracted && !mem.atBottom) {
+            restoreScroll(chatId);
+            return;
+        }
+
+        
+        if (mem && mem.atBottom) {
+            restoreScroll(chatId);
+            return;
+        }
+
+        
+        pinToBottomSync();
+    };
+
+    const shouldPreserveExactScroll = () => {
+        const mem = scrollMemoryRef.current[chatId];
+        return Boolean(mem && mem.userInteracted && !mem.atBottom);
+    };
+
+    const settleToBottomIfNeeded = () => {
+        const c = messagesContainerRef.current;
+        if (!c) return;
+        if (userHasScrolledRef.current) return;
+        if (shouldPreserveExactScroll()) return;
+        
+        if (unreadAnchorId || autoJumpedToUnreadRef.current || displayUnreadCount > 0) return;
+
+        pinToBottomSync();
+    };
+
+    const getReplySenderName = (reply: MessageReplyType | null | undefined) => {
+        if (!reply) return 'کاربر';
+        const repliedMessage = messagesById.get(reply.id);
+        const senderId = String(repliedMessage?.senderId || reply.senderId || '').trim();
+
+        if (!senderId) return 'کاربر';
+        if (senderId === currentUserId) return 'شما';
+        if (senderId === contact.chatId) return contact.name || contact.username || 'کاربر';
+
+        const memberName = groupMembers[senderId]?.name;
+        if (memberName) return memberName;
+
+        return senderId;
+    };
+
+    const filePreviewLabel = (mimeType?: string) => {
+        const fileMime = (mimeType || '').toLowerCase();
+        if (fileMime.startsWith('image/')) return '🖼️ تصویر';
+        if (fileMime.startsWith('video/')) return '🎥 ویدیو';
+        if (fileMime.startsWith('audio/')) return '🎵 آهنگ';
+        return '📎 فایل';
+    };
+
+    const getReplyPreviewText = (reply: MessageReplyType | null | undefined) => {
+        if (!reply) return '';
+        const repliedMessage = messagesById.get(reply.id);
+        const fallbackText = (reply.text || '').trim();
+        if (repliedMessage?.chessInvite) {
+            return repliedMessage.chessInvite.shared ? '♟️ بازی شطرنج' : '♟️ دعوت به بازی شطرنج';
+        }
+        if (!repliedMessage?.file) return fallbackText;
+        const prefix = filePreviewLabel(repliedMessage.file.mimeType);
+        return fallbackText ? `${prefix} • ${fallbackText}` : prefix;
+    };
+
+    const getForwardPreviewText = (draft: { previewText?: string; previewFile?: FileMetadata | null } | null | undefined) => {
+        if (!draft) return '';
+        const fallbackText = (draft.previewText || '').trim();
+        if (!draft.previewFile) return fallbackText || 'پیام';
+        const prefix = filePreviewLabel(draft.previewFile.mimeType);
+        return fallbackText ? `${prefix} • ${fallbackText}` : prefix;
+    };
+
+    const forwardPreviewTitle = pendingForwardDraft && (pendingForwardDraft.messageIds?.length || 0) > 1
+        ? `فوروارد ${toPersianDigits(pendingForwardDraft.messageIds!.length)} پیام از «${pendingForwardDraft.sourceChatName || 'چت'}»`
+        : 'در حال فوروارد پیام';
+
+    const openForwardSource = (m: Message) => {
+        const sourceId = m.forwardedFrom?.originalSenderId;
+        if (!sourceId) return;
+
+        if (sourceId === currentUserId) {
+            onOpenProfile?.();
+            return;
+        }
+
+        if (sourceId === 'ai') {
+            onOpenAIChat?.();
+            return;
+        }
+        if (sourceId === 'official-channel') {
+            maybeSaveScroll(chatId);
+            onSelectChat?.('official-channel');
+            return;
+        }
+
+        const sourceChat = chats.find((c) => c.chatType === 'direct' && c.otherUser?.chatId === sourceId);
+        const sourceUser: User = sourceChat?.otherUser || {
+            chatId: sourceId,
+            username: m.forwardedFrom?.username || '',
+            name: m.forwardedFrom?.name || m.forwardedFrom?.username || sourceId,
+            bio: '',
+            avatar: '',
+            online: false,
+        };
+
+        maybeSaveScroll(chatId);
+        restoringFromInfoRef.current = true;
+        setForwardSourceUser(sourceUser);
+    };
+
+    const openMember = (memberId: string) => {
+        if (!memberId) return;
+        maybeSaveScroll(chatId);
+        restoringFromInfoRef.current = true;
+        if (memberId === currentUserId) {
+            onOpenProfile?.();
+            return;
+        }
+        setViewingMemberId(memberId);
+    };
+
+    useEffect(() => {
+        if (!isGroupChat) {
+            setChatStats((prev) => (prev === null ? prev : null));
+            return;
+        }
+        let cancelled = false;
+        const loadStats = async () => {
+            try {
+                const stats = await apiFetch(`/chats/${encodeURIComponent(chatId)}/stats`);
+                if (!cancelled) {
+                    const totalMembers = Number(stats?.totalMembers || 0);
+                    const onlineMembers = Number(stats?.onlineMembers || 0);
+                    setChatStats((prev) => (
+                        prev && prev.totalMembers === totalMembers && prev.onlineMembers === onlineMembers
+                            ? prev
+                            : { totalMembers, onlineMembers }
+                    ));
+                }
+            } catch {
+                if (!cancelled) setChatStats((prev) => (prev === null ? prev : null));
+            }
+        };
+        loadStats();
+        const timer = window.setInterval(loadStats, 15000);
+        return () => { cancelled = true; window.clearInterval(timer); };
+    }, [chatId, isGroupChat]);
+
+    useEffect(() => {
+        if (!isGroupChat) {
+            setGroupMembers((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+            setMembersLoading((prev) => (prev ? false : prev));
+            setMembersResolved(true);
+            return;
+        }
+        const cached = readCachedGroupMembers(chatId);
+        if (Object.keys(cached).length > 0) {
+            groupMembersSnapshotRef.current = cached;
+            setGroupMembers((prev) => (membersEqual(prev, cached) ? prev : cached));
+            setMembersResolved(true);
+        } else {
+            setMembersResolved(false);
+        }
+        let cancelled = false;
+        let initialLoad = true;
+        const loadMembers = async () => {
+            if (initialLoad) setMembersLoading(true);
+            try {
+                const members = await apiFetch(`/chats/${encodeURIComponent(chatId)}/members`);
+                if (!cancelled && Array.isArray(members)) {
+                    const map: Record<string, GroupMember> = {};
+                    members.forEach((m: any) => {
+                        const id = m.chatId || m.userId || m.username || '';
+                        if (id) map[id] = {
+                            name: m.name || '',
+                            username: m.username || '',
+                            avatar: m.avatar || '',
+                            bio: m.bio || '',
+                            chatId: id,
+                            verified: m.verified,
+                            online: id === currentUserId ? true : Boolean(m.online),
+                        };
+                    });
+                    if (!membersEqual(groupMembersSnapshotRef.current ?? {}, map)) {
+                        writeCachedGroupMembers(chatId, map);
+                    }
+                    groupMembersSnapshotRef.current = map;
+                    setGroupMembers((prev) => (membersEqual(prev, map) ? prev : map));
+                }
+            } catch { }
+            finally {
+                initialLoad = false;
+                if (!cancelled) {
+                    setMembersLoading((prev) => (prev ? false : prev));
+                    setMembersResolved(true);
+                }
+            }
+        };
+        loadMembers();
+
+        const timer = window.setInterval(loadMembers, 15000);
+        return () => { cancelled = true; window.clearInterval(timer); };
+    }, [chatId, isGroupChat]);
+
+
+    const isSavedMessages = contact.chatId === 'saved';
+    const canDeleteChat = chatId !== 'pending' && !isSavedMessages;
+    const [token] = useState(() => localStorage.getItem('token') || '');
+
+    useLayoutEffect(() => {
+        const host = composerHostRef.current;
+        const el = host?.firstElementChild;
+        if (!(el instanceof HTMLElement)) return;
+        const update = () => setComposerHeight(el.offsetHeight);
+        update();
+        const observer = new ResizeObserver(update);
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [chatId, editingId, showContactInfo, forwardSourceUser, viewingMemberId, showMembersList]);
+
+
+    useEffect(() => {
+        const room = roomRef.current;
+        if (!room) return;
+        const vv = (window as any).visualViewport as VisualViewport | undefined;
+        if (!vv) { room.style.setProperty('--keyboard-offset', '0px'); return; }
+        const ua = navigator.userAgent || '';
+        const isIOSWebKit = /iP(ad|hone|od)/i.test(ua) || (/Macintosh/i.test(ua) && 'ontouchend' in document);
+        const isChromeLikeOnIOS = /CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
+        const shouldUseViewportKeyboardOffset = isIOSWebKit && !isChromeLikeOnIOS;
+        let raf: number | null = null;
+        const update = () => {
+            const el = roomRef.current;
+            if (!el) return;
+            const offsetTop = typeof vv.offsetTop === 'number' ? vv.offsetTop : 0;
+            const keyboard = shouldUseViewportKeyboardOffset
+                ? Math.max(0, window.innerHeight - vv.height - offsetTop)
+                : 0;
+            el.style.setProperty('--keyboard-offset', `${Math.round(keyboard)}px`);
+            if (isAtBottomRef.current) {
+                if (raf) cancelAnimationFrame(raf);
+                raf = requestAnimationFrame(() => scrollToBottom(false));
+            }
+        };
+        update();
+        vv.addEventListener('resize', update);
+        vv.addEventListener('scroll', update);
+        window.addEventListener('orientationchange', update);
+        return () => {
+            vv.removeEventListener('resize', update);
+            vv.removeEventListener('scroll', update);
+            window.removeEventListener('orientationchange', update);
+            if (raf) cancelAnimationFrame(raf);
+            room.style.removeProperty('--keyboard-offset');
+        };
+        
+    }, [chatId]);
+
+
+    const startHighlight = (messageId: string) => {
+        setHighlightId(messageId);
+        if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
+        highlightTimeoutRef.current = window.setTimeout(() => setHighlightId(null), 1500);
+    };
+
+    const scrollToMessage = (messageId: string, retry = 1) => {
+        const el = messageElsRef.current.get(messageId);
+        const container = messagesContainerRef.current;
+        if (!el || !container) {
+            const lastAttempt = missingJumpAttemptRef.current;
+            if (!messagesById.has(messageId) && (!lastAttempt || lastAttempt.id !== messageId || performance.now() - lastAttempt.at > 2000)) {
+                missingJumpAttemptRef.current = { id: messageId, at: performance.now() };
+                void onJumpToMessage?.(chatId, messageId);
+            }
+            return;
+        }
+        if (highlightRafRef.current) cancelAnimationFrame(highlightRafRef.current);
+        const topBarOffset = pinnedMessage ? 122 : 68;
+        const cr = container.getBoundingClientRect();
+        const tr = el.getBoundingClientRect();
+        const isFullyVisible = tr.top >= cr.top + topBarOffset && tr.bottom <= cr.bottom - 70;
+        if (isFullyVisible) {
+            startHighlight(messageId);
+            return;
+        }
+
+        markProgrammaticScroll();
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        let lastTop = container.scrollTop;
+        let sameCount = 0;
+        const startedAt = performance.now();
+        const check = () => {
+            const cont = messagesContainerRef.current;
+            const target = messageElsRef.current.get(messageId);
+            if (!cont || !target) return;
+            const now = performance.now();
+            if (cont.scrollTop === lastTop) {
+                sameCount += 1;
+            } else {
+                sameCount = 0;
+                lastTop = cont.scrollTop;
+            }
+            if (sameCount >= 4 || now - startedAt > 650) {
+                const targetRect = target.getBoundingClientRect();
+                const contRect = cont.getBoundingClientRect();
+                const inView = targetRect.top >= contRect.top + topBarOffset - 20 && targetRect.bottom <= contRect.bottom - 50;
+                if (!inView && retry > 0) {
+                    scrollToMessage(messageId, retry - 1);
+                    return;
+                }
+                startHighlight(messageId);
+                highlightRafRef.current = null;
+                return;
+            }
+            highlightRafRef.current = requestAnimationFrame(check);
+        };
+        highlightRafRef.current = requestAnimationFrame(check);
+    };
+
+    useEffect(() => {
+        if (!targetScrollMessage?.messageId) return;
+        if (targetScrollMessage.chatId !== chatId) return;
+        const timer = window.setTimeout(() => {
+            scrollToMessage(targetScrollMessage.messageId);
+            onJumpToMessageSettled?.();
+        }, 120);
+        return () => window.clearTimeout(timer);
+    }, [targetScrollMessage?.messageId, targetScrollMessage?.timestamp, chatId]);
+
+    useEffect(() => () => onJumpToMessageSettled?.(), []);
+
+
+
+    const doDownloadMessageFile = async (m: Message) => {
+        if (!m.file?.fileId) return;
+        setMsgMenu(null);
+        
+        const mt = (m.file.mimeType || '').toLowerCase();
+        const isImage = mt.startsWith('image/');
+        const isVideo = mt.startsWith('video/');
+        const isAudio = mt.startsWith('audio/');
+        
+        if (!isImage && !isVideo && !isAudio) {
+            window.dispatchEvent(new CustomEvent('trigger-file-download', { detail: { fileId: m.file.fileId } }));
+            return;
+        }
+
+        try {
+            const blob = await getOrCacheBlob({
+                cacheKey: `chat:${chatId}:file:${m.file.fileId}`,
+                loadBlob: async () => {
+                    const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(m.file!.fileId)}`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (!response.ok) throw new Error('Download failed');
+                    const downloadedBytes = new Uint8Array(await response.arrayBuffer());
+                    const plainBytes = isAudio ? downloadedBytes : await decryptFileBytesClientSide(downloadedBytes, token, chatId);
+                    return new Blob([plainBytes as BlobPart], { type: m.file?.mimeType || 'application/octet-stream' });
+                },
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = m.file.fileName || 'file';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+        } catch {
+            alert('خطا در دانلود فایل');
+        }
+    };
+
+    const doCopyMessage = async (m: Message) => {
+        await copyText(m.text ?? '').catch(() => { });
+        setMsgMenu(null);
+    };
+
+    
+    const handleReact = async (messageId: string, emoji: string) => {
+        setReactionMenu(null); setMsgMenu(null);
+        
+        const msg = messagesById.get(messageId);
+        const currentReactions = optimisticReactions[messageId] ?? (msg?.reactions as ReactionEntry[] | undefined);
+        
+        const alreadyReacted = (currentReactions || []).some(
+            (r) => r.emoji === emoji && r.userIds.includes(currentUserId)
+        );
+        
+        setOptimisticReactions((prev) => ({
+            ...prev,
+            [messageId]: applyOptimisticReactions(currentReactions, currentUserId, emoji),
+        }));
+        
+        if (!alreadyReacted) triggerHaptic();
+        try {
+            if (onReactMessage) {
+                await onReactMessage(chatId, messageId, emoji);
+            } else {
+                await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, { method: 'POST', body: JSON.stringify({ emoji }) });
+            }
+        } catch (e) {
+            console.error('Failed to react:', e);
+            
+            setOptimisticReactions((prev) => {
+                const next = { ...prev };
+                delete next[messageId];
+                return next;
+            });
+        }
+    };
+
+    const handleDeleteReaction = async (messageId: string) => {
+        setReactionMenu(null); setMsgMenu(null);
+        const msg = messagesById.get(messageId);
+        const currentReactions = optimisticReactions[messageId] ?? (msg?.reactions as ReactionEntry[] | undefined);
+        
+        setOptimisticReactions((prev) => ({
+            ...prev,
+            [messageId]: applyOptimisticReactions(currentReactions, currentUserId),
+        }));
+        try {
+            if (onUnreactMessage) {
+                await onUnreactMessage(chatId, messageId);
+            } else {
+                await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/react`, { method: 'DELETE' });
+            }
+        } catch (e) {
+            console.error('Failed to delete reaction:', e);
+            
+            setOptimisticReactions((prev) => {
+                const next = { ...prev };
+                delete next[messageId];
+                return next;
+            });
+        }
+    };
+    
+
+    
+    useEffect(() => {
+        setOptimisticReactions((prev) => {
+            if (!Object.keys(prev).length) return prev;
+            const next = { ...prev };
+            let changed = false;
+            Object.keys(prev).forEach((messageId) => {
+                const msg = messagesById.get(messageId);
+                if (!msg) {
+                    delete next[messageId];
+                    changed = true;
+                    return;
+                }
+                const serverReactions = (msg.reactions as ReactionEntry[] | undefined) ?? [];
+                const optimistic = prev[messageId] ?? [];
+                if (reactionsEqual(serverReactions, optimistic)) {
+                    delete next[messageId];
+                    changed = true;
+                }
+            });
+            return changed ? next : prev;
+        });
+    }, [messages]);
+
+    const forwardBatch = useCallback((sourceChatId: string, messageIds: string[], targetChatId: string) => {
+        if (onForwardMessage) return onForwardMessage(sourceChatId, messageIds, targetChatId);
+        return apiFetch('/messages/forward', {
+            method: 'POST',
+            body: JSON.stringify({
+                sourceChatId,
+                targetChatId,
+                items: messageIds.map((messageId) => ({ messageId })),
+            }),
+        });
+    }, [onForwardMessage]);
+
+    const handleForwardDraft = useCallback(async () => {
+        const draft = pendingForwardDraft;
+        if (!draft) return;
+        if (forwardingInFlightRef.current) return;
+        forwardingInFlightRef.current = true;
+        const ids = draft.messageIds?.length ? draft.messageIds : [draft.messageId];
+        onClearPendingForwardDraft?.(chatId);
+        try {
+            await forwardBatch(draft.sourceChatId, ids, chatId);
+        } catch {
+            onSetPendingForwardDraft?.(chatId, draft);
+            alert('فوروارد پیام با خطا مواجه شد');
+        } finally {
+            forwardingInFlightRef.current = false;
+        }
+    }, [pendingForwardDraft, chatId, onClearPendingForwardDraft, onSetPendingForwardDraft, forwardBatch]);
+
+    const handleForwardFromModal = async (targetChatId: string) => {
+        const idsToForward = forwardingMessageIds.length > 0
+            ? [...forwardingMessageIds]
+            : (forwardingMessageId ? [forwardingMessageId] : []);
+
+        if (idsToForward.length === 0) return;
+
+        setForwardModalOpen(false);
+        setForwardingMessageId(null);
+        setForwardingMessageIds([]);
+        setSelectedMessageIds([]);
+
+        const sortedMsgs = messages
+            .filter((m) => idsToForward.includes(m.id))
+            .sort((a, b) => a.timestamp - b.timestamp);
+        const messageIds = sortedMsgs.map((m) => m.id);
+        if (messageIds.length === 0) return;
+
+        const firstMessage = sortedMsgs[0];
+        onSetPendingForwardDraft?.(targetChatId, {
+            sourceChatId: chatId,
+            messageId: messageIds[0],
+            messageIds: messageIds.length > 1 ? messageIds : undefined,
+            sourceChatName: currentChat?.otherUser?.name || contact.name || '',
+            previewText: firstMessage.text || '',
+            previewFile: messageIds.length === 1 ? (firstMessage.file || null) : null,
+        });
+        onSelectChat?.(targetChatId);
+    };
+
+    const isSelectionModeActive = selectedMessageIds.length > 0;
+
+    const toggleMessageSelection = useCallback((messageId: string) => {
+        if (!selectedMessageIds.includes(messageId) && selectedMessageIds.length >= MAX_SELECTED_MESSAGES) {
+            triggerHaptic();
+            setSelectionShake((value) => value + 1);
+            return;
+        }
+        setSelectedMessageIds((prev: string[]) => (
+            prev.includes(messageId)
+                ? prev.filter((id: string) => id !== messageId)
+                : [...prev, messageId]
+        ));
+    }, [selectedMessageIds]);
+
+    const handleCopySelected = async () => {
+        if (selectedMessageIds.length === 0) return;
+        const selectedMsgs = messages
+            .filter((m) => selectedMessageIds.includes(m.id))
+            .sort((a, b) => a.timestamp - b.timestamp);
+
+        const textLines = selectedMsgs
+            .map((m) => {
+                const raw = m.text ?? '';
+                if (raw.trim()) return raw.trim();
+                if (m.file?.fileName) return `[فایل: ${m.file.fileName}]`;
+                return '';
+            })
+            .filter(Boolean);
+
+        if (textLines.length > 0) {
+            try {
+                await copyText(textLines.join('\n\n'));
+                setCopyToast('متن پیام‌ها کپی شد');
+                window.setTimeout(() => setCopyToast(null), 2000);
+            } catch {
+                alert('کپی با خطا مواجه شد');
+            }
+        }
+        setSelectedMessageIds([]);
+    };
+
+    const handleOpenForwardSelected = () => {
+        if (selectedMessageIds.length === 0) return;
+        setForwardingMessageIds([...selectedMessageIds]);
+        setForwardModalOpen(true);
+    };
+
+    const deletableSelectedIds = useMemo(() => {
+        return selectedMessageIds.filter((id: string) => {
+            const msg = messagesById.get(id);
+            if (!msg) return false;
+            return msg.senderId === currentUserId || (isGroupChat && isVerifiedUser);
+        });
+    }, [selectedMessageIds, messages, currentUserId, isGroupChat, isVerifiedUser]);
+
+    const canDeleteAnySelected = selectedMessageIds.length > 0 && deletableSelectedIds.length === selectedMessageIds.length;
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && selectedMessageIds.length > 0) {
+                setSelectedMessageIds([]);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedMessageIds.length]);
+
+    const openForwardModal = (messageId: string) => {
+        setForwardingMessageId(messageId);
+        setForwardingMessageIds([]);
+        setForwardModalOpen(true);
+        setMsgMenu(null);
+    };
+
+    const loadSeenBy = async (messageId: string) => {
+        if (!isGroupChat) return;
+        if (seenByLoadingMessageId === messageId) return;
+        setSeenByLoadingMessageId(messageId);
+        try {
+            const res = await getMessageSeenBy(chatId, messageId);
+            const rows = Array.isArray((res as any)?.seenBy) ? (res as any).seenBy : [];
+            setSeenByUsersByMessage((prev) => ({ ...prev, [messageId]: rows }));
+        } catch (e) {
+            console.error('Failed to load seen-by:', e);
+            setSeenByUsersByMessage((prev) => ({ ...prev, [messageId]: [] }));
+        } finally {
+            setSeenByLoadingMessageId((s) => (s === messageId ? null : s));
+        }
+    };
+
+    const handleRegisterUploadFile = useCallback((handler: ((file: File) => void) | null) => {
+        setExternalFileUploadHandler(() => handler);
+    }, []);
+
+    useEffect(() => {
+        const onDocClick = (e: MouseEvent) => {
+            const target = e.target as Node;
+            if (menuRef.current?.contains(target)) return;
+            if (msgMenuRef.current?.contains(target)) return;
+            if (reactionMenuRef.current?.contains(target)) return;
+            if (seenByMenuRef.current?.contains(target)) return;
+            if (confirmDeleteChatRef.current) {
+                const modal = confirmDeleteChatRef.current.querySelector('.chat-room-confirm-modal');
+                if (modal && !modal.contains(target)) { setConfirmDeleteChat(false); return; }
+            }
+            if (confirmDeleteMsgRef.current) {
+                const modal = confirmDeleteMsgRef.current.querySelector('.chat-room-confirm-modal');
+                if (modal && !modal.contains(target)) { setConfirmDeleteMsg(null); return; }
+            }
+            if (confirmLeaveGroupRef.current) {
+                const modal = confirmLeaveGroupRef.current.querySelector('.chat-room-confirm-modal');
+                if (modal && !modal.contains(target)) { setConfirmLeaveGroup(false); return; }
+            }
+            if (confirmPinRef.current) {
+                const modal = confirmPinRef.current.querySelector('.chat-room-confirm-modal');
+                if (modal && !modal.contains(target)) { setConfirmPin(null); return; }
+            }
+            setChatMenuOpen(false);
+            setMsgMenu(null);
+            setReactionMenu(null);
+            setSeenByMenu(null);
+        };
+        document.addEventListener('click', onDocClick);
+        return () => document.removeEventListener('click', onDocClick);
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
+            if (highlightRafRef.current) cancelAnimationFrame(highlightRafRef.current);
+            if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
+        };
+    }, []);
+
+    
+    useEffect(() => {
+        return () => {
+            maybeSaveScroll(chatId);
+        };
+        
+    }, [chatId]);
+
+    useEffect(() => {
+        const mem = scrollMemoryRef.current[chatId];
+        const preserveExactScroll = Boolean(mem?.userInteracted && !mem?.atBottom);
+        if (preserveExactScroll) {
+            initialMediaFollowupDoneRef.current = true;
+            initialMediaPendingIdsRef.current = new Set();
+        } else {
+            initialMediaFollowupDoneRef.current = false;
+            initialMediaPendingIdsRef.current = collectInitialMediaPendingIds();
+            if (initialMediaPendingIdsRef.current.size === 0) {
+                initialMediaFollowupDoneRef.current = true;
+            }
+        }
+        setChatContentReady(true);
+        prevLenRef.current = messages.length;
+        return () => {
+            if (initialMediaReadyTimeoutRef.current != null) {
+                window.clearTimeout(initialMediaReadyTimeoutRef.current);
+                initialMediaReadyTimeoutRef.current = null;
+            }
+        };
+    }, [chatId]);
+
+    
+    useEffect(() => {
+        if (initialUnreadCount > 0 && displayUnreadCount === 0) {
+            setDisplayUnreadCount(initialUnreadCount);
+        }
+    }, [initialUnreadCount, displayUnreadCount]);
+
+    useEffect(() => {
+        if (isUnreadAnchorValid(unreadAnchorId)) return;
+        const id = computeUnreadAnchorId(displayUnreadCount);
+        setUnreadAnchorId(id && isUnreadAnchorValid(id) ? id : null);
+        
+    }, [displayUnreadCount, messages.length, chatId]);
+
+    
+    useLayoutEffect(() => {
+        if (loading) return;
+        if (!chatContentReady) return;
+        if (messages.length === 0) return;
+        settleToBottomIfNeeded();
+        
+    }, [chatId, loading, messages.length, displayUnreadCount, chatContentReady]);
+
+    useEffect(() => {
+        if (!chatContentReady || loading || messages.length === 0) return;
+        if (userHasScrolledRef.current) return;
+        if (displayUnreadCount > 0 || unreadAnchorId || autoJumpedToUnreadRef.current) return;
+        const raf = requestAnimationFrame(() => {
+            const container = messagesContainerRef.current;
+            if (!container) return;
+            const mem = scrollMemoryRef.current[chatId];
+            if (userHasScrolledRef.current || (mem && mem.userInteracted && !mem.atBottom)) return;
+            pinToBottomSync();
+        });
+        return () => cancelAnimationFrame(raf);
+    }, [chatId, chatContentReady, loading, messages.length, displayUnreadCount, unreadAnchorId]);
+
+    
+    useEffect(() => {
+        if (!restoringFromInfoRef.current) return;
+        if (showContactInfo || forwardSourceUser || viewingMemberId || showMembersList) return;
+        const mem = scrollMemoryRef.current[chatId];
+        if (!mem) return;
+        const shouldRestoreExact = Boolean(mem.userInteracted && !mem.atBottom);
+        restoreTopAfterInfoRef.current = shouldRestoreExact ? mem.top : null;
+        restoreBottomAfterInfoRef.current = !shouldRestoreExact;
+        let raf = 0;
+        let frames = 0;
+        let lastHeight = -1;
+        let stableFrames = 0;
+        const settle = () => {
+            const container = messagesContainerRef.current;
+            if (!container) return;
+            if (restoreTopAfterInfoRef.current !== null) {
+                markProgrammaticScroll();
+                container.scrollTop = restoreTopAfterInfoRef.current;
+            } else if (!shouldPreserveExactScroll()) {
+                scrollToBottom(false);
+            }
+            stableFrames = container.scrollHeight === lastHeight ? stableFrames + 1 : 0;
+            lastHeight = container.scrollHeight;
+            frames += 1;
+            if (stableFrames >= 2 || frames >= 24) {
+                if (restoreBottomAfterInfoRef.current) {
+                    scrollToBottom(true);
+                    restoreBottomAfterInfoRef.current = false;
+                }
+                restoringFromInfoRef.current = false;
+                return;
+            }
+            raf = requestAnimationFrame(settle);
+        };
+        raf = requestAnimationFrame(settle);
+        return () => cancelAnimationFrame(raf);
+    }, [showContactInfo, forwardSourceUser, viewingMemberId, showMembersList, chatId]);
+
+    useLayoutEffect(() => {
+        const container = messagesContainerRef.current;
+        if (!container) { prevLenRef.current = messages.length; return; }
+
+        if (!initialScrollDoneRef.current) {
+            if (messages.length > 0 && !loading) {
+                if (initialMediaFollowupDoneRef.current && initialMediaPendingIdsRef.current.size === 0) {
+                    const pendingIds = collectInitialMediaPendingIds();
+                    if (pendingIds.size > 0) {
+                        initialMediaPendingIdsRef.current = pendingIds;
+                        initialMediaFollowupDoneRef.current = false;
+                    }
+                }
+                applyInitialScroll();
+                initialScrollDoneRef.current = true;
+                setChatContentReady(true);
+                prevLenRef.current = messages.length;
+                return;
+            }
+            if (!loading && messages.length === 0) {
+                setChatContentReady(true);
+            }
+            prevLenRef.current = messages.length;
+            return;
+        }
+
+        if (autoJumpedToUnreadRef.current && !userScrolledAfterAutoJumpRef.current) {
+            const anchor = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
+            if (anchor) {
+                scrollToUnreadAnchor(anchor);
+            }
+        }
+    }, [chatId, loading, messages.length, displayUnreadCount, unreadAnchorId]);
+
+    useEffect(() => {
+        if (!chatContentReady) return;
+        if (!initialScrollDoneRef.current) return;
+        const container = messagesContainerRef.current;
+        if (!container) { prevLenRef.current = messages.length; return; }
+        const nearBottom = computeNearBottom();
+        isAtBottomRef.current = nearBottom;
+
+        const added = messages.length - prevLenRef.current;
+        const prevFirstId = prevFirstMessageIdRef.current;
+        const prevLastId = prevLastMessageIdRef.current;
+        const nextFirstId = messages[0]?.id || null;
+        const nextLastId = messages[messages.length - 1]?.id || null;
+        const likelyPrependedOlder =
+            added > 0
+            && Boolean(prevFirstId)
+            && nextFirstId !== prevFirstId
+            && Boolean(prevLastId)
+            && nextLastId === prevLastId;
+        const finishedOlderRangeLoad =
+            pendingRangeLoadTypeRef.current === 'older'
+            && !loadingOlderMessages
+            && pendingOlderAdjustRef.current;
+        if (finishedOlderRangeLoad) {
+            const snap = pendingOlderAdjustRef.current;
+            if (snap && added > 0) {
+                const delta = container.scrollHeight - snap.prevHeight;
+                markProgrammaticScroll();
+                container.scrollTop = snap.prevTop + Math.max(0, delta);
+            }
+
+            const newMessages = messages.slice(0, Math.max(0, added));
+            const mediaIds = collectMediaIds(newMessages);
+            if (mediaIds.size > 0) {
+                mediaIds.forEach(id => rangeMediaPendingIdsRef.current.add(id));
+                
+            } else {
+                setLocalLoadingOlder(false);
+            }
+
+            pendingOlderAdjustRef.current = null;
+                pendingRangeLoadTypeRef.current = null;
+            prevLenRef.current = messages.length;
+            prevFirstMessageIdRef.current = nextFirstId;
+            prevLastMessageIdRef.current = nextLastId;
+            return;
+        }
+        if (pendingRangeLoadTypeRef.current === 'newer' && !loadingNewerMessages) {
+            const newMessages = messages.slice(Math.max(0, messages.length - added));
+            const mediaIds = collectMediaIds(newMessages);
+            if (mediaIds.size > 0) {
+                mediaIds.forEach(id => rangeMediaPendingIdsRef.current.add(id));
+            } else {
+                setLocalLoadingNewer(false);
+            }
+            pendingRangeLoadTypeRef.current = null;
+        }
+        if (added > 0) {
+            if (likelyPrependedOlder) {
+                if (autoJumpedToUnreadRef.current && !userScrolledAfterAutoJumpRef.current) {
+                    const anchor = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
+                    if (anchor) {
+                        scrollToUnreadAnchor(anchor);
+                    }
+                } else if (isAtBottomRef.current && !userHasScrolledRef.current) {
+                    pinToBottomSync();
+                }
+                prevLenRef.current = messages.length;
+                prevFirstMessageIdRef.current = nextFirstId;
+                prevLastMessageIdRef.current = nextLastId;
+                return;
+            }
+            if (pendingRangeLoadTypeRef.current) {
+                prevLenRef.current = messages.length;
+                prevFirstMessageIdRef.current = nextFirstId;
+                prevLastMessageIdRef.current = nextLastId;
+                return;
+            }
+            if (autoJumpedToUnreadRef.current && !userScrolledAfterAutoJumpRef.current) {
+                const anchor = unreadAnchorId || computeUnreadAnchorId(displayUnreadCount);
+                if (anchor) {
+                    scrollToUnreadAnchor(anchor);
+                }
+                prevLenRef.current = messages.length;
+                prevFirstMessageIdRef.current = nextFirstId;
+                prevLastMessageIdRef.current = nextLastId;
+                return;
+            }
+            if (nearBottom && (!autoJumpedToUnreadRef.current || userScrolledAfterAutoJumpRef.current)) {
+                const openedRecently = Date.now() - openedAtRef.current < 1600;
+                const shouldAnimate = !openedRecently && added <= 2;
+                const raf = requestAnimationFrame(() => scrollToBottom(shouldAnimate));
+                prevLenRef.current = messages.length;
+                prevFirstMessageIdRef.current = nextFirstId;
+                prevLastMessageIdRef.current = nextLastId;
+                return () => cancelAnimationFrame(raf);
+            }
+            const prevLastIndex = prevLastId ? messages.findIndex((msg) => msg.id === prevLastId) : -1;
+            const recentlyAddedMessages = prevLastIndex >= 0 ? messages.slice(prevLastIndex + 1) : [];
+            const incomingCount = recentlyAddedMessages.filter((msg) => msg.senderId !== currentUserId).length;
+            if (incomingCount > 0) {
+                setNewMsgCount((c) => c + incomingCount);
+            }
+        }
+        prevLenRef.current = messages.length;
+        prevFirstMessageIdRef.current = nextFirstId;
+        prevLastMessageIdRef.current = nextLastId;
+        
+    }, [messages, messages.length, currentUserId, loadingOlderMessages, loadingNewerMessages, chatContentReady]);
+
+    const onMessagesScroll = () => {
+        if (scrollRafRef.current !== null) return;
+        scrollRafRef.current = requestAnimationFrame(() => {
+            scrollRafRef.current = null;
+            handleMessagesScroll();
+        });
+    };
+
+    const triggerLoadOlderMessages = () => {
+        const container = messagesContainerRef.current;
+        if (!container || !hasOlderMessages || loadingOlderMessages || localLoadingOlder) return;
+        pendingRangeLoadTypeRef.current = 'older';
+        pendingOlderAdjustRef.current = { prevHeight: container.scrollHeight, prevTop: container.scrollTop };
+        setLocalLoadingOlder(true);
+        Promise.resolve(onLoadOlderMessages?.(chatId)).finally(() => {
+            const fallbackTimer = window.setTimeout(() => {
+                rangeMediaPendingIdsRef.current.clear();
+                setLocalLoadingOlder(false);
+            }, 3500);
+            window.setTimeout(() => {
+                if (rangeMediaPendingIdsRef.current.size === 0) {
+                    window.clearTimeout(fallbackTimer);
+                    setLocalLoadingOlder(false);
+                }
+            }, 1000);
+        });
+    };
+
+    useEffect(() => {
+        const sentinel = topSentinelRef.current;
+        const root = messagesContainerRef.current;
+        if (!sentinel || !root) return;
+        const observer = new IntersectionObserver((entries) => {
+            if (!entries.some((entry) => entry.isIntersecting)) return;
+            if (!initialScrollDoneRef.current || !userHasScrolledRef.current) return;
+            triggerLoadOlderMessages();
+        }, { root, threshold: 0 });
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [chatId, hasOlderMessages, loadingOlderMessages, localLoadingOlder, onLoadOlderMessages]);
+
+    const handleMessagesScroll = () => {
+        const container = messagesContainerRef.current;
+        if (!container) return;
+        const currentTop = container.scrollTop;
+        setMessagesScrolled(isElementScrolled(container));
+        const lastTop = lastScrollTopRef.current;
+        const scrollingDown = currentTop > lastTop + 1;
+        lastScrollTopRef.current = currentTop;
+
+        if (msgMenu || reactionMenu || seenByMenu) {
+            setMsgMenu(null);
+            setReactionMenu(null);
+            setSeenByMenu(null);
+        }
+
+        
+        
+        if (programmaticScrollEventsRef.current > 0) {
+            programmaticScrollEventsRef.current -= 1;
+            return;
+        }
+
+        const nearBottom = computeNearBottom();
+        isAtBottomRef.current = nearBottom;
+        const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+        if (nearBottom || distanceToBottom <= 24) {
+            userReadingOlderRef.current = false;
+        } else if (!scrollingDown && distanceToBottom > 140) {
+            userReadingOlderRef.current = true;
+        }
+        if (nearBottom) {
+            setNewMsgCount(0);
+            setShowScrollBtn(false);
+        } else {
+            setShowScrollBtn(distanceToBottom > 180);
+        }
+
+        userHasScrolledRef.current = true;
+
+        if (autoJumpedToUnreadRef.current) {
+            userScrolledAfterAutoJumpRef.current = true;
+        }
+
+        
+        saveScroll(chatId);
+
+        if (
+            distanceToBottom > 12
+            && distanceToBottom <= 96
+            && scrollingDown
+            && hasNewerMessages
+            && !loadingNewerMessages
+            && !localLoadingNewer
+            && !userReadingOlderRef.current
+        ) {
+            pendingRangeLoadTypeRef.current = 'newer';
+            setLocalLoadingNewer(true);
+            Promise.resolve(onLoadNewerMessages?.(chatId)).finally(() => {
+                const fallbackTimer = window.setTimeout(() => {
+                    rangeMediaPendingIdsRef.current.clear();
+                    setLocalLoadingNewer(false);
+                }, 3500);
+                window.setTimeout(() => {
+                    if (rangeMediaPendingIdsRef.current.size === 0) {
+                        window.clearTimeout(fallbackTimer);
+                        setLocalLoadingNewer(false);
+                    }
+                }, 1000);
+            });
+        }
+    };
+
+    const messageMetaCache = useMemo(() => new Map<string, { ts: unknown; text: string; time: string; dayKey: number; isBigEmojiOnly: boolean; emojiOnlyClass: string }>(), []);
+
+    const items = useMemo(() => {
+        const cache = messageMetaCache;
+        if (cache.size > 4000) cache.clear();
+        const readMeta = (msg: Message) => {
+            const text = msg.text || '';
+            const cached = cache.get(msg.id);
+            if (cached && cached.ts === msg.timestamp && cached.text === text) return cached;
+            const pureEmojiCount = text ? getPureEmojiCount(text) : 0;
+            const hasEmojiOnlyStickerStyle = pureEmojiCount >= 1 && pureEmojiCount <= 5 && !msg.file;
+            const next = {
+                ts: msg.timestamp,
+                text,
+                time: formatMessageTime(msg.timestamp),
+                dayKey: messageDayKey(msg.timestamp),
+                isBigEmojiOnly: hasEmojiOnlyStickerStyle,
+                emojiOnlyClass: hasEmojiOnlyStickerStyle ? `message-text--emoji-only-${Math.min(5, pureEmojiCount)}` : '',
+            };
+            cache.set(msg.id, next);
+            return next;
+        };
+
+        return messages.map((m, idx) => {
+            const prev = idx > 0 ? messages[idx - 1] : null;
+            const next = idx < messages.length - 1 ? messages[idx + 1] : null;
+            const meta = readMeta(m);
+            const isMine = m.senderId === currentUserId;
+            const prevSameSender = Boolean(prev) && prev!.senderId === m.senderId;
+            const nextSameSender = Boolean(next) && next!.senderId === m.senderId;
+            const dayBreak = !prev || readMeta(prev).dayKey !== meta.dayKey;
+            const dayLabel = dayBreak ? formatDayLabel(m.timestamp) : '';
+            return {
+                m,
+                isMine,
+                dayBreak,
+                dayLabel,
+                formattedTime: meta.time,
+                shape: bubbleShape(prevSameSender, nextSameSender),
+                isBigEmojiOnly: meta.isBigEmojiOnly,
+                emojiOnlyClass: meta.emojiOnlyClass,
+            };
+        });
+    }, [messages, currentUserId, messageMetaCache]);
+
+    const unreadAnchorForUi = useMemo(
+        () => unreadAnchorId || computeUnreadAnchorId(displayUnreadCount),
+        [unreadAnchorId, displayUnreadCount, messages, currentUserId]
+    );
+
+    const unreadCountForUi = useMemo(() => {
+        let cnt = Number(displayUnreadCount || 0);
+        if (Number.isFinite(cnt) && cnt > 0) {
+            return Math.floor(cnt);
+        }
+        const incoming = messages.filter((m: any) => m && m.senderId !== currentUserId);
+        let unreadFromEnd = 0;
+        for (let i = incoming.length - 1; i >= 0; i--) {
+            if (incoming[i]?.seen === false) {
+                unreadFromEnd++;
+            } else {
+                break;
+            }
+        }
+        return unreadFromEnd;
+    }, [messages, currentUserId, displayUnreadCount]);
+
+    const otherTypingUserIds = useMemo(
+        () => (typingUserIds || []).filter((uid) => uid && uid !== currentUserId),
+        [typingUserIds, currentUserId]
+    );
+    const otherUploadingUserIds = useMemo(
+        () => (uploadingUserIds || []).filter((uid) => uid && uid !== currentUserId),
+        [uploadingUserIds, currentUserId]
+    );
+
+    const typingStatusLabel = useMemo(() => {
+        if (isContactBlocked || isOfficialChannel) return '';
+        if (otherTypingUserIds.length === 0) return '';
+        if (!isGroupChat) return 'درحال تایپ...';
+        if (otherTypingUserIds.length === 1) {
+            const uid = otherTypingUserIds[0];
+            const name = groupMembers[uid]?.name || 'یک کاربر';
+            return `${name} درحال تایپ...`;
+        }
+        return `${toPersianDigits(otherTypingUserIds.length)} کاربر درحال تایپ هستند`;
+    }, [otherTypingUserIds, isGroupChat, groupMembers, isContactBlocked]);
+
+    const uploadingStatusLabel = useMemo(() => {
+        if (isContactBlocked || isOfficialChannel) return '';
+        if (otherUploadingUserIds.length === 0) return '';
+        if (!isGroupChat) return 'درحال آپلود فایل...';
+        if (otherUploadingUserIds.length === 1) {
+            const uid = otherUploadingUserIds[0];
+            const name = groupMembers[uid]?.name || 'یک کاربر';
+            return `${name} درحال آپلود فایل...`;
+        }
+        return `${toPersianDigits(otherUploadingUserIds.length)} کاربر درحال آپلود فایل هستند`;
+    }, [otherUploadingUserIds, isGroupChat, groupMembers, isContactBlocked]);
+
+    const headerActivityLabel = useMemo(() => {
+        if (typingStatusLabel) return typingStatusLabel;
+        return uploadingStatusLabel;
+    }, [typingStatusLabel, uploadingStatusLabel]);
+
+    const scrollButtonBottom = composerHeight + 18;
+
+    const jumpToLatest = async () => {
+        if (isJumpingToLatest) return;
+        setNewMsgCount(0);
+        if (hasNewerMessages) {
+            setIsJumpingToLatest(true);
+            try {
+                if (onJumpToLatestMessages) {
+                    await Promise.resolve(onJumpToLatestMessages(chatId));
+                } else if (onSelectChat) {
+                    await Promise.resolve(onSelectChat(chatId));
+                } else if (onLoadNewerMessages) {
+                    await Promise.resolve(onLoadNewerMessages(chatId));
+                }
+            } finally {
+                setIsJumpingToLatest(false);
+            }
+        }
+        scrollToBottom(true);
+        window.setTimeout(() => {
+            scrollToBottom(true);
+            if (computeNearBottom()) setShowScrollBtn(false);
+        }, 260);
+    };
+
+    const handleComposerSend = useCallback((payload: ChatComposerSendPayload) => {
+        if (isContactBlocked || !canSendInOfficialChannel) return false;
+        if (!payload.text.trim() && !payload.attachment && (!pendingForwardDraft || Boolean(editingId))) return false;
+        if (payload.text || payload.attachment) {
+            onSendMessage({
+                text: payload.text,
+                replyToId: payload.replyToId,
+                editMessageId: payload.editMessageId,
+                attachment: payload.attachment,
+            });
+        }
+        if (pendingForwardDraft && !editingId) {
+            void handleForwardDraft();
+        }
+        setReplyTo(null);
+        setEditingId(null);
+        requestAnimationFrame(() => scrollToBottom(true));
+        return true;
+    }, [isContactBlocked, canSendInOfficialChannel, pendingForwardDraft, editingId, onSendMessage, handleForwardDraft, chatId]);
+
+    const handleInputFocus = useCallback(() => {
+        window.setTimeout(() => {
+            if (computeNearBottom()) scrollToBottom(false);
+        }, 80);
+    }, []);
+
+    const handleCancelReplyEdit = useCallback(() => {
+        setReplyTo(null);
+        setEditingId(null);
+    }, []);
+
+    const handleCancelForward = useCallback(() => {
+        onClearPendingForwardDraft?.(chatId);
+    }, [onClearPendingForwardDraft, chatId]);
+
+    const handleTypingChange = useCallback((targetChatId: string, isTyping: boolean) => {
+        onTypingChange?.(targetChatId, isTyping);
+    }, [onTypingChange]);
+
+    const doDeleteChat = async () => {
+        try {
+            await apiFetch(`/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
+            setConfirmDeleteChat(false); setChatMenuOpen(false);
+            if (onChatDeleted) onChatDeleted(chatId); else onBack();
+        } catch { alert('حذف گفتگو با خطا مواجه شد'); }
+    };
+
+    const doLeaveGroup = async () => {
+        try {
+            await apiFetch(`/groups/${encodeURIComponent(chatId)}/leave`, { method: 'POST' });
+            setConfirmLeaveGroup(false); setChatMenuOpen(false);
+            if (onChatDeleted) onChatDeleted(chatId); else onBack();
+        } catch { alert('خروج از گروه با خطا مواجه شد'); }
+    };
+
+    const openDeleteChatConfirm = () => {
+        setChatMenuOpen(false);
+        window.setTimeout(() => setConfirmDeleteChat(true), 40);
+    };
+
+    const openLeaveGroupConfirm = () => {
+        setChatMenuOpen(false);
+        window.setTimeout(() => setConfirmLeaveGroup(true), 40);
+    };
+
+    const openMessageMenu = async (messageId: string, targetEl: HTMLElement, clientX?: number, clientY?: number) => {
+        const room = roomRef.current;
+        if (!room) return;
+
+        
+        if (msgMenu?.id === messageId || reactionMenu?.id === messageId || seenByMenu?.id === messageId) {
+            setMsgMenu(null);
+            setReactionMenu(null);
+            setSeenByMenu(null);
+            return;
+        }
+
+        const roomRect = room.getBoundingClientRect();
+        const r = targetEl.getBoundingClientRect();
+
+        const x = typeof clientX === 'number' && Number.isFinite(clientX) ? clientX : (r.left + 12);
+        const y = typeof clientY === 'number' && Number.isFinite(clientY) ? clientY : (r.top + 28);
+
+        
+        const relX = x - roomRect.left;
+        const relY = y - roomRect.top;
+
+        const message = messagesById.get(messageId);
+        let isFileDownloaded = false;
+        if (message?.file?.fileId) {
+            const blob = await getCachedBlob(`chat:${chatId}:file:${message.file.fileId}`);
+            if (blob) isFileDownloaded = true;
+        }
+
+        setMsgMenu({ id: messageId, top: relY + 8, left: relX - 12, isFileDownloaded });
+        setReactionMenu(null);
+        setSeenByMenu(null);
+
+        if (isGroupChat && message?.senderId === currentUserId) {
+            loadSeenBy(messageId);
+        }
+    };
+
+    
+    useLayoutEffect(() => {
+        const room = roomRef.current;
+        if (!room) return;
+        const rr = room.getBoundingClientRect();
+        const clamp = <T extends { top: number; left: number }>(menu: T | null, el: HTMLDivElement | null): T | null => {
+            if (!menu || !el) return menu;
+            const mr = el.getBoundingClientRect();
+            const padding = 12;
+            const minTop = 64;
+            const left = Math.min(Math.max(menu.left, padding), Math.max(padding, rr.width - mr.width - padding));
+            const top = Math.min(Math.max(menu.top, minTop), Math.max(minTop, rr.height - mr.height - padding));
+            return left === menu.left && top === menu.top ? menu : { ...menu, left, top };
+        };
+        setMsgMenu((menu) => clamp(menu, msgMenuRef.current));
+        setReactionMenu((menu) => clamp(menu, reactionMenuRef.current));
+        setSeenByMenu((menu) => clamp(menu, seenByMenuRef.current));
+    }, [msgMenu?.id, msgMenu?.top, msgMenu?.left, msgMenu?.isFileDownloaded, reactionMenu?.id, reactionMenu?.top, reactionMenu?.left, seenByMenu?.id, seenByMenu?.top, seenByMenu?.left]);
+
+    const openReactionMenu = (messageId: string, targetEl: HTMLElement, anchor?: { top: number; left: number }) => {
+        const room = roomRef.current;
+        if (!room) return;
+        const roomRect = room.getBoundingClientRect();
+        const r = targetEl.getBoundingClientRect();
+        const pickerHeight = 200; const pickerWidth = 320;
+        const anchorTop = anchor?.top ?? (r.bottom - roomRect.top);
+        const anchorLeft = anchor?.left ?? (r.left - roomRect.left);
+        const spaceBelow = roomRect.height - anchorTop;
+        const top = spaceBelow < pickerHeight + 16 ? Math.max(64, anchorTop - pickerHeight) : anchorTop;
+        const finalLeft = Math.max(12, Math.min(anchorLeft, roomRect.width - pickerWidth - 16));
+        setReactionMenu({ id: messageId, top, left: finalLeft });
+        setMsgMenu(null);
+        setSeenByMenu(null);
+    };
+
+    const beginReply = (m: Message, withHaptic = false) => {
+        setReplyTo({ id: m.id, senderId: m.senderId, text: m.text });
+        setEditingId(null); setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
+        if (withHaptic) triggerHaptic();
+    };
+
+    const beginEdit = (m: Message) => {
+        setEditingId(m.id); setReplyTo(null);
+        setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
+    };
+
+    const doDeleteMessage = (messageId: string) => {
+        setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
+        setConfirmDeleteMsg(messageId);
+    };
+
+    const cleanupMessageCache = (messageId: string) => {
+        const msg = messagesById.get(messageId);
+        if (msg?.file?.fileId) void deleteCachedBlob(`chat:${chatId}:file:${msg.file.fileId}`);
+    };
+
+    const confirmDeleteMessage = () => {
+        if (confirmDeleteMsg) {
+            onDeleteMessage(confirmDeleteMsg);
+            cleanupMessageCache(confirmDeleteMsg);
+            setConfirmDeleteMsg(null);
+        }
+    };
+
+    const toggleReasoning = (messageId: string) => {
+        setReasoningPanelByMessage((prev) => ({ ...prev, [messageId]: !prev[messageId] }));
+    };
+
+    const messageHandlerStateRef = useRef({
+        openMessageMenu,
+        openReactionMenu,
+        handleReact,
+        handleDeleteReaction,
+        beginReply,
+        toggleMessageSelection,
+        scrollToMessage,
+        openForwardSource,
+        openMember,
+        handleInitialMediaReady,
+        openImageViewer,
+        openVideoViewer,
+        setReplySwipeLocked,
+        toggleReasoning,
+    });
+    messageHandlerStateRef.current = {
+        openMessageMenu,
+        openReactionMenu,
+        handleReact,
+        handleDeleteReaction,
+        beginReply,
+        toggleMessageSelection,
+        scrollToMessage,
+        openForwardSource,
+        openMember,
+        handleInitialMediaReady,
+        openImageViewer,
+        openVideoViewer,
+        setReplySwipeLocked,
+        toggleReasoning,
+    };
+
+    const messageActions = useMemo(() => ({
+        openMenu: (messageId: string, targetEl: HTMLElement, clientX?: number, clientY?: number) => {
+            void messageHandlerStateRef.current.openMessageMenu(messageId, targetEl, clientX, clientY);
+        },
+        openReactionMenu: (messageId: string, targetEl: HTMLElement) => {
+            messageHandlerStateRef.current.openReactionMenu(messageId, targetEl);
+        },
+        react: (messageId: string, emoji: string) => {
+            void messageHandlerStateRef.current.handleReact(messageId, emoji);
+        },
+        deleteReaction: (messageId: string) => {
+            void messageHandlerStateRef.current.handleDeleteReaction(messageId);
+        },
+        reply: (message: Message) => messageHandlerStateRef.current.beginReply(message, false),
+        toggleSelect: (messageId: string) => messageHandlerStateRef.current.toggleMessageSelection(messageId),
+        scrollToMessage: (messageId: string) => messageHandlerStateRef.current.scrollToMessage(messageId),
+        openForwardSource: (message: Message) => messageHandlerStateRef.current.openForwardSource(message),
+        openMember: (memberId: string) => messageHandlerStateRef.current.openMember(memberId),
+        toggleReasoning: (messageId: string) => messageHandlerStateRef.current.toggleReasoning(messageId),
+        mediaReady: (messageId: string) => messageHandlerStateRef.current.handleInitialMediaReady(messageId),
+        openImage: (url: string, file: FileMetadata | null) => messageHandlerStateRef.current.openImageViewer(url, file),
+        openVideo: (url: string, file: FileMetadata | null) => messageHandlerStateRef.current.openVideoViewer(url, file),
+        swipeLock: (locked: boolean) => messageHandlerStateRef.current.setReplySwipeLocked(locked),
+        registerEl: (messageId: string, el: HTMLDivElement | null) => {
+            if (!el) {
+                messageElsRef.current.delete(messageId);
+                return;
+            }
+            messageElsRef.current.set(messageId, el);
+        },
+    }), []);
+
+    const renderedMessageItems = useMemo(() => items.map(({ m, isMine, dayBreak, dayLabel, formattedTime, shape, isBigEmojiOnly, emojiOnlyClass }) => {
+        const showUnreadSeparator = Boolean(unreadAnchorForUi && unreadAnchorForUi === m.id && m.senderId !== currentUserId);
+        const seenByCountForMessage = seenByUsersByMessage[m.id]?.length ?? 0;
+        const isSeenForUi = Boolean(
+            m.seen || (isGroupChat && isMine && seenByCountForMessage > 0) || (isOfficialChannel && isMine)
+        );
+        const messageSeenByRaw = Array.isArray((m as any).seenBy) ? (m as any).seenBy.length : 0;
+        const messageSeenCountRaw = Number((m as any).seenCount || 0);
+        const messageSeenCount = Math.max(1, seenByCountForMessage, messageSeenByRaw, messageSeenCountRaw);
+        const sender = groupMembers[m.senderId];
+        const senderPending = isGroupChat && !isMine && !sender && !membersResolved;
+        const replySenderId = m.replyTo ? String(messagesById.get(m.replyTo.id)?.senderId || m.replyTo.senderId || '') : '';
+        const replySenderPending = isGroupChat && !membersResolved && Boolean(replySenderId) && !groupMembers[replySenderId];
+        const reactionsForMessage = (optimisticReactions[m.id] ?? m.reactions ?? EMPTY_REACTIONS) as unknown as ReactionEntry[];
+
+        return (
+            <ChatMessageItem
+                key={m.id}
+                message={m}
+                displayText={m.text}
+                isMine={isMine}
+                isGroupChat={isGroupChat}
+                isOfficialChannel={isOfficialChannel}
+                isSelectionModeActive={isSelectionModeActive}
+                canSwipeToReply={canSwipeToReply}
+                currentUserId={currentUserId}
+                token={token}
+                chatId={chatId}
+                dayBreak={dayBreak}
+                dayLabel={dayLabel}
+                formattedTime={formattedTime}
+                shape={shape}
+                isBigEmojiOnly={isBigEmojiOnly}
+                emojiOnlyClass={emojiOnlyClass}
+                senderName={sender?.name || m.senderId || 'ناشناس'}
+                senderAvatar={sender?.avatar || ''}
+                senderPending={senderPending}
+                replySenderName={m.replyTo ? getReplySenderName(m.replyTo) : ''}
+                replySenderPending={replySenderPending}
+                replyPreviewText={m.replyTo ? getReplyPreviewText(m.replyTo) : ''}
+                reactions={reactionsForMessage}
+                isHighlighted={highlightId === m.id}
+                isSelected={selectedMessageIds.includes(m.id)}
+                showUnreadSeparator={showUnreadSeparator}
+                unreadCountForUi={unreadCountForUi}
+                isMenuActive={msgMenu?.id === m.id}
+                isSeenForUi={isSeenForUi}
+                messageSeenCount={messageSeenCount}
+                reasoningOpen={Boolean(reasoningPanelByMessage[m.id])}
+                unreadSeparatorRef={unreadSeparatorRef}
+                actions={messageActions}
+            />
+        );
+    }), [
+        items,
+        highlightId,
+        unreadAnchorForUi,
+        unreadCountForUi,
+        currentUserId,
+        msgMenu?.id,
+        seenByUsersByMessage,
+        isGroupChat,
+        isOfficialChannel,
+        optimisticReactions,
+        canSwipeToReply,
+        groupMembers,
+        membersResolved,
+        messagesById,
+        token,
+        chatId,
+        reasoningPanelByMessage,
+        selectedMessageIds,
+        isSelectionModeActive,
+        messageActions,
+    ]);
+
+    const contactView = (() => {
+        if (showContactInfo && !isOfficialChannel) {
+            const infoUser: any = isGroupChat ? { ...contact, chatId, isGroup: true } : contact;
+            const blocked = Boolean(isUserBlocked?.(infoUser));
+            return {
+                user: infoUser,
+                isBlocked: !isGroupChat && blocked,
+                hideOnlineStatus: !isGroupChat && (Boolean(infoUser?.blockedByOther) || blocked),
+                isInteractiveOnline: Boolean(interactiveOnlineUsers && infoUser?.chatId && interactiveOnlineUsers[infoUser.chatId]),
+                onToggleBlock: !isGroupChat ? onToggleBlockUser : undefined,
+                onBack: () => {
+                    setShowContactInfo(false);
+                    if (forceContactInfoOpen && onCloseForcedContactInfo) {
+                        onCloseForcedContactInfo(chatId);
+                        return;
+                    }
+                    if (openGroupEditorFromMembers) {
+                        setShowMembersList(true);
+                        setOpenGroupEditorFromMembers(false);
+                    }
+                },
+                onOpenMembers: isGroupChat ? () => {
+                    setOpenGroupEditorFromMembers(false);
+                    setShowContactInfo(false);
+                    setShowMembersList(true);
+                } : undefined,
+                autoOpenMembers: !openGroupEditorFromMembers,
+                startInEditMode: openGroupEditorFromMembers,
+                onOpenChat: (u: User) => {
+                    if (u.chatId === currentUserId) {
+                        onOpenProfile?.();
+                        setShowContactInfo(false);
+                        return;
+                    }
+                    onOpenDirectChat?.(u);
+                    setShowContactInfo(false);
+                },
+            };
+        }
+        if (forwardSourceUser) {
+            return {
+                user: forwardSourceUser,
+                isBlocked: Boolean(isUserBlocked?.(forwardSourceUser)),
+                hideOnlineStatus: Boolean((forwardSourceUser as any)?.blockedByOther) || Boolean(isUserBlocked?.(forwardSourceUser)),
+                isInteractiveOnline: Boolean(interactiveOnlineUsers && forwardSourceUser?.chatId && interactiveOnlineUsers[forwardSourceUser.chatId]),
+                onToggleBlock: onToggleBlockUser,
+                onBack: () => setForwardSourceUser(null),
+                onOpenMembers: undefined,
+                autoOpenMembers: true,
+                startInEditMode: false,
+                onOpenChat: (u: User) => {
+                    if (u.chatId === currentUserId) {
+                        onOpenProfile?.();
+                        setForwardSourceUser(null);
+                        return;
+                    }
+                    onOpenDirectChat?.(u);
+                    setForwardSourceUser(null);
+                },
+            };
+        }
+        if (viewingMemberId) {
+            const memberData = groupMembers[viewingMemberId];
+            const memberUser: any = memberData
+                ? {
+                    chatId: memberData.chatId || viewingMemberId,
+                    name: memberData.name || viewingMemberId,
+                    username: memberData.username || '',
+                    avatar: memberData.avatar || '',
+                    bio: memberData.bio || '',
+                    online: memberData.online ?? false,
+                    lastSeen: memberData.lastSeen,
+                    lastSeenCategory: memberData.lastSeenCategory,
+                    verified: memberData.verified || false,
+                }
+                : { chatId: viewingMemberId, name: viewingMemberId, username: '', avatar: '', bio: '', online: false };
+            return {
+                user: memberUser,
+                isBlocked: Boolean(isUserBlocked?.(memberUser)),
+                hideOnlineStatus: Boolean((memberUser as any)?.blockedByOther) || Boolean(isUserBlocked?.(memberUser)),
+                isInteractiveOnline: Boolean(interactiveOnlineUsers && (memberUser.chatId || viewingMemberId) && interactiveOnlineUsers[memberUser.chatId || viewingMemberId]),
+                onToggleBlock: onToggleBlockUser,
+                onBack: () => setViewingMemberId(null),
+                onOpenMembers: undefined,
+                autoOpenMembers: true,
+                startInEditMode: false,
+                onOpenChat: (u: User) => {
+                    if (u.chatId === currentUserId) {
+                        onOpenProfile?.();
+                        setViewingMemberId(null);
+                        return;
+                    }
+                    onOpenDirectChat?.(u);
+                    setViewingMemberId(null);
+                },
+            };
+        }
+        return null;
+    })();
+
+    if (contactView) return <ContactInfo {...contactView} />;
+
+    if (showMembersList) {
+        return (
+            <GroupMembersView
+                contact={contact}
+                currentUserId={currentUserId}
+                isVerifiedUser={isVerifiedUser}
+                groupMembers={groupMembers}
+                membersLoading={membersLoading}
+                chatStats={chatStats}
+                token={token}
+                interactiveOnlineUsers={interactiveOnlineUsers}
+                onBack={() => {
+                    setShowMembersList(false);
+                    if (onCloseForcedContactInfo) {
+                        onCloseForcedContactInfo(chatId);
+                    }
+                }}
+                onEditGroup={() => {
+                    setOpenGroupEditorFromMembers(true);
+                    setShowMembersList(false);
+                    setShowContactInfo(true);
+                }}
+                onOpenProfile={() => {
+                    setShowMembersList(false);
+                    onOpenProfile?.();
+                }}
+                onViewMember={(memberId) => {
+                    setShowMembersList(false);
+                    restoringFromInfoRef.current = true;
+                    setViewingMemberId(memberId);
+                }}
+            />
+        );
+    }
+
+    return (
+        <motion.div
+            className="chat-room" style={{ position: 'relative' }} ref={roomRef}
+            variants={screenVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            onDragOver={(e) => {
+                if (isContactBlocked || !externalFileUploadHandler) return;
+                e.preventDefault();
+                setDragUploadActive(true);
+            }}
+            onDragEnter={(e) => {
+                if (isContactBlocked || !externalFileUploadHandler) return;
+                e.preventDefault();
+                setDragUploadActive(true);
+            }}
+            onDragLeave={(e) => {
+                if (!dragUploadActive) return;
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setDragUploadActive(false);
+                }
+            }}
+            onDrop={(e) => {
+                if (isContactBlocked || !externalFileUploadHandler) return;
+                e.preventDefault();
+                setDragUploadActive(false);
+                const file = e.dataTransfer?.files?.[0];
+                if (file) externalFileUploadHandler(file);
+            }}
+            onPasteCapture={(e) => {
+                if (isContactBlocked || !externalFileUploadHandler) return;
+                const items = Array.from(e.clipboardData?.items || []);
+                const imageItem = items.find((item) => item.kind === 'file' && item.type.startsWith('image/'));
+                const pastedFile = imageItem?.getAsFile();
+                if (pastedFile) {
+                    e.preventDefault();
+                    externalFileUploadHandler(pastedFile);
+                }
+            }}
+        >
+            {isSelectionModeActive ? (
+                <div className="chat-room__header chat-room__header--selection">
+                    <div className="chat-room__selection-left">
+                        <button
+                            className="icon-btn chat-room__selection-close-btn"
+                            onClick={() => setSelectedMessageIds([])}
+                            aria-label="Cancel selection"
+                            title="لغو انتخاب"
+                            type="button"
+                        >
+                            <X size={20} />
+                        </button>
+                        <span
+                            key={selectionShake}
+                            className={cx('chat-room__selection-count', selectionShake > 0 && 'chat-room__selection-count--shake')}
+                        >
+                            {toPersianDigits(selectedMessageIds.length)} پیام انتخاب شده
+                        </span>
+                    </div>
+
+                    <div className="chat-room__selection-actions">
+                        <button
+                            type="button"
+                            className="icon-btn"
+                            onClick={handleCopySelected}
+                            title="کپی متن پیام‌ها"
+                            aria-label="Copy selected messages"
+                        >
+                            <Copy size={19} />
+                        </button>
+                        <button
+                            type="button"
+                            className="icon-btn"
+                            onClick={handleOpenForwardSelected}
+                            title="فوروارد پیام‌های انتخاب‌شده"
+                            aria-label="Forward selected messages"
+                        >
+                            <CornerUpLeft size={19} />
+                        </button>
+                        {canDeleteAnySelected && (
+                            <button
+                                type="button"
+                                className="icon-btn icon-btn--danger"
+                                onClick={() => setConfirmDeleteSelected(true)}
+                                title="حذف پیام‌های انتخاب‌شده"
+                                aria-label="Delete selected messages"
+                            >
+                                <Trash2 size={19} />
+                            </button>
+                        )}
+                    </div>
+                </div>
+            ) : (
+                <div className="chat-room__header">
+                    <button className={cx('chat-room__back-btn', 'back-icon-btn', messagesScrolled && 'chat-room__back-btn--scrolled')} onClick={() => { maybeSaveScroll(chatId); onBack(); }} aria-label="Back" type="button"><ChevronLeft size={22} /></button>
+                    <button className="icon-btn chat-room__close-btn" onClick={() => { maybeSaveScroll(chatId); onCloseChat(); }} aria-label="Back to empty" type="button"><ChevronLeft size={22} /></button>
+
+                    <button
+                        className="chat-room__header-clickable chat-room__header-clickable--full"
+                        onClick={() => {
+                            if (isSavedMessages || isOfficialChannel) return;
+                            maybeSaveScroll(chatId);
+                            if (onOpenContactInfo && chatId !== 'pending') {
+                                onOpenContactInfo(chatId);
+                            }
+                            restoringFromInfoRef.current = true;
+                            setOpenGroupEditorFromMembers(false);
+                            setShowContactInfo(true);
+                        }}
+                        aria-label={isSavedMessages || isOfficialChannel ? '' : 'Open contact info'}
+                        type="button"
+                        style={isSavedMessages || isOfficialChannel ? { cursor: 'default' } : undefined}
+                    >
+                        <Avatar
+                            name={contact.name}
+                            size="sm"
+                            online={isGroupChat || isSavedMessages || isContactBlocked ? undefined : Boolean((interactiveOnlineUsers && contact.chatId && interactiveOnlineUsers[contact.chatId]) || contact.online)}
+                            savedMessages={isSavedMessages}
+                            src={contact.avatar}
+                        />
+                        <div className="chat-room__header-info">
+                            <div className="chat-room__contact-name" style={{ alignItems: 'center', gap: 6 }}>
+                                <p className='chat-room__contact-name-2 emoji-font'>{contact.name}</p>
+                                {!isSavedMessages && resolveVerified(contact.verified) ? <VerifiedBadge size={14} /> : null}
+                            </div>
+                            {!isSavedMessages && (
+                                <div className={(!isGroupChat && !isContactBlocked && Boolean((interactiveOnlineUsers && contact.chatId && interactiveOnlineUsers[contact.chatId]) || contact.online)) ? 'chat-room__contact-status chat-room__contact-status--online' : 'chat-room__contact-status'}>
+                                    {isOfficialChannel ? (
+                                        <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(chatStats?.totalMembers ?? 0)} عضو</span>
+                                    ) : headerActivityLabel ? (
+                                        <span className="status-online-text">{headerActivityLabel}</span>
+                                    ) : (isGroupChat ? (
+                                        <span style={{ direction: 'rtl', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                            <span className="status-online-text">{toPersianDigits(chatStats?.onlineMembers ?? 0)} آنلاین</span>
+                                            <span style={{ color: 'var(--text-muted)' }}>•</span>
+                                            <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0)} عضو</span>
+                                        </span>
+                                    ) : formatLastSeen(contact, { isContactBlocked, isInteractiveOnline: Boolean(interactiveOnlineUsers && contact.chatId && interactiveOnlineUsers[contact.chatId]) }))}
+                                </div>
+                            )}
+                        </div>
+                    </button>
+
+                    {!isSavedMessages && !isOfficialChannel && (
+                        <div className="chat-room__header-actions" ref={menuRef}>
+                            <button
+                                className="icon-btn"
+                                onClick={() => setChatMenuOpen((v) => !v)}
+                                aria-label="More"
+                                disabled={!canDeleteChat}
+                                style={!canDeleteChat ? { opacity: 0.4, cursor: 'default' } : undefined}
+                                type="button"
+                            >
+                                <MoreVertical size={20} />
+                            </button>
+
+                            {chatMenuOpen && canDeleteChat && (
+                                <div className="popover popover--mini popover--right">
+                                    {isGroupChat ? (
+                                        <>
+                                            <button
+                                                className="popover__item popover__item--danger"
+                                                onClick={openLeaveGroupConfirm}
+                                                type="button"
+                                            >
+                                                <LogOut size={16} />
+                                                خروج از گروه
+                                            </button>
+                                            {isVerifiedUser && (
+                                                <button
+                                                    className="popover__item popover__item--danger"
+                                                    onClick={openDeleteChatConfirm}
+                                                    type="button"
+                                                >
+                                                    <Trash2 size={16} />
+                                                    حذف گروه
+                                                </button>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <button
+                                            className="popover__item popover__item--danger"
+                                            onClick={openDeleteChatConfirm}
+                                            type="button"
+                                        >
+                                            <Trash2 size={16} />
+                                            حذف گفتگو
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {pinnedMessage && (
+                <div
+                    className="chat-room__pinned-bar"
+                    onClick={() => {
+                        if (messagesById.has(pinnedMessage.id)) {
+                            scrollToMessage(pinnedMessage.id);
+                        } else {
+                            onJumpToMessage?.(chatId, pinnedMessage.id);
+                        }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                >
+                    <div className="chat-room__pinned-bar__indicator" />
+                    <Pin size={16} className="chat-room__pinned-bar__icon" />
+                    <div className="chat-room__pinned-bar__content">
+                        <div className="chat-room__pinned-bar__title">
+                            پیام سنجاق شده{pinnedMessage.senderName ? ` • ${pinnedMessage.senderName}` : ''}
+                        </div>
+                        <div className="chat-room__pinned-bar__text">
+                            {(() => {
+                                const pinnedFull = messagesById.get(pinnedMessage.id);
+                                if (pinnedFull?.chessInvite) {
+                                    return pinnedFull.chessInvite.shared ? '♟️ بازی شطرنج' : '♟️ دعوت به بازی شطرنج';
+                                }
+                                return pinnedMessage.text || (pinnedMessage.file ? `[فایل: ${pinnedMessage.file.fileName || 'پیوست'}]` : 'پیام');
+                            })()}
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        className="chat-room__pinned-bar__unpin"
+                        title="برداشتن سنجاق"
+                        aria-label="Unpin message"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmPin({ action: 'unpin' });
+                        }}
+                    >
+                        <X size={16} />
+                    </button>
+                </div>
+            )}
+
+            <div
+                className="chat-room__messages"
+                ref={messagesContainerRef}
+                onScroll={onMessagesScroll}
+                onPlayCapture={(e) => {
+                    const targetVideo = e.target instanceof HTMLVideoElement ? e.target : null;
+                    if (!targetVideo) return;
+                    const container = messagesContainerRef.current;
+                    if (!container) return;
+                    container.querySelectorAll('video').forEach((videoEl) => {
+                        if (videoEl !== targetVideo && !videoEl.paused) videoEl.pause();
+                    });
+                }}
+                style={{
+                    overflowX: 'hidden',
+                    overflowY: replySwipeLocked ? 'hidden' : 'auto',
+                    paddingBottom: composerHeight + 26,
+                }}
+            >
+                <div className="chat-room__messages-inner">
+                    <div ref={topSentinelRef} />
+                    {!loading && (
+                        <div className="messages-list-visible-wrap" style={{ display: 'contents', visibility: chatContentReady ? 'visible' : 'hidden' }}>
+                            {(loadingOlderMessages || localLoadingOlder) && (
+                                <div className="chat-range-loader-wrap chat-range-loader-wrap--top">
+                                    <span className="chat-range-loader chat-range-loader--active" />
+                                </div>
+                            )}
+                            {renderedMessageItems}
+                            {(loadingNewerMessages || localLoadingNewer) && (
+                                <div className="chat-range-loader-wrap chat-range-loader-wrap--bottom">
+                                    <span className="chat-range-loader chat-range-loader--active" />
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                </div>
+            </div>
+
+            {loading && (
+                <div className="chat-room__skeleton-layer">
+                    <ChatMessagesSkeleton />
+                </div>
+            )}
+
+            {jumpingToMessage && (
+                <div className="chat-room__jump-overlay" onClick={() => onCancelJumpToMessage?.()}>
+                    <div className="chat-room__jump-box" onClick={(e) => e.stopPropagation()}>
+                        <span className="chat-range-loader chat-range-loader--active chat-room__jump-spinner" />
+                    </div>
+                </div>
+            )}
+
+            {msgMenu && (() => {
+                const activeMsg = messagesById.get(msgMenu.id);
+                if (!activeMsg) return null;
+                const activeMsgIsMine = activeMsg.senderId === currentUserId;
+                const canDeleteActiveMsg = activeMsgIsMine || (isGroupChat && isVerifiedUser);
+                const showSeenByAction = isGroupChat && activeMsgIsMine && !isOfficialChannel;
+                const canReplyInMessageMenu = !(isOfficialChannel && !isVerifiedUser);
+                const hasCaption = Boolean((activeMsg.text || '').trim());
+                const isChessMsg = Boolean(activeMsg.chessInvite);
+                const showCopyAction = !isChessMsg && (!activeMsg.file || hasCaption);
+                const showDownloadAction = Boolean(activeMsg.file?.fileId && msgMenu.isFileDownloaded);
+                const canTogglePin = pinnedMessage?.id === activeMsg.id || !((isGroupChat || isOfficialChannel) && !isVerifiedUser);
+
+                return (
+                    <div ref={msgMenuRef} className="popover popover--mini"
+                        style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}>
+                        {showSeenByAction && (
+                            <button className="popover__item" onClick={() => {
+                                setSeenByMenu({ id: activeMsg.id, top: msgMenu.top, left: msgMenu.left });
+                                setMsgMenu(null);
+                            }} type="button">
+                                <Eye size={16} />دیده شده توسط
+                            </button>
+                        )}
+                        <button className="popover__item" onClick={() => { const el = messageElsRef.current.get(activeMsg.id); if (el) openReactionMenu(activeMsg.id, el, { top: msgMenu.top, left: msgMenu.left }); }} type="button">
+                            <Smile size={16} />واکنش
+                        </button>
+                        {canReplyInMessageMenu && (
+                            <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><CornerUpRight size={16} />پاسخ</button>
+                        )}
+                        {canTogglePin && (
+                            <button
+                                className="popover__item"
+                                onClick={() => {
+                                    const targetId = activeMsg.id;
+                                    setMsgMenu(null);
+                                    setConfirmPin({
+                                        action: pinnedMessage?.id === targetId ? 'unpin' : 'pin',
+                                        messageId: targetId,
+                                    });
+                                }}
+                                type="button"
+                            >
+                                <Pin size={16} />
+                                {pinnedMessage?.id === activeMsg.id ? 'برداشتن سنجاق' : 'سنجاق کردن پیام'}
+                            </button>
+                        )}
+                        <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><CornerUpLeft size={16} />فوروارد</button>
+                        <button
+                            className="popover__item"
+                            onClick={() => {
+                                setMsgMenu(null);
+                                setSelectedMessageIds([activeMsg.id]);
+                            }}
+                            type="button"
+                        >
+                            <Check size={16} />
+                            انتخاب
+                        </button>
+                        {activeMsg.senderId === currentUserId && !activeMsg.forwardedFrom && !isChessMsg && (
+                            <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
+                        )}
+                        {showCopyAction && (<button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><Copy size={16} />کپی</button>)}
+                        {showDownloadAction && (<button className="popover__item" onClick={() => doDownloadMessageFile(activeMsg)} type="button"><Download size={16} />دانلود</button>)}
+                        {canDeleteActiveMsg && (
+                            <button className="popover__item popover__item--danger" onClick={() => doDeleteMessage(activeMsg.id)} type="button">
+                                <Trash2 size={16} />حذف
+                            </button>
+                        )}
+                    </div>
+                );
+            })()}
+
+            {seenByMenu && (() => {
+                const rows = seenByUsersByMessage[seenByMenu.id] || [];
+
+                return (
+                    <div ref={seenByMenuRef} className="popover popover--mini"
+                        style={{ top: seenByMenu.top, left: seenByMenu.left, right: 'auto', position: 'absolute', zIndex: 52 }}
+                        onClick={(e) => e.stopPropagation()}>
+                        <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)' }}>
+                            دیده شده توسط ({toPersianDigits(rows.length)})
+                        </div>
+                        <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                            {rows.length === 0 ? (
+                                <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>
+                                    هنوز کسی این پیام را ندیده است
+                                </div>
+                            ) : (
+                                rows.map((u) => (
+                                    <button key={u.chatId} className="popover__item" type="button"
+                                        onClick={() => {
+                                            setSeenByMenu(null);
+                                            openMember(u.chatId);
+                                        }}>
+                                        <Avatar name={u.name || u.username || ''} src={u.avatar || ''} size="sm" />
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                            <span>{u.name || u.username || u.chatId}</span>
+                                            {resolveVerified(u.verified) && <VerifiedBadge size={13} />}
+                                        </span>
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                );
+            })()}
+
+            {openedImage && (
+                <ImageMediaViewer
+                    imageUrl={openedImage.url}
+                    downloadFile={openedImage.file}
+                    token={token}
+                    chatId={chatId}
+                    onClose={closeMediaViewer}
+                />
+            )}
+            {openedVideo && (
+                <VideoMediaViewer
+                    videoUrl={openedVideo.url}
+                    downloadFile={openedVideo.file}
+                    token={token}
+                    chatId={chatId}
+                    onClose={closeMediaViewer}
+                />
+            )}
+
+            {reactionMenu && (() => {
+                const reactionMsg = messagesById.get(reactionMenu.id);
+                if (!reactionMsg) return null;
+
+                const reactionRows = optimisticReactions[reactionMsg.id] ?? reactionMsg.reactions ?? [];
+
+                const myReaction = reactionRows.find((r: any) =>
+                    r.userIds && Array.isArray(r.userIds) && r.userIds.includes(currentUserId)
+                );
+
+                const reactionUsersList: { userId: string; emoji: string; name: string; avatar: string; verified: boolean }[] = [];
+                if (reactionRows.length > 0) {
+                    reactionRows.forEach((r: any) => {
+                        (r.userIds || []).forEach((uid: string) => {
+                            const member = groupMembers[uid];
+                            reactionUsersList.push({
+                                userId: uid,
+                                emoji: r.emoji,
+                                name: member?.name || uid,
+                                avatar: member?.avatar || '',
+                                verified: resolveVerified(member?.verified),
+                            });
+                        });
+                    });
+                }
+
+                return (
+                    <div ref={reactionMenuRef}
+                        style={{ top: reactionMenu.top, left: reactionMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}>
+                        <ReactionPicker
+                            messageId={reactionMsg.id}
+                            currentReaction={myReaction?.emoji}
+                            onReact={(id, emoji) => handleReact(id, emoji)}
+                            onDeleteReaction={(id) => handleDeleteReaction(id)}
+                            onClose={() => setReactionMenu(null)}
+                        />
+
+                        {isGroupChat && !isOfficialChannel && reactionUsersList.length > 0 && (
+                            <div style={{ marginTop: 6, background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 12, overflow: 'hidden', minWidth: 220, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+                                <div style={{ padding: '7px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)', fontFamily: 'Vazir, sans-serif' }}>
+                                    واکنش‌ها
+                                    ({toPersianDigits(reactionUsersList.length)})
+                                </div>
+                                <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                                    {reactionUsersList.map((ru, i) => (
+                                        <div key={i}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setReactionMenu(null);
+                                                openMember(ru.userId);
+                                            }}
+                                            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderTop: i > 0 ? '1px solid var(--border-primary)' : 'none', cursor: 'pointer', transition: 'background 0.12s' }}
+                                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary, rgba(0,0,0,0.04))')}
+                                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                        >
+                                            <div style={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
+                                                <Avatar name={ru.name} size="xs" src={ru.avatar} />
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
+                                                <span style={{ fontSize: 13, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    {ru.name}
+                                                </span>
+                                                {ru.verified && <VerifiedBadge size={13} />}
+                                            </div>
+                                            <span style={{ fontSize: 18, flexShrink: 0, fontFamily: "'AppleEmoji', 'Vazir', sans-serif" }}>{ru.emoji}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            })()}
+
+            <AnimatePresence>
+                {(newMsgCount > 0 || showScrollBtn || isJumpingToLatest) && (
+                    <motion.button
+                        type="button"
+                        aria-label="Jump to latest messages"
+                        onClick={jumpToLatest}
+                        disabled={isJumpingToLatest}
+                        className="chat-room__send-btn chat-room__send-btn--disabled"
+                        animate={{ opacity: 1 }}
+                        initial={{ opacity: 0 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.14, ease: 'easeOut' }}
+                        style={{ position: 'absolute', right: 12, bottom: scrollButtonBottom, zIndex: 12, color: 'var(--text-primary)', cursor: 'pointer' }}>
+                        {isJumpingToLatest ? (
+                            <span className="chat-room__scroll-btn-spinner" aria-hidden="true" />
+                        ) : (
+                            <ChevronDown size={20} />
+                        )}
+                        {newMsgCount > 0 && (
+                            <span className="chat-room__scroll-badge">{toPersianDigits(newMsgCount)}</span>
+                        )}
+                    </motion.button>
+                )}
+            </AnimatePresence>
+
+            <div className="chat-room__composer-host" ref={composerHostRef}>
+                <ChatComposer
+                    key={`${chatId}:${editingId ?? 'compose'}`}
+                    chatId={chatId}
+                    isContactBlocked={isContactBlocked}
+                    canSend={canSendInOfficialChannel}
+                    blockedMessage={isUserBlocked?.(contact) ? 'شما این کاربر را بلاک کرده‌اید.' : 'این کاربر شما را بلاک کرده است.'}
+                    replyTo={replyTo}
+                    editingId={editingId}
+                    editDraft={editingId ? (messagesById.get(editingId)?.text ?? '') : ''}
+                    replyPreviewText={replyTo ? getReplyPreviewText(replyTo) : ''}
+                    pendingForwardDraft={pendingForwardDraft}
+                    forwardPreviewText={getForwardPreviewText(pendingForwardDraft)}
+                    forwardPreviewTitle={forwardPreviewTitle}
+                    uploadFile={externalFileUploadHandler}
+                    onSend={handleComposerSend}
+                    onCancelReplyEdit={handleCancelReplyEdit}
+                    onCancelForward={handleCancelForward}
+                    onTypingChange={handleTypingChange}
+                    onRegisterUploadFile={handleRegisterUploadFile}
+                    onInputFocus={handleInputFocus}
+                />
+            </div>
+
+            <ForwardModal
+                isOpen={forwardModalOpen}
+                chats={chats}
+                currentUserId={currentUserId}
+                currentUserVerified={isVerifiedUser}
+                forwardCount={forwardingMessageIds.length || (forwardingMessageId ? 1 : 0)}
+                onClose={() => {
+                    setForwardModalOpen(false);
+                    setForwardingMessageIds([]);
+                    setForwardingMessageId(null);
+                }}
+                onSelectTargetChat={handleForwardFromModal}
+                onSelectChat={onSelectChat}
+            />
+
+            {copyToast && (
+                <div className="chat-room__toast">
+                    {copyToast}
+                </div>
+            )}
+
+            <AnimatePresence>
+                {confirmDeleteSelected && (
+                    <ConfirmDialog
+                        title={`حذف ${toPersianDigits(deletableSelectedIds.length)} پیام؟`}
+                        text={`آیا از حذف ${toPersianDigits(deletableSelectedIds.length)} پیام انتخاب‌شده اطمینان دارید؟ پیام‌ها برای همه حذف خواهند شد.`}
+                        confirmLabel="حذف"
+                        onCancel={() => setConfirmDeleteSelected(false)}
+                        onConfirm={() => {
+                            setConfirmDeleteSelected(false);
+                            const idsToDelete = [...deletableSelectedIds];
+                            setSelectedMessageIds([]);
+                            for (const id of idsToDelete) {
+                                cleanupMessageCache(id);
+                            }
+                            if (onDeleteMessages) {
+                                void onDeleteMessages(idsToDelete);
+                            } else {
+                                for (const id of idsToDelete) {
+                                    onDeleteMessage(id);
+                                }
+                            }
+                        }}
+                    />
+                )}
+            </AnimatePresence>
+
+            {dragUploadActive && (
+                <div className="chat-room__drag-upload-overlay">
+                    <div className="chat-room__drag-upload-overlay-content">
+                        <Upload size={30} />
+                        <span>فایل را برای آپلود رها کنید</span>
+                    </div>
+                </div>
+            )}
+
+            <AnimatePresence>
+                {confirmDeleteChat && (
+                    <ConfirmDialog
+                        overlayRef={confirmDeleteChatRef}
+                        title={isGroupChat ? 'گروه حذف شود؟' : 'گفتگو حذف شود؟'}
+                        text={isGroupChat ? 'گروه و تمام پیام‌ها برای همه حذف خواهد شد.' : 'این عمل گفتگو و تمام پیام‌ها را برای هر دو کاربر حذف خواهد کرد.'}
+                        confirmLabel="حذف"
+                        onCancel={() => setConfirmDeleteChat(false)}
+                        onConfirm={doDeleteChat}
+                    />
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {confirmLeaveGroup && (
+                    <ConfirmDialog
+                        overlayRef={confirmLeaveGroupRef}
+                        title="خروج از گروه؟"
+                        text="آیا می‌خواهید از گروه خارج شوید؟ گروه برای شما حذف خواهد شد."
+                        confirmLabel="خروج"
+                        onCancel={() => setConfirmLeaveGroup(false)}
+                        onConfirm={doLeaveGroup}
+                    />
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {confirmDeleteMsg && (
+                    <ConfirmDialog
+                        overlayRef={confirmDeleteMsgRef}
+                        title="این پیام حذف شود؟"
+                        text="این عمل پیام را کامل حذف میکند."
+                        confirmLabel="حذف"
+                        onCancel={() => setConfirmDeleteMsg(null)}
+                        onConfirm={confirmDeleteMessage}
+                    />
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {confirmPin && (
+                    <ConfirmDialog
+                        overlayRef={confirmPinRef}
+                        title={confirmPin.action === 'pin' ? 'پیام سنجاق شود؟' : 'سنجاق برداشته شود؟'}
+                        text={confirmPin.action === 'pin'
+                            ? 'این پیام در بالای گفتگو سنجاق میشود.'
+                            : 'پیام سنجاق‌شده از بالای گفتگو برداشته میشود.'}
+                        confirmLabel={confirmPin.action === 'pin' ? 'سنجاق' : 'برداشتن'}
+                        onCancel={() => setConfirmPin(null)}
+                        onConfirm={() => {
+                            const action = confirmPin;
+                            setConfirmPin(null);
+                            if (action.action === 'pin' && action.messageId) {
+                                void onPinMessage?.(chatId, action.messageId);
+                            } else {
+                                void onUnpinMessage?.(chatId);
+                            }
+                        }}
+                    />
+                )}
+            </AnimatePresence>
+
+        </motion.div>
+    );
+}
