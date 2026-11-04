@@ -371,30 +371,30 @@ export function ThemeSettings() {
 
                         <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', gap: 4 }}>
                             <div className="message-item">
-                                <div className="message-row message-row--theirs">
-                                    <div className="message-bubble message-bubble--theirs msg-shape--single">
+                                <div className="message-row message-row--mine">
+                                    <div className="message-bubble message-bubble--mine msg-shape--single">
                                         <div className="message-text">بهترین ادمین نواروم کیه به نظرت؟</div>
-                                        <div className="message-meta message-meta--theirs">
+                                        <div className="message-meta message-meta--mine">
                                             <span className="message-time">۱۲:۳۰</span>
+                                            <span className="message-seen message-seen--double" aria-label="seen">
+                                                <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--first" />
+                                                <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--second" />
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                             <div className="message-item">
-                                <div className="message-row message-row--mine">
-                                    <div className="message-bubble message-bubble--mine msg-shape--single">
+                                <div className="message-row message-row--theirs">
+                                    <div className="message-bubble message-bubble--theirs msg-shape--single">
                                         <div className="message-text">قطعاً طاها</div>
                                         <div className="message-reactions">
                                             <span className="message-reaction">
                                                 <span className="message-reaction__emoji">🤣</span>
                                             </span>
                                         </div>
-                                        <div className="message-meta message-meta--mine">
+                                        <div className="message-meta message-meta--theirs">
                                             <span className="message-time">۱۲:۳۱</span>
-                                            <span className="message-seen message-seen--double" aria-label="seen">
-                                                <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--first" />
-                                                <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--second" />
-                                            </span>
                                         </div>
                                     </div>
                                 </div>
@@ -438,6 +438,7 @@ export function ThemeSettings() {
                                 <button
                                     key={option.id}
                                     type="button"
+                                    aria-label={option.label}
                                     onClick={() => {
                                         if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
                                             navigator.vibrate(10);
@@ -476,18 +477,7 @@ export function ThemeSettings() {
                                                 opacity: isSelected ? 1 : 0.85,
                                             }}
                                         />
-                                    ) : (
-                                        <span
-                                            aria-hidden="true"
-                                            style={{
-                                                position: 'absolute',
-                                                inset: 0,
-                                                pointerEvents: 'none',
-                                                background: 'linear-gradient(135deg, transparent 48%, color-mix(in srgb, var(--text-secondary) 25%, transparent) 50%, transparent 52%)',
-                                                opacity: 0.6,
-                                            }}
-                                        />
-                                    )}
+                                    ) : null}
 
                                     <span style={{
                                         position: 'relative',
@@ -497,19 +487,20 @@ export function ThemeSettings() {
                                         justifyContent: 'space-between',
                                         width: '100%',
                                     }}>
-                                        <span style={{
-                                            fontSize: 13,
-                                            fontWeight: isSelected ? 700 : 500,
-                                            color: 'var(--text-primary)',
-                                            letterSpacing: '0.2px',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            whiteSpace: 'nowrap',
-                                            paddingLeft: 4,
-                                            direction: 'ltr',
-                                        }}>
-                                            {option.label}
-                                        </span>
+                                        {option.id === 'none' ? (
+                                            <span style={{
+                                                fontSize: 13,
+                                                fontWeight: isSelected ? 700 : 500,
+                                                color: 'var(--text-primary)',
+                                                letterSpacing: '0.2px',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                whiteSpace: 'nowrap',
+                                                paddingLeft: 4,
+                                            }}>
+                                                {option.label}
+                                            </span>
+                                        ) : null}
                                         {isSelected ? (
                                             <span style={{
                                                 display: 'inline-flex',
@@ -521,6 +512,7 @@ export function ThemeSettings() {
                                                 background: 'var(--accent-primary)',
                                                 color: '#ffffff',
                                                 flexShrink: 0,
+                                                marginInlineStart: 'auto',
                                             }}>
                                                 <Check size={12} strokeWidth={3} />
                                             </span>
