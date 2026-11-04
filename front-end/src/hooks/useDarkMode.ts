@@ -2,8 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   type ChatWallpaperPattern,
   WALLPAPER_STORAGE_KEY,
+  WALLPAPER_INTENSITY_STORAGE_KEY,
+  DEFAULT_WALLPAPER_INTENSITY,
+  WALLPAPER_OPTIONS,
   generateWallpaperDataUri,
   getWallpaperSize,
+  scaleWallpaperOpacity,
 } from '../utils/chatWallpapers';
 
 export type { ChatWallpaperPattern } from '../utils/chatWallpapers';
@@ -211,16 +215,20 @@ function getInitialBlurEffect(): boolean {
 
 function getInitialChatWallpaper(): ChatWallpaperPattern {
   if (typeof window === 'undefined') return 'none';
-  const stored = localStorage.getItem(WALLPAPER_STORAGE_KEY) as ChatWallpaperPattern | null;
-  const validPatterns: ChatWallpaperPattern[] = [
-    'none', 'circuit-board', 'polka-dots', 'tic-tac-toe',
-    'jigsaw', 'topography', 'hideout', 'yyy',
-    'hexagons', 'i-like-food', 'glamorous', 'aztec'
-  ];
-  if (stored && validPatterns.includes(stored)) {
-    return stored;
+  const stored = localStorage.getItem(WALLPAPER_STORAGE_KEY);
+  if (stored && WALLPAPER_OPTIONS.some((o) => o.id === stored)) {
+    return stored as ChatWallpaperPattern;
   }
   return 'none';
+}
+
+function getInitialChatWallpaperIntensity(): number {
+  if (typeof window === 'undefined') return DEFAULT_WALLPAPER_INTENSITY;
+  const raw = localStorage.getItem(WALLPAPER_INTENSITY_STORAGE_KEY);
+  const stored = Number(raw);
+  return raw !== null && Number.isFinite(stored)
+    ? Math.min(100, Math.max(0, Math.round(stored)))
+    : DEFAULT_WALLPAPER_INTENSITY;
 }
 
 const createCustomSurfaceVars = (isDarkMode: boolean): Record<string, string> => {
@@ -312,6 +320,7 @@ export function useDarkMode() {
   const [ultraDarkMode, setUltraDarkMode] = useState<boolean>(getInitialUltraDark);
   const [blurEffect, setBlurEffect] = useState<boolean>(getInitialBlurEffect);
   const [chatWallpaper, setChatWallpaper] = useState<ChatWallpaperPattern>(getInitialChatWallpaper);
+  const [chatWallpaperIntensity, setChatWallpaperIntensity] = useState<number>(getInitialChatWallpaperIntensity);
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
@@ -379,15 +388,16 @@ export function useDarkMode() {
     }
 
     localStorage.setItem(WALLPAPER_STORAGE_KEY, chatWallpaper);
+    localStorage.setItem(WALLPAPER_INTENSITY_STORAGE_KEY, String(chatWallpaperIntensity));
     const wallpaperColor = accentVars['--accent-primary'] || (isDarkMode ? '#3b82f6' : '#2563eb');
-    const wallpaperOpacity = isDarkMode ? 0.16 : 0.09;
+    const wallpaperOpacity = scaleWallpaperOpacity(isDarkMode ? 0.16 : 0.09, chatWallpaperIntensity);
     const wallpaperUri = generateWallpaperDataUri(chatWallpaper, wallpaperColor, wallpaperOpacity);
     root.style.setProperty('--chat-wallpaper-pattern', wallpaperUri ? `url("${wallpaperUri}")` : 'none');
     root.style.setProperty('--chat-wallpaper-size', getWallpaperSize(chatWallpaper));
 
     syncThemeColor();
     (root.style as any).colorScheme = isDarkMode ? 'dark' : 'light';
-  }, [isDarkMode, themeMode, themeTone, themePalette, accentIntensity, ultraDarkMode, blurEffect, chatWallpaper]);
+  }, [isDarkMode, themeMode, themeTone, themePalette, accentIntensity, ultraDarkMode, blurEffect, chatWallpaper, chatWallpaperIntensity]);
 
   return {
     themeMode,
@@ -406,5 +416,7 @@ export function useDarkMode() {
     setBlurEffect,
     chatWallpaper,
     setChatWallpaper,
+    chatWallpaperIntensity,
+    setChatWallpaperIntensity,
   };
 }

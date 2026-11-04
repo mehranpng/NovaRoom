@@ -3,7 +3,8 @@ import { Check, Download, Loader2, Monitor, Moon, Sun, Trash2, Smile, Palette, W
 import { cx } from '../utils/cx';
 import { useScrollFade } from '../hooks/useScrollFade';
 import { useDarkMode, type AccentIntensity, type ThemeMode, type ThemePalette, type ThemeTone } from '../hooks/useDarkMode';
-import { WALLPAPER_OPTIONS, generateWallpaperDataUri, getWallpaperSize } from '../utils/chatWallpapers';
+import { WALLPAPER_OPTIONS, generateWallpaperDataUri, getWallpaperSize, scaleWallpaperOpacity } from '../utils/chatWallpapers';
+import { toPersianDigits } from '../utils/format';
 import {
     isEmojiFontDownloaded,
     isEmojiFontActive,
@@ -49,6 +50,8 @@ export function ThemeSettings() {
         setBlurEffect,
         chatWallpaper,
         setChatWallpaper,
+        chatWallpaperIntensity,
+        setChatWallpaperIntensity,
     } = useDarkMode();
     const ultraDarkAvailable = isDarkMode;
     const shouldDisableCustomTone = isDarkMode && ultraDarkMode;
@@ -57,7 +60,7 @@ export function ThemeSettings() {
     const previewPatternUri = generateWallpaperDataUri(
         chatWallpaper,
         activeAccentColor,
-        isDarkMode ? 0.18 : 0.12
+        scaleWallpaperOpacity(isDarkMode ? 0.18 : 0.12, chatWallpaperIntensity)
     );
 
     const [emojiDownloaded, setEmojiDownloaded] = useState<boolean>(false);
@@ -342,21 +345,20 @@ export function ThemeSettings() {
                 </div>
 
                 <div className="profile__chat-id-card profile__chat-id-card--flat">
-                    <p className="profile__field-label" style={{ marginBottom: 10 }}>پیش‌نمایش زنده</p>
+                    <p className="profile__field-label" style={{ marginBottom: 10 }}>پیش‌نمایش</p>
 
                     <div style={{
                         position: 'relative',
-                        height: 124,
+                        minHeight: 124,
                         borderRadius: 18,
                         overflow: 'hidden',
                         border: '1px solid var(--glass-border)',
-                        backgroundColor: 'var(--bg-secondary)',
+                        background: 'var(--chat-room-bg, var(--bg-secondary))',
                         display: 'flex',
                         flexDirection: 'column',
                         justifyContent: 'center',
                         padding: '12px 14px',
                         gap: 8,
-                        boxShadow: 'inset 0 0 12px rgba(0,0,0,0.1)',
                     }}>
                         <div style={{
                             position: 'absolute',
@@ -367,36 +369,62 @@ export function ThemeSettings() {
                             backgroundSize: getWallpaperSize(chatWallpaper),
                         }} />
 
-                        <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'flex-start' }}>
-                            <div style={{
-                                maxWidth: '82%',
-                                padding: '7px 12px',
-                                borderRadius: '14px 14px 14px 4px',
-                                background: 'var(--message-theirs-bg)',
-                                color: 'var(--message-theirs-text)',
-                                fontSize: 12.5,
-                                fontWeight: 500,
-                                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                            }}>
-                                بهترین ادمین نواروم کیه به نظرت؟
+                        <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <div className="message-item">
+                                <div className="message-row message-row--theirs">
+                                    <div className="message-bubble message-bubble--theirs msg-shape--single">
+                                        <div className="message-text">بهترین ادمین نواروم کیه به نظرت؟</div>
+                                        <div className="message-meta message-meta--theirs">
+                                            <span className="message-time">۱۲:۳۰</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-
-                        <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'flex-end' }}>
-                            <div style={{
-                                maxWidth: '82%',
-                                padding: '7px 12px',
-                                borderRadius: '14px 14px 4px 14px',
-                                background: 'var(--accent-primary)',
-                                color: 'var(--message-mine-text, #ffffff)',
-                                fontSize: 12.5,
-                                fontWeight: 600,
-                                boxShadow: '0 2px 6px color-mix(in srgb, var(--accent-primary) 30%, transparent)',
-                            }}>
-                                قطعاً طاها
+                            <div className="message-item">
+                                <div className="message-row message-row--mine">
+                                    <div className="message-bubble message-bubble--mine msg-shape--single">
+                                        <div className="message-text">قطعاً طاها</div>
+                                        <div className="message-reactions">
+                                            <span className="message-reaction">
+                                                <span className="message-reaction__emoji">🤣</span>
+                                            </span>
+                                        </div>
+                                        <div className="message-meta message-meta--mine">
+                                            <span className="message-time">۱۲:۳۱</span>
+                                            <span className="message-seen message-seen--double" aria-label="seen">
+                                                <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--first" />
+                                                <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--second" />
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
+
+                    <p className="profile__field-label" style={{ marginTop: 16, marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+                        <span>شدت الگو</span>
+                        <span style={{ fontFamily: 'Vazir, sans-serif' }}>{toPersianDigits(chatWallpaperIntensity)}٪</span>
+                    </p>
+                    <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        className="theme-intensity-slider"
+                        dir="rtl"
+                        value={chatWallpaperIntensity}
+                        disabled={chatWallpaper === 'none'}
+                        aria-label="شدت الگو"
+                        onChange={(e) => setChatWallpaperIntensity(Number(e.currentTarget.value))}
+                        style={{
+                            width: '100%',
+                            border: 'none',
+                            outline: 'none',
+                            boxShadow: 'none',
+                            background: `linear-gradient(270deg, var(--accent-primary) 0%, var(--accent-primary) ${chatWallpaperIntensity}%, var(--border-secondary) ${chatWallpaperIntensity}%, var(--border-secondary) 100%)`,
+                        }}
+                    />
 
                     <p className="profile__field-label" style={{ marginTop: 16, marginBottom: 10 }}>انتخاب الگو</p>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
@@ -419,7 +447,7 @@ export function ThemeSettings() {
                                     style={{
                                         position: 'relative',
                                         overflow: 'hidden',
-                                        fontFamily: 'Vazir, sans-serif',
+                                        fontFamily: "'Nunito', 'Vazir', sans-serif",
                                         border: `1px solid ${isSelected ? 'var(--accent-primary)' : 'var(--glass-border)'}`,
                                         background: isSelected
                                             ? 'color-mix(in srgb, var(--accent-primary) 12%, var(--glass-surface-soft))'
@@ -435,7 +463,6 @@ export function ThemeSettings() {
                                         transition: 'border-color .15s ease, background .15s ease',
                                     }}
                                 >
-                                    {/* Pattern texture inside the button (Second Preview) */}
                                     {cardPatternUri ? (
                                         <span
                                             aria-hidden="true"
@@ -462,7 +489,6 @@ export function ThemeSettings() {
                                         />
                                     )}
 
-                                    {/* English Name & Checkmark */}
                                     <span style={{
                                         position: 'relative',
                                         zIndex: 2,
@@ -475,12 +501,12 @@ export function ThemeSettings() {
                                             fontSize: 13,
                                             fontWeight: isSelected ? 700 : 500,
                                             color: 'var(--text-primary)',
-                                            textShadow: isDarkMode ? '0 1px 3px rgba(0,0,0,0.85)' : '0 1px 2px rgba(255,255,255,0.9)',
                                             letterSpacing: '0.2px',
                                             overflow: 'hidden',
                                             textOverflow: 'ellipsis',
                                             whiteSpace: 'nowrap',
                                             paddingLeft: 4,
+                                            direction: 'ltr',
                                         }}>
                                             {option.label}
                                         </span>
@@ -494,7 +520,6 @@ export function ThemeSettings() {
                                                 borderRadius: '50%',
                                                 background: 'var(--accent-primary)',
                                                 color: '#ffffff',
-                                                boxShadow: '0 1px 4px color-mix(in srgb, var(--accent-primary) 40%, transparent)',
                                                 flexShrink: 0,
                                             }}>
                                                 <Check size={12} strokeWidth={3} />
