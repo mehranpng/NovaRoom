@@ -396,12 +396,13 @@ export function ChessHome({ currentUser, chats, onOpenGame, onOpenAiGame, onSele
                         <div className="chess-card__header">
                             <Avatar
                                 name="استاک‌فیش"
-                                size="sm"
-                                src={`${import.meta.env.BASE_URL}logo/stockfish-logo.webp`}
+                                size="md"
+                                plain
+                                src={`${import.meta.env.BASE_URL}logo/stockfish.webp`}
                             />
                             <div>
                                 <div className="chess-card__title">استاک‌فیش</div>
-                                <div className="chess-card__sub">موتور Stockfish 19 Lite • بازی با ربات</div>
+                                <div className="chess-card__sub">موتور Stockfish 19 Lite</div>
                             </div>
                         </div>
                         <button

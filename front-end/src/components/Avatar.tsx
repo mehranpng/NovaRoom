@@ -11,6 +11,7 @@ interface AvatarProps {
   online?: boolean;
   savedMessages?: boolean;
   src?: string;
+  plain?: boolean;
 }
 
 function getColorIndex(name: string): number {
@@ -31,6 +32,7 @@ function getInitials(name: string): string {
 }
 
 const sizeMap = { xs: 28, sm: 40, md: 48, lg: 64, xl: 80 };
+const plainSizeMap = { xs: 40, sm: 40, md: 58, lg: 70, xl: 96 };
 const iconSizeMap = { xs: 14, sm: 20, md: 24, lg: 32, xl: 40 };
 
 
@@ -167,7 +169,7 @@ export function extractFileIdFromAvatar(rawAvatar: string): string {
   return '';
 }
 
-export function Avatar({ name, size = 'md', online, savedMessages = false, src = '' }: AvatarProps) {
+export function Avatar({ name, size = 'md', online, savedMessages = false, src = '', plain = false }: AvatarProps) {
   const [resolvedSrc, setResolvedSrc] = useState<string>(() => {
     if (!src) return '';
     return avatarCache.get(src) || '';
@@ -194,7 +196,7 @@ export function Avatar({ name, size = 'md', online, savedMessages = false, src =
     };
   }, [src]);
 
-  const px = sizeMap[size];
+  const px = plain ? plainSizeMap[size] : sizeMap[size];
 
   if (savedMessages) {
     return (
@@ -215,19 +217,34 @@ export function Avatar({ name, size = 'md', online, savedMessages = false, src =
       style={{ width: `${px}px`, height: `${px}px`, flexShrink: 0 }}
     >
       {resolvedSrc ? (
-        <img
-          src={resolvedSrc}
-          alt={name}
-          className="avatar__image"
-          loading="lazy"
-          style={{
-            width: `${px}px`,
-            height: `${px}px`,
-            borderRadius: '50%',
-            objectFit: 'cover',
-            display: 'block',
-          }}
-        />
+        plain ? (
+          <img
+            src={resolvedSrc}
+            alt={name}
+            loading="lazy"
+            style={{
+              width: `${px}px`,
+              height: `${px}px`,
+              borderRadius: 0,
+              objectFit: 'contain',
+              display: 'block',
+            }}
+          />
+        ) : (
+          <img
+            src={resolvedSrc}
+            alt={name}
+            className="avatar__image"
+            loading="lazy"
+            style={{
+              width: `${px}px`,
+              height: `${px}px`,
+              borderRadius: '50%',
+              objectFit: 'cover',
+              display: 'block',
+            }}
+          />
+        )
       ) : (
         <div
           className={cx('avatar__circle', `avatar-color-${getColorIndex(name)}`)}

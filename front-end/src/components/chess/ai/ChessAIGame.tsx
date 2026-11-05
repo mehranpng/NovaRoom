@@ -44,7 +44,7 @@ interface LineEntry {
 
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const UCI_MOVE = /^[a-h][1-8][a-h][1-8][qrbn]?$/;
-const BOT_AVATAR = `${import.meta.env.BASE_URL}logo/stockfish-logo.webp`;
+const BOT_AVATAR = `${import.meta.env.BASE_URL}logo/stockfish.webp`;
 
 const AI_TIME_OPTIONS = [
     { value: 'unlimited', label: 'بدون زمان', baseMs: 0 },
@@ -91,9 +91,6 @@ const formatClock = (ms: number): string => {
     const seconds = clamped % 60;
     return `${toPersianDigits(String(minutes).padStart(2, '0'))}:${toPersianDigits(String(seconds).padStart(2, '0'))}`;
 };
-
-const formatTimeControl = (value: TimeValue): string =>
-    AI_TIME_OPTIONS.find((option) => option.value === value)?.label ?? '';
 
 const isTimeValue = (value: string): value is TimeValue =>
     AI_TIME_OPTIONS.some((option) => option.value === value);
@@ -468,7 +465,13 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
                         setSelected(null);
                         return;
                     }
-                    if (tryPlayerMove(selected, target)) return;
+                    const legal = board
+                        .moves({ square: selected, verbose: true })
+                        .some((move) => move.to === target);
+                    if (legal) {
+                        tryPlayerMove(selected, target);
+                        return;
+                    }
                 }
                 const piece = board.get(target);
                 setSelected(piece && piece.color === playerCode ? target : null);
@@ -634,9 +637,7 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
                         <ChevronLeft size={22} />
                     </button>
                 </div>
-                <h1 className="profile__header-title">
-                    {phase === 'playing' ? `شطرنج با ربات • ${formatTimeControl(timeValue)}` : 'شطرنج با ربات'}
-                </h1>
+                <h1 className="profile__header-title">شطرنج با ربات</h1>
             </div>
 
             <div className="chess__body">
@@ -644,7 +645,7 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
                     {phase === 'setup' ? (
                         <div className="chess-card chess-ai__setup">
                             <div className="chess-card__header">
-                                <Avatar name={aiName} size="md" src={BOT_AVATAR} />
+                                <Avatar name={aiName} size="lg" plain src={BOT_AVATAR} />
                                 <div>
                                     <div className="chess-card__title">{aiName}</div>
                                     <div className="chess-card__sub">بازی با ربات شطرنج</div>
@@ -725,7 +726,7 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
                         <>
                             <div className="chess__player">
                                 <div className="chess__player-info">
-                                    <Avatar name={aiName} size="sm" src={BOT_AVATAR} />
+                                    <Avatar name={aiName} size="sm" plain src={BOT_AVATAR} />
                                     <div className="chess__player-text">
                                         <div className="chess__player-line">
                                             <span className="chess__player-name">{aiName}</span>
