@@ -322,6 +322,16 @@ export const decryptMessageClientSide = async (message: any, token: string, chat
             next.reasoningContent = decReasoning;
         }));
     }
+    if (typeof next.searchSources === 'string') {
+        tasks.push(decryptClientText(next.searchSources, token, scope).then((decSources) => {
+            try {
+                const parsed = JSON.parse(decSources);
+                next.searchSources = Array.isArray(parsed) ? parsed : [];
+            } catch {
+                next.searchSources = [];
+            }
+        }));
+    }
     await Promise.all(tasks);
     return next;
 };

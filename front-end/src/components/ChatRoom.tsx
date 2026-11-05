@@ -21,6 +21,7 @@ import { pendingUploadedFileByChat } from '../utils/pendingUploads';
 import { formatDayLabel, formatLastSeen, formatMessageTime, messageDayKey, resolveVerified, toPersianDigits } from '../utils/format';
 import { copyText } from '../utils/clipboard';
 import { triggerHaptic } from '../utils/haptics';
+import { updateSearchPillsFade } from '../utils/searchPillsFade';
 import { ChatMessageItem, type ReactionEntry } from './ChatMessageItem';
 import { ChatComposer, type ChatComposerSendPayload } from './ChatComposer';
 import { GroupMembersView, type GroupMember } from './GroupMembersView';
@@ -1589,6 +1590,14 @@ export function ChatRoom({
         prevLastMessageIdRef.current = nextLastId;
         
     }, [messages, messages.length, currentUserId, loadingOlderMessages, loadingNewerMessages, chatContentReady]);
+
+    useEffect(() => {
+        const onResize = () => {
+            roomRef.current?.querySelectorAll<HTMLElement>('.ai-search-pills').forEach(updateSearchPillsFade);
+        };
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
 
     const onMessagesScroll = () => {
         if (scrollRafRef.current !== null) return;

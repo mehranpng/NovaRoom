@@ -2450,6 +2450,9 @@ export function App() {
                 reasoningDurationSec: sourceMessage.reasoningDurationSec,
                 aiModelKey: sourceMessage.aiModelKey,
                 aiModelName: sourceMessage.aiModelName,
+                searchEnabled: sourceMessage.searchEnabled,
+                searchStatus: sourceMessage.searchStatus,
+                searchSources: sourceMessage.searchSources,
             };
         });
 
@@ -2472,6 +2475,9 @@ export function App() {
                 const encryptedReasoningContent = sourceMessage.reasoningContent
                     ? await encryptChatTextClientSide(String(sourceMessage.reasoningContent || ''), authToken || '', targetChatId)
                     : undefined;
+                const encryptedSearchSources = sourceMessage.searchSources?.length
+                    ? await encryptChatTextClientSide(JSON.stringify(sourceMessage.searchSources), authToken || '', targetChatId)
+                    : undefined;
                 const origReplyId = sourceMessage.replyTo?.id;
                 let encryptedReplyText: string | undefined;
                 if (origReplyId && oldIdToSourceMsg.has(origReplyId)) {
@@ -2484,6 +2490,7 @@ export function App() {
                     encryptedText,
                     encryptedReasoningContent,
                     encryptedReplyText,
+                    encryptedSearchSources,
                     clientId: forwardClientId,
                 };
             }));
@@ -2977,7 +2984,7 @@ export function App() {
             return false;
         }
         if (useWebSearch && aiUsageStatus.search.remaining <= 0) {
-            notify({ message: 'سقف ۵ جستجوی روزانه شما تکمیل شده است.', type: 'info' });
+            notify({ message: 'سقف ۳ جستجوی روزانه شما تکمیل شده است.', type: 'info' });
             return false;
         }
         if (attachment && aiUsageStatus.files.remaining <= 0) {

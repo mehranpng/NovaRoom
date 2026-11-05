@@ -198,7 +198,7 @@ MAX_AI_MESSAGE_LENGTH = 3000
 MAX_AI_MESSAGES_PER_CHAT = 60
 AI_DAILY_TOKEN_LIMIT = 20000
 AI_DAILY_FILE_LIMIT = 5
-AI_DAILY_SEARCH_LIMIT = 5
+AI_DAILY_SEARCH_LIMIT = 3
 MAX_AI_USER_MEMORIES = 10
 AI_MAX_FILE_SIZE = 10 * 1024 * 1024
 AI_TEMP_FILE_TTL_SEC = 15 * 60
@@ -1076,6 +1076,7 @@ class ForwardBatchItem(BaseModel):
     encryptedText: Optional[str] = None
     encryptedReasoningContent: Optional[str] = None
     encryptedReplyText: Optional[str] = None
+    encryptedSearchSources: Optional[str] = None
     clientId: Optional[str] = None
 
 
@@ -1085,6 +1086,7 @@ class ForwardMessageRequest(BaseModel):
     encryptedText: Optional[str] = None
     encryptedReasoningContent: Optional[str] = None
     encryptedReplyText: Optional[str] = None
+    encryptedSearchSources: Optional[str] = None
     clientId: Optional[str] = None
     items: Optional[List[ForwardBatchItem]] = None
 
@@ -4119,6 +4121,9 @@ async def get_messages(
                 "reasoningDurationSec": int(m.get("reasoningDurationSec", 0) or 0),
                 "aiModelKey": m.get("aiModelKey"),
                 "aiModelName": m.get("aiModelName"),
+                "searchEnabled": bool(m.get("searchEnabled", False)),
+                "searchStatus": str(m.get("searchStatus") or ""),
+                "searchSources": m.get("searchSources") or "",
                 "clientId": m.get("clientId"),
             }
             for m in msgs
@@ -4284,6 +4289,9 @@ async def get_messages(
             "reasoningDurationSec": int(m.get("reasoningDurationSec", 0) or 0),
             "aiModelKey": m.get("aiModelKey"),
             "aiModelName": m.get("aiModelName"),
+            "searchEnabled": bool(m.get("searchEnabled", False)),
+            "searchStatus": str(m.get("searchStatus") or ""),
+            "searchSources": m.get("searchSources") or "",
             "chessInvite": m.get("chessInvite"),
             "clientId": m.get("clientId"),
         }
@@ -4981,6 +4989,7 @@ async def forward_message(
                 encryptedText=req.encryptedText,
                 encryptedReasoningContent=req.encryptedReasoningContent,
                 encryptedReplyText=req.encryptedReplyText,
+                encryptedSearchSources=req.encryptedSearchSources,
                 clientId=req.clientId,
             )
         ]
@@ -5085,6 +5094,15 @@ async def forward_message(
                 if ai_role == "assistant"
                 else None
             )
+            search_enabled = bool(original_msg.get("searchEnabled", False))
+            search_status = str(original_msg.get("searchStatus") or "")
+            search_sources = (
+                _decode_search_sources(
+                    original_msg.get("searchSources"), session_token, source_ai_scope
+                )
+                if search_enabled
+                else []
+            )
         else:
             existing_forwarded_from = (
                 original_msg.get("forwardedFrom")
@@ -5168,6 +5186,15 @@ async def forward_message(
             ai_model_name = str(original_msg.get("aiModelName") or "").strip() or (
                 ai_model_label_from_key(ai_model_key) if ai_model_key else None
             )
+            search_enabled = bool(original_msg.get("searchEnabled", False))
+            search_status = str(original_msg.get("searchStatus") or "")
+            search_sources = (
+                _decode_search_sources(
+                    original_msg.get("searchSources"), session_token, source_chat_scope
+                )
+                if search_enabled
+                else []
+            )
 
         plain_for_reply = message_text or (
             str((file_data or {}).get("fileName") or "") if file_data else ""
@@ -5188,6 +5215,9 @@ async def forward_message(
                 "reasoning_duration_sec": reasoning_duration_sec,
                 "ai_model_key": ai_model_key,
                 "ai_model_name": ai_model_name,
+                "search_enabled": search_enabled,
+                "search_status": search_status,
+                "search_sources": search_sources,
                 "forwarded_from_info": forwarded_from_info,
                 "file_data": file_data,
                 "source_chat_for_file": source_chat_for_file,
@@ -5213,6 +5243,11 @@ async def forward_message(
         provided_encrypted_reasoning = (
             str(item.encryptedReasoningContent).strip()
             if isinstance(item.encryptedReasoningContent, str)
+            else ""
+        )
+        provided_encrypted_search = (
+            str(item.encryptedSearchSources).strip()
+            if isinstance(item.encryptedSearchSources, str)
             else ""
         )
         encrypted_forward_text = (
@@ -5270,6 +5305,21 @@ async def forward_message(
             "reasoningDurationSec": entry["reasoning_duration_sec"],
             "aiModelKey": entry["ai_model_key"],
             "aiModelName": entry["ai_model_name"],
+            "searchEnabled": entry["search_enabled"],
+            "searchStatus": entry["search_status"],
+            "searchSources": (
+                provided_encrypted_search
+                if provided_encrypted_search
+                else (
+                    encrypt_scoped_text(
+                        json.dumps(entry["search_sources"], ensure_ascii=False),
+                        session_token,
+                        target_scope,
+                    )
+                    if entry["search_sources"]
+                    else ""
+                )
+            ),
             "clientId": str(item.clientId or "").strip() or None,
         }
 
@@ -5351,6 +5401,9 @@ async def forward_message(
                 "reasoningDurationSec": entry["reasoning_duration_sec"],
                 "aiModelKey": entry["ai_model_key"],
                 "aiModelName": entry["ai_model_name"],
+                "searchEnabled": entry["search_enabled"],
+                "searchStatus": entry["search_status"],
+                "searchSources": entry["search_sources"],
                 "clientId": str(item.clientId or "").strip() or None,
             },
         }
@@ -6320,7 +6373,7 @@ async def handle_ai_message(
         if prepared_attachment:
             await _cleanup_ai_temp_attachment(prepared_attachment)
         await finish_error(
-            {"type": "ai_error", "message": "سقف ۵ جستجوی روزانه شما تکمیل شده است."}
+            {"type": "ai_error", "message": "سقف ۳ جستجوی روزانه شما تکمیل شده است."}
         )
         return
 

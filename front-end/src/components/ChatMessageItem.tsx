@@ -1,9 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
-import { Check, ChevronDown, Copy } from 'lucide-react';
+import { Check, ChevronDown, Copy, Globe } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
-import type { FileMetadata, Message } from '../types';
+import type { AISearchSource, FileMetadata, Message } from '../types';
 import { Avatar } from './Avatar';
 import { FileMessage } from './FileMessage';
 import { ChessInviteCard } from './chess/ChessInviteCard';
@@ -11,6 +11,7 @@ import { toPersianDigits } from '../utils/format';
 import { triggerHaptic } from '../utils/haptics';
 import { copyText } from '../utils/clipboard';
 import { cancelUpload } from '../utils/chatFileUploader';
+import { updateSearchPillsFade } from '../utils/searchPillsFade';
 
 export type ReactionEntry = { emoji: string; count: number; userIds: string[] };
 
@@ -69,6 +70,15 @@ export type ChatMessageItemProps = {
 };
 
 const SENDER_COLORS = ['#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3', '#00BCD4', '#009688', '#4CAF50', '#FF5722', '#FF9800'];
+
+function sourceDomain(source: AISearchSource) {
+    if (source.domain) return source.domain;
+    try {
+        return new URL(source.url).hostname;
+    } catch {
+        return source.url;
+    }
+}
 
 function normalizeMessageTextForRender(text: string): string {
     let t = String(text || '').replace(/\\n/g, '\n');
@@ -254,6 +264,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
 }: ChatMessageItemProps) {
     const bubbleRef = useRef<HTMLDivElement | null>(null);
     const [isSwiping, setIsSwiping] = useState(false);
+    const [searchOpen, setSearchOpen] = useState(false);
     const swipeRef = useRef({ startX: 0, startY: 0, active: false, captured: false, pointerId: null as number | null, blockClickUntil: 0 });
     const longPressTimerRef = useRef<number | null>(null);
     const longPressOriginRef = useRef({ x: 0, y: 0 });
@@ -331,6 +342,9 @@ export const ChatMessageItem = memo(function ChatMessageItem({
         const idx = Math.abs(String(message.senderId).split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % SENDER_COLORS.length;
         return SENDER_COLORS[idx];
     }, [message.senderId]);
+
+    const searchSources = message.searchSources || [];
+    const showSearchBlock = Boolean(message.searchEnabled && (searchSources.length > 0 || message.searchStatus === 'searching'));
 
     return (
         <div className="message-item">
@@ -573,6 +587,49 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                         </div>
                     )}
 
+                    {showSearchBlock && (
+                        <div className="ai-search-block" onClick={(e) => e.stopPropagation()}>
+                            <button
+                                type="button"
+                                className="ai-search-block__header"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (searchSources.length > 0) setSearchOpen((v) => !v);
+                                }}
+                            >
+                                <span className="ai-search-block__header-main">
+                                    <Globe size={15} />
+                                    <span className={message.searchStatus === 'searching' ? 'thinking-indicator__text' : 'ai-search-block__title'}>
+                                        {message.searchStatus === 'searching'
+                                            ? 'در حال جستجو در وب...'
+                                            : `جستجو در وب · ${toPersianDigits(searchSources.length)} منبع`}
+                                    </span>
+                                </span>
+                                {searchSources.length > 0 && (
+                                    <ChevronDown size={15} className={searchOpen ? 'ai-reasoning-chevron ai-reasoning-chevron--open' : 'ai-reasoning-chevron'} />
+                                )}
+                            </button>
+                            {searchOpen && searchSources.length > 0 && (
+                                <div className="ai-search-block__body">
+                                    {searchSources.map((source) => (
+                                        <a
+                                            key={`${source.index}-${source.url}`}
+                                            className="ai-search-source-card"
+                                            href={source.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <span className="ai-search-source-card__title">{source.title || sourceDomain(source)}</span>
+                                            <span className="ai-search-source-card__domain">{sourceDomain(source)}</span>
+                                            {source.snippet && <span className="ai-search-source-card__snippet">{source.snippet}</span>}
+                                        </a>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {message.file && (
                         <FileMessage
                             file={message.file}
@@ -644,6 +701,30 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                 isBigEmojiOnly={isBigEmojiOnly}
                                 emojiOnlyClass={emojiOnlyClass}
                             />
+                        </div>
+                    )}
+
+                    {message.searchEnabled && message.searchStatus === 'completed' && searchSources.length > 0 && (
+                        <div
+                            className="ai-search-pills"
+                            ref={(el) => { if (el) updateSearchPillsFade(el); }}
+                            onScroll={(e) => updateSearchPillsFade(e.currentTarget)}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {searchSources.map((source) => (
+                                <a
+                                    key={`${source.index}-${source.url}`}
+                                    className="ai-search-pill"
+                                    href={source.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    title={source.title}
+                                >
+                                    <Globe size={12} />
+                                    <span>{sourceDomain(source)}</span>
+                                </a>
+                            ))}
                         </div>
                     )}
 

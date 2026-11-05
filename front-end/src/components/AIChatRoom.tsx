@@ -11,6 +11,7 @@ import { ForwardModal } from './ForwardModal';
 import { notify } from '../utils/notificationBus';
 import { cx } from '../utils/cx';
 import { isElementScrolled } from '../utils/scrollFade';
+import { updateSearchPillsFade } from '../utils/searchPillsFade';
 import { triggerHaptic } from '../utils/haptics';
 import { copyText } from '../utils/clipboard';
 import { apiFetch } from '../config/api';
@@ -810,7 +811,7 @@ export function AIChatRoom({
 
     const toggleWebSearch = () => {
         if (usageStatus.search.remaining <= 0 && !webSearchEnabled) {
-            notify({ message: 'سقف ۵ جستجوی روزانه شما تکمیل شده است.', type: 'info' });
+            notify({ message: 'سقف ۳ جستجوی روزانه شما تکمیل شده است.', type: 'info' });
             return;
         }
         setWebSearchEnabled((prev) => {
@@ -953,11 +954,23 @@ export function AIChatRoom({
         );
     };
 
+    useEffect(() => {
+        const onResize = () => {
+            roomRef.current?.querySelectorAll<HTMLElement>('.ai-search-pills').forEach(updateSearchPillsFade);
+        };
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
+
     const renderSourcePills = (message: Message) => {
         const sources = message.searchSources || [];
         if (!message.searchEnabled || message.searchStatus !== 'completed' || sources.length === 0) return null;
         return (
-            <div className="ai-search-pills">
+            <div
+                className="ai-search-pills"
+                ref={(el) => { if (el) updateSearchPillsFade(el); }}
+                onScroll={(e) => updateSearchPillsFade(e.currentTarget)}
+            >
                 {sources.map((source) => (
                     <a
                         key={`${source.index}-${source.url}`}
@@ -1306,7 +1319,7 @@ export function AIChatRoom({
                 className="chat-room__messages"
                 ref={messagesContainerRef}
                 onScroll={onMessagesScroll}
-                style={{ paddingBottom: (composerHeight || 56) + 26 }}
+                style={{ overflowX: 'hidden', paddingBottom: (composerHeight || 56) + 26 }}
             >
                 <div className="chat-room__messages-inner">
                     {loading ? null : isEmptyChatState ? (
