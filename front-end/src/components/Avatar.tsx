@@ -7,7 +7,7 @@ import { getOrCacheBlob, deleteCachedBlob } from '../utils/mediaCache';
 
 interface AvatarProps {
   name: string;
-  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'xxs' | 'xs' | 'sm' | 'md' | 'md-lg' | 'lg' | 'xl';
   online?: boolean;
   savedMessages?: boolean;
   src?: string;
@@ -31,9 +31,9 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-const sizeMap = { xs: 28, sm: 40, md: 48, lg: 64, xl: 80 };
-const plainSizeMap = { xs: 40, sm: 40, md: 58, lg: 70, xl: 96 };
-const iconSizeMap = { xs: 14, sm: 20, md: 24, lg: 32, xl: 40 };
+const sizeMap = { xxs: 18, xs: 28, sm: 40, md: 48, 'md-lg': 50, lg: 64, xl: 80 };
+const plainSizeMap = { xxs: 24, xs: 40, sm: 40, md: 58, 'md-lg': 60, lg: 70, xl: 96 };
+const iconSizeMap = { xxs: 10, xs: 14, sm: 20, md: 24, 'md-lg': 25, lg: 32, xl: 40 };
 
 
 const avatarCache = new Map<string, string>();

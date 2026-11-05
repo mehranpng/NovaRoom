@@ -2082,6 +2082,14 @@ export function ChatRoom({
         },
     }), []);
 
+    const reactionMembers = useMemo(() => {
+        if (isGroupChat) return groupMembers;
+        const members: Record<string, { name?: string; avatar?: string }> = {};
+        if (currentUser?.chatId) members[currentUser.chatId] = { name: currentUser.name, avatar: currentUser.avatar };
+        if (contact.chatId) members[contact.chatId] = { name: contact.name, avatar: contact.avatar };
+        return members;
+    }, [isGroupChat, groupMembers, currentUser, contact]);
+
     const renderedMessageItems = useMemo(() => items.map(({ m, isMine, dayBreak, dayLabel, formattedTime, shape, isBigEmojiOnly, emojiOnlyClass }) => {
         const showUnreadSeparator = Boolean(unreadAnchorForUi && unreadAnchorForUi === m.id && m.senderId !== currentUserId);
         const seenByCountForMessage = seenByUsersByMessage[m.id]?.length ?? 0;
@@ -2123,6 +2131,7 @@ export function ChatRoom({
                 replySenderPending={replySenderPending}
                 replyPreviewText={m.replyTo ? getReplyPreviewText(m.replyTo) : ''}
                 reactions={reactionsForMessage}
+                reactionMembers={reactionMembers}
                 isHighlighted={highlightId === m.id}
                 isSelected={selectedMessageIds.includes(m.id)}
                 showUnreadSeparator={showUnreadSeparator}
@@ -2148,6 +2157,7 @@ export function ChatRoom({
         optimisticReactions,
         canSwipeToReply,
         groupMembers,
+        reactionMembers,
         membersResolved,
         messagesById,
         token,

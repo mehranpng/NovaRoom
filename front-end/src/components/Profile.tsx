@@ -1,4 +1,4 @@
-import { Copy, Check, Pencil, Save, Calendar, Upload, Trash2, Link2, Users, UserRound, AtSign, Hash, FileText, ChevronLeft, LogOut } from 'lucide-react';
+import { Copy, Check, Pencil, Save, Calendar, Upload, Trash2, UserRound, AtSign, Hash, FileText, ChevronLeft, LogOut } from 'lucide-react';
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -23,13 +23,6 @@ interface ProfileProps {
     onLogout: () => void;
 }
 
-interface OwnedGroup {
-    chatId: string;
-    name: string;
-    inviteCode: string;
-    inviteLink: string;
-}
-
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 const toPersianDigits = (value: string | number): string => String(value).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)] ?? d);
 
@@ -44,7 +37,6 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
     const [copiedField, setCopiedField] = useState<string | null>(null);
     const [updatingAvatar, setUpdatingAvatar] = useState(false);
     const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
-    const [ownedGroups, setOwnedGroups] = useState<OwnedGroup[]>([]);
     const [openedProfileImage, setOpenedProfileImage] = useState<{ url: string; fileId: string } | null>(null);
     const navigate = useNavigate();
     const location = useLocation();
@@ -52,7 +44,6 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
     const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
     const [usernameHint, setUsernameHint] = useState<string>('');
     const checkTimerRef = useRef<number | null>(null);
-    const groupCreationLimit = user.adminLevel ? 30 : 2;
 
     const nameRef = useRef<HTMLInputElement | null>(null);
     const usernameRef = useRef<HTMLInputElement | null>(null);
@@ -162,19 +153,6 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
             setSaving(false);
         }
     };
-
-    useEffect(() => {
-        const loadOwnedGroups = async () => {
-            try {
-                const groups = await apiFetch('/profile/groups');
-                setOwnedGroups(Array.isArray(groups) ? groups : []);
-            } catch (e) {
-                console.error('Failed to load profile groups', e);
-            }
-        };
-
-        loadOwnedGroups();
-    }, []);
 
     const updateAvatar = async (avatarValue: string) => {
         try {
@@ -498,38 +476,6 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
 
                     {!isEditing && (
                         <>
-                            <div className="profile__card">
-                                <div className="profile__section-title">
-                                    <span className="profile__section-icon"><Users size={15} /></span>
-                                    گروه‌های ساخته‌شده توسط شما
-                                    <span className="profile__groups-limit">
-                                        {toPersianDigits(ownedGroups.length)} از {toPersianDigits(groupCreationLimit)}
-                                    </span>
-                                </div>
-                                {ownedGroups.length === 0 ? (
-                                    <p className="profile__groups-empty">هنوز گروهی نساخته‌اید.</p>
-                                ) : (
-                                    <div className="profile__groups-list">
-                                        {ownedGroups.map((group) => (
-                                            <div className="profile__group-item" key={group.chatId}>
-                                                <div className="profile__group-main">
-                                                    <p className="profile__group-name">{group.name}</p>
-                                                    <p className="profile__group-code">{group.inviteCode}</p>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    className="profile__group-copy"
-                                                    onClick={() => handleCopy(group.inviteLink, `group-${group.chatId}`)}
-                                                >
-                                                    <Link2 size={14} />
-                                                    {copiedField === `group-${group.chatId}` ? 'کپی شد' : 'کپی لینک دعوت'}
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
                             <button type="button" className="profile__logout-btn" onClick={() => setShowLogoutConfirm(true)}>
                                 <LogOut size={17} />
                                 خروج از حساب کاربری

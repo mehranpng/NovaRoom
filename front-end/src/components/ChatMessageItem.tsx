@@ -7,7 +7,7 @@ import type { AISearchSource, FileMetadata, Message } from '../types';
 import { Avatar } from './Avatar';
 import { FileMessage } from './FileMessage';
 import { ChessInviteCard } from './chess/ChessInviteCard';
-import { toPersianDigits } from '../utils/format';
+import { isLtrText, toPersianDigits } from '../utils/format';
 import { triggerHaptic } from '../utils/haptics';
 import { copyText } from '../utils/clipboard';
 import { cancelUpload } from '../utils/chatFileUploader';
@@ -57,6 +57,7 @@ export type ChatMessageItemProps = {
     replySenderPending: boolean;
     replyPreviewText: string;
     reactions: ReactionEntry[];
+    reactionMembers?: Record<string, { name?: string; avatar?: string }>;
     isHighlighted: boolean;
     isSelected: boolean;
     showUnreadSeparator: boolean;
@@ -194,16 +195,17 @@ const MemoMessageTextContent = memo(function MemoMessageTextContent({
     const normalized = useMemo(() => normalizeMessageTextForRender(rawText), [rawText]);
     const isMarkdown = useMemo(() => hasMarkdownSyntax(normalized), [normalized]);
     const linkedNodes = useMemo(() => (isMarkdown ? null : renderTextWithLinks(normalized)), [isMarkdown, normalized]);
+    const isLtr = useMemo(() => isLtrText(normalized), [normalized]);
 
     if (isMarkdown) {
         return (
-            <div className="message-text message-text--markdown">
+            <div className={isLtr ? 'message-text message-text--markdown message-text--ltr' : 'message-text message-text--markdown'}>
                 <MemoMarkdown text={normalized} components={markdownComponents} />
             </div>
         );
     }
     return (
-        <div className={isBigEmojiOnly ? `message-text message-text--emoji-only ${emojiOnlyClass}` : 'message-text'}>
+        <div className={isBigEmojiOnly ? `message-text message-text--emoji-only ${emojiOnlyClass}` : isLtr ? 'message-text message-text--ltr' : 'message-text'}>
             {linkedNodes}
         </div>
     );
@@ -251,6 +253,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     replySenderPending,
     replyPreviewText,
     reactions,
+    reactionMembers,
     isHighlighted,
     isSelected,
     showUnreadSeparator,
@@ -733,6 +736,9 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                             {sortedReactions.map((reaction, idx) => {
                                 const userIds = reaction.userIds || [];
                                 const isMyReaction = userIds.includes(currentUserId);
+                                const soleReactor = !isOfficialChannel && reaction.count === 1 && userIds.length === 1
+                                    ? reactionMembers?.[userIds[0]]
+                                    : null;
                                 return (
                                     <button key={idx}
                                         className={isMyReaction ? 'message-reaction message-reaction--active' : 'message-reaction'}
@@ -753,6 +759,9 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                         type="button"
                                     >
                                         <span className="message-reaction__emoji">{reaction.emoji}</span>
+                                        {soleReactor && (
+                                            <Avatar name={soleReactor.name || ''} size="xxs" src={soleReactor.avatar || ''} />
+                                        )}
                                         {reaction.count > 1 && (
                                             <span className="message-reaction__count" style={{ fontFamily: 'Vazir, sans-serif' }}>
                                                 {toPersianDigits(reaction.count)}

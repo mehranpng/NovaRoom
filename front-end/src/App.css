@@ -290,12 +290,12 @@ body,
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 12px;
+    padding: 10px 14px;
 }
 
 .skeleton-avatar {
-    width: 48px;
-    height: 48px;
+    width: 50px;
+    height: 50px;
     border-radius: 50%;
     flex-shrink: 0;
 }
@@ -306,13 +306,13 @@ body,
 }
 
 .skeleton-chat-name {
-    height: 16px;
+    height: 18px;
     width: 45%;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 .skeleton-chat-message {
-    height: 14px;
+    height: 15px;
     width: 70%;
 }
 
@@ -442,6 +442,10 @@ body,
     font-size: 10px;
 }
 
+.avatar--xxs .avatar__circle {
+    font-size: 8px;
+}
+
 .avatar--xs .avatar__image {
     width: 24px;
     height: 24px;
@@ -457,6 +461,10 @@ body,
     width: 48px;
     height: 48px;
     font-size: 16px;
+}
+
+.avatar--md-lg .avatar__circle {
+    font-size: 20px;
 }
 
 .avatar--lg .avatar__circle {
@@ -507,6 +515,12 @@ body,
 }
 
 .avatar--md .avatar__status {
+    width: 12px;
+    height: 12px;
+    border-width: 2px;
+}
+
+.avatar--md-lg .avatar__status {
     width: 12px;
     height: 12px;
     border-width: 2px;
@@ -1212,7 +1226,7 @@ body,
 }
 
 .chat-list__item-name {
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 600;
     color: var(--text-primary);
     overflow: hidden;
@@ -1231,7 +1245,7 @@ body,
 .chat-list__item-time {
     margin-left: 8px;
     flex-shrink: 0;
-    font-size: 12px;
+    font-size: 12.5px;
     color: var(--text-secondary);
     direction: rtl;
 }
@@ -1244,7 +1258,7 @@ body,
 }
 
 .chat-list__item-text {
-    font-size: 13.5px;
+    font-size: 14.5px;
     color: var(--text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2236,6 +2250,11 @@ body,
     line-height: 1.6;
     direction: rtl;
     text-align: right;
+}
+
+.message-text--ltr {
+    direction: ltr;
+    text-align: left;
 }
 
 .message-text--markdown .md-h1 {

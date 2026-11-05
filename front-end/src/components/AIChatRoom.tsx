@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { ChevronLeft, Copy, Check, SendHorizontal, Brain, PanelRight, PencilLine, Trash2, History, CornerUpLeft, ChevronDown, Pin, PinOff, MessageSquareDashed, X, Plus, Paperclip, Globe, Loader2 } from 'lucide-react';
+import { ChevronLeft, Copy, Check, Brain, PanelRight, PencilLine, Trash2, History, CornerUpLeft, ChevronDown, Pin, PinOff, MessageSquareDashed, X, Plus, Paperclip, Globe, Loader2 } from 'lucide-react';
+import { SendIcon } from './SendIcon';
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -10,6 +11,7 @@ import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
 import { ForwardModal } from './ForwardModal';
 import { notify } from '../utils/notificationBus';
 import { cx } from '../utils/cx';
+import { isLtrText } from '../utils/format';
 import { isElementScrolled } from '../utils/scrollFade';
 import { updateSearchPillsFade } from '../utils/searchPillsFade';
 import { triggerHaptic } from '../utils/haptics';
@@ -1480,7 +1482,7 @@ export function AIChatRoom({
                                                     )}
                                                 </AnimatePresence>
                                                 <div className="ai-reasoning-answer">
-                                                    <div className="message-text message-text--markdown">
+                                                    <div className={cx('message-text', 'message-text--markdown', isLtrText(message.text ?? '') && 'message-text--ltr')}>
                                                         <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
                                                             {normalizeMessageTextForRender(message.text ?? '')}
                                                         </ReactMarkdown>
@@ -1548,7 +1550,7 @@ export function AIChatRoom({
                                                 </div>
                                             )}
                                             {Boolean(message.text) && (
-                                                <div className="message-text message-text--markdown">
+                                                <div className={cx('message-text', 'message-text--markdown', isLtrText(message.text ?? '') && 'message-text--ltr')}>
                                                     <ReactMarkdown
                                                         remarkPlugins={[remarkGfm, remarkBreaks]}
 
@@ -2239,7 +2241,7 @@ export function AIChatRoom({
                                 }}
                             />
                         ) : (
-                            <SendHorizontal size={18} />
+                            <SendIcon size={19} />
                         )}
                     </button>
                 </div>

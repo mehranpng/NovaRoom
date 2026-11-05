@@ -37,6 +37,10 @@ export function toPersianDigits(value: string | number): string {
     return String(value).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)] ?? d);
 }
 
+export function isLtrText(value: string): boolean {
+    return !/[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/.test(value) && /[A-Za-z0-9]/.test(value);
+}
+
 export function resolveVerified(val: unknown): boolean {
     if (val === null || val === undefined) return false;
     if (val === false || val === 0 || val === 'false' || val === '0') return false;

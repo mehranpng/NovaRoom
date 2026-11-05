@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Search, Users, Link as LinkIcon, ChevronLeft, Copy, CheckCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { apiFetch } from '../config/api';
@@ -15,6 +15,13 @@ interface NewChatScreenProps {
     onCreateGroup: (groupName: string) => Promise<any> | any;
     onJoinGroup: (inviteCode: string) => Promise<void> | void;
     currentUser?: User | null;
+}
+
+interface OwnedGroup {
+    chatId: string;
+    name: string;
+    inviteCode: string;
+    inviteLink: string;
 }
 
 const navigationTabTransition = { duration: 0.22, ease: [0.22, 1, 0.36, 1] } as const;
@@ -58,6 +65,21 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
     const [joining, setJoining] = useState(false);
     const [groupError, setGroupError] = useState<string>('');
     const [joinError, setJoinError] = useState<string>('');
+    const [ownedGroups, setOwnedGroups] = useState<OwnedGroup[]>([]);
+    const [copiedGroup, setCopiedGroup] = useState<string>('');
+
+    const loadOwnedGroups = useCallback(async () => {
+        try {
+            const groups = await apiFetch('/profile/groups');
+            setOwnedGroups(Array.isArray(groups) ? groups : []);
+        } catch (err) {
+            console.error(err);
+        }
+    }, []);
+
+    useEffect(() => {
+        void loadOwnedGroups();
+    }, [loadOwnedGroups]);
 
     useEffect(() => {
         if (mode !== 'chat') return;
@@ -108,6 +130,7 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
                 setCreatedGroupLink(res.inviteLink);
                 setGroupName('');
             }
+            if (res?.chatId) await loadOwnedGroups();
         } catch (error) {
             setGroupError(error instanceof Error ? error.message : 'ساخت گروه با خطا مواجه شد');
         } finally {
@@ -136,6 +159,12 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
         void navigator.clipboard.writeText(createdGroupLink);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+    };
+
+    const handleCopyGroupLink = (inviteLink: string, chatId: string) => {
+        void navigator.clipboard.writeText(inviteLink);
+        setCopiedGroup(chatId);
+        setTimeout(() => setCopiedGroup(''), 2000);
     };
 
     const isAdmin = Boolean(currentUser?.adminLevel);
@@ -330,6 +359,32 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
                                     <LinkIcon size={16} />
                                     {joining ? 'در حال عضویت...' : 'عضویت در گروه'}
                                 </button>
+                            </div>
+
+                            <div style={{ ...surfaceStyle, padding: 16, marginTop: 18, direction: 'rtl', textAlign: 'right' }}>
+                                <p className="profile__field-label" style={{ marginBottom: 10 }}>گروه‌های ساخته‌شده شما</p>
+                                {ownedGroups.length === 0 ? (
+                                    <p className="profile__groups-empty">هنوز گروهی نساخته‌اید.</p>
+                                ) : (
+                                    <div className="profile__groups-list">
+                                        {ownedGroups.map((group) => (
+                                            <div className="profile__group-item" key={group.chatId}>
+                                                <div className="profile__group-main">
+                                                    <p className="profile__group-name">{group.name}</p>
+                                                    <p className="profile__group-code">{group.inviteCode}</p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    className={`new-chat-screen__copy${copiedGroup === group.chatId ? ' new-chat-screen__copy--copied' : ''}`}
+                                                    onClick={() => handleCopyGroupLink(group.inviteLink, group.chatId)}
+                                                >
+                                                    {copiedGroup === group.chatId ? <CheckCheck size={14} /> : <LinkIcon size={14} />}
+                                                    {copiedGroup === group.chatId ? 'کپی شد' : 'کپی لینک دعوت'}
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </motion.div>
                     )}

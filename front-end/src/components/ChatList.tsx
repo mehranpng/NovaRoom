@@ -1019,7 +1019,7 @@ export const ChatList = memo(function ChatList({
                                     }}
                                     className={cx('chat-list__item', isActive && 'chat-list__item--active', chatActionMenu?.chatId === chat.id && 'chat-list__item--menu-open', dragHoverChatId === chat.id && 'chat-list__item--drag-hover')}
                                 >
-                                    <Avatar name="" size="md" savedMessages={true} />
+                                    <Avatar name="" size="md-lg" savedMessages={true} />
                                     <div className="chat-list__item-content">
                                         <div className="chat-list__item-row">
                                             <span
@@ -1126,7 +1126,7 @@ export const ChatList = memo(function ChatList({
                             >
                                 <Avatar
                                     name={contact.name}
-                                    size="md"
+                                    size="md-lg"
                                     online={group || blockedRelation ? undefined : Boolean((interactiveOnlineUsers && contact.chatId && interactiveOnlineUsers[contact.chatId]) || contact.online)}
                                     src={isOfficial ? '/logo/ch.png' : contact.avatar}
                                 />

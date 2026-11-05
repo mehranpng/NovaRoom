@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Pencil, SendHorizontal, X } from 'lucide-react';
+import { Pencil, X } from 'lucide-react';
+import { SendIcon } from './SendIcon';
 import type { MessageReply, PendingAttachment, PendingForwardDraft } from '../types';
 import { pendingUploadedFileByChat } from '../utils/pendingUploads';
 import { FileUpload } from './FileUpload';
@@ -288,7 +289,7 @@ export const ChatComposer = memo(function ChatComposer({
                         <button
                             className={text.trim() || displayedAttachment || (pendingForwardDraft && !editingId) ? 'chat-room__send-btn chat-room__send-btn--active' : 'chat-room__send-btn chat-room__send-btn--disabled'}
                             onClick={submit} disabled={!text.trim() && !displayedAttachment && (!pendingForwardDraft || Boolean(editingId))} aria-label="Send" type="button">
-                            <SendHorizontal size={18} />
+                            <SendIcon size={19} />
                         </button>
                     </>
                 )}
