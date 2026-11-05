@@ -94,10 +94,11 @@ function PingBars({ online, latency }: { online: boolean; latency?: number }) {
 }
 
 
-function capturedPieces(moves: ChessGameView['moves']): Record<ChessColor, { piece: string; count: number }[]> {
+export function capturedPieces(moves: { san: string | null }[]): Record<ChessColor, { piece: string; count: number }[]> {
     const lost: Record<ChessColor, Record<string, number>> = { white: {}, black: {} };
     const board = new Chess();
     for (const entry of moves) {
+        if (!entry.san) continue;
         try {
             const played = board.move(entry.san);
             if (!played?.captured) continue;
@@ -112,7 +113,7 @@ function capturedPieces(moves: ChessGameView['moves']): Record<ChessColor, { pie
     return { white: toList(lost.white), black: toList(lost.black) };
 }
 
-function CapturedRow({ pieces, color }: { pieces: { piece: string; count: number }[]; color: ChessColor }) {
+export function CapturedRow({ pieces, color }: { pieces: { piece: string; count: number }[]; color: ChessColor }) {
     if (pieces.length === 0) return null;
     return (
         <span className="chess__captured">

@@ -16,6 +16,7 @@ import type { EngineStatus } from './stockfishEngine';
 import { createStockfishWorker, downloadStockfishAssets, isStockfishDownloaded } from './stockfishAssets';
 import { clearSavedAiGame, loadSavedAiGame, saveAiGame } from './chessAiStorage';
 import type { SavedAiGame } from './chessAiStorage';
+import { CapturedRow, capturedPieces } from '../ChessGame';
 import './chess-ai.css';
 
 interface ChessAIGameProps {
@@ -144,16 +145,19 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
     const [starting, setStarting] = useState(false);
     const [downloadPercent, setDownloadPercent] = useState(0);
     const [setupError, setSetupError] = useState<string | null>(null);
+    const [boardKey, setBoardKey] = useState(0);
 
     const engineRef = useRef<StockfishEngine | null>(null);
     const fenRef = useRef(START_FEN);
     const movesEndRef = useRef<HTMLDivElement | null>(null);
     const mountedRef = useRef(true);
+    const draggingRef = useRef(false);
 
     const timeConfig = AI_TIME_OPTIONS.find((option) => option.value === timeValue) ?? AI_TIME_OPTIONS[0];
     const current = line[line.length - 1];
     const fen = current.fen;
     const position = useMemo(() => new Chess(fen), [fen]);
+    const captured = useMemo(() => capturedPieces(line), [line]);
     const repetitionCount = useMemo(() => {
         const key = positionKey(fen);
         return line.reduce((count, entry) => count + (positionKey(entry.fen) === key ? 1 : 0), 0);
@@ -184,6 +188,26 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
         const onVisibilityChange = () => setPageVisible(!document.hidden);
         document.addEventListener('visibilitychange', onVisibilityChange);
         return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    }, []);
+
+    useEffect(() => {
+        const releaseStuckDrag = () => {
+            if (!draggingRef.current) return;
+            window.setTimeout(() => {
+                if (!draggingRef.current) return;
+                draggingRef.current = false;
+                setSelected(null);
+                setBoardKey((key) => key + 1);
+            }, 120);
+        };
+        window.addEventListener('pointerup', releaseStuckDrag);
+        window.addEventListener('pointercancel', releaseStuckDrag);
+        window.addEventListener('touchend', releaseStuckDrag);
+        return () => {
+            window.removeEventListener('pointerup', releaseStuckDrag);
+            window.removeEventListener('pointercancel', releaseStuckDrag);
+            window.removeEventListener('touchend', releaseStuckDrag);
+        };
     }, []);
 
     useEffect(() => {
@@ -693,15 +717,19 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
                                             <span className={cx('chess__color-dot', `chess__color-dot--${aiColor}`)} />
                                             {winnerColor === aiColor && <span className="chess__winner-badge">برنده</span>}
                                         </div>
-                                        <div className="chess-ai__player-sub">
-                                            {thinking ? 'در حال فکر کردن…' : gameOver ? 'بازی تمام شد' : 'آماده'}
-                                        </div>
+                                        <CapturedRow pieces={captured[playerColor]} color={playerColor} />
                                     </div>
                                 </div>
+                                {thinking && (
+                                    <div className="chess-ai__thinking" role="status" aria-label="ربات در حال فکر کردن است">
+                                        <span className="chess-ai__spinner" aria-hidden="true" />
+                                    </div>
+                                )}
                             </div>
 
                             <div className="chess__board-wrap">
                                 <Chessboard
+                                    key={boardKey}
                                     options={{
                                         position: fen,
                                         boardOrientation: playerColor,
@@ -718,9 +746,15 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
                                         darkSquareStyle: { backgroundColor: '#769656' },
                                         canDragPiece: ({ piece }) => canPlay && piece.pieceType.startsWith(playerCode),
                                         onPieceDrag: ({ square }) => {
+                                            draggingRef.current = true;
                                             if (square) setSelected(square as Square);
                                         },
+                                        onPieceDragCancel: () => {
+                                            draggingRef.current = false;
+                                            setSelected(null);
+                                        },
                                         onPieceDrop: ({ sourceSquare, targetSquare }) => {
+                                            draggingRef.current = false;
                                             if (!targetSquare || sourceSquare === targetSquare) return false;
                                             return tryPlayerMove(sourceSquare as Square, targetSquare as Square);
                                         },
@@ -774,9 +808,7 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
                                             <span className={cx('chess__color-dot', `chess__color-dot--${playerColor}`)} />
                                             {winnerColor === playerColor && <span className="chess__winner-badge">برنده</span>}
                                         </div>
-                                        <div className="chess-ai__player-sub">
-                                            {isPlayerTurn ? 'نوبت شما' : gameOver ? 'بازی تمام شد' : 'منتظر ربات'}
-                                        </div>
+                                        <CapturedRow pieces={captured[aiColor]} color={aiColor} />
                                     </div>
                                 </div>
                                 {playerClock !== null && (

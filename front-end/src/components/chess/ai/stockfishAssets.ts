@@ -113,12 +113,15 @@ export async function downloadStockfishAssets(
     let totalSize = 0;
     const report = (loaded: number, total: number) => {
         totalSize = Math.max(totalSize, completed + total);
-        onProgress?.(completed + loaded, totalSize || completed + loaded);
+        const denominator = Math.max(totalSize, completed + loaded);
+        const percent = denominator > 0 ? Math.min(99, Math.round(((completed + loaded) / denominator) * 100)) : 0;
+        onProgress?.(percent, 100);
     };
     const js = await fetchAsset(ENGINE_FILES.js, report, signal);
     completed = js.byteLength;
     const wasm = await fetchAsset(ENGINE_FILES.wasm, report, signal);
     await writeAssets({ js, wasm });
+    onProgress?.(100, 100);
 }
 
 let workerUrls: { js: string; wasm: string } | null = null;
