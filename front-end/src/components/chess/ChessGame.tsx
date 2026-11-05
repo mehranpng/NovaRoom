@@ -38,6 +38,10 @@ const REASON_LABELS: Record<string, string> = {
     checkmate: 'کیش و مات',
     resign: 'تسلیم',
     timeout: 'اتمام زمان',
+    first_move_timeout: 'عدم انجام حرکت اول',
+    long_move_abandonment: 'عدم فعالیت در حرکت',
+    disconnect_abandonment: 'قطع اتصال بازیکن',
+    double_disconnect_draw: 'قطع اتصال هر دو بازیکن',
     stalemate: 'پات',
     insufficient: 'مهره ناکافی',
     repetition: 'تکرار حرکت',
@@ -379,12 +383,12 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
     }, [send]);
 
     useEffect(() => {
-        if (game?.status !== 'active' || !game.clocks) return;
+        if (game?.status !== 'active') return;
         const id = window.setInterval(() => {
             setNow(Date.now());
         }, 100);
         return () => window.clearInterval(id);
-    }, [game?.status, game?.clocks]);
+    }, [game?.status]);
 
     useEffect(() => {
         movesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'end' });
@@ -661,16 +665,28 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
         avatar: currentUser.avatar,
     } : null);
 
+    const serverEstimate = now + skew;
+
     const getClockMs = (color: ChessColor): number | null => {
         if (!game.clocks) return null;
         const base = game.clocks[color];
         if (game.status !== 'active' || game.ply < 2 || game.turn !== color) return base;
-        const elapsed = now + skew - game.lastMoveAt;
+        const elapsed = serverEstimate - game.lastMoveAt;
         return Math.max(0, base - Math.max(0, elapsed));
     };
 
     const myClock = getClockMs(myColor);
     const oppClock = getClockMs(oppColor);
+
+    const firstMoveLeftMs =
+        game.status === 'active' && game.ply < 2 && typeof game.firstMoveDeadline === 'number'
+            ? Math.max(0, game.firstMoveDeadline - serverEstimate)
+            : null;
+
+    const disconnectLeftMs =
+        game.status === 'active' && typeof game.disconnectDeadline === 'number'
+            ? Math.max(0, game.disconnectDeadline - serverEstimate)
+            : null;
 
     const movePairs: { num: number; white?: string; whitePly: number; black?: string; blackPly: number }[] = [];
     for (let i = 0; i < game.moves.length; i += 2) {
@@ -685,9 +701,11 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
 
     const canPlay = isParticipant && game.status === 'active' && game.turn === myColor;
 
+    const isAborted = game.reason === 'aborted' || game.reason === 'first_move_timeout' || game.result === '*';
+
     const resultTitle = (() => {
         if (game.status !== 'finished') return '';
-        if (game.reason === 'aborted' || game.result === '*') return 'بازی لغو شد';
+        if (isAborted) return 'بازی لغو شد';
         if (game.result === '1-0') return 'سفید برنده شد';
         if (game.result === '0-1') return 'سیاه برنده شد';
         return 'مساوی';
@@ -1065,6 +1083,34 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                         </div>
                     )}
 
+                    {game.status === 'active' && firstMoveLeftMs !== null && (
+                        <div className="chess__timer-banner">
+                            <span>
+                                {game.turn === myColor ? 'مهلت حرکت اول شما' : 'مهلت حرکت اول حریف'}
+                            </span>
+                            <span className="chess__timer-pill">{formatClock(firstMoveLeftMs)}</span>
+                        </div>
+                    )}
+
+                    {game.status === 'active' && game.disconnectTarget && (
+                        <div className="chess__timer-banner chess__timer-banner--warn">
+                            <span>
+                                {game.disconnectTarget === 'double'
+                                    ? 'قطع اتصال هر دو بازیکن • مهلت بازگشت'
+                                    : game.disconnectTarget === myColor
+                                      ? disconnectLeftMs !== null
+                                          ? 'اتصال شما قطع شد • مهلت بازگشت'
+                                          : 'اتصال شما قطع است'
+                                      : disconnectLeftMs !== null
+                                        ? 'اتصال حریف قطع شد • مهلت بازگشت'
+                                        : 'اتصال حریف قطع است (شروع تایمر در نوبت حریف)'}
+                            </span>
+                            {disconnectLeftMs !== null && (
+                                <span className="chess__timer-pill">{formatClock(disconnectLeftMs)}</span>
+                            )}
+                        </div>
+                    )}
+
                     {game.status === 'active' && isParticipant && (
                         <>
                             {game.drawOfferedBy === oppColor && (
@@ -1124,7 +1170,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                             <div className="chess__result-title">{resultTitle}</div>
                             {resultSub && <div className="chess__result-sub">{resultSub}</div>}
                             <div className="chess__actions">
-                                {isParticipant && !isGuestMode && game.reason !== 'aborted' && (
+                                {isParticipant && !isGuestMode && !isAborted && (
                                     <button
                                         type="button"
                                         className="chess-secondary-btn"

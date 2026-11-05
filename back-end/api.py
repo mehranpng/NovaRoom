@@ -5477,7 +5477,8 @@ async def chess_expire_waiting(game_id: str):
 async def chess_apply_elo_if_needed(game: dict) -> bool:
     if game.get("status") != "finished" or game.get("eloProcessed"):
         return False
-    if game.get("reason") == "aborted" or game.get("result") not in ("1-0", "0-1", "1/2-1/2"):
+    if game.get("reason") in chess_service.UNRATED_REASONS or game.get("result") not in ("1-0", "0-1", "1/2-1/2"):
+        game["rated"] = False
         game["eloProcessed"] = True
         return True
     w_id = game.get("players", {}).get("white")
@@ -5602,6 +5603,11 @@ async def chess_find_blocking_game(user_id: str, now: int, only_active: bool = F
         "$or": [{"players.white": user_id}, {"players.black": user_id}, {"creatorId": user_id}],
     }
     async for g in cl_chess_games.find(query):
+        if g.get("status") == "active":
+            dl = chess_service.deadline_ms(g)
+            if dl is not None and now >= dl:
+                await chess_on_deadline(g["_id"])
+                continue
         return g
     return None
 
@@ -7846,7 +7852,8 @@ async def get_chess_history(
     target_id = str(userId or "").strip() or current_user["chatId"]
     query = {
         "status": "finished",
-        "reason": {"$ne": "aborted"},
+        "reason": {"$nin": list(chess_service.ABORTED_REASONS)},
+        "result": {"$ne": "*"},
         "$or": [{"players.white": target_id}, {"players.black": target_id}],
     }
     docs = (
@@ -8332,8 +8339,14 @@ async def chess_websocket(
     pending = chess_abandon_tasks.pop(f"{gameId}:{user_id}", None)
     if pending:
         pending.cancel()
-    await chess_send_all(gameId, game, {"kind": "presence"})
-    chess_schedule(game)
+    try:
+        game, _ = await chess_run(
+            gameId,
+            lambda g, n: chess_service.set_connected(g, user_id, True, n),
+        )
+    except ChessError:
+        await websocket.close(code=1008)
+        return
     ping_task = asyncio.create_task(chess_ping_loop(websocket))
     stamps = []
     try:
@@ -8396,13 +8409,13 @@ async def chess_websocket(
             if not chess_rooms.get(gameId):
                 chess_rooms.pop(gameId, None)
                 chess_latency.pop(gameId, None)
-            latest = await cl_chess_games.find_one({"_id": gameId})
-            if latest:
-                await chess_send_all(gameId, latest, {"kind": "presence"})
-                if latest["status"] == "active" and chess_service.is_timed(latest):
-                    chess_abandon_tasks[f"{gameId}:{user_id}"] = asyncio.create_task(
-                        chess_abandon_after(gameId, user_id)
-                    )
+            try:
+                await chess_run(
+                    gameId,
+                    lambda g, n: chess_service.set_connected(g, user_id, False, n),
+                )
+            except ChessError:
+                pass
 
 
 if __name__ == "__main__":

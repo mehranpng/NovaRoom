@@ -7052,13 +7052,17 @@ html.no-blur-effect .chat-list__header,
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    flex-wrap: wrap;
 }
 
 .chess-tc-group__title {
     font-size: 14px;
     color: var(--text-secondary);
     min-width: 64px;
+    flex-shrink: 0;
+}
+
+.chess-tc-group .chess-chips {
+    justify-content: flex-end;
 }
 
 .chess-chips {
@@ -7508,17 +7512,35 @@ html.no-blur-effect .chat-list__header,
     direction: rtl;
 }
 
-.chess__draw-banner {
+.chess__draw-banner,
+.chess__timer-banner {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    padding: 10px 12px;
-    border-radius: 18px;
+    padding: 8px 14px;
+    border-radius: 9999px;
     background: var(--glass-surface-soft);
     border: 1px solid var(--glass-border);
     font-size: 13px;
+    color: var(--text-primary);
     direction: rtl;
+}
+
+.chess__timer-banner--warn {
+    border-color: rgba(229, 57, 53, 0.35);
+    background: rgba(229, 57, 53, 0.08);
+}
+
+.chess__timer-pill {
+    padding: 3px 10px;
+    border-radius: 9999px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    font-size: 13px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
 }
 
 .chess__draw-actions {

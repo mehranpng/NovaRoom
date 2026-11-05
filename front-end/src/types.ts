@@ -222,6 +222,9 @@ export interface ChessGameView {
     turn: ChessColor;
     clocks: { white: number; black: number } | null;
     lastMoveAt: number;
+    firstMoveDeadline?: number | null;
+    disconnectDeadline?: number | null;
+    disconnectTarget?: ChessColor | 'double' | null;
     serverNow: number;
     ply: number;
     lastMove: { from: string; to: string } | null;

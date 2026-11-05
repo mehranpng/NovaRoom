@@ -26,6 +26,10 @@ const REASON_LABELS: Record<string, string> = {
     checkmate: 'کیش و مات',
     resign: 'تسلیم',
     timeout: 'اتمام زمان',
+    first_move_timeout: 'عدم انجام حرکت اول',
+    long_move_abandonment: 'عدم فعالیت در حرکت',
+    disconnect_abandonment: 'قطع اتصال بازیکن',
+    double_disconnect_draw: 'قطع اتصال هر دو بازیکن',
     stalemate: 'پات',
     insufficient: 'مهره ناکافی',
     repetition: 'تکرار حرکت',
@@ -37,8 +41,8 @@ const REASON_LABELS: Record<string, string> = {
 
 const timeControlCategory = (tc: string): string => {
     if (tc === 'unlimited') return 'بدون زمان';
-    if (tc === '1+0') return 'بولت';
-    if (tc === '3+0' || tc === '3+2' || tc === '5+0') return 'بلیتز';
+    if (tc === '1+0' || tc === '2+1') return 'بولت';
+    if (tc === '3+0' || tc === '3+2' || tc === '5+0' || tc === '5+5') return 'بلیتز';
     if (tc === '10+0' || tc === '15+10') return 'رپید';
     return 'کلاسیک';
 };
@@ -52,7 +56,7 @@ const resultLabel = (game: ChessGameView): string => {
     if (game.result === '1-0') return 'برد سفید';
     if (game.result === '0-1') return 'برد سیاه';
     if (game.result === '1/2-1/2') return 'مساوی';
-    if (game.reason === 'aborted' || game.result === '*') return 'لغو شده';
+    if (game.reason === 'aborted' || game.reason === 'first_move_timeout' || game.result === '*') return 'لغو شده';
     return '';
 };
 
