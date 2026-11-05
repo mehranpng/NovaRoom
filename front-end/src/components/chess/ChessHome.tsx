@@ -35,7 +35,7 @@ interface ChessHomeProps {
     chats: Chat[];
     onOpenGame: (gameId: string) => void;
     onOpenAiGame: () => void;
-    onSelectUser: (user: User) => void;
+    onSelectLeaderboardEntry: (entry: ChessLeaderboardEntry) => void;
 }
 
 const HISTORY_PAGE_SIZE = 30;
@@ -97,7 +97,7 @@ export function resetChessLobbyScroll() {
     lobbyTab = 'play';
 }
 
-export function ChessHome({ currentUser, chats, onOpenGame, onOpenAiGame, onSelectUser }: ChessHomeProps) {
+export function ChessHome({ currentUser, chats, onOpenGame, onOpenAiGame, onSelectLeaderboardEntry }: ChessHomeProps) {
     const initialSnapshot = getChessLobbySnapshot();
     const [currentGame, setCurrentGame] = useState<ChessGameView | null>(() => initialSnapshot?.currentGame ?? null);
     const [history, setHistory] = useState<ChessGameView[]>(() => initialSnapshot?.history ?? []);
@@ -579,7 +579,7 @@ export function ChessHome({ currentUser, chats, onOpenGame, onOpenAiGame, onSele
                                                 className="chess-leaderboard__item"
                                                 onClick={() => {
                                                     rememberScroll();
-                                                    onSelectUser(entry.user);
+                                                    onSelectLeaderboardEntry(entry);
                                                 }}
                                             >
                                                 <div className="chess-leaderboard__main">
@@ -600,15 +600,6 @@ export function ChessHome({ currentUser, chats, onOpenGame, onOpenAiGame, onSele
                                                         <div className="chess-leaderboard__name">
                                                             <span className="chess-leaderboard__name-text">{entry.user.name}</span>
                                                             {entry.user.verified && <VerifiedBadge size={15} />}
-                                                        </div>
-                                                        <div className="chess-leaderboard__wld">
-                                                            <span className="chess-leaderboard__wld--win">
-                                                                {`برد: ${toPersianDigits(entry.wins)}`}
-                                                            </span>
-                                                            <span>{`مساوی: ${toPersianDigits(entry.draws)}`}</span>
-                                                            <span className="chess-leaderboard__wld--loss">
-                                                                {`باخت: ${toPersianDigits(entry.losses)}`}
-                                                            </span>
                                                         </div>
                                                     </div>
                                                 </div>

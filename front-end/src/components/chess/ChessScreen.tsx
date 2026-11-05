@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { Chat, User } from '../../types';
+import type { Chat, ChessLeaderboardEntry, User } from '../../types';
 import { ContactInfo } from '../ContactInfo';
 import { ChessAIGame } from './ai/ChessAIGame';
 import { ChessGame } from './ChessGame';
 import { ChessHome, resetChessLobbyScroll } from './ChessHome';
-
-type ChessContactUser = User & { blockedByMe?: boolean; blockedByOther?: boolean };
+import { ChessUserProfile } from './ChessUserProfile';
 
 interface ChessScreenProps {
     currentUser: User;
@@ -40,13 +39,14 @@ export function ChessScreen({
     onOpenAiGame,
     onExitGame,
 }: ChessScreenProps) {
-    const [selectedContact, setSelectedContact] = useState<ChessContactUser | null>(null);
+    const [selectedEntry, setSelectedEntry] = useState<ChessLeaderboardEntry | null>(null);
+    const [contactInfoOpen, setContactInfoOpen] = useState(false);
 
     useEffect(() => () => resetChessLobbyScroll(), []);
 
     useEffect(() => {
-        onContactOpenChange?.(Boolean(selectedContact));
-    }, [selectedContact, onContactOpenChange]);
+        onContactOpenChange?.(Boolean(selectedEntry));
+    }, [selectedEntry, onContactOpenChange]);
 
     useEffect(() => () => onContactOpenChange?.(false), [onContactOpenChange]);
 
@@ -67,15 +67,16 @@ export function ChessScreen({
         );
     }
 
-    if (selectedContact) {
-        const blocked = Boolean(isUserBlocked?.(selectedContact));
+    if (selectedEntry && contactInfoOpen) {
+        const contactUser = selectedEntry.user;
+        const blocked = Boolean(isUserBlocked?.(contactUser));
         return (
             <ContactInfo
-                key={`chess-contact-${selectedContact.chatId}`}
-                user={selectedContact}
+                key={`chess-contact-${contactUser.chatId}`}
+                user={contactUser}
                 isBlocked={blocked}
-                hideOnlineStatus={Boolean(selectedContact.blockedByOther) || blocked}
-                isInteractiveOnline={Boolean(interactiveOnlineUsers?.[selectedContact.chatId])}
+                hideOnlineStatus={Boolean(contactUser.blockedByOther) || blocked}
+                isInteractiveOnline={Boolean(interactiveOnlineUsers?.[contactUser.chatId])}
                 onToggleBlock={
                     onToggleBlockUser
                         ? async (user) => {
@@ -83,15 +84,38 @@ export function ChessScreen({
                           }
                         : undefined
                 }
-                onBack={() => setSelectedContact(null)}
+                onBack={() => setContactInfoOpen(false)}
                 onOpenChat={(user) => {
-                    setSelectedContact(null);
+                    setContactInfoOpen(false);
+                    setSelectedEntry(null);
                     if (user.chatId === currentUser.chatId) {
                         onOpenProfile?.();
                         return;
                     }
                     onOpenDirectChat?.(user);
                 }}
+            />
+        );
+    }
+
+    if (selectedEntry) {
+        return (
+            <ChessUserProfile
+                key={`chess-user-${selectedEntry.user.chatId}`}
+                entry={selectedEntry}
+                onBack={() => {
+                    setContactInfoOpen(false);
+                    setSelectedEntry(null);
+                }}
+                onOpenContactInfo={() => {
+                    if (selectedEntry.user.chatId === currentUser.chatId && onOpenProfile) {
+                        setSelectedEntry(null);
+                        onOpenProfile();
+                        return;
+                    }
+                    setContactInfoOpen(true);
+                }}
+                onOpenGame={onOpenGame}
             />
         );
     }
@@ -103,9 +127,9 @@ export function ChessScreen({
             chats={chats}
             onOpenGame={onOpenGame}
             onOpenAiGame={onOpenAiGame}
-            onSelectUser={(user) => {
-                if (user.chatId === currentUser.chatId) return;
-                setSelectedContact(user);
+            onSelectLeaderboardEntry={(entry) => {
+                setContactInfoOpen(false);
+                setSelectedEntry(entry);
             }}
         />
     );

@@ -146,27 +146,32 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
     const [downloadPercent, setDownloadPercent] = useState(0);
     const [setupError, setSetupError] = useState<string | null>(null);
     const [boardKey, setBoardKey] = useState(0);
+    const [viewIndex, setViewIndex] = useState<number | null>(null);
 
     const engineRef = useRef<StockfishEngine | null>(null);
     const fenRef = useRef(START_FEN);
     const movesEndRef = useRef<HTMLDivElement | null>(null);
+    const activeMoveRef = useRef<HTMLButtonElement | null>(null);
     const mountedRef = useRef(true);
     const draggingRef = useRef(false);
 
     const timeConfig = AI_TIME_OPTIONS.find((option) => option.value === timeValue) ?? AI_TIME_OPTIONS[0];
-    const current = line[line.length - 1];
-    const fen = current.fen;
-    const position = useMemo(() => new Chess(fen), [fen]);
-    const captured = useMemo(() => capturedPieces(line), [line]);
+    const latest = line[line.length - 1];
+    const latestPosition = useMemo(() => new Chess(latest.fen), [latest.fen]);
     const repetitionCount = useMemo(() => {
-        const key = positionKey(fen);
+        const key = positionKey(latest.fen);
         return line.reduce((count, entry) => count + (positionKey(entry.fen) === key ? 1 : 0), 0);
-    }, [fen, line]);
+    }, [latest.fen, line]);
     const threefoldRepetition = repetitionCount >= 3;
     const playerCode = playerColor === 'white' ? 'w' : 'b';
     const aiColor: PlayColor = playerColor === 'white' ? 'black' : 'white';
-    const gameOver = position.isGameOver() || threefoldRepetition || timedOut;
-    const isPlayerTurn = position.turn() === playerCode && !gameOver;
+    const gameOver = latestPosition.isGameOver() || threefoldRepetition || timedOut;
+    const activeIndex = gameOver && viewIndex !== null ? Math.min(Math.max(0, viewIndex), line.length - 1) : line.length - 1;
+    const current = line[activeIndex];
+    const fen = current.fen;
+    const position = useMemo(() => new Chess(fen), [fen]);
+    const captured = useMemo(() => capturedPieces(line.slice(0, activeIndex + 1)), [line, activeIndex]);
+    const isPlayerTurn = latestPosition.turn() === playerCode && !gameOver;
     const engineReady = engineStatus === 'ready' || engineStatus === 'searching';
     const hasEngineError = engineError !== null || engineStatus === 'error';
     const thinking = !isPlayerTurn && !gameOver && !hasEngineError;
@@ -181,8 +186,8 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
     }, []);
 
     useLayoutEffect(() => {
-        fenRef.current = fen;
-    }, [fen]);
+        fenRef.current = latest.fen;
+    }, [latest.fen]);
 
     useEffect(() => {
         const onVisibilityChange = () => setPageVisible(!document.hidden);
@@ -281,14 +286,14 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
 
     useEffect(() => {
         if (phase !== 'playing' || !engineReady || !pageVisible) return;
-        if (gameOver || position.turn() === playerCode) return;
+        if (gameOver || latestPosition.turn() === playerCode) return;
 
         const engine = engineRef.current;
         if (!engine) return;
 
         let cancelled = false;
         let delayTimer: number | null = null;
-        const searchedFen = fen;
+        const searchedFen = latest.fen;
 
         engine
             .search({
@@ -367,11 +372,17 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
             if (delayTimer !== null) window.clearTimeout(delayTimer);
             engine.stop();
         };
-    }, [difficultyConfig, engineReady, fen, gameOver, pageVisible, phase, playerCode, position]);
+    }, [difficultyConfig, engineReady, gameOver, latest.fen, latestPosition, pageVisible, phase, playerCode]);
 
     useEffect(() => {
         movesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'end' });
     }, [line.length]);
+
+    useEffect(() => {
+        if (activeMoveRef.current) {
+            activeMoveRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+    }, [activeIndex]);
 
     const commitPlayerMove = useCallback(
         (from: Square, to: Square, promo?: PromotionPiece) => {
@@ -521,6 +532,7 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
             setEngineError(null);
             setEngineStatus('starting');
             setTimedOut(false);
+            setViewIndex(null);
             setNow(Date.now());
             setPhase('playing');
         } catch {
@@ -541,6 +553,7 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
         setPromotion(null);
         setEngineError(null);
         setTimedOut(false);
+        setViewIndex(null);
     }, [timeConfig.baseMs]);
 
     const undo = useCallback(() => {
@@ -549,6 +562,7 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
         setPromotion(null);
         setEngineError(null);
         setTimedOut(false);
+        setViewIndex(null);
         setNow(Date.now());
         setLine((prev) => {
             if (prev.length <= 1) return prev;
@@ -575,8 +589,8 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
         ? null
         : timedOut
             ? aiColor
-            : position.isCheckmate()
-                ? position.turn() === playerCode
+            : latestPosition.isCheckmate()
+                ? latestPosition.turn() === playerCode
                     ? aiColor
                     : playerColor
                 : null;
@@ -585,21 +599,23 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
 
     const resultSub = (() => {
         if (timedOut) return 'اتمام زمان';
-        if (position.isCheckmate()) return 'کیش و مات';
-        if (position.isStalemate()) return 'پات';
-        if (position.isInsufficientMaterial()) return 'مهره کافی نیست';
+        if (latestPosition.isCheckmate()) return 'کیش و مات';
+        if (latestPosition.isStalemate()) return 'پات';
+        if (latestPosition.isInsufficientMaterial()) return 'مهره کافی نیست';
         if (threefoldRepetition) return 'تکرار حرکت';
-        if (position.isDrawByFiftyMoves()) return 'قانون ۵۰ حرکت';
+        if (latestPosition.isDrawByFiftyMoves()) return 'قانون ۵۰ حرکت';
         return 'مساوی';
     })();
 
-    const movePairs: { num: number; white?: string; black?: string }[] = [];
+    const movePairs: { num: number; white?: string; whitePly: number; black?: string; blackPly: number }[] = [];
     const playedMoves = line.slice(1);
     for (let i = 0; i < playedMoves.length; i += 2) {
         movePairs.push({
             num: i / 2 + 1,
             white: playedMoves[i]?.san ?? undefined,
+            whitePly: i + 1,
             black: playedMoves[i + 1]?.san ?? undefined,
+            blackPly: i + 2,
         });
     }
 
@@ -821,13 +837,49 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
                             {movePairs.length > 0 && (
                                 <div className="chess__moves">
                                     <div className="chess__moves-track">
-                                        {movePairs.map((pair) => (
-                                            <span key={pair.num} className="chess__move-pair">
-                                                <span className="chess__move-num">{toPersianDigits(pair.num)}.</span>
-                                                <span>{pair.white}</span>
-                                                {pair.black && <span>{pair.black}</span>}
-                                            </span>
-                                        ))}
+                                        {movePairs.map((pair) => {
+                                            const whiteActive = activeIndex === pair.whitePly;
+                                            const blackActive = activeIndex === pair.blackPly;
+                                            return (
+                                                <span key={pair.num} className="chess__move-pair">
+                                                    <span className="chess__move-num">{toPersianDigits(pair.num)}.</span>
+                                                    {pair.white && (
+                                                        <button
+                                                            ref={whiteActive ? activeMoveRef : null}
+                                                            type="button"
+                                                            disabled={!gameOver}
+                                                            className={cx(
+                                                                'chess__move-btn',
+                                                                gameOver && 'chess__move-btn--interactive',
+                                                                whiteActive && 'chess__move-btn--active',
+                                                            )}
+                                                            onClick={() => {
+                                                                if (gameOver) setViewIndex(pair.whitePly);
+                                                            }}
+                                                        >
+                                                            {pair.white}
+                                                        </button>
+                                                    )}
+                                                    {pair.black && (
+                                                        <button
+                                                            ref={blackActive ? activeMoveRef : null}
+                                                            type="button"
+                                                            disabled={!gameOver}
+                                                            className={cx(
+                                                                'chess__move-btn',
+                                                                gameOver && 'chess__move-btn--interactive',
+                                                                blackActive && 'chess__move-btn--active',
+                                                            )}
+                                                            onClick={() => {
+                                                                if (gameOver) setViewIndex(pair.blackPly);
+                                                            }}
+                                                        >
+                                                            {pair.black}
+                                                        </button>
+                                                    )}
+                                                </span>
+                                            );
+                                        })}
                                         <div ref={movesEndRef} />
                                     </div>
                                 </div>

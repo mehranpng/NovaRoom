@@ -147,9 +147,11 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
     const [emoteSoundMuted, setEmoteSoundMuted] = useState(false);
     const [activeEmotes, setActiveEmotes] = useState<Partial<Record<ChessColor, { emote: ChessEmote; seq: number }>>>({});
     const [notFound, setNotFound] = useState<boolean>(() => isChessGameUnavailable(gameId));
+    const [viewPly, setViewPly] = useState<number | null>(null);
     const soundPlyRef = useRef(typeof initialCached?.ply === 'number' ? initialCached.ply : -1);
     const startSoundPlayedRef = useRef(Boolean(initialCached && initialCached.status !== 'waiting'));
     const movesEndRef = useRef<HTMLDivElement | null>(null);
+    const activeMoveRef = useRef<HTMLButtonElement | null>(null);
     const emoteTimersRef = useRef<Partial<Record<ChessColor, number>>>({});
     const emoteAnchorRef = useRef<HTMLDivElement | null>(null);
     const emoteSeqRef = useRef(0);
@@ -195,7 +197,83 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
         return game.players.white === currentUser.chatId || game.players.black === currentUser.chatId;
     }, [game, currentUser.chatId]);
 
-    const captured = useMemo(() => (game ? capturedPieces(game.moves) : null), [game?.moves]);
+    const snapshots = useMemo(() => {
+        const list: { fen: string; lastMove: { from: string; to: string } | null }[] = [
+            { fen: START_FEN, lastMove: null },
+        ];
+        if (!game?.moves?.length) return list;
+        const board = new Chess();
+        for (const mv of game.moves) {
+            try {
+                const from = mv.uci.slice(0, 2);
+                const to = mv.uci.slice(2, 4);
+                const promotion = mv.uci.length > 4 ? mv.uci[4] : undefined;
+                const played = board.move({ from, to, promotion });
+                if (!played) break;
+                list.push({ fen: board.fen(), lastMove: { from, to } });
+            } catch {
+                break;
+            }
+        }
+        return list;
+    }, [game?.moves]);
+
+    const isFinished = game?.status === 'finished';
+    const maxPly = snapshots.length - 1;
+    const effectivePly = isFinished && viewPly !== null ? Math.min(Math.max(0, viewPly), maxPly) : maxPly;
+    const viewedSnapshot = snapshots[effectivePly];
+    const displayedFen = pendingFen ?? (isFinished && viewPly !== null ? viewedSnapshot?.fen : game?.fen) ?? START_FEN;
+    const displayedLastMove = isFinished && viewPly !== null ? viewedSnapshot?.lastMove ?? null : game?.lastMove ?? null;
+
+    const captured = useMemo(
+        () => (game ? capturedPieces(game.moves.slice(0, effectivePly)) : null),
+        [game, effectivePly],
+    );
+
+    useEffect(() => {
+        if (activeMoveRef.current) {
+            activeMoveRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+    }, [effectivePly]);
+
+    const handleSelectPly = useCallback(
+        (targetPly: number) => {
+            if (!game || game.status !== 'finished') return;
+            const clamped = Math.min(Math.max(0, targetPly), snapshots.length - 1);
+            setViewPly(clamped === snapshots.length - 1 ? null : clamped);
+            if (clamped > 0 && snapshots[clamped]) {
+                try {
+                    const prevFen = snapshots[clamped - 1].fen;
+                    const mvUci = game.moves[clamped - 1]?.uci;
+                    if (mvUci) {
+                        const board = new Chess(prevFen);
+                        const played = board.move({
+                            from: mvUci.slice(0, 2),
+                            to: mvUci.slice(2, 4),
+                            promotion: mvUci.length > 4 ? mvUci[4] : undefined,
+                        });
+                        if (played) {
+                            const moverColor: ChessColor = clamped % 2 === 1 ? 'white' : 'black';
+                            playChessSound(
+                                soundForMove(
+                                    {
+                                        capture: played.isCapture(),
+                                        castle: played.isKingsideCastle() || played.isQueensideCastle(),
+                                        promotion: played.isPromotion(),
+                                        check: board.inCheck(),
+                                    },
+                                    moverColor === myColor,
+                                ),
+                            );
+                        }
+                    }
+                } catch {
+                    void 0;
+                }
+            }
+        },
+        [game, myColor, snapshots],
+    );
 
     const handleState = useCallback((nextGame: ChessGameView, event: ChessEvent | null) => {
         setGame((prev) => {
@@ -208,6 +286,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
         });
         setPendingFen(null);
         setSelected(null);
+        setViewPly(null);
         const clientNow = Date.now();
         setNow(clientNow);
         setSkew((nextGame.serverNow || clientNow) - clientNow);
@@ -366,14 +445,12 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
         }
     }, [game, isParticipant, myColor, commitMove]);
 
-    const displayedFen = pendingFen ?? game?.fen ?? START_FEN;
-
     const squareStyles = useMemo(() => {
         const styles: Record<string, React.CSSProperties> = {};
         if (!game) return styles;
-        if (game.lastMove) {
-            styles[game.lastMove.from] = { backgroundColor: 'rgba(245, 197, 66, 0.36)' };
-            styles[game.lastMove.to] = { backgroundColor: 'rgba(245, 197, 66, 0.46)' };
+        if (displayedLastMove) {
+            styles[displayedLastMove.from] = { backgroundColor: 'rgba(245, 197, 66, 0.36)' };
+            styles[displayedLastMove.to] = { backgroundColor: 'rgba(245, 197, 66, 0.46)' };
         }
         try {
             const chess = new Chess(displayedFen);
@@ -405,7 +482,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
             return styles;
         }
         return styles;
-    }, [game, displayedFen, selected, isParticipant, myColor]);
+    }, [game, displayedFen, displayedLastMove, selected, isParticipant, myColor]);
 
     const handleSquareClick = useCallback(({ square }: { square: string }) => {
         if (!game || !isParticipant || game.status !== 'active' || game.turn !== myColor) return;
@@ -595,12 +672,14 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
     const myClock = getClockMs(myColor);
     const oppClock = getClockMs(oppColor);
 
-    const movePairs: { num: number; white?: string; black?: string }[] = [];
+    const movePairs: { num: number; white?: string; whitePly: number; black?: string; blackPly: number }[] = [];
     for (let i = 0; i < game.moves.length; i += 2) {
         movePairs.push({
             num: i / 2 + 1,
             white: game.moves[i]?.san,
+            whitePly: i + 1,
             black: game.moves[i + 1]?.san,
+            blackPly: i + 2,
         });
     }
 
@@ -908,13 +987,45 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                     {movePairs.length > 0 && (
                         <div className="chess__moves">
                             <div className="chess__moves-track">
-                                {movePairs.map((pair) => (
-                                    <span key={pair.num} className="chess__move-pair">
-                                        <span className="chess__move-num">{toPersianDigits(pair.num)}.</span>
-                                        <span>{pair.white}</span>
-                                        {pair.black && <span>{pair.black}</span>}
-                                    </span>
-                                ))}
+                                {movePairs.map((pair) => {
+                                    const whiteActive = effectivePly === pair.whitePly;
+                                    const blackActive = effectivePly === pair.blackPly;
+                                    return (
+                                        <span key={pair.num} className="chess__move-pair">
+                                            <span className="chess__move-num">{toPersianDigits(pair.num)}.</span>
+                                            {pair.white && (
+                                                <button
+                                                    ref={whiteActive ? activeMoveRef : null}
+                                                    type="button"
+                                                    disabled={!isFinished}
+                                                    className={cx(
+                                                        'chess__move-btn',
+                                                        isFinished && 'chess__move-btn--interactive',
+                                                        whiteActive && 'chess__move-btn--active',
+                                                    )}
+                                                    onClick={() => handleSelectPly(pair.whitePly)}
+                                                >
+                                                    {pair.white}
+                                                </button>
+                                            )}
+                                            {pair.black && (
+                                                <button
+                                                    ref={blackActive ? activeMoveRef : null}
+                                                    type="button"
+                                                    disabled={!isFinished}
+                                                    className={cx(
+                                                        'chess__move-btn',
+                                                        isFinished && 'chess__move-btn--interactive',
+                                                        blackActive && 'chess__move-btn--active',
+                                                    )}
+                                                    onClick={() => handleSelectPly(pair.blackPly)}
+                                                >
+                                                    {pair.black}
+                                                </button>
+                                            )}
+                                        </span>
+                                    );
+                                })}
                                 <div ref={movesEndRef} />
                             </div>
                         </div>

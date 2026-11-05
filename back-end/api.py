@@ -7838,15 +7838,16 @@ async def get_current_chess_game(
 @limiter.limit("60/minute")
 async def get_chess_history(
     request: Request,
+    userId: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(30, ge=1, le=30),
     current_user: dict = Depends(get_current_user),
 ):
-    me = current_user["chatId"]
+    target_id = str(userId or "").strip() or current_user["chatId"]
     query = {
         "status": "finished",
         "reason": {"$ne": "aborted"},
-        "$or": [{"players.white": me}, {"players.black": me}],
+        "$or": [{"players.white": target_id}, {"players.black": target_id}],
     }
     docs = (
         await cl_chess_games.find(query)
