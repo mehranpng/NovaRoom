@@ -488,15 +488,17 @@ export function ContactInfo({
                                 <MessageCircle size={17} />
                                 ارسال پیام
                             </button>
-                            <button
-                                type="button"
-                                onClick={() => onToggleBlock?.(user)}
-                                className="contact-info__block-btn"
-                                aria-label={isBlocked ? 'آنبلاک کردن' : 'بلاک کردن'}
-                            >
-                                <Ban size={17} />
-                                {isBlocked ? 'آنبلاک کردن' : 'بلاک کردن'}
-                            </button>
+                            {onToggleBlock && (
+                                <button
+                                    type="button"
+                                    onClick={() => onToggleBlock(user)}
+                                    className="contact-info__block-btn"
+                                    aria-label={isBlocked ? 'آنبلاک کردن' : 'بلاک کردن'}
+                                >
+                                    <Ban size={17} />
+                                    {isBlocked ? 'آنبلاک کردن' : 'بلاک کردن'}
+                                </button>
+                            )}
                         </>
                     )}
 

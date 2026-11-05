@@ -660,6 +660,12 @@ export function App() {
                         return chat;
                     }
                     const sameUnread = Number(prevChat.unreadCount || 0) === Number(chat.unreadCount || 0);
+                    const prevMentions = prevChat.unreadMentionIds || EMPTY_IDS;
+                    const nextMentions = chat.unreadMentionIds || EMPTY_IDS;
+                    const sameMentions = prevMentions.length === nextMentions.length && prevMentions.every((id, i) => id === nextMentions[i]);
+                    const prevReactions = prevChat.unreadReactionIds || EMPTY_IDS;
+                    const nextReactions = chat.unreadReactionIds || EMPTY_IDS;
+                    const sameReactions = prevReactions.length === nextReactions.length && prevReactions.every((id, i) => id === nextReactions[i]);
                     const sameLastMsg =
                         prevChat.lastMessage?.id === chat.lastMessage?.id &&
                         prevChat.lastMessage?.text === chat.lastMessage?.text &&
@@ -678,7 +684,7 @@ export function App() {
                     const sameGroupCounts =
                         (prevChat as any)?.totalMembers === (chat as any)?.totalMembers &&
                         (prevChat as any)?.onlineMembers === (chat as any)?.onlineMembers;
-                    const resolved = sameUnread && sameLastMsg && sameOtherUser && sameGroupCounts ? prevChat : chat;
+                    const resolved = sameUnread && sameMentions && sameReactions && sameLastMsg && sameOtherUser && sameGroupCounts ? prevChat : chat;
                     if (resolved !== prev[idx]) {
                         changed = true;
                     }
@@ -927,6 +933,22 @@ export function App() {
 
             return prev.map(chat => {
                 if (chat.id !== chatId) return chat;
+                const isGroup = chat.chatType === 'group' && chat.id !== 'official-channel';
+                const isMentionedOrReplied = Boolean(
+                    isGroup &&
+                    myId &&
+                    newMsg.senderId !== myId &&
+                    (
+                        (Array.isArray(newMsg.unreadMentionUserIds) && newMsg.unreadMentionUserIds.includes(myId)) ||
+                        newMsg.replyTo?.senderId === myId ||
+                        (currentUser?.username && new RegExp(`(?<![A-Za-z0-9_])@${currentUser.username}(?![A-Za-z0-9_])`, 'i').test(String(newMsg.text || '')))
+                    )
+                );
+                const prevMentionIds = chat.unreadMentionIds || [];
+                const nextMentionIds = isMentionedOrReplied && !prevMentionIds.includes(newMsg.id)
+                    ? [...prevMentionIds, newMsg.id]
+                    : prevMentionIds;
+
                 return {
                     ...chat,
                     lastMessage: {
@@ -937,10 +959,11 @@ export function App() {
                         file: newMsg.file,
                     },
                     unreadCount: shouldIncrementUnread ? (chat.unreadCount || 0) + 1 : chat.unreadCount,
+                    unreadMentionIds: nextMentionIds,
                 };
             });
         });
-    }, [currentUser?.chatId, loadChats, playChatSound]);
+    }, [currentUser?.chatId, currentUser?.username, loadChats, playChatSound]);
 
 
     const handleMessageEdited = useCallback((chatId: string, updated: Message) => {
@@ -955,16 +978,28 @@ export function App() {
 
         setChats(prev => prev.map(c => {
             if (c.id !== chatId) return c;
-            if (!c.lastMessage || (c.lastMessage as ChatLastMessage).id !== updated.id) return c;
+            const isMentioned = Boolean(
+                c.chatType === 'group' &&
+                c.id !== 'official-channel' &&
+                currentUser?.chatId &&
+                Array.isArray(updated.unreadMentionUserIds) &&
+                updated.unreadMentionUserIds.includes(currentUser.chatId)
+            );
+            const mentionIds = c.unreadMentionIds || [];
+            const nextMentionIds = isMentioned && !mentionIds.includes(updated.id)
+                ? [...mentionIds, updated.id]
+                : mentionIds;
+            const isLastMessage = Boolean(c.lastMessage && (c.lastMessage as ChatLastMessage).id === updated.id);
+            if (!isLastMessage && nextMentionIds === mentionIds) return c;
             return {
                 ...c,
-                lastMessage: {
-                    ...(c.lastMessage as ChatLastMessage),
-                    text: updated.text,
-                }
+                lastMessage: isLastMessage
+                    ? { ...(c.lastMessage as ChatLastMessage), text: updated.text }
+                    : c.lastMessage,
+                unreadMentionIds: nextMentionIds,
             };
         }));
-    }, []);
+    }, [currentUser?.chatId]);
 
     const handleMessageDeleted = useCallback((chatId: string, messageId: string, lastMessage?: any, messageIds?: string[]) => {
         const idsSet = new Set(messageIds && messageIds.length > 0 ? messageIds : [messageId]);
@@ -977,23 +1012,20 @@ export function App() {
             };
         });
 
-        if (lastMessage) {
-            setChats(prev => prev.map(c => {
-                if (c.id !== chatId) return c;
-                return {
-                    ...c,
-                    lastMessage: {
-                        ...lastMessage,
-                        timestamp: normalizeTimestamp(lastMessage.timestamp),
-                    }
-                };
-            }));
-        } else {
-            setChats(prev => prev.map(c => {
-                if (c.id !== chatId) return c;
-                return { ...c, lastMessage: null };
-            }));
-        }
+        setChats(prev => prev.map(c => {
+            if (c.id !== chatId) return c;
+            const nextMentionIds = (c.unreadMentionIds || []).filter(id => !idsSet.has(id));
+            const nextReactionIds = (c.unreadReactionIds || []).filter(id => !idsSet.has(id));
+            const nextLastMessage = lastMessage
+                ? { ...lastMessage, timestamp: normalizeTimestamp(lastMessage.timestamp) }
+                : null;
+            return {
+                ...c,
+                lastMessage: nextLastMessage,
+                unreadMentionIds: nextMentionIds,
+                unreadReactionIds: nextReactionIds,
+            };
+        }));
     }, []);
 
     const handleMessagePinned = useCallback(async (chatId: string, pinnedMessage: any) => {
@@ -1237,7 +1269,7 @@ export function App() {
         setChats(prev => prev.map(c => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
     }, []);
 
-    const handleReactionUpdated = useCallback((chatId: string, messageId: string, reactions: any[]) => {
+    const handleReactionUpdated = useCallback((chatId: string, messageId: string, reactions: any[], unreadReactionUserIds?: string[]) => {
         setMessages(prev => {
             const arr = prev[chatId];
             if (!arr) return prev;
@@ -1247,6 +1279,56 @@ export function App() {
             next[idx] = { ...arr[idx], reactions };
             return { ...prev, [chatId]: next };
         });
+
+        const myId = currentUser?.chatId;
+        if (!myId || chatId === 'official-channel' || chatId === `saved_messages_${myId}`) return;
+        if (Array.isArray(unreadReactionUserIds)) {
+            const hasUnreadForMe = unreadReactionUserIds.includes(myId);
+            setChats(prev => prev.map(c => {
+                if (c.id !== chatId) return c;
+                const currentIds = c.unreadReactionIds || [];
+                const alreadyHas = currentIds.includes(messageId);
+                if (hasUnreadForMe && !alreadyHas) {
+                    return { ...c, unreadReactionIds: [...currentIds, messageId] };
+                }
+                if (!hasUnreadForMe && alreadyHas) {
+                    return { ...c, unreadReactionIds: currentIds.filter(id => id !== messageId) };
+                }
+                return c;
+            }));
+        }
+    }, [currentUser?.chatId]);
+
+    const handleAckMention = useCallback(async (chatId: string, messageId: string) => {
+        if (!chatId || !messageId) return;
+        setChats((prev) => prev.map((c) => {
+            if (c.id !== chatId) return c;
+            const nextIds = (c.unreadMentionIds || []).filter((id) => id !== messageId);
+            return { ...c, unreadMentionIds: nextIds };
+        }));
+        try {
+            await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/ack-mention`, {
+                method: 'POST',
+            });
+        } catch (err) {
+            console.error('Failed to ack mention:', err);
+        }
+    }, []);
+
+    const handleAckReaction = useCallback(async (chatId: string, messageId: string) => {
+        if (!chatId || !messageId) return;
+        setChats((prev) => prev.map((c) => {
+            if (c.id !== chatId) return c;
+            const nextIds = (c.unreadReactionIds || []).filter((id) => id !== messageId);
+            return { ...c, unreadReactionIds: nextIds };
+        }));
+        try {
+            await apiFetch(`/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/ack-reaction`, {
+                method: 'POST',
+            });
+        } catch (err) {
+            console.error('Failed to ack reaction:', err);
+        }
     }, []);
 
     const handleWsReconnectExhausted = useCallback(() => {
@@ -3483,6 +3565,10 @@ export function App() {
                                 jumpingToMessage={Boolean(jumpLoading && jumpLoading.chatId === (activeChatId || 'pending'))}
                                 onJumpToMessageSettled={handleJumpToMessageSettled}
                                 onCancelJumpToMessage={handleCancelJumpToMessage}
+                                unreadMentionIds={activeChat?.unreadMentionIds || EMPTY_IDS}
+                                unreadReactionIds={activeChat?.unreadReactionIds || EMPTY_IDS}
+                                onAckMention={handleAckMention}
+                                onAckReaction={handleAckReaction}
                             />
                         ) : (
                             <EmptyState />

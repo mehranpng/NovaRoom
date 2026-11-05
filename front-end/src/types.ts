@@ -105,6 +105,8 @@ export interface Message {
     chessInvite?: ChessInvite;
     upload?: { phase: 'uploading' | 'encrypting'; progress: number };
     forwarding?: boolean;
+    unreadMentionUserIds?: string[];
+    unreadReactionUserIds?: string[];
 }
 
 export interface ChatLastMessage {
@@ -133,6 +135,8 @@ export interface Chat {
     lastMessage?: ChatLastMessage | null;
     pinnedMessage?: PinnedMessage | null;
     unreadCount: number;
+    unreadMentionIds?: string[];
+    unreadReactionIds?: string[];
 }
 
 export interface AIChatSummary {

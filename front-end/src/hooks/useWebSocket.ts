@@ -12,7 +12,7 @@ interface UseWebSocketProps {
     onMessageDeleted?: (chatId: string, messageId: string, lastMessage?: any, messageIds?: string[]) => void;
     onUserStatusChange?: (userId: string, online: boolean, lastSeen?: number | null) => void;
     onMessagesSeen?: (chatId: string, byUserId?: string) => void;
-    onReactionUpdated?: (chatId: string, messageId: string, reactions: any[]) => void;
+    onReactionUpdated?: (chatId: string, messageId: string, reactions: any[], unreadReactionUserIds?: string[]) => void;
     onTypingStatus?: (chatId: string, userId: string, isTyping: boolean) => void;
     onUploadStatus?: (chatId: string, userId: string, isUploading: boolean) => void;
     onMessagePinned?: (chatId: string, pinnedMessage: any) => void;
@@ -291,7 +291,15 @@ export function useWebSocket({
                     const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
                     const resolvedMessageId = String(data?.messageId || data?.message_id || data?.payload?.messageId || data?.payload?.message_id || data?.message?.id || '').trim();
                     if (resolvedChatId && resolvedMessageId) {
-                        onReactionUpdatedRef.current?.(resolvedChatId, resolvedMessageId, Array.isArray(data.reactions) ? data.reactions : []);
+                        const unreadReactionUserIds = Array.isArray(data?.unreadReactionUserIds)
+                            ? data.unreadReactionUserIds.map((id: any) => String(id || '')).filter(Boolean)
+                            : undefined;
+                        onReactionUpdatedRef.current?.(
+                            resolvedChatId,
+                            resolvedMessageId,
+                            Array.isArray(data.reactions) ? data.reactions : [],
+                            unreadReactionUserIds
+                        );
                     }
                 } else if (dataType === 'typing' || dataType === 'typing_status' || dataType === 'user_typing') {
                     const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();

@@ -31,6 +31,7 @@ type ChatMessageActions = {
     openVideo: (url: string, file: FileMetadata | null) => void;
     swipeLock: (locked: boolean) => void;
     registerEl: (messageId: string, el: HTMLDivElement | null) => void;
+    openMention: (username: string, messageId: string) => void;
 };
 
 export type ChatMessageItemProps = {
@@ -134,32 +135,37 @@ function CodeBlock({ className, children }: { className?: string; children?: Rea
     );
 }
 
-const markdownComponents: Components = {
-    code({ className, children, ...props }) {
-        const isInline = !('data-language' in props) && !className?.includes('language-');
-        if (!isInline) {
-            return <CodeBlock className={className}>{children}</CodeBlock>;
-        }
-        return <code className="md-code-inline">{children}</code>;
-    },
-    h1: ({ children }: { children?: React.ReactNode }) => <h1 className="md-h1">{children}</h1>,
-    h2: ({ children }: { children?: React.ReactNode }) => <h2 className="md-h2">{children}</h2>,
-    h3: ({ children }: { children?: React.ReactNode }) => <h3 className="md-h3">{children}</h3>,
-    h4: ({ children }: { children?: React.ReactNode }) => <h4 className="md-h4">{children}</h4>,
-    h5: ({ children }: { children?: React.ReactNode }) => <h5 className="md-h5">{children}</h5>,
-    h6: ({ children }: { children?: React.ReactNode }) => <h6 className="md-h6">{children}</h6>,
-    p: ({ children }: { children?: React.ReactNode }) => <p className="md-p">{children}</p>,
-    ul: ({ children }: { children?: React.ReactNode }) => <ul className="md-ul">{children}</ul>,
-    ol: ({ children }: { children?: React.ReactNode }) => <ol className="md-ol">{children}</ol>,
-    li: ({ children }: { children?: React.ReactNode }) => <li className="md-li">{children}</li>,
-    strong: ({ children }: { children?: React.ReactNode }) => <strong className="md-strong">{children}</strong>,
-    em: ({ children }: { children?: React.ReactNode }) => <em className="md-em">{children}</em>,
-    del: ({ children }: { children?: React.ReactNode }) => <del className="md-del">{children}</del>,
-    blockquote: ({ children }: { children?: React.ReactNode }) => <blockquote className="md-blockquote">{children}</blockquote>,
-    a: ({ children, href }: { children?: React.ReactNode; href?: string }) => (
-        <a className="md-link" href={href} target="_blank" rel="noopener noreferrer">{children}</a>
-    ),
-};
+function buildMarkdownComponents(onMentionClick?: (username: string) => void): Components {
+    const transform = (children: React.ReactNode) => transformMarkdownChildren(children, onMentionClick);
+    return {
+        code({ className, children, ...props }) {
+            const isInline = !('data-language' in props) && !className?.includes('language-');
+            if (!isInline) {
+                return <CodeBlock className={className}>{children}</CodeBlock>;
+            }
+            return <code className="md-code-inline">{children}</code>;
+        },
+        h1: ({ children }: { children?: React.ReactNode }) => <h1 className="md-h1">{children}</h1>,
+        h2: ({ children }: { children?: React.ReactNode }) => <h2 className="md-h2">{children}</h2>,
+        h3: ({ children }: { children?: React.ReactNode }) => <h3 className="md-h3">{children}</h3>,
+        h4: ({ children }: { children?: React.ReactNode }) => <h4 className="md-h4">{children}</h4>,
+        h5: ({ children }: { children?: React.ReactNode }) => <h5 className="md-h5">{children}</h5>,
+        h6: ({ children }: { children?: React.ReactNode }) => <h6 className="md-h6">{children}</h6>,
+        p: ({ children }: { children?: React.ReactNode }) => <p className="md-p">{transform(children)}</p>,
+        ul: ({ children }: { children?: React.ReactNode }) => <ul className="md-ul">{children}</ul>,
+        ol: ({ children }: { children?: React.ReactNode }) => <ol className="md-ol">{children}</ol>,
+        li: ({ children }: { children?: React.ReactNode }) => <li className="md-li">{transform(children)}</li>,
+        strong: ({ children }: { children?: React.ReactNode }) => <strong className="md-strong">{transform(children)}</strong>,
+        em: ({ children }: { children?: React.ReactNode }) => <em className="md-em">{transform(children)}</em>,
+        del: ({ children }: { children?: React.ReactNode }) => <del className="md-del">{transform(children)}</del>,
+        blockquote: ({ children }: { children?: React.ReactNode }) => <blockquote className="md-blockquote">{transform(children)}</blockquote>,
+        a: ({ children, href }: { children?: React.ReactNode; href?: string }) => (
+            <a className="md-link" href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+        ),
+    };
+}
+
+const markdownComponents = buildMarkdownComponents();
 
 const MARKDOWN_TRIGGER_RE = /[#*`\[$>\\_\-\d+]/;
 const MARKDOWN_SYNTAX_RE = /(^|\n)\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>\s)|(```|`[^`]+`|\[[^\]]+]\([^)]+\)|\*\*[^*]+\*\*|__[^_]+__|\$\$?[\s\S]+?\$\$?|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\])/m;
@@ -169,7 +175,88 @@ function hasMarkdownSyntax(text: string): boolean {
     return MARKDOWN_SYNTAX_RE.test(text);
 }
 
-function renderTextWithLinks(text: string): React.ReactNode {
+const MENTION_PART_RE = /((?:^|[^A-Za-z0-9_])@[A-Za-z0-9_]*[A-Za-z][A-Za-z0-9_]*)/g;
+
+function renderSegmentWithMentions(
+    segment: string,
+    keyPrefix: string,
+    onMentionClick?: (username: string) => void,
+): React.ReactNode[] {
+    const out: React.ReactNode[] = [];
+    let lastIndex = 0;
+    const regex = new RegExp(MENTION_PART_RE.source, 'g');
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(segment)) !== null) {
+        const fullMatch = match[0];
+        const atIndex = fullMatch.indexOf('@');
+        const leadingChar = atIndex > 0 ? fullMatch.slice(0, atIndex) : '';
+        const mentionToken = fullMatch.slice(atIndex);
+        const tokenStart = match.index + atIndex;
+
+        if (tokenStart > lastIndex) {
+            out.push(
+                <span key={`${keyPrefix}-t-${lastIndex}`}>
+                    {segment.slice(lastIndex, tokenStart)}
+                </span>
+            );
+        } else if (leadingChar) {
+            out.push(<span key={`${keyPrefix}-l-${match.index}`}>{leadingChar}</span>);
+        }
+
+        const username = mentionToken.slice(1);
+        out.push(
+            <a
+                key={`${keyPrefix}-m-${tokenStart}`}
+                href={`#@${username}`}
+                dir="ltr"
+                className="md-link message-mention-link"
+                onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onMentionClick?.(username);
+                }}
+            >
+                {mentionToken}
+            </a>
+        );
+
+        lastIndex = tokenStart + mentionToken.length;
+    }
+
+    if (lastIndex < segment.length) {
+        out.push(
+            <span key={`${keyPrefix}-end-${lastIndex}`}>
+                {segment.slice(lastIndex)}
+            </span>
+        );
+    }
+
+    return out;
+}
+
+function transformMarkdownChildren(
+    children: React.ReactNode,
+    onMentionClick?: (username: string) => void,
+): React.ReactNode {
+    if (!onMentionClick) return children;
+    if (typeof children === 'string') {
+        return renderSegmentWithMentions(children, 'md', onMentionClick);
+    }
+    if (Array.isArray(children)) {
+        return children.map((child, idx) =>
+            typeof child === 'string'
+                ? renderSegmentWithMentions(child, `md-${idx}`, onMentionClick)
+                : child
+        );
+    }
+    return children;
+}
+
+function renderTextWithLinks(
+    text: string,
+    onMentionClick?: (username: string) => void,
+): React.ReactNode {
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
     const isUrl = (value: string) => /^(https?:\/\/[^\s]+|www\.[^\s]+)$/i.test(value);
     const parts = text.split(urlRegex);
@@ -179,7 +266,7 @@ function renderTextWithLinks(text: string): React.ReactNode {
             const href = part.startsWith('http') ? part : `https://${part}`;
             return <a key={`${part}-${idx}`} className="md-link" href={href} target="_blank" rel="noopener noreferrer">{part}</a>;
         }
-        return <span key={`${idx}-${part.slice(0, 8)}`}>{part}</span>;
+        return renderSegmentWithMentions(part, `seg-${idx}`, onMentionClick);
     });
 }
 
@@ -187,20 +274,26 @@ const MemoMessageTextContent = memo(function MemoMessageTextContent({
     rawText,
     isBigEmojiOnly,
     emojiOnlyClass,
+    onMentionClick,
 }: {
     rawText: string;
     isBigEmojiOnly: boolean;
     emojiOnlyClass: string;
+    onMentionClick?: (username: string) => void;
 }) {
     const normalized = useMemo(() => normalizeMessageTextForRender(rawText), [rawText]);
     const isMarkdown = useMemo(() => hasMarkdownSyntax(normalized), [normalized]);
-    const linkedNodes = useMemo(() => (isMarkdown ? null : renderTextWithLinks(normalized)), [isMarkdown, normalized]);
+    const linkedNodes = useMemo(() => (isMarkdown ? null : renderTextWithLinks(normalized, onMentionClick)), [isMarkdown, normalized, onMentionClick]);
     const isLtr = useMemo(() => isLtrText(normalized), [normalized]);
+    const components = useMemo(
+        () => (onMentionClick ? buildMarkdownComponents(onMentionClick) : markdownComponents),
+        [onMentionClick],
+    );
 
     if (isMarkdown) {
         return (
             <div className={isLtr ? 'message-text message-text--markdown message-text--ltr' : 'message-text message-text--markdown'}>
-                <MemoMarkdown text={normalized} components={markdownComponents} />
+                <MemoMarkdown text={normalized} components={components} />
             </div>
         );
     }
@@ -339,6 +432,15 @@ export const ChatMessageItem = memo(function ChatMessageItem({
         () => reactions.slice().sort((a, b) => Number(b?.count || 0) - Number(a?.count || 0)),
         [reactions],
     );
+
+    const handleMentionClick = useCallback((username: string) => {
+        if (isUploading) return;
+        if (isSelectionModeActive) {
+            actions.toggleSelect(message.id);
+            return;
+        }
+        actions.openMention(username, message.id);
+    }, [isUploading, isSelectionModeActive, actions, message.id]);
 
     const senderColor = useMemo(() => {
         if (!message.senderId) return SENDER_COLORS[0];
@@ -695,6 +797,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                             rawText={displayText}
                             isBigEmojiOnly={isBigEmojiOnly}
                             emojiOnlyClass={emojiOnlyClass}
+                            onMentionClick={handleMentionClick}
                         />
                     )}
                     {message.text && !message.chessInvite && message.reasoningEnabled && message.reasoningContent && (
@@ -703,6 +806,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                 rawText={displayText}
                                 isBigEmojiOnly={isBigEmojiOnly}
                                 emojiOnlyClass={emojiOnlyClass}
+                                onMentionClick={handleMentionClick}
                             />
                         </div>
                     )}

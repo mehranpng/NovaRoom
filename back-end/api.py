@@ -424,6 +424,77 @@ def _base64url_decode_bytes(value: str) -> bytes:
     return base64.b64decode((normalized + padding).encode("ascii"))
 
 
+MENTION_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9_])@([A-Za-z0-9_]*[A-Za-z][A-Za-z0-9_]*)")
+
+
+def decrypt_client_chat_text(value: Any, token: str, chat_scope: str) -> str:
+    raw_text = str(value or "")
+    if not raw_text:
+        return ""
+    if not raw_text.startswith(ENC_PREFIX):
+        return raw_text
+    try:
+        packed = _base64url_decode_bytes(raw_text[len(ENC_PREFIX) :])
+        if len(packed) >= ENC_NONCE_SIZE + ENC_TAG_SIZE:
+            nonce = packed[:ENC_NONCE_SIZE]
+            body = packed[ENC_NONCE_SIZE:-ENC_TAG_SIZE]
+            tag = packed[-ENC_TAG_SIZE:]
+            client_key = _derive_client_shared_key(chat_scope)
+            expected = hmac.new(client_key, nonce + body, hashlib.sha256).digest()[
+                :ENC_TAG_SIZE
+            ]
+            if hmac.compare_digest(tag, expected):
+                return _xor_stream(body, client_key, nonce).decode(
+                    "utf-8", errors="ignore"
+                )
+    except Exception:
+        pass
+    return decrypt_with_fallback(raw_text, token, chat_scope)
+
+
+async def resolve_group_unread_mention_user_ids(
+    plain_text: str,
+    sender_id: str,
+    participants: List[str],
+    reply_to: Optional[Dict[str, Any]] = None,
+) -> List[str]:
+    if not participants:
+        return []
+    participant_set = {str(p).strip() for p in participants if str(p or "").strip()}
+    target_ids: set = set()
+
+    if isinstance(reply_to, dict):
+        replied_sender = str(reply_to.get("senderId") or "").strip()
+        if (
+            replied_sender
+            and replied_sender != sender_id
+            and replied_sender in participant_set
+        ):
+            target_ids.add(replied_sender)
+
+    mentioned_usernames = {
+        m.lower() for m in MENTION_TOKEN_RE.findall(str(plain_text or "")) if m
+    }
+    if mentioned_usernames:
+        other_participants = [p for p in participant_set if p != sender_id]
+        if other_participants:
+            docs = await cl_users.find(
+                {"chatId": {"$in": other_participants}, **NOT_PURGING},
+                {"chatId": 1, "profile.username": 1},
+            ).to_list(len(other_participants))
+            for doc in docs:
+                uname = (
+                    str((doc.get("profile") or {}).get("username") or "")
+                    .strip()
+                    .lower()
+                )
+                cid = str(doc.get("chatId") or "").strip()
+                if uname and uname in mentioned_usernames and cid and cid != sender_id:
+                    target_ids.add(cid)
+
+    return sorted(target_ids)
+
+
 def _try_unpack_client_file_packet(raw: bytes) -> Optional[bytes]:
     if not raw:
         return None
@@ -3716,6 +3787,75 @@ async def search_users(
     return result
 
 
+@app.get("/users/by-username/{username}")
+@limiter.limit("120/minute;2000/hour")
+async def get_user_by_username(
+    request: Request,
+    username: str,
+    current_user: dict = Depends(get_current_user),
+):
+    uname = (username or "").strip().lstrip("@")
+    if not validate_username(uname):
+        raise HTTPException(status_code=404, detail="User not found")
+
+    u = await cl_users.find_one(
+        {
+            **NOT_PURGING,
+            "profile.username": {"$regex": f"^{re.escape(uname)}$", "$options": "i"},
+        }
+    )
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    my_id = current_user["chatId"]
+    target_id = u["chatId"]
+    my_blocked_ids = set(_get_blocked_from_user_doc(current_user))
+    u_blocked_ids = set(_get_blocked_from_user_doc(u))
+    blocked_by_me = bool(target_id != my_id and target_id in my_blocked_ids)
+    blocked_by_other = bool(target_id != my_id and my_id in u_blocked_ids)
+    blocked_relation = blocked_by_me or blocked_by_other
+
+    presence = (
+        {
+            "online": True,
+            "lastSeen": None,
+            "lastSeenCategory": None,
+            "avatarVisible": True,
+            "bioVisible": True,
+        }
+        if target_id == my_id
+        else await resolve_user_presence_for_viewer(
+            current_user,
+            u,
+            blocked=bool(blocked_relation),
+        )
+    )
+
+    profile = u.get("profile") or {}
+    return {
+        "chatId": target_id,
+        "username": profile.get("username", ""),
+        "name": profile.get("name", ""),
+        "avatar": (
+            profile.get("avatar", "")
+            if presence.get("avatarVisible") and not blocked_by_other
+            else ""
+        ),
+        "bio": (
+            decrypt_user_bio(u, str(current_user.get("_session_token") or ""))
+            if presence.get("bioVisible")
+            else ""
+        ),
+        "online": bool(presence.get("online")),
+        "lastSeen": presence.get("lastSeen"),
+        "lastSeenCategory": presence.get("lastSeenCategory"),
+        "verified": bool(u.get("verified", False)),
+        "registrationDate": u.get("registrationDate"),
+        "blockedByMe": blocked_by_me,
+        "blockedByOther": blocked_by_other,
+    }
+
+
 @app.post("/chats")
 @limiter.limit("100/hour")
 async def create_or_get_chat(
@@ -3996,6 +4136,45 @@ async def get_chat_list(
     for r in unread_rows:
         unread_map[str(r.get("_id"))] = int(r.get("count", 0))
 
+    group_chat_ids = [
+        c["_id"]
+        for c in chats
+        if c.get("chatType") == "group" and not is_official_channel_chat(c["_id"])
+    ]
+    regular_chat_ids = [
+        c["_id"]
+        for c in chats
+        if not is_official_channel_chat(c["_id"]) and c["_id"] != saved_chat_id
+    ]
+
+    mention_ids_map: Dict[str, List[str]] = {}
+    if group_chat_ids:
+        mention_docs = (
+            await cl_messages.find(
+                {"chatId": {"$in": group_chat_ids}, "unreadMentionUserIds": my_id},
+                {"_id": 1, "chatId": 1},
+            )
+            .sort([("timestamp", 1), ("_id", 1)])
+            .to_list(500)
+        )
+        for doc in mention_docs:
+            cid = str(doc.get("chatId") or "")
+            mention_ids_map.setdefault(cid, []).append(str(doc["_id"]))
+
+    reaction_ids_map: Dict[str, List[str]] = {}
+    if regular_chat_ids:
+        reaction_docs = (
+            await cl_messages.find(
+                {"chatId": {"$in": regular_chat_ids}, "unreadReactionUserIds": my_id},
+                {"_id": 1, "chatId": 1},
+            )
+            .sort([("timestamp", 1), ("_id", 1)])
+            .to_list(500)
+        )
+        for doc in reaction_docs:
+            cid = str(doc.get("chatId") or "")
+            reaction_ids_map.setdefault(cid, []).append(str(doc["_id"]))
+
     for chat in chats:
         is_group = chat.get("chatType") == "group"
         other_id = next(
@@ -4125,6 +4304,16 @@ async def get_chat_list(
                 "lastMessage": last_msg,
                 "pinnedMessage": pinned_msg,
                 "unreadCount": unread_map.get(chat["_id"], 0),
+                "unreadMentionIds": (
+                    mention_ids_map.get(chat["_id"], [])
+                    if is_group and not is_official_channel_chat(chat["_id"])
+                    else []
+                ),
+                "unreadReactionIds": (
+                    reaction_ids_map.get(chat["_id"], [])
+                    if not is_official_channel_chat(chat["_id"])
+                    else []
+                ),
             }
         )
 
@@ -4176,6 +4365,8 @@ async def get_chat_list(
                 "lastMessage": saved_last_msg,
                 "pinnedMessage": saved_pinned_msg,
                 "unreadCount": 0,
+                "unreadMentionIds": [],
+                "unreadReactionIds": [],
             }
         )
 
@@ -4223,6 +4414,8 @@ async def get_chat_list(
             },
             "lastMessage": official_last_msg,
             "unreadCount": int(official_unread_count or 0),
+            "unreadMentionIds": [],
+            "unreadReactionIds": [],
         }
     )
 
@@ -4980,6 +5173,7 @@ async def add_reaction(
         raise HTTPException(status_code=404, detail="Message not found")
 
     reactions = msg.get("reactions", [])
+    msg_sender_id = str(msg.get("senderId") or "").strip()
 
     user_reaction = next((r for r in reactions if r.get("userId") == user_id), None)
 
@@ -4990,15 +5184,42 @@ async def add_reaction(
             for r in reactions:
                 if r.get("userId") == user_id:
                     r["emoji"] = emoji
+                    r["seen"] = bool(user_id == msg_sender_id)
     else:
-        reactions.append({"userId": user_id, "emoji": emoji})
-
-    await cl_messages.update_one({"_id": oid}, {"$set": {"reactions": reactions}})
-
-    aggregated_reactions = aggregate_reactions(reactions)
+        reactions.append(
+            {
+                "userId": user_id,
+                "emoji": emoji,
+                "seen": bool(user_id == msg_sender_id),
+            }
+        )
 
     saved_chat_id = get_saved_messages_id(user_id)
     is_saved = chat_id == saved_chat_id
+    is_official = is_official_channel_chat(chat_id)
+
+    has_unseen_reaction = (
+        not is_saved
+        and not is_official
+        and bool(msg_sender_id)
+        and any(
+            r.get("userId") != msg_sender_id and r.get("seen") is False
+            for r in reactions
+        )
+    )
+    unread_reaction_user_ids = [msg_sender_id] if has_unseen_reaction else []
+
+    await cl_messages.update_one(
+        {"_id": oid},
+        {
+            "$set": {
+                "reactions": reactions,
+                "unreadReactionUserIds": unread_reaction_user_ids,
+            }
+        },
+    )
+
+    aggregated_reactions = aggregate_reactions(reactions)
 
     participants = [user_id] if is_saved else []
     if not is_saved:
@@ -5017,6 +5238,7 @@ async def add_reaction(
                 "chatId": chat_id,
                 "messageId": message_id,
                 "reactions": aggregated_reactions,
+                "unreadReactionUserIds": unread_reaction_user_ids,
             },
         )
 
@@ -5115,15 +5337,36 @@ async def remove_reaction(
         raise HTTPException(status_code=404, detail="Message not found")
 
     reactions = msg.get("reactions", [])
+    msg_sender_id = str(msg.get("senderId") or "").strip()
 
     reactions = [r for r in reactions if r.get("userId") != user_id]
 
-    await cl_messages.update_one({"_id": oid}, {"$set": {"reactions": reactions}})
-
-    aggregated_reactions = aggregate_reactions(reactions)
-
     saved_chat_id = get_saved_messages_id(user_id)
     is_saved = chat_id == saved_chat_id
+    is_official = is_official_channel_chat(chat_id)
+
+    has_unseen_reaction = (
+        not is_saved
+        and not is_official
+        and bool(msg_sender_id)
+        and any(
+            r.get("userId") != msg_sender_id and r.get("seen") is False
+            for r in reactions
+        )
+    )
+    unread_reaction_user_ids = [msg_sender_id] if has_unseen_reaction else []
+
+    await cl_messages.update_one(
+        {"_id": oid},
+        {
+            "$set": {
+                "reactions": reactions,
+                "unreadReactionUserIds": unread_reaction_user_ids,
+            }
+        },
+    )
+
+    aggregated_reactions = aggregate_reactions(reactions)
 
     participants = [user_id] if is_saved else []
     if not is_saved:
@@ -5142,10 +5385,61 @@ async def remove_reaction(
                 "chatId": chat_id,
                 "messageId": message_id,
                 "reactions": aggregated_reactions,
+                "unreadReactionUserIds": unread_reaction_user_ids,
             },
         )
 
     return {"reactions": aggregated_reactions}
+
+
+@app.post("/chats/{chat_id}/messages/{message_id}/ack-mention")
+@limiter.limit("120/minute;2000/hour")
+async def ack_message_mention(
+    request: Request,
+    chat_id: str,
+    message_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = current_user["chatId"]
+    oid = await try_object_id(message_id)
+    if not oid:
+        raise HTTPException(status_code=400, detail="Invalid message ID")
+    await cl_messages.update_one(
+        {"_id": oid, "chatId": chat_id},
+        {"$pull": {"unreadMentionUserIds": user_id}},
+    )
+    return {"ok": True}
+
+
+@app.post("/chats/{chat_id}/messages/{message_id}/ack-reaction")
+@limiter.limit("120/minute;2000/hour")
+async def ack_message_reaction(
+    request: Request,
+    chat_id: str,
+    message_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = current_user["chatId"]
+    oid = await try_object_id(message_id)
+    if not oid:
+        raise HTTPException(status_code=400, detail="Invalid message ID")
+    msg = await cl_messages.find_one(
+        {"_id": oid, "chatId": chat_id}, {"reactions": 1, "senderId": 1}
+    )
+    if not msg:
+        return {"ok": True}
+    reactions = msg.get("reactions", []) or []
+    if str(msg.get("senderId") or "") == user_id:
+        for r in reactions:
+            r["seen"] = True
+    await cl_messages.update_one(
+        {"_id": oid, "chatId": chat_id},
+        {
+            "$pull": {"unreadReactionUserIds": user_id},
+            "$set": {"reactions": reactions},
+        },
+    )
+    return {"ok": True}
 
 
 @app.post("/chats/{chat_id}/pin/{message_id}")
@@ -7058,11 +7352,15 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     )
                     continue
 
+                is_group_chat = False
+                chat_participants: List[str] = []
                 if not is_saved and not is_official:
                     chat_doc = await cl_chats.find_one(
                         {"_id": chat_id_target}, {"participants": 1, "chatType": 1}
                     )
                     participants = chat_doc.get("participants", []) if chat_doc else []
+                    chat_participants = participants
+                    is_group_chat = bool(chat_doc and chat_doc.get("chatType") == "group")
                     if chat_id not in participants:
                         continue
                     if chat_doc and chat_doc.get("chatType") != "group":
@@ -7095,6 +7393,18 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                                 ),
                             }
 
+                plain_message_text = decrypt_client_chat_text(text, token, chat_scope)
+                unread_mention_user_ids = (
+                    await resolve_group_unread_mention_user_ids(
+                        plain_message_text,
+                        chat_id,
+                        chat_participants,
+                        reply_to,
+                    )
+                    if (not is_saved and not is_official and is_group_chat)
+                    else []
+                )
+
                 encrypted_text = encrypt_scoped_text(text, token, chat_scope)
                 message_doc = {
                     "chatId": chat_id_target,
@@ -7105,6 +7415,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     "seenBy": [chat_id],
                     "replyTo": reply_to,
                     "reactions": [],
+                    "unreadMentionUserIds": unread_mention_user_ids,
+                    "unreadReactionUserIds": [],
                 }
                 if reply_to and isinstance(reply_to.get("text"), str):
                     message_doc["replyTo"]["text"] = encrypt_scoped_text(
@@ -7158,6 +7470,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             "replyTo": reply_to,
                             "edited": False,
                             "reactions": [],
+                            "unreadMentionUserIds": unread_mention_user_ids,
                             "file": file_data,
                             "clientId": (
                                 client_id if isinstance(client_id, str) else None
@@ -7195,24 +7508,45 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 is_official = is_official_channel_chat(chat_id_target)
                 if is_official and not bool(user.get("verified", False)):
                     continue
+                is_group_chat = False
+                edited_mention_user_ids: List[str] = []
                 if not is_saved and not is_official:
                     chat_doc = await cl_chats.find_one(
-                        {"_id": chat_id_target}, {"participants": 1}
+                        {"_id": chat_id_target}, {"participants": 1, "chatType": 1}
                     )
                     if not chat_doc or chat_id not in chat_doc.get("participants", []):
                         continue
+                    is_group_chat = chat_doc.get("chatType") == "group"
+                    if is_group_chat:
+                        plain_edited_text = decrypt_client_chat_text(
+                            new_text, token, f"chat:{chat_id_target}"
+                        )
+                        newly_mentioned = await resolve_group_unread_mention_user_ids(
+                            plain_edited_text,
+                            chat_id,
+                            chat_doc.get("participants", []),
+                            msg.get("replyTo"),
+                        )
+                        existing_mentions = list(
+                            msg.get("unreadMentionUserIds") or []
+                        )
+                        edited_mention_user_ids = sorted(
+                            set(existing_mentions) | set(newly_mentioned)
+                        )
+
+                edit_set = {
+                    "text": encrypt_scoped_text(
+                        new_text, token, f"chat:{chat_id_target}"
+                    ),
+                    "textEncrypted": True,
+                    "editedAt": utc_now(),
+                }
+                if is_group_chat:
+                    edit_set["unreadMentionUserIds"] = edited_mention_user_ids
 
                 await cl_messages.update_one(
                     {"_id": oid},
-                    {
-                        "$set": {
-                            "text": encrypt_scoped_text(
-                                new_text, token, f"chat:{chat_id_target}"
-                            ),
-                            "textEncrypted": True,
-                            "editedAt": utc_now(),
-                        }
-                    },
+                    {"$set": edit_set},
                 )
 
                 if not is_saved and not is_official:
@@ -7288,6 +7622,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         ),
                         "edited": True,
                         "reactions": aggregate_reactions(msg.get("reactions", [])),
+                        "unreadMentionUserIds": (
+                            edited_mention_user_ids if is_group_chat else []
+                        ),
                         "file": msg.get("file"),
                     },
                 }

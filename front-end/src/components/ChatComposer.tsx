@@ -1,9 +1,12 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pencil, X } from 'lucide-react';
 import { SendIcon } from './SendIcon';
 import type { MessageReply, PendingAttachment, PendingForwardDraft } from '../types';
 import { pendingUploadedFileByChat } from '../utils/pendingUploads';
 import { FileUpload } from './FileUpload';
+import { Avatar } from './Avatar';
+import { VerifiedBadge } from './VerifiedBadge';
+import { resolveVerified } from '../utils/format';
 
 const MAX_CHAT_MESSAGE_LENGTH = 6000;
 
@@ -12,6 +15,14 @@ export type ChatComposerSendPayload = {
     replyToId?: string;
     editMessageId?: string;
     attachment?: PendingAttachment;
+};
+
+export type MentionCandidate = {
+    chatId: string;
+    name: string;
+    username: string;
+    avatar: string;
+    verified?: boolean;
 };
 
 type ChatComposerProps = {
@@ -27,6 +38,7 @@ type ChatComposerProps = {
     forwardPreviewText: string;
     forwardPreviewTitle: string;
     uploadFile: ((file: File) => void) | null;
+    mentionCandidates?: MentionCandidate[];
     onSend: (payload: ChatComposerSendPayload) => boolean;
     onCancelReplyEdit: () => void;
     onCancelForward: () => void;
@@ -42,6 +54,17 @@ function isMobileKeyboardInput() {
     return Boolean(coarse || /Android|iPhone|iPad|iPod|Mobile/i.test(ua));
 }
 
+function findActiveMentionQuery(text: string, caretIndex: number): { start: number; end: number; query: string } | null {
+    const safeCaret = Math.max(0, Math.min(caretIndex, text.length));
+    const beforeCaret = text.slice(0, safeCaret);
+    const atIndex = beforeCaret.lastIndexOf('@');
+    if (atIndex === -1) return null;
+    if (atIndex > 0 && /[A-Za-z0-9_]/.test(beforeCaret[atIndex - 1])) return null;
+    const query = beforeCaret.slice(atIndex + 1);
+    if (/\s/.test(query)) return null;
+    return { start: atIndex, end: safeCaret, query };
+}
+
 export const ChatComposer = memo(function ChatComposer({
     chatId,
     isContactBlocked,
@@ -55,6 +78,7 @@ export const ChatComposer = memo(function ChatComposer({
     forwardPreviewText,
     forwardPreviewTitle,
     uploadFile,
+    mentionCandidates = [],
     onSend,
     onCancelReplyEdit,
     onCancelForward,
@@ -63,6 +87,8 @@ export const ChatComposer = memo(function ChatComposer({
     onInputFocus,
 }: ChatComposerProps) {
     const [text, setText] = useState(() => (editingId ? editDraft : ''));
+    const [caretPos, setCaretPos] = useState(0);
+    const [activeMentionIndex, setActiveMentionIndex] = useState(0);
     const [attachment, setAttachment] = useState<PendingAttachment | null>(() => pendingUploadedFileByChat[chatId] ?? null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const typingTimeoutRef = useRef<number | null>(null);
@@ -143,6 +169,53 @@ export const ChatComposer = memo(function ChatComposer({
         textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 44), 200)}px`;
     }, [text]);
 
+    const mentionMatch = useMemo(() => {
+        if (!mentionCandidates.length || isContactBlocked || !canSend) return null;
+        return findActiveMentionQuery(text, caretPos);
+    }, [mentionCandidates.length, isContactBlocked, canSend, text, caretPos]);
+
+    const filteredMentions = useMemo(() => {
+        if (!mentionMatch || !mentionCandidates.length) return [];
+        const q = mentionMatch.query.trim().toLowerCase();
+        if (!q) return mentionCandidates;
+        return mentionCandidates
+            .filter((member) => {
+                const uname = member.username.toLowerCase();
+                const name = member.name.toLowerCase();
+                if (uname.startsWith(q)) return true;
+                if (name.startsWith(q)) return true;
+                return name.split(/\s+/).some((part) => part.startsWith(q));
+            })
+            .sort((a, b) => {
+                const aStartsUname = a.username.toLowerCase().startsWith(q) ? 0 : 1;
+                const bStartsUname = b.username.toLowerCase().startsWith(q) ? 0 : 1;
+                if (aStartsUname !== bStartsUname) return aStartsUname - bStartsUname;
+                return a.username.localeCompare(b.username);
+            });
+    }, [mentionMatch, mentionCandidates]);
+
+    useEffect(() => {
+        setActiveMentionIndex(0);
+    }, [mentionMatch?.query, mentionMatch?.start]);
+
+    const selectMentionCandidate = (member: MentionCandidate) => {
+        if (!mentionMatch) return;
+        const insertion = `@${member.username} `;
+        const before = text.slice(0, mentionMatch.start);
+        const after = text.slice(mentionMatch.end);
+        const nextText = `${before}${insertion}${after.startsWith(' ') ? after.slice(1) : after}`;
+        const nextCaret = before.length + insertion.length;
+        setText(nextText);
+        setCaretPos(nextCaret);
+        refreshTyping(nextText);
+        requestAnimationFrame(() => {
+            const textarea = textareaRef.current;
+            if (!textarea) return;
+            textarea.focus();
+            textarea.setSelectionRange(nextCaret, nextCaret);
+        });
+    };
+
     const displayedAttachment = attachment ?? pendingUploadedFileByChat[chatId] ?? null;
 
     const handleFileSelected = useCallback((next: PendingAttachment) => {
@@ -179,11 +252,46 @@ export const ChatComposer = memo(function ChatComposer({
         stopTyping();
         pendingUploadedFileByChat[chatId] = null;
         setText('');
+        setCaretPos(0);
         setAttachment(null);
     };
 
     return (
         <div className="chat-room__input-area">
+            {filteredMentions.length > 0 && (
+                <div
+                    className="chat-room__mention-picker"
+                    onMouseDown={(e) => e.preventDefault()}
+                >
+                    <div className="chat-room__mention-picker-list">
+                        {filteredMentions.map((member, idx) => (
+                            <button
+                                key={member.chatId}
+                                type="button"
+                                className={
+                                    idx === activeMentionIndex
+                                        ? 'chat-room__mention-item chat-room__mention-item--active'
+                                        : 'chat-room__mention-item'
+                                }
+                                onClick={() => selectMentionCandidate(member)}
+                            >
+                                <Avatar name={member.name || member.username} src={member.avatar} size="xs" />
+                                <div className="chat-room__mention-item-info">
+                                    <div className="chat-room__mention-item-name-row">
+                                        <span className="chat-room__mention-item-name emoji-font">
+                                            {member.name || member.username}
+                                        </span>
+                                        {resolveVerified(member.verified) && <VerifiedBadge size={13} />}
+                                    </div>
+                                    <span className="chat-room__mention-item-username" dir="ltr">
+                                        @{member.username}
+                                    </span>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
             {(replyTo || editingId) && (
                 <div className="chat-room__reply-edit-box">
                     <div style={{ minWidth: 0, flex: 1, textAlign: 'right' }}>
@@ -265,10 +373,36 @@ export const ChatComposer = memo(function ChatComposer({
                             onChange={(e) => {
                                 const nextValue = e.target.value;
                                 setText(nextValue);
+                                setCaretPos(e.target.selectionStart ?? nextValue.length);
                                 refreshTyping(nextValue);
                             }}
                             onFocus={onInputFocus}
+                            onClick={(e) => {
+                                setCaretPos(e.currentTarget.selectionStart ?? text.length);
+                            }}
+                            onKeyUp={(e) => {
+                                if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Enter' || e.key === 'Tab') return;
+                                setCaretPos(e.currentTarget.selectionStart ?? text.length);
+                            }}
                             onKeyDown={(e) => {
+                                if (filteredMentions.length > 0) {
+                                    if (e.key === 'ArrowDown') {
+                                        e.preventDefault();
+                                        setActiveMentionIndex((prev) => (prev + 1) % filteredMentions.length);
+                                        return;
+                                    }
+                                    if (e.key === 'ArrowUp') {
+                                        e.preventDefault();
+                                        setActiveMentionIndex((prev) => (prev - 1 + filteredMentions.length) % filteredMentions.length);
+                                        return;
+                                    }
+                                    if ((e.key === 'Enter' && !e.shiftKey && !isMobileKeyboardInput()) || e.key === 'Tab') {
+                                        e.preventDefault();
+                                        const target = filteredMentions[activeMentionIndex] || filteredMentions[0];
+                                        if (target) selectMentionCandidate(target);
+                                        return;
+                                    }
+                                }
                                 if (e.key === 'Enter' && !e.shiftKey && !isMobileKeyboardInput()) {
                                     e.preventDefault();
                                     submit();

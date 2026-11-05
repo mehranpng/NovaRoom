@@ -1,4 +1,4 @@
-import { Search, Plus, LogOut, Bookmark, Trash2, RefreshCw, Pin, PinOff, MessageSquarePlus, X } from 'lucide-react';
+import { Search, Plus, LogOut, Bookmark, Trash2, RefreshCw, Pin, PinOff, MessageSquarePlus, X, AtSign, Heart } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Chat, User } from '../types';
@@ -1061,6 +1061,8 @@ export const ChatList = memo(function ChatList({
                         const contact = getContact(chat);
                         const blockedRelation = Boolean((chat.otherUser as any)?.blockedByMe || (chat.otherUser as any)?.blockedByOther);
                         const unreadCount = Math.max(0, Number(chat.unreadCount || 0));
+                        const unreadMentionCount = (!isOfficial && !isSaved && group) ? (chat.unreadMentionIds?.length || 0) : 0;
+                        const unreadReactionCount = (!isOfficial && !isSaved) ? (chat.unreadReactionIds?.length || 0) : 0;
                         const groupStats = group ? getGroupStats(chat) : null;
                         const canManageGroup = Boolean(currentUser.adminLevel) || (group && chat.otherUser?.createdBy === currentUser.chatId);
                         const menuItemCount = group ? (canManageGroup ? 3 : 2) : 2;
@@ -1176,8 +1178,22 @@ export const ChatList = memo(function ChatList({
                                             {isMine && <span className="chat-list__item-text-prefix">شما: </span>}
                                             {getLastMessagePreview(chat.lastMessage, 'هنوز پیامی ارسال نشده')}
                                         </p>
-                                        {unreadCount > 0 && (
-                                            <span className="chat-list__unread-badge">{toPersianDigits(unreadCount)}</span>
+                                        {(unreadReactionCount > 0 || unreadMentionCount > 0 || unreadCount > 0) && (
+                                            <div className="chat-list__badges">
+                                                {unreadReactionCount > 0 && (
+                                                    <span className="chat-list__reaction-badge" aria-label="واکنش جدید">
+                                                        <Heart size={11} fill="currentColor" strokeWidth={2.2} />
+                                                    </span>
+                                                )}
+                                                {unreadMentionCount > 0 && (
+                                                    <span className="chat-list__mention-badge" aria-label="منشن یا پاسخ جدید">
+                                                        <AtSign size={12} strokeWidth={2.5} />
+                                                    </span>
+                                                )}
+                                                {unreadCount > 0 && (
+                                                    <span className="chat-list__unread-badge">{toPersianDigits(unreadCount)}</span>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 </div>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Copy, Eye, MoreVertical, Pencil, Smile, Trash2, X, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload, Download, Pin } from 'lucide-react';
+import { ChevronLeft, Copy, Eye, MoreVertical, Pencil, Smile, Trash2, X, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload, Download, Pin, AtSign, Heart } from 'lucide-react';
 import { AnimatePresence, motion } from "framer-motion";
 import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata, PendingAttachment, PendingForwardDraft, PinnedMessage } from '../types';
 import { Avatar } from './Avatar';
@@ -106,6 +106,10 @@ interface ChatRoomProps {
     jumpingToMessage?: boolean;
     onJumpToMessageSettled?: () => void;
     onCancelJumpToMessage?: () => void;
+    unreadMentionIds?: string[];
+    unreadReactionIds?: string[];
+    onAckMention?: (chatId: string, messageId: string) => void | Promise<void>;
+    onAckReaction?: (chatId: string, messageId: string) => void | Promise<void>;
 }
 
 function bubbleShape(prevSameSender: boolean, nextSameSender: boolean) {
@@ -266,6 +270,10 @@ export function ChatRoom({
     jumpingToMessage = false,
     onJumpToMessageSettled,
     onCancelJumpToMessage,
+    unreadMentionIds = [],
+    unreadReactionIds = [],
+    onAckMention,
+    onAckReaction,
 }: ChatRoomProps) {
     const currentChat = useMemo(
         () => chats.find((c) => c.id === chatId) || null,
@@ -335,6 +343,10 @@ export function ChatRoom({
     const highlightTimeoutRef = useRef<number | null>(null);
     const highlightRafRef = useRef<number | null>(null);
     const missingJumpAttemptRef = useRef<{ id: string; at: number } | null>(null);
+    const [resolvingMention, setResolvingMention] = useState(false);
+    const mentionAbortRef = useRef<AbortController | null>(null);
+    const mentionRequestIdRef = useRef(0);
+    const shakeTimersRef = useRef<Record<string, number>>({});
 
     const [replySwipeLocked, setReplySwipeLocked] = useState(false);
 
@@ -1017,7 +1029,99 @@ export function ChatRoom({
 
     useEffect(() => () => onJumpToMessageSettled?.(), []);
 
+    const cancelMentionResolve = useCallback(() => {
+        mentionRequestIdRef.current += 1;
+        mentionAbortRef.current?.abort();
+        mentionAbortRef.current = null;
+        setResolvingMention(false);
+    }, []);
 
+    useEffect(() => () => {
+        cancelMentionResolve();
+        Object.values(shakeTimersRef.current).forEach((timerId) => window.clearTimeout(timerId));
+    }, [chatId, cancelMentionResolve]);
+
+    const shakeMessageBubble = useCallback((messageId: string) => {
+        const el = messageElsRef.current.get(messageId);
+        if (el) {
+            if (shakeTimersRef.current[messageId]) {
+                window.clearTimeout(shakeTimersRef.current[messageId]);
+            }
+            el.classList.remove('message-bubble--shake');
+            void el.offsetWidth;
+            el.classList.add('message-bubble--shake');
+            shakeTimersRef.current[messageId] = window.setTimeout(() => {
+                el.classList.remove('message-bubble--shake');
+                delete shakeTimersRef.current[messageId];
+            }, 420);
+        }
+        try {
+            if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                navigator.vibrate([18, 40, 18]);
+            } else {
+                triggerHaptic();
+            }
+        } catch {
+            triggerHaptic();
+        }
+    }, []);
+
+    const openMention = useCallback(async (rawUsername: string, messageId: string) => {
+        const cleanUsername = String(rawUsername || '').trim().replace(/^@+/, '');
+        if (!cleanUsername) return;
+
+        mentionAbortRef.current?.abort();
+        const controller = new AbortController();
+        mentionAbortRef.current = controller;
+        const requestId = ++mentionRequestIdRef.current;
+        setResolvingMention(true);
+
+        try {
+            if (!/^[A-Za-z0-9_]{3,32}$/.test(cleanUsername)) {
+                await new Promise((resolve) => window.setTimeout(resolve, 180));
+                if (requestId !== mentionRequestIdRef.current) return;
+                setResolvingMention(false);
+                shakeMessageBubble(messageId);
+                return;
+            }
+
+            const resolvedUser = await apiFetch(
+                `/users/by-username/${encodeURIComponent(cleanUsername)}`,
+                { signal: controller.signal }
+            );
+            if (requestId !== mentionRequestIdRef.current) return;
+            setResolvingMention(false);
+
+            if (resolvedUser && resolvedUser.chatId) {
+                maybeSaveScroll(chatId);
+                restoringFromInfoRef.current = true;
+                setForwardSourceUser({
+                    chatId: String(resolvedUser.chatId),
+                    username: String(resolvedUser.username || cleanUsername),
+                    name: String(resolvedUser.name || resolvedUser.username || cleanUsername),
+                    bio: String(resolvedUser.bio || ''),
+                    avatar: String(resolvedUser.avatar || ''),
+                    online: Boolean(resolvedUser.online),
+                    lastSeen: resolvedUser.lastSeen,
+                    lastSeenCategory: resolvedUser.lastSeenCategory,
+                    verified: Boolean(resolvedUser.verified),
+                    registrationDate: resolvedUser.registrationDate,
+                    ...(typeof resolvedUser.blockedByMe !== 'undefined' ? { blockedByMe: Boolean(resolvedUser.blockedByMe) } : {}),
+                    ...(typeof resolvedUser.blockedByOther !== 'undefined' ? { blockedByOther: Boolean(resolvedUser.blockedByOther) } : {}),
+                } as User);
+            } else {
+                shakeMessageBubble(messageId);
+            }
+        } catch (err: any) {
+            if (err?.name === 'AbortError' || requestId !== mentionRequestIdRef.current) return;
+            setResolvingMention(false);
+            shakeMessageBubble(messageId);
+        } finally {
+            if (mentionAbortRef.current === controller) {
+                mentionAbortRef.current = null;
+            }
+        }
+    }, [chatId, shakeMessageBubble]);
 
     const doDownloadMessageFile = async (m: Message) => {
         if (!m.file?.fileId) return;
@@ -1822,6 +1926,55 @@ export function ChatRoom({
 
     const scrollButtonBottom = composerHeight + 18;
 
+    const visibleUnreadMentionIds = useMemo(
+        () => (isGroupChat && !isOfficialChannel && !isSavedMessages ? unreadMentionIds : []),
+        [isGroupChat, isOfficialChannel, isSavedMessages, unreadMentionIds]
+    );
+    const visibleUnreadReactionIds = useMemo(
+        () => (!isOfficialChannel && !isSavedMessages ? unreadReactionIds : []),
+        [isOfficialChannel, isSavedMessages, unreadReactionIds]
+    );
+
+    const mentionCandidates = useMemo(() => {
+        if (!isGroupChat || isOfficialChannel) return [];
+        return Object.entries(groupMembers)
+            .map(([id, m]) => ({
+                chatId: m.chatId || id,
+                name: m.name || '',
+                username: (m.username || '').trim(),
+                avatar: m.avatar || '',
+                verified: m.verified,
+            }))
+            .filter((m) => Boolean(m.username))
+            .sort((a, b) => {
+                if (a.chatId === currentUserId && b.chatId !== currentUserId) return 1;
+                if (b.chatId === currentUserId && a.chatId !== currentUserId) return -1;
+                return (a.name || a.username).localeCompare(b.name || b.username, 'fa');
+            });
+    }, [isGroupChat, isOfficialChannel, groupMembers, currentUserId]);
+
+    const handleStepUnreadMention = () => {
+        if (visibleUnreadMentionIds.length === 0) return;
+        const targetMessageId = visibleUnreadMentionIds[0];
+        void onAckMention?.(chatId, targetMessageId);
+        if (messagesById.has(targetMessageId)) {
+            scrollToMessage(targetMessageId);
+        } else {
+            void onJumpToMessage?.(chatId, targetMessageId);
+        }
+    };
+
+    const handleStepUnreadReaction = () => {
+        if (visibleUnreadReactionIds.length === 0) return;
+        const targetMessageId = visibleUnreadReactionIds[0];
+        void onAckReaction?.(chatId, targetMessageId);
+        if (messagesById.has(targetMessageId)) {
+            scrollToMessage(targetMessageId);
+        } else {
+            void onJumpToMessage?.(chatId, targetMessageId);
+        }
+    };
+
     const jumpToLatest = async () => {
         if (isJumpingToLatest) return;
         setNewMsgCount(0);
@@ -2032,6 +2185,7 @@ export function ChatRoom({
         openVideoViewer,
         setReplySwipeLocked,
         toggleReasoning,
+        openMention,
     });
     messageHandlerStateRef.current = {
         openMessageMenu,
@@ -2048,6 +2202,7 @@ export function ChatRoom({
         openVideoViewer,
         setReplySwipeLocked,
         toggleReasoning,
+        openMention,
     };
 
     const messageActions = useMemo(() => ({
@@ -2073,6 +2228,9 @@ export function ChatRoom({
         openImage: (url: string, file: FileMetadata | null) => messageHandlerStateRef.current.openImageViewer(url, file),
         openVideo: (url: string, file: FileMetadata | null) => messageHandlerStateRef.current.openVideoViewer(url, file),
         swipeLock: (locked: boolean) => messageHandlerStateRef.current.setReplySwipeLocked(locked),
+        openMention: (username: string, messageId: string) => {
+            void messageHandlerStateRef.current.openMention(username, messageId);
+        },
         registerEl: (messageId: string, el: HTMLDivElement | null) => {
             if (!el) {
                 messageElsRef.current.delete(messageId);
@@ -2208,12 +2366,13 @@ export function ChatRoom({
             };
         }
         if (forwardSourceUser) {
+            const isSelf = forwardSourceUser.chatId === currentUserId;
             return {
                 user: forwardSourceUser,
-                isBlocked: Boolean(isUserBlocked?.(forwardSourceUser)),
-                hideOnlineStatus: Boolean((forwardSourceUser as any)?.blockedByOther) || Boolean(isUserBlocked?.(forwardSourceUser)),
+                isBlocked: !isSelf && Boolean(isUserBlocked?.(forwardSourceUser)),
+                hideOnlineStatus: !isSelf && (Boolean((forwardSourceUser as any)?.blockedByOther) || Boolean(isUserBlocked?.(forwardSourceUser))),
                 isInteractiveOnline: Boolean(interactiveOnlineUsers && forwardSourceUser?.chatId && interactiveOnlineUsers[forwardSourceUser.chatId]),
-                onToggleBlock: onToggleBlockUser,
+                onToggleBlock: isSelf ? undefined : onToggleBlockUser,
                 onBack: () => setForwardSourceUser(null),
                 onOpenMembers: undefined,
                 autoOpenMembers: true,
@@ -2592,8 +2751,14 @@ export function ChatRoom({
                 </div>
             )}
 
-            {jumpingToMessage && (
-                <div className="chat-room__jump-overlay" onClick={() => onCancelJumpToMessage?.()}>
+            {(jumpingToMessage || resolvingMention) && (
+                <div
+                    className="chat-room__jump-overlay"
+                    onClick={() => {
+                        onCancelJumpToMessage?.();
+                        cancelMentionResolve();
+                    }}
+                >
                     <div className="chat-room__jump-box" onClick={(e) => e.stopPropagation()}>
                         <span className="chat-range-loader chat-range-loader--active chat-room__jump-spinner" />
                     </div>
@@ -2806,30 +2971,74 @@ export function ChatRoom({
                 );
             })()}
 
-            <AnimatePresence>
-                {(newMsgCount > 0 || showScrollBtn || isJumpingToLatest) && (
-                    <motion.button
-                        type="button"
-                        aria-label="Jump to latest messages"
-                        onClick={jumpToLatest}
-                        disabled={isJumpingToLatest}
-                        className="chat-room__send-btn chat-room__send-btn--disabled"
-                        animate={{ opacity: 1 }}
-                        initial={{ opacity: 0 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.14, ease: 'easeOut' }}
-                        style={{ position: 'absolute', right: 12, bottom: scrollButtonBottom, zIndex: 12, color: 'var(--text-primary)', cursor: 'pointer' }}>
-                        {isJumpingToLatest ? (
-                            <span className="chat-room__scroll-btn-spinner" aria-hidden="true" />
-                        ) : (
-                            <ChevronDown size={20} />
-                        )}
-                        {newMsgCount > 0 && (
-                            <span className="chat-room__scroll-badge">{toPersianDigits(newMsgCount)}</span>
-                        )}
-                    </motion.button>
-                )}
-            </AnimatePresence>
+            <div
+                className="chat-room__floating-actions"
+                style={{ position: 'absolute', right: 12, bottom: scrollButtonBottom, zIndex: 12 }}
+            >
+                <AnimatePresence>
+                    {visibleUnreadReactionIds.length > 0 && (
+                        <motion.button
+                            key="floating-reaction-btn"
+                            type="button"
+                            aria-label="مشاهده واکنش‌های جدید"
+                            onClick={handleStepUnreadReaction}
+                            className="chat-room__send-btn chat-room__send-btn--disabled chat-room__floating-btn chat-room__floating-btn--reaction"
+                            animate={{ opacity: 1, y: 0 }}
+                            initial={{ opacity: 0, y: 8 }}
+                            exit={{ opacity: 0, y: 8 }}
+                            transition={{ duration: 0.14, ease: 'easeOut' }}
+                        >
+                            <Heart size={19} fill="currentColor" strokeWidth={2} />
+                            <span className="chat-room__scroll-badge">
+                                {toPersianDigits(visibleUnreadReactionIds.length)}
+                            </span>
+                        </motion.button>
+                    )}
+
+                    {visibleUnreadMentionIds.length > 0 && (
+                        <motion.button
+                            key="floating-mention-btn"
+                            type="button"
+                            aria-label="مشاهده منشن‌ها و پاسخ‌های جدید"
+                            onClick={handleStepUnreadMention}
+                            className="chat-room__send-btn chat-room__send-btn--disabled chat-room__floating-btn"
+                            animate={{ opacity: 1, y: 0 }}
+                            initial={{ opacity: 0, y: 8 }}
+                            exit={{ opacity: 0, y: 8 }}
+                            transition={{ duration: 0.14, ease: 'easeOut' }}
+                        >
+                            <AtSign size={19} strokeWidth={2.3} />
+                            <span className="chat-room__scroll-badge">
+                                {toPersianDigits(visibleUnreadMentionIds.length)}
+                            </span>
+                        </motion.button>
+                    )}
+
+                    {(newMsgCount > 0 || showScrollBtn || isJumpingToLatest) && (
+                        <motion.button
+                            key="floating-scroll-btn"
+                            type="button"
+                            aria-label="Jump to latest messages"
+                            onClick={jumpToLatest}
+                            disabled={isJumpingToLatest}
+                            className="chat-room__send-btn chat-room__send-btn--disabled chat-room__floating-btn"
+                            animate={{ opacity: 1, y: 0 }}
+                            initial={{ opacity: 0, y: 8 }}
+                            exit={{ opacity: 0, y: 8 }}
+                            transition={{ duration: 0.14, ease: 'easeOut' }}
+                        >
+                            {isJumpingToLatest ? (
+                                <span className="chat-room__scroll-btn-spinner" aria-hidden="true" />
+                            ) : (
+                                <ChevronDown size={20} />
+                            )}
+                            {newMsgCount > 0 && (
+                                <span className="chat-room__scroll-badge">{toPersianDigits(newMsgCount)}</span>
+                            )}
+                        </motion.button>
+                    )}
+                </AnimatePresence>
+            </div>
 
             <div className="chat-room__composer-host" ref={composerHostRef}>
                 <ChatComposer
@@ -2846,6 +3055,7 @@ export function ChatRoom({
                     forwardPreviewText={getForwardPreviewText(pendingForwardDraft)}
                     forwardPreviewTitle={forwardPreviewTitle}
                     uploadFile={externalFileUploadHandler}
+                    mentionCandidates={mentionCandidates}
                     onSend={handleComposerSend}
                     onCancelReplyEdit={handleCancelReplyEdit}
                     onCancelForward={handleCancelForward}
