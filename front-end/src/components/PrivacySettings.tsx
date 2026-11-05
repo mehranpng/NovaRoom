@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { AlertTriangle, ChevronLeft, EyeOff, KeyRound, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { AlertTriangle, Check, ChevronDown, ChevronLeft, KeyRound, Shield, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { screenVariants } from '../utils/screenMotion';
 import { cx } from '../utils/cx';
@@ -9,7 +10,7 @@ import { formatDeletionCountdown } from '../utils/deletionTimer';
 import { apiFetch } from '../config/api';
 import { notify } from '../utils/notificationBus';
 import { PasswordField } from './PasswordField';
-import type { User } from '../types';
+import type { PrivacyVisibility, User } from '../types';
 import './admin/admin.css';
 
 interface PrivacySettingsProps {
@@ -20,11 +21,82 @@ interface PrivacySettingsProps {
 }
 
 type PrivacyView = 'main' | 'password' | 'deleteAccount';
+type PrivacyField = 'lastSeenVisibility' | 'avatarVisibility' | 'bioVisibility';
+
+const PRIVACY_POPOVER_WIDTH = 168;
+const PRIVACY_POPOVER_HEIGHT = 148;
+const PRIVACY_POPOVER_GAP = 0;
+
+const PRIVACY_FIELD_LABELS: Record<PrivacyField, string> = {
+    lastSeenVisibility: 'آخرین بازدید',
+    avatarVisibility: 'عکس پروفایل',
+    bioVisibility: 'بیوگرافی',
+};
+
+const VISIBILITY_OPTIONS: Record<PrivacyField, Array<{ value: PrivacyVisibility; label: string; hint: string }>> = {
+    lastSeenVisibility: [
+        {
+            value: 'everyone',
+            label: 'نمایش همه',
+            hint: 'آخرین بازدید شما برای همه کاربران نمایش داده می‌شود.',
+        },
+        {
+            value: 'friends',
+            label: 'نمایش دوستان',
+            hint: 'فقط کاربرانی که با آن‌ها گفتگوی دوطرفه داشته‌اید آخرین بازدید شما را می‌بینند.',
+        },
+        {
+            value: 'nobody',
+            label: 'بسته',
+            hint: 'آخرین بازدید شما برای هیچ‌کس نمایش داده نمی‌شود و دیگران «به تازگی» می‌بینند.',
+        },
+    ],
+    avatarVisibility: [
+        {
+            value: 'everyone',
+            label: 'نمایش همه',
+            hint: 'عکس پروفایل شما برای همه کاربران نمایش داده می‌شود.',
+        },
+        {
+            value: 'friends',
+            label: 'نمایش دوستان',
+            hint: 'فقط کاربرانی که با آن‌ها گفتگوی دوطرفه داشته‌اید عکس پروفایل شما را می‌بینند.',
+        },
+        {
+            value: 'nobody',
+            label: 'بسته',
+            hint: 'عکس پروفایل شما برای هیچ‌کس نمایش داده نمی‌شود.',
+        },
+    ],
+    bioVisibility: [
+        {
+            value: 'everyone',
+            label: 'نمایش همه',
+            hint: 'بیوگرافی شما برای همه کاربران نمایش داده می‌شود.',
+        },
+        {
+            value: 'friends',
+            label: 'نمایش دوستان',
+            hint: 'فقط کاربرانی که با آن‌ها گفتگوی دوطرفه داشته‌اید بیوگرافی شما را می‌بینند.',
+        },
+        {
+            value: 'nobody',
+            label: 'بسته',
+            hint: 'بیوگرافی شما برای هیچ‌کس نمایش داده نمی‌شود.',
+        },
+    ],
+};
 
 export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLogout }: PrivacySettingsProps) {
     const { scrolled, handleScroll } = useScrollFade();
-    const [hideOnline, setHideOnline] = useState<boolean>(Boolean(currentUser?.hideOnlineStatus));
-    const [saving, setSaving] = useState(false);
+    const [privacy, setPrivacy] = useState<Record<PrivacyField, PrivacyVisibility>>({
+        lastSeenVisibility: currentUser?.lastSeenVisibility ?? (currentUser?.hideOnlineStatus ? 'nobody' : 'everyone'),
+        avatarVisibility: currentUser?.avatarVisibility ?? 'everyone',
+        bioVisibility: currentUser?.bioVisibility ?? 'everyone',
+    });
+    const [savingPrivacy, setSavingPrivacy] = useState<PrivacyField | null>(null);
+    const [expandedField, setExpandedField] = useState<PrivacyField | null>(null);
+    const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(null);
 
     const [view, setView] = useState<PrivacyView>('main');
     const [currentPassword, setCurrentPassword] = useState('');
@@ -42,35 +114,161 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
     const now = useNow(Boolean(scheduledFor), 1000);
     const countdown = scheduledFor ? formatDeletionCountdown(scheduledFor, now) : '';
 
-    const toggleHideOnline = async () => {
-        if (saving) return;
-        const nextState = !hideOnline;
-        setSaving(true);
+    const closePrivacyPopover = () => {
+        setExpandedField(null);
+        setPopoverPosition(null);
+    };
+
+    useEffect(() => {
+        if (!expandedField) return;
+        const handlePointerDown = (event: PointerEvent) => {
+            const target = event.target as Element | null;
+            if (
+                target?.closest('.adm-privacy-popover') ||
+                target?.closest('.adm-privacy-row__head') ||
+                target?.closest('.adm-settings-row')
+            ) {
+                return;
+            }
+            setExpandedField(null);
+            setPopoverPosition(null);
+        };
+        const handleClickCapture = (event: MouseEvent) => {
+            const target = event.target as Element | null;
+            if (!target?.closest('.adm-settings-row')) return;
+            event.preventDefault();
+            event.stopPropagation();
+            setExpandedField(null);
+            setPopoverPosition(null);
+        };
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setExpandedField(null);
+                setPopoverPosition(null);
+            }
+        };
+        document.addEventListener('pointerdown', handlePointerDown);
+        document.addEventListener('click', handleClickCapture, true);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('pointerdown', handlePointerDown);
+            document.removeEventListener('click', handleClickCapture, true);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [expandedField]);
+
+    const togglePrivacyPopover = (field: PrivacyField, event: React.MouseEvent<HTMLButtonElement>) => {
+        if (expandedField) {
+            closePrivacyPopover();
+            return;
+        }
+        const rect = event.currentTarget.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        let top = rect.bottom + PRIVACY_POPOVER_GAP;
+        if (top + PRIVACY_POPOVER_HEIGHT > viewportHeight - PRIVACY_POPOVER_GAP) {
+            top = Math.max(PRIVACY_POPOVER_GAP, rect.top - PRIVACY_POPOVER_HEIGHT - PRIVACY_POPOVER_GAP);
+        }
+        const left = Math.min(
+            Math.max(PRIVACY_POPOVER_GAP, rect.left),
+            window.innerWidth - PRIVACY_POPOVER_WIDTH - PRIVACY_POPOVER_GAP
+        );
+        setPopoverPosition({ top, left });
+        setExpandedField(field);
+    };
+
+    const updateVisibility = async (field: PrivacyField, value: PrivacyVisibility) => {
+        if (savingPrivacy) return;
+        if (privacy[field] === value) {
+            closePrivacyPopover();
+            return;
+        }
         if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
             navigator.vibrate(10);
         }
+        setSavingPrivacy(field);
 
         try {
-            await apiFetch('/profile/me/privacy', {
+            const result = await apiFetch('/profile/me/privacy', {
                 method: 'PATCH',
-                body: JSON.stringify({ hideOnlineStatus: nextState }),
+                body: JSON.stringify({ [field]: value }),
             });
-            setHideOnline(nextState);
-            onUpdateCurrentUser?.({ hideOnlineStatus: nextState });
-            notify({
-                type: 'success',
-                message: nextState
-                    ? 'وضعیت آنلاین بودن و آخرین بازدید شما مخفی شد.'
-                    : 'وضعیت آنلاین بودن و آخرین بازدید شما قابل مشاهده شد.',
-            });
+            setPrivacy((prev) => ({ ...prev, [field]: value }));
+            onUpdateCurrentUser?.(result);
+            closePrivacyPopover();
         } catch {
             notify({
                 type: 'error',
                 message: 'خطا در ذخیره تنظیمات حریم خصوصی.',
             });
         } finally {
-            setSaving(false);
+            setSavingPrivacy(null);
         }
+    };
+
+    const renderPrivacyRow = (field: PrivacyField, label: string) => {
+        const selectedOption = VISIBILITY_OPTIONS[field].find((option) => option.value === privacy[field]);
+        const expanded = expandedField === field;
+        return (
+            <div className={cx('adm-privacy-row', expanded && 'adm-privacy-row--expanded')}>
+                <button
+                    type="button"
+                    className="adm-privacy-row__head"
+                    onClick={(event) => togglePrivacyPopover(field, event)}
+                    aria-expanded={expanded}
+                    aria-label={`انتخاب ${label}`}
+                >
+                    <span className="adm-privacy-row__label">{label}</span>
+                    <span className="adm-privacy-row__value">
+                        {selectedOption?.label}
+                        <ChevronDown
+                            size={16}
+                            className={cx('adm-privacy-row__chevron', expanded && 'adm-privacy-row__chevron--open')}
+                        />
+                    </span>
+                </button>
+
+                {selectedOption && (
+                    <span className="adm-privacy-row__hint">{selectedOption.hint}</span>
+                )}
+            </div>
+        );
+    };
+
+    const renderPrivacyPopover = () => {
+        if (!expandedField || !popoverPosition || typeof document === 'undefined') return null;
+        return createPortal(
+            <>
+                <div className="adm-privacy-overlay" aria-hidden="true" />
+                <div
+                    className="adm-privacy-popover"
+                    role="radiogroup"
+                    aria-label={PRIVACY_FIELD_LABELS[expandedField]}
+                    style={{ top: popoverPosition.top, left: popoverPosition.left }}
+                >
+                    {VISIBILITY_OPTIONS[expandedField].map((option) => {
+                        const selected = privacy[expandedField] === option.value;
+                        return (
+                            <button
+                                key={option.value}
+                                type="button"
+                                role="radio"
+                                aria-checked={selected}
+                                className={cx(
+                                    'adm-privacy-popover__item',
+                                    selected && 'adm-privacy-popover__item--selected'
+                                )}
+                                onClick={() => updateVisibility(expandedField, option.value)}
+                                disabled={Boolean(savingPrivacy)}
+                            >
+                                <span>{option.label}</span>
+                                {selected && <Check size={14} />}
+                            </button>
+                        );
+                    })}
+                </div>
+            </>,
+            document.body
+        );
     };
 
     const submitPasswordChange = async (event: React.FormEvent) => {
@@ -295,27 +493,21 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
                 </div>
             ) : (
                 <div className="adm-content" onScroll={handleScroll}>
-                    <div className="adm-card adm-card--switch adm-card--pill">
+                    <section className="adm-card">
                         <div className="adm-card__title">
-                            <EyeOff size={18} />
-                            مخفی کردن آخرین بازدید
+                            <Shield size={18} />
+                            حریم خصوصی
                         </div>
-                        <button
-                            type="button"
-                            onClick={toggleHideOnline}
-                            disabled={saving}
-                            role="switch"
-                            aria-checked={hideOnline}
-                            aria-label="مخفی کردن آخرین بازدید"
-                            className={cx('adm-switch', hideOnline && 'adm-switch--on')}
-                        >
-                            <span className="adm-switch__thumb" />
-                        </button>
-                    </div>
+                        <div className="adm-privacy-list">
+                            {renderPrivacyRow('lastSeenVisibility', 'آخرین بازدید')}
+                            {renderPrivacyRow('avatarVisibility', 'عکس پروفایل')}
+                            {renderPrivacyRow('bioVisibility', 'بیوگرافی')}
+                        </div>
+                    </section>
 
                     <button
                         type="button"
-                        className="adm-settings-row adm-tap"
+                        className={cx('adm-settings-row', 'adm-settings-row--top-gap', !expandedField && 'adm-tap')}
                         onClick={() => setView('password')}
                     >
                         <span className="adm-settings-row__label">
@@ -326,7 +518,7 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
 
                     <button
                         type="button"
-                        className="adm-settings-row adm-settings-row--danger adm-tap"
+                        className={cx('adm-settings-row', 'adm-settings-row--danger', !expandedField && 'adm-tap')}
                         onClick={() => setView('deleteAccount')}
                     >
                         <span className="adm-settings-row__label">
@@ -337,6 +529,7 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
                     </button>
                 </div>
             )}
+            {renderPrivacyPopover()}
         </motion.div>
     );
 }

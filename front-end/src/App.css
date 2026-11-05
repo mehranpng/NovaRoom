@@ -4067,6 +4067,11 @@ html.keyboard-open .chat-room__input-area {
     font-style: italic;
 }
 
+.profile__bio-text--ltr {
+    direction: ltr;
+    text-align: left;
+}
+
 .profile__field-group {
     margin-bottom: 16px;
 }

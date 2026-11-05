@@ -1,3 +1,5 @@
+export type PrivacyVisibility = 'everyone' | 'friends' | 'nobody';
+
 export interface User {
     chatId: string;
     username: string;
@@ -7,6 +9,9 @@ export interface User {
     online: boolean;
     lastSeen?: number | string | null;
     lastSeenCategory?: 'recently' | 'within_week' | 'within_month' | 'long_time_ago' | null;
+    lastSeenVisibility?: PrivacyVisibility;
+    avatarVisibility?: PrivacyVisibility;
+    bioVisibility?: PrivacyVisibility;
     hideOnlineStatus?: boolean;
     verified?: boolean;
     registrationDate?: string;

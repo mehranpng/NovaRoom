@@ -643,16 +643,111 @@ def resolve_user_online_state(user_doc: Optional[Dict[str, Any]]) -> bool:
     return bool(user_doc.get("online"))
 
 
-def resolve_user_presence_for_viewer(
+PRIVACY_VISIBILITY_VALUES = {"everyone", "friends", "nobody"}
+_MUTUAL_INTERACTION_CACHE_TTL_SECONDS = 30
+_mutual_interaction_cache: Dict[Tuple[str, str], Tuple[bool, float]] = {}
+
+
+def privacy_visibility(settings: Optional[Dict[str, Any]], key: str) -> str:
+    settings = settings or {}
+    value = str(settings.get(key) or "").strip()
+    if value in PRIVACY_VISIBILITY_VALUES:
+        return value
+    if key == "lastSeenVisibility" and settings.get("hideOnlineStatus"):
+        return "nobody"
+    return "everyone"
+
+
+def privacy_settings_payload(settings: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    return {
+        "lastSeenVisibility": privacy_visibility(settings, "lastSeenVisibility"),
+        "avatarVisibility": privacy_visibility(settings, "avatarVisibility"),
+        "bioVisibility": privacy_visibility(settings, "bioVisibility"),
+    }
+
+
+def _visibility_allows(visibility: str, is_friend: bool) -> bool:
+    if visibility == "everyone":
+        return True
+    if visibility == "friends":
+        return is_friend
+    return False
+
+
+async def has_mutual_interaction(user_a: str, user_b: str) -> bool:
+    a = str(user_a or "").strip()
+    b = str(user_b or "").strip()
+    if not a or not b or a == b:
+        return False
+    cache_key = (a, b) if a < b else (b, a)
+    cached = _mutual_interaction_cache.get(cache_key)
+    now = time.time()
+    if cached and now - cached[1] < _MUTUAL_INTERACTION_CACHE_TTL_SECONDS:
+        return cached[0]
+    chat_id = get_chat_id_for_two(a, b)
+    chat = await cl_chats.find_one(
+        {"_id": chat_id, "participants": {"$all": [a, b]}}, {"_id": 1}
+    )
+    if not chat:
+        result = False
+    else:
+        senders = await cl_messages.distinct(
+            "senderId", {"chatId": chat_id, "senderId": {"$in": [a, b]}}
+        )
+        sender_ids = {str(sender) for sender in senders}
+        result = a in sender_ids and b in sender_ids
+    if len(_mutual_interaction_cache) > 10000:
+        _mutual_interaction_cache.clear()
+    _mutual_interaction_cache[cache_key] = (result, now)
+    return result
+
+
+def _last_seen_category(target_last_seen: Any, target_online: bool) -> str:
+    now = utc_now()
+    ref_dt = now if target_online else target_last_seen
+    if not ref_dt:
+        return "recently"
+    if not isinstance(ref_dt, datetime):
+        try:
+            ref_dt = datetime.fromtimestamp(float(ref_dt) / 1000.0, tz=timezone.utc)
+        except Exception:
+            ref_dt = now
+    elif ref_dt.tzinfo is None:
+        ref_dt = ref_dt.replace(tzinfo=timezone.utc)
+    else:
+        ref_dt = ref_dt.astimezone(timezone.utc)
+    diff_seconds = max(0.0, (now - ref_dt).total_seconds())
+    if diff_seconds < 4 * 86400:
+        return "recently"
+    if diff_seconds < 14 * 86400:
+        return "within_week"
+    if diff_seconds < 30 * 86400:
+        return "within_month"
+    return "long_time_ago"
+
+
+async def resolve_user_presence_for_viewer(
     viewer_user: Optional[Dict[str, Any]],
     target_user: Optional[Dict[str, Any]],
     blocked: bool = False,
 ) -> Dict[str, Any]:
     if not target_user:
-        return {"online": False, "lastSeen": None, "lastSeenCategory": None}
+        return {
+            "online": False,
+            "lastSeen": None,
+            "lastSeenCategory": None,
+            "avatarVisible": False,
+            "bioVisible": False,
+        }
 
     if blocked:
-        return {"online": False, "lastSeen": None, "lastSeenCategory": "long_time_ago"}
+        return {
+            "online": False,
+            "lastSeen": None,
+            "lastSeenCategory": "long_time_ago",
+            "avatarVisible": False,
+            "bioVisible": False,
+        }
 
     viewer_id = str((viewer_user or {}).get("chatId") or "")
     target_id = str(target_user.get("chatId") or "")
@@ -664,46 +759,49 @@ def resolve_user_presence_for_viewer(
             "online": target_actual_online,
             "lastSeen": dt_to_epoch_ms(target_last_seen) if target_last_seen else None,
             "lastSeenCategory": None,
+            "avatarVisible": True,
+            "bioVisible": True,
         }
 
     viewer_settings = (viewer_user or {}).get("settings") or {}
     target_settings = target_user.get("settings") or {}
-    viewer_hide = bool(viewer_settings.get("hideOnlineStatus", False))
-    target_hide = bool(target_settings.get("hideOnlineStatus", False))
+    viewer_visibility = privacy_visibility(viewer_settings, "lastSeenVisibility")
+    target_visibility = privacy_visibility(target_settings, "lastSeenVisibility")
+    avatar_visibility = privacy_visibility(target_settings, "avatarVisibility")
+    bio_visibility = privacy_visibility(target_settings, "bioVisibility")
 
-    if viewer_hide or target_hide:
-        now = utc_now()
-        ref_dt = now if target_actual_online else target_last_seen
-        category = "recently"
-        if ref_dt:
-            if not isinstance(ref_dt, datetime):
-                try:
-                    ref_dt = datetime.fromtimestamp(float(ref_dt) / 1000.0, tz=timezone.utc)
-                except Exception:
-                    ref_dt = now
-            elif ref_dt.tzinfo is None:
-                ref_dt = ref_dt.replace(tzinfo=timezone.utc)
-            else:
-                ref_dt = ref_dt.astimezone(timezone.utc)
-            diff_seconds = max(0.0, (now - ref_dt).total_seconds())
-            if diff_seconds < 4 * 86400:
-                category = "recently"
-            elif diff_seconds < 14 * 86400:
-                category = "within_week"
-            elif diff_seconds < 30 * 86400:
-                category = "within_month"
-            else:
-                category = "long_time_ago"
+    is_friend = False
+    if "friends" in (
+        viewer_visibility,
+        target_visibility,
+        avatar_visibility,
+        bio_visibility,
+    ):
+        is_friend = await has_mutual_interaction(viewer_id, target_id)
+
+    avatar_visible = _visibility_allows(avatar_visibility, is_friend)
+    bio_visible = _visibility_allows(bio_visibility, is_friend)
+
+    can_see_last_seen = _visibility_allows(
+        target_visibility, is_friend
+    ) and _visibility_allows(viewer_visibility, is_friend)
+    if not can_see_last_seen:
         return {
             "online": False,
             "lastSeen": None,
-            "lastSeenCategory": category,
+            "lastSeenCategory": _last_seen_category(
+                target_last_seen, target_actual_online
+            ),
+            "avatarVisible": avatar_visible,
+            "bioVisible": bio_visible,
         }
 
     return {
         "online": target_actual_online,
         "lastSeen": dt_to_epoch_ms(target_last_seen) if target_last_seen else None,
         "lastSeenCategory": None,
+        "avatarVisible": avatar_visible,
+        "bioVisible": bio_visible,
     }
 
 
@@ -1694,6 +1792,9 @@ async def logout(
     allowed_contacts = await _filter_recipients_by_block_status(
         user_id, contacts_to_notify
     )
+    allowed_contacts = await _filter_recipients_by_presence_visibility(
+        user_id, allowed_contacts
+    )
     await broadcast(
         allowed_contacts,
         {"type": "user_status", "userId": user_id, "online": False},
@@ -1915,6 +2016,32 @@ async def _filter_recipients_by_block_status(
             continue
         allowed.append(cid)
     return allowed
+
+
+async def _filter_recipients_by_presence_visibility(
+    actor_id: str, candidate_ids: Iterable[str]
+) -> List[str]:
+    unique_candidates = [str(cid or "").strip() for cid in candidate_ids]
+    unique_candidates = [cid for cid in unique_candidates if cid and cid != actor_id]
+    if not unique_candidates:
+        return []
+
+    actor = await cl_users.find_one({"chatId": actor_id}, {"settings": 1})
+    visibility = privacy_visibility((actor or {}).get("settings"), "lastSeenVisibility")
+    if visibility == "everyone":
+        return unique_candidates
+    if visibility == "nobody":
+        return []
+
+    allowed_flags = await asyncio.gather(
+        *(has_mutual_interaction(actor_id, cid) for cid in unique_candidates),
+        return_exceptions=True,
+    )
+    return [
+        cid
+        for cid, allowed in zip(unique_candidates, allowed_flags)
+        if allowed is True
+    ]
 
 
 def _user_can_pin_chat(user_id: str, chat_id: str) -> bool:
@@ -3296,12 +3423,15 @@ async def login(req: LoginRequest, request: Request):
             "verified": bool(user.get("verified", False)),
             "registrationDate": user.get("registrationDate"),
             "adminLevel": get_admin_level(user),
+            **privacy_settings_payload(user.get("settings")),
         },
     }
 
 
 class PrivacySettingsUpdate(BaseModel):
-    hideOnlineStatus: bool
+    lastSeenVisibility: Optional[Literal["everyone", "friends", "nobody"]] = None
+    avatarVisibility: Optional[Literal["everyone", "friends", "nobody"]] = None
+    bioVisibility: Optional[Literal["everyone", "friends", "nobody"]] = None
 
 
 @app.get("/profile/me")
@@ -3317,21 +3447,18 @@ async def get_profile(request: Request, current_user: dict = Depends(get_current
         "avatar": current_user["profile"]["avatar"],
         "online": resolve_user_online_state(current_user),
         "lastSeen": dt_to_epoch_ms(last_seen) if last_seen else None,
-        "hideOnlineStatus": bool(user_settings.get("hideOnlineStatus", False)),
         "verified": bool(current_user.get("verified", False)),
         "registrationDate": current_user.get("registrationDate"),
         "adminLevel": get_admin_level(current_user),
         "deletionScheduledFor": deletion_scheduled_for_ms(current_user),
+        **privacy_settings_payload(user_settings),
     }
 
 
 @app.get("/profile/me/privacy")
 @limiter.limit("60/minute;1000/hour")
 async def get_privacy_settings(request: Request, current_user: dict = Depends(get_current_user)):
-    user_settings = current_user.get("settings") or {}
-    return {
-        "hideOnlineStatus": bool(user_settings.get("hideOnlineStatus", False)),
-    }
+    return privacy_settings_payload(current_user.get("settings"))
 
 
 @app.patch("/profile/me/privacy")
@@ -3341,12 +3468,27 @@ async def update_privacy_settings(
     payload: PrivacySettingsUpdate,
     current_user: dict = Depends(get_current_user),
 ):
-    hide_flag = bool(payload.hideOnlineStatus)
+    update_data: Dict[str, str] = {}
+    if payload.lastSeenVisibility is not None:
+        update_data["settings.lastSeenVisibility"] = payload.lastSeenVisibility
+    if payload.avatarVisibility is not None:
+        update_data["settings.avatarVisibility"] = payload.avatarVisibility
+    if payload.bioVisibility is not None:
+        update_data["settings.bioVisibility"] = payload.bioVisibility
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No privacy setting provided")
     await cl_users.update_one(
         {"chatId": current_user["chatId"]},
-        {"$set": {"settings.hideOnlineStatus": hide_flag}},
+        {"$set": update_data},
     )
-    return {"hideOnlineStatus": hide_flag}
+    updated_settings = {
+        **(current_user.get("settings") or {}),
+        **{
+            key.removeprefix("settings."): value
+            for key, value in update_data.items()
+        },
+    }
+    return privacy_settings_payload(updated_settings)
 
 
 @app.patch("/profile/me")
@@ -3451,6 +3593,9 @@ async def set_presence_offline(current_user: dict = Depends(get_current_user)):
         allowed_contacts = await _filter_recipients_by_block_status(
             user_id, contacts_to_notify
         )
+        allowed_contacts = await _filter_recipients_by_presence_visibility(
+            user_id, allowed_contacts
+        )
         await broadcast(
             allowed_contacts,
             {
@@ -3538,7 +3683,7 @@ async def search_users(
     for u in users:
         u_blocked_ids = set(_get_blocked_from_user_doc(u))
         blocked_by_other = my_id in u_blocked_ids
-        presence = resolve_user_presence_for_viewer(
+        presence = await resolve_user_presence_for_viewer(
             current_user,
             u,
             blocked=bool(blocked_by_other),
@@ -3549,9 +3694,17 @@ async def search_users(
                 "chatId": u["chatId"],
                 "username": u["profile"]["username"],
                 "name": u["profile"]["name"],
-                "avatar": "" if blocked_by_other else u["profile"]["avatar"],
-                "bio": decrypt_user_bio(
-                    u, str(current_user.get("_session_token") or "")
+                "avatar": (
+                    u["profile"]["avatar"]
+                    if presence.get("avatarVisible") and not blocked_by_other
+                    else ""
+                ),
+                "bio": (
+                    decrypt_user_bio(
+                        u, str(current_user.get("_session_token") or "")
+                    )
+                    if presence.get("bioVisible")
+                    else ""
                 ),
                 "online": presence["online"],
                 "lastSeen": presence.get("lastSeen"),
@@ -3889,7 +4042,7 @@ async def get_chat_list(
         presence = (
             {"online": False, "lastSeen": None, "lastSeenCategory": None}
             if is_group
-            else resolve_user_presence_for_viewer(
+            else await resolve_user_presence_for_viewer(
                 current_user,
                 other_user,
                 blocked=bool(blocked_relation),
@@ -3920,9 +4073,11 @@ async def get_chat_list(
                         (chat.get("groupAvatar") or "")
                         if is_group
                         else (
-                            ""
-                            if blocked_by_other
-                            else (other_user["profile"]["avatar"] if other_user else "")
+                            other_user["profile"]["avatar"]
+                            if other_user
+                            and presence.get("avatarVisible")
+                            and not blocked_by_other
+                            else ""
                         )
                     ),
                     "username": (
@@ -3939,7 +4094,7 @@ async def get_chat_list(
                         if is_group
                         else (
                             decrypt_user_bio(other_user, session_token)
-                            if other_user
+                            if other_user and presence.get("bioVisible")
                             else ""
                         )
                     ),
@@ -4129,7 +4284,7 @@ async def get_chat_members(
 
             u_blocked_ids = set(_get_blocked_from_user_doc(u))
             blocked_by_other = my_id in u_blocked_ids
-            presence = resolve_user_presence_for_viewer(
+            presence = await resolve_user_presence_for_viewer(
                 current_user,
                 u,
                 blocked=bool(blocked_by_other),
@@ -4141,9 +4296,17 @@ async def get_chat_members(
                     "chatId": uid,
                     "name": profile.get("name") or profile.get("username") or uid,
                     "username": profile.get("username", ""),
-                    "avatar": "" if blocked_by_other else profile.get("avatar", ""),
-                    "bio": decrypt_user_bio(
-                        u, str(current_user.get("_session_token") or "")
+                    "avatar": (
+                        profile.get("avatar", "")
+                        if presence.get("avatarVisible") and not blocked_by_other
+                        else ""
+                    ),
+                    "bio": (
+                        decrypt_user_bio(
+                            u, str(current_user.get("_session_token") or "")
+                        )
+                        if presence.get("bioVisible")
+                        else ""
                     ),
                     "verified": bool(u.get("verified", False)),
                     "online": presence["online"],
@@ -4166,7 +4329,7 @@ async def get_chat_members(
     for u in users:
         u_blocked_ids = set(_get_blocked_from_user_doc(u))
         blocked_by_other = my_id in u_blocked_ids
-        presence = resolve_user_presence_for_viewer(
+        presence = await resolve_user_presence_for_viewer(
             current_user,
             u,
             blocked=bool(blocked_by_other),
@@ -4180,9 +4343,17 @@ async def get_chat_members(
                 or profile.get("username")
                 or u.get("chatId", ""),
                 "username": profile.get("username", ""),
-                "avatar": "" if blocked_by_other else profile.get("avatar", ""),
-                "bio": decrypt_user_bio(
-                    u, str(current_user.get("_session_token") or "")
+                "avatar": (
+                    profile.get("avatar", "")
+                    if presence.get("avatarVisible") and not blocked_by_other
+                    else ""
+                ),
+                "bio": (
+                    decrypt_user_bio(
+                        u, str(current_user.get("_session_token") or "")
+                    )
+                    if presence.get("bioVisible")
+                    else ""
                 ),
                 "verified": u.get("verified", False),
                 "online": presence["online"],
@@ -4900,6 +5071,11 @@ async def get_message_seen_by(
 
         u_blocked_ids = set(_get_blocked_from_user_doc(u))
         blocked_by_other = user_id in u_blocked_ids
+        presence = await resolve_user_presence_for_viewer(
+            current_user,
+            u,
+            blocked=bool(blocked_by_other),
+        )
 
         profile = (u or {}).get("profile", {})
         result.append(
@@ -4907,7 +5083,11 @@ async def get_message_seen_by(
                 "chatId": sid,
                 "name": profile.get("name") or profile.get("username") or sid,
                 "username": profile.get("username", ""),
-                "avatar": "" if blocked_by_other else profile.get("avatar", ""),
+                "avatar": (
+                    profile.get("avatar", "")
+                    if presence.get("avatarVisible") and not blocked_by_other
+                    else ""
+                ),
                 "verified": bool((u or {}).get("verified", False)),
             }
         )
@@ -6799,20 +6979,20 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
         user_bio = decrypt_user_bio(user, token)
 
         if became_online:
-            user_doc = await cl_users.find_one({"chatId": chat_id}, {"settings": 1})
-            user_settings = (user_doc or {}).get("settings") or {}
-            hide_online = bool(user_settings.get("hideOnlineStatus", False))
-            if not hide_online:
-                user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
-                contacts_to_notify = set()
-                for chat in user_chats:
-                    for p in chat.get("participants", []):
-                        if p != chat_id:
-                            contacts_to_notify.add(p)
+            user_chats = await cl_chats.find({"participants": chat_id}).to_list(None)
+            contacts_to_notify = set()
+            for chat in user_chats:
+                for p in chat.get("participants", []):
+                    if p != chat_id:
+                        contacts_to_notify.add(p)
 
-                allowed_contacts = await _filter_recipients_by_block_status(
-                    chat_id, contacts_to_notify
-                )
+            allowed_contacts = await _filter_recipients_by_block_status(
+                chat_id, contacts_to_notify
+            )
+            allowed_contacts = await _filter_recipients_by_presence_visibility(
+                chat_id, allowed_contacts
+            )
+            if allowed_contacts:
                 await broadcast(
                     allowed_contacts,
                     {"type": "user_status", "userId": chat_id, "online": True},
@@ -7526,6 +7706,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 allowed_contacts = await _filter_recipients_by_block_status(
                     chat_id, contacts_to_notify
+                )
+                allowed_contacts = await _filter_recipients_by_presence_visibility(
+                    chat_id, allowed_contacts
                 )
                 await broadcast(
                     allowed_contacts,
@@ -8611,7 +8794,7 @@ async def get_chess_leaderboard(
         blocked_by_me = u_id in my_blocked_ids
         blocked_by_other = my_id in u_blocked_ids
         blocked_relation = blocked_by_me or blocked_by_other
-        presence = resolve_user_presence_for_viewer(current_user, u, blocked=blocked_relation)
+        presence = await resolve_user_presence_for_viewer(current_user, u, blocked=blocked_relation)
         stats = u.get("chessStats") or {}
         profile = u.get("profile") or {}
         wins = int(stats.get("wins", 0))
@@ -8628,8 +8811,16 @@ async def get_chess_leaderboard(
                 "chatId": u_id,
                 "username": profile.get("username", ""),
                 "name": profile.get("name", ""),
-                "avatar": "" if blocked_by_other else profile.get("avatar", ""),
-                "bio": decrypt_user_bio(u, session_token),
+                "avatar": (
+                    profile.get("avatar", "")
+                    if presence.get("avatarVisible") and not blocked_by_other
+                    else ""
+                ),
+                "bio": (
+                    decrypt_user_bio(u, session_token)
+                    if presence.get("bioVisible")
+                    else ""
+                ),
                 "online": presence["online"],
                 "lastSeen": presence.get("lastSeen"),
                 "lastSeenCategory": presence.get("lastSeenCategory"),

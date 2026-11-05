@@ -124,7 +124,7 @@ export function formatLastSeen(
     }
     const diffMs = Math.max(0, Date.now() - normalizeTs(user.lastSeen));
     if (diffMs < 60_000) {
-        return 'آخرین بازدید به تازگی';
+        return 'آخرین بازدید لحظاتی پیش';
     }
     const diffMinutes = Math.floor(diffMs / 60_000);
     if (diffMinutes < 60) {

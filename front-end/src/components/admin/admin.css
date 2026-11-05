@@ -83,6 +83,129 @@
     color: var(--text-secondary);
 }
 
+.adm-privacy-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.adm-privacy-row {
+    position: relative;
+    padding: 2px 0 6px;
+}
+
+.adm-privacy-row__head {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: inherit;
+    text-align: right;
+    cursor: pointer;
+}
+
+.adm-privacy-row__label {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.adm-privacy-row__value {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent-primary);
+}
+
+.adm-privacy-row__chevron {
+    transition: transform var(--motion-fast) var(--motion-ease-standard);
+}
+
+.adm-privacy-row__chevron--open {
+    transform: rotate(180deg);
+}
+
+.adm-privacy-row__hint {
+    display: block;
+    padding: 0 2px 2px;
+    font-size: 12px;
+    line-height: 1.8;
+    color: var(--text-secondary);
+}
+
+.adm-privacy-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgba(0, 0, 0, 0.14);
+    pointer-events: none;
+}
+
+.adm-privacy-popover {
+    position: fixed;
+    z-index: 60;
+    width: 168px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px;
+    border-radius: 16px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-surface-elevated);
+    box-shadow: var(--shadow-md);
+    direction: rtl;
+    animation: popover-in var(--motion-base) var(--motion-ease-standard);
+}
+
+html:not(.no-blur-effect) .adm-privacy-popover {
+    background: color-mix(in srgb, var(--bg-primary) 48%, transparent);
+    backdrop-filter: blur(22px) saturate(180%);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+}
+
+.adm-privacy-popover__item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 9px 10px;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: right;
+    transition: background var(--motion-fast) var(--motion-ease-standard), transform var(--motion-fast) var(--motion-ease-standard);
+}
+
+.adm-privacy-popover__item:active {
+    transform: scale(0.98);
+}
+
+.adm-privacy-popover__item:disabled {
+    opacity: 0.7;
+}
+
+.adm-privacy-popover__item:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
+
+.adm-privacy-popover__item--selected {
+    color: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+}
+
 .adm-empty {
     display: flex;
     flex-direction: column;
@@ -401,6 +524,11 @@
     font-size: 14px;
     font-weight: 500;
     position: relative;
+    flex-shrink: 0;
+}
+
+.adm-settings-row--top-gap {
+    margin-top: 8px;
 }
 
 .adm-settings-row--spaced {

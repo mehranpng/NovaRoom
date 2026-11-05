@@ -13,6 +13,7 @@ import { encryptAvatarBytesClientSide } from '../utils/e2ee';
 import { screenVariants } from '../utils/screenMotion';
 import { useScrollFade } from '../hooks/useScrollFade';
 import { copyText } from '../utils/clipboard';
+import { isLtrText } from '../utils/format';
 
 interface ProfileProps {
     user: User;
@@ -467,7 +468,7 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
                                     <span className="profile__section-icon"><FileText size={15} /></span>
                                     بیوگرافی
                                 </div>
-                                <p className={cx('profile__bio-text', !user.bio && 'profile__bio-text--empty')}>
+                                <p className={cx('profile__bio-text', !user.bio && 'profile__bio-text--empty', !!user.bio && isLtrText(user.bio) && 'profile__bio-text--ltr')}>
                                     {user.bio || 'هنوز بیوگرافی اضافه نکرده‌اید.'}
                                 </p>
                             </div>
