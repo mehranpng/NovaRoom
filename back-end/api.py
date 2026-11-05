@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import Response, FileResponse, StreamingResponse
 from starlette.websockets import WebSocketState
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime, timedelta, timezone
 import jwt
 import bcrypt
@@ -202,6 +202,8 @@ MAX_AI_MESSAGES_PER_CHAT = 60
 AI_DAILY_TOKEN_LIMIT = 20000
 AI_DAILY_FILE_LIMIT = 5
 AI_DAILY_SEARCH_LIMIT = 3
+AI_DISABLED_DEFAULT_MESSAGE = "به دلایل فنی Nova AI موقتا غیرفعال هست"
+AI_DISABLED_MESSAGE_MAX_LENGTH = 100
 MAX_AI_USER_MEMORIES = 10
 AI_MAX_FILE_SIZE = 10 * 1024 * 1024
 AI_TEMP_FILE_TTL_SEC = 15 * 60
@@ -1063,6 +1065,27 @@ class RegistrationStateRequest(BaseModel):
     open: bool
 
 
+class AdminAISettingsRequest(BaseModel):
+    enabled: bool = True
+    dailyTokenLimit: int = Field(default=20000, ge=0, le=10_000_000)
+    dailySearchLimit: int = Field(default=3, ge=0, le=10_000)
+    dailyFileLimit: int = Field(default=5, ge=0, le=10_000)
+    disabledMessage: str = Field(default=AI_DISABLED_DEFAULT_MESSAGE, max_length=AI_DISABLED_MESSAGE_MAX_LENGTH)
+
+
+class AdminAIResetQuotaRequest(BaseModel):
+    tokens: bool = False
+    search: bool = False
+    files: bool = False
+
+
+class AdminUserAILimitsRequest(BaseModel):
+    mode: Literal["global", "custom"] = "global"
+    dailyTokenLimit: Optional[int] = Field(default=None, ge=0, le=10_000_000)
+    dailySearchLimit: Optional[int] = Field(default=None, ge=0, le=10_000)
+    dailyFileLimit: Optional[int] = Field(default=None, ge=0, le=10_000)
+
+
 ALLOWED_LINK_TTL_MINUTES = {30, 60, 180, 360, 720, 1440}
 
 
@@ -1393,6 +1416,62 @@ async def is_registration_open() -> bool:
     if not doc:
         return True
     return bool(doc.get("open", True))
+
+
+def _coerce_non_negative_int(value: Any, fallback: int) -> int:
+    try:
+        parsed = int(value)
+        return parsed if parsed >= 0 else fallback
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _coerce_ai_disabled_message(value: Any) -> str:
+    text = str(value or "").strip()
+    return text[:AI_DISABLED_MESSAGE_MAX_LENGTH] if text else AI_DISABLED_DEFAULT_MESSAGE
+
+
+async def get_ai_settings() -> Dict[str, Any]:
+    doc = await cl_app_settings.find_one({"_id": "ai"})
+    if not isinstance(doc, dict):
+        return {
+            "enabled": True,
+            "dailyTokenLimit": AI_DAILY_TOKEN_LIMIT,
+            "dailySearchLimit": AI_DAILY_SEARCH_LIMIT,
+            "dailyFileLimit": AI_DAILY_FILE_LIMIT,
+            "disabledMessage": AI_DISABLED_DEFAULT_MESSAGE,
+        }
+    return {
+        "enabled": bool(doc.get("enabled", True)),
+        "dailyTokenLimit": _coerce_non_negative_int(doc.get("dailyTokenLimit"), AI_DAILY_TOKEN_LIMIT),
+        "dailySearchLimit": _coerce_non_negative_int(doc.get("dailySearchLimit"), AI_DAILY_SEARCH_LIMIT),
+        "dailyFileLimit": _coerce_non_negative_int(doc.get("dailyFileLimit"), AI_DAILY_FILE_LIMIT),
+        "disabledMessage": _coerce_ai_disabled_message(doc.get("disabledMessage")),
+    }
+
+
+def resolve_user_ai_limits(user_doc: Optional[Dict[str, Any]], global_settings: Dict[str, Any]) -> Dict[str, Any]:
+    raw_limits = (user_doc or {}).get("aiLimits")
+    if isinstance(raw_limits, dict) and raw_limits.get("mode") == "custom":
+        return {
+            "mode": "custom",
+            "dailyTokenLimit": _coerce_non_negative_int(raw_limits.get("dailyTokenLimit"), global_settings["dailyTokenLimit"]),
+            "dailySearchLimit": _coerce_non_negative_int(raw_limits.get("dailySearchLimit"), global_settings["dailySearchLimit"]),
+            "dailyFileLimit": _coerce_non_negative_int(raw_limits.get("dailyFileLimit"), global_settings["dailyFileLimit"]),
+        }
+    return {
+        "mode": "global",
+        "dailyTokenLimit": global_settings["dailyTokenLimit"],
+        "dailySearchLimit": global_settings["dailySearchLimit"],
+        "dailyFileLimit": global_settings["dailyFileLimit"],
+    }
+
+
+async def is_ai_enabled_for_user(user_doc: Optional[Dict[str, Any]], global_settings: Optional[Dict[str, Any]] = None) -> bool:
+    if user_doc and get_admin_level(user_doc) == "admin0":
+        return True
+    settings = global_settings or await get_ai_settings()
+    return bool(settings.get("enabled", True))
 
 
 async def consume_link(collection, token: str) -> Optional[dict]:
@@ -2666,10 +2745,14 @@ async def get_account_deletion(
 @app.get("/admin/me")
 @limiter.limit("60/minute;600/hour")
 async def admin_me(request: Request, current_user: dict = Depends(require_admin)):
-    return {
-        "adminLevel": get_admin_level(current_user),
+    level = get_admin_level(current_user)
+    response: Dict[str, Any] = {
+        "adminLevel": level,
         "registrationOpen": await is_registration_open(),
     }
+    if level == "admin0":
+        response["aiSettings"] = await get_ai_settings()
+    return response
 
 
 @app.post("/admin/register-links")
@@ -2885,6 +2968,9 @@ async def admin_user_detail(
         raise HTTPException(status_code=404, detail="User not found")
     login_data = user.get("login") or {}
     last_seen = user.get("lastSeen")
+    global_ai = await get_ai_settings()
+    resolved_limits = resolve_user_ai_limits(user, global_ai)
+    usage_row = await cl_ai_usage.find_one({"userId": chat_id, "dateKey": tehran_day_key()})
     return {
         "chatId": user.get("chatId"),
         "name": ((user.get("profile") or {}).get("name") or ""),
@@ -2900,6 +2986,19 @@ async def admin_user_detail(
         "sessionsCount": len(login_data.get("sessions") or []),
         "hasPassword": bool(login_data.get("password")),
         "deletionStatus": (user.get("deletion") or {}).get("status"),
+        "aiLimits": {
+            **resolved_limits,
+            "globalDefaults": {
+                "dailyTokenLimit": global_ai["dailyTokenLimit"],
+                "dailySearchLimit": global_ai["dailySearchLimit"],
+                "dailyFileLimit": global_ai["dailyFileLimit"],
+            },
+        },
+        "aiUsage": {
+            "tokensUsed": max(0, int(usage_row.get("tokensUsed", 0))) if isinstance(usage_row, dict) else 0,
+            "searchUsed": max(0, int(usage_row.get("searchCount", 0))) if isinstance(usage_row, dict) else 0,
+            "filesUsed": max(0, int(usage_row.get("fileCount", 0))) if isinstance(usage_row, dict) else 0,
+        },
     }
 
 
@@ -3015,6 +3114,131 @@ async def admin_set_registration(
         {"_id": "registration"}, {"$set": {"open": bool(payload.open)}}, upsert=True
     )
     return {"open": bool(payload.open)}
+
+
+def _build_quota_reset_fields(payload: AdminAIResetQuotaRequest) -> Dict[str, int]:
+    fields: Dict[str, int] = {}
+    if payload.tokens:
+        fields["tokensUsed"] = 0
+    if payload.search:
+        fields["searchCount"] = 0
+    if payload.files:
+        fields["fileCount"] = 0
+    return fields
+
+
+@app.put("/admin/ai/settings")
+@limiter.limit("30/minute;200/hour")
+async def admin_update_ai_settings(
+    request: Request,
+    payload: AdminAISettingsRequest,
+    current_user: dict = Depends(require_admin0),
+):
+    settings_doc = {
+        "enabled": bool(payload.enabled),
+        "dailyTokenLimit": int(payload.dailyTokenLimit),
+        "dailySearchLimit": int(payload.dailySearchLimit),
+        "dailyFileLimit": int(payload.dailyFileLimit),
+        "disabledMessage": _coerce_ai_disabled_message(payload.disabledMessage),
+        "updatedAt": utc_now(),
+    }
+    await cl_app_settings.update_one(
+        {"_id": "ai"}, {"$set": settings_doc}, upsert=True
+    )
+    return {
+        "enabled": settings_doc["enabled"],
+        "dailyTokenLimit": settings_doc["dailyTokenLimit"],
+        "dailySearchLimit": settings_doc["dailySearchLimit"],
+        "dailyFileLimit": settings_doc["dailyFileLimit"],
+        "disabledMessage": settings_doc["disabledMessage"],
+    }
+
+
+@app.post("/admin/ai/reset-usage")
+@limiter.limit("20/minute;100/hour")
+async def admin_reset_all_ai_usage(
+    request: Request,
+    payload: AdminAIResetQuotaRequest,
+    current_user: dict = Depends(require_admin0),
+):
+    reset_fields = _build_quota_reset_fields(payload)
+    if not reset_fields:
+        raise HTTPException(status_code=400, detail="At least one quota must be selected")
+    await cl_ai_usage.update_many(
+        {},
+        {"$set": {**reset_fields, "updatedAt": utc_now()}},
+    )
+    return {"reset": True}
+
+
+@app.put("/admin/users/{chat_id}/ai-limits")
+@limiter.limit("30/minute;200/hour")
+async def admin_update_user_ai_limits(
+    request: Request,
+    chat_id: str,
+    payload: AdminUserAILimitsRequest,
+    current_user: dict = Depends(require_admin0),
+):
+    target = await cl_users.find_one({"chatId": chat_id}, {"deletion": 1, "aiLimits": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if is_purging(target):
+        raise HTTPException(status_code=409, detail="Account is being deleted")
+    global_ai = await get_ai_settings()
+    if payload.mode == "custom":
+        ai_limits = {
+            "mode": "custom",
+            "dailyTokenLimit": int(payload.dailyTokenLimit if payload.dailyTokenLimit is not None else global_ai["dailyTokenLimit"]),
+            "dailySearchLimit": int(payload.dailySearchLimit if payload.dailySearchLimit is not None else global_ai["dailySearchLimit"]),
+            "dailyFileLimit": int(payload.dailyFileLimit if payload.dailyFileLimit is not None else global_ai["dailyFileLimit"]),
+        }
+        await cl_users.update_one({"chatId": chat_id}, {"$set": {"aiLimits": ai_limits}})
+    else:
+        await cl_users.update_one({"chatId": chat_id}, {"$unset": {"aiLimits": ""}})
+        ai_limits = {
+            "mode": "global",
+            "dailyTokenLimit": global_ai["dailyTokenLimit"],
+            "dailySearchLimit": global_ai["dailySearchLimit"],
+            "dailyFileLimit": global_ai["dailyFileLimit"],
+        }
+    return {
+        **ai_limits,
+        "globalDefaults": {
+            "dailyTokenLimit": global_ai["dailyTokenLimit"],
+            "dailySearchLimit": global_ai["dailySearchLimit"],
+            "dailyFileLimit": global_ai["dailyFileLimit"],
+        },
+    }
+
+
+@app.post("/admin/users/{chat_id}/ai-reset")
+@limiter.limit("30/minute;200/hour")
+async def admin_reset_user_ai_usage(
+    request: Request,
+    chat_id: str,
+    payload: AdminAIResetQuotaRequest,
+    current_user: dict = Depends(require_admin0),
+):
+    target = await cl_users.find_one({"chatId": chat_id}, {"deletion": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    reset_fields = _build_quota_reset_fields(payload)
+    if not reset_fields:
+        raise HTTPException(status_code=400, detail="At least one quota must be selected")
+    day_key = tehran_day_key()
+    await cl_ai_usage.update_many(
+        {"userId": chat_id},
+        {"$set": {**reset_fields, "updatedAt": utc_now()}},
+    )
+    usage_row = await cl_ai_usage.find_one({"userId": chat_id, "dateKey": day_key})
+    return {
+        "reset": True,
+        "aiUsage": {
+            "tokensUsed": max(0, int(usage_row.get("tokensUsed", 0))) if isinstance(usage_row, dict) else 0,
+            "searchUsed": max(0, int(usage_row.get("searchCount", 0))) if isinstance(usage_row, dict) else 0,
+            "filesUsed": max(0, int(usage_row.get("fileCount", 0))) if isinstance(usage_row, dict) else 0,
+        },
+    }
 
 
 @app.post("/auth/login", response_model=TokenResponse)
@@ -6357,12 +6581,27 @@ async def handle_ai_message(
         return
 
     usage = await get_usage_status(user_id)
+    if not usage.get("aiEnabled", True):
+        await finish_error(
+            {
+                "type": "ai_error",
+                "code": "ai_disabled",
+                "clientId": client_id if isinstance(client_id, str) else None,
+                "aiChatId": ai_chat_id,
+                "message": usage.get("aiDisabledMessage") or AI_DISABLED_DEFAULT_MESSAGE,
+                "usage": usage,
+            }
+        )
+        return
+
     if usage["tokens"]["exhausted"]:
         await finish_error(
             {
                 "type": "ai_error",
                 "code": "ai_daily_limit_reached",
-                "message": "سهمیه ۲۰٬۰۰۰ توکنی امروز شما تکمیل شده است. لطفاً تا ۰۰:۰۰ به وقت تهران صبر کنید.",
+                "clientId": client_id if isinstance(client_id, str) else None,
+                "aiChatId": ai_chat_id,
+                "message": "سهمیه توکن امروز شما تکمیل شده است. لطفاً تا ۰۰:۰۰ به وقت تهران صبر کنید.",
                 "usage": usage,
             }
         )
@@ -6376,7 +6615,12 @@ async def handle_ai_message(
             ai_chat = await ensure_ai_chat(user_id, ai_chat_id)
         except HTTPException:
             await finish_error(
-                {"type": "ai_error", "message": "گفتگوی انتخاب‌شده معتبر نیست."}
+                {
+                    "type": "ai_error",
+                    "clientId": client_id if isinstance(client_id, str) else None,
+                    "aiChatId": ai_chat_id,
+                    "message": "گفتگوی انتخاب‌شده معتبر نیست.",
+                }
             )
             return
 
@@ -6388,6 +6632,8 @@ async def handle_ai_message(
         await finish_error(
             {
                 "type": "ai_error",
+                "clientId": client_id if isinstance(client_id, str) else None,
+                "aiChatId": ai_chat_id,
                 "message": "حداکثر ۶۰ پیام در هر گفتگو مجاز است. لطفاً گفتگوی جدید باز کنید.",
             }
         )
@@ -6398,22 +6644,39 @@ async def handle_ai_message(
         prepared_attachment = await _prepare_ai_attachment(user_id, attachment)
         if not prepared_attachment:
             await finish_error(
-                {"type": "ai_error", "message": "فایل پیوست معتبر نیست یا منقضی شده است."}
+                {
+                    "type": "ai_error",
+                    "clientId": client_id if isinstance(client_id, str) else None,
+                    "aiChatId": ai_chat_id,
+                    "message": "فایل پیوست معتبر نیست یا منقضی شده است.",
+                }
             )
             return
-        if not await consume_file_quota(user_id):
+        if not await consume_file_quota(user_id, usage["files"]["limit"]):
             await _cleanup_ai_temp_attachment(prepared_attachment)
             await finish_error(
-                {"type": "ai_error", "message": "سقف ۵ فایل روزانه شما تکمیل شده است."}
+                {
+                    "type": "ai_error",
+                    "clientId": client_id if isinstance(client_id, str) else None,
+                    "aiChatId": ai_chat_id,
+                    "message": f"سقف {usage['files']['limit']} فایل روزانه شما تکمیل شده است.",
+                    "usage": await get_usage_status(user_id),
+                }
             )
             return
 
     detected_urls = extract_urls_from_text(text) if use_web_search else []
-    if use_web_search and not await consume_search_quota(user_id):
+    if use_web_search and not await consume_search_quota(user_id, usage["search"]["limit"]):
         if prepared_attachment:
             await _cleanup_ai_temp_attachment(prepared_attachment)
         await finish_error(
-            {"type": "ai_error", "message": "سقف ۳ جستجوی روزانه شما تکمیل شده است."}
+            {
+                "type": "ai_error",
+                "clientId": client_id if isinstance(client_id, str) else None,
+                "aiChatId": ai_chat_id,
+                "message": f"سقف {usage['search']['limit']} جستجوی روزانه شما تکمیل شده است.",
+                "usage": await get_usage_status(user_id),
+            }
         )
         return
 
@@ -7287,30 +7550,47 @@ def tehran_day_key(now: Optional[datetime] = None) -> str:
     return base.astimezone(TEHRAN_TZ).strftime("%Y-%m-%d")
 
 
-async def get_usage_status(user_id: str) -> Dict[str, Any]:
+async def get_usage_status(user_id: str, user_doc: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     day_key = tehran_day_key()
+    if user_doc is None:
+        user_doc = await cl_users.find_one(
+            {"chatId": user_id},
+            {"aiLimits": 1, "adminLevel": 1, "profile.username": 1},
+        )
+    global_settings = await get_ai_settings()
+    limits = resolve_user_ai_limits(user_doc, global_settings)
+    token_limit = limits["dailyTokenLimit"]
+    file_limit = limits["dailyFileLimit"]
+    search_limit = limits["dailySearchLimit"]
+    ai_enabled = await is_ai_enabled_for_user(user_doc, global_settings)
+
     row = await cl_ai_usage.find_one({"userId": user_id, "dateKey": day_key})
     tokens_used = max(0, int(row.get("tokensUsed", 0))) if isinstance(row, dict) else 0
     file_used = max(0, int(row.get("fileCount", 0))) if isinstance(row, dict) else 0
     search_used = max(0, int(row.get("searchCount", 0))) if isinstance(row, dict) else 0
-    used_percent = min(100, round((tokens_used / AI_DAILY_TOKEN_LIMIT) * 100)) if AI_DAILY_TOKEN_LIMIT else 100
+    used_percent = min(100, round((tokens_used / token_limit) * 100)) if token_limit > 0 else 100
     return {
         "dateKey": day_key,
         "resetTimezone": "Asia/Tehran",
+        "aiEnabled": ai_enabled,
+        "aiDisabledMessage": global_settings["disabledMessage"],
         "tokens": {
+            "used": tokens_used,
+            "remaining": max(0, token_limit - tokens_used),
+            "limit": token_limit,
             "usedPercent": used_percent,
             "remainingPercent": max(0, 100 - used_percent),
-            "exhausted": tokens_used >= AI_DAILY_TOKEN_LIMIT,
+            "exhausted": tokens_used >= token_limit,
         },
         "files": {
             "used": file_used,
-            "remaining": max(0, AI_DAILY_FILE_LIMIT - file_used),
-            "limit": AI_DAILY_FILE_LIMIT,
+            "remaining": max(0, file_limit - file_used),
+            "limit": file_limit,
         },
         "search": {
             "used": search_used,
-            "remaining": max(0, AI_DAILY_SEARCH_LIMIT - search_used),
-            "limit": AI_DAILY_SEARCH_LIMIT,
+            "remaining": max(0, search_limit - search_used),
+            "limit": search_limit,
         },
     }
 
@@ -7349,12 +7629,20 @@ async def consume_daily_quota(user_id: str, field: str, limit: int) -> bool:
     return True
 
 
-async def consume_file_quota(user_id: str) -> bool:
-    return await consume_daily_quota(user_id, "fileCount", AI_DAILY_FILE_LIMIT)
+async def consume_file_quota(user_id: str, limit: Optional[int] = None) -> bool:
+    if limit is None:
+        user_doc = await cl_users.find_one({"chatId": user_id}, {"aiLimits": 1})
+        limits = resolve_user_ai_limits(user_doc, await get_ai_settings())
+        limit = limits["dailyFileLimit"]
+    return await consume_daily_quota(user_id, "fileCount", limit)
 
 
-async def consume_search_quota(user_id: str) -> bool:
-    return await consume_daily_quota(user_id, "searchCount", AI_DAILY_SEARCH_LIMIT)
+async def consume_search_quota(user_id: str, limit: Optional[int] = None) -> bool:
+    if limit is None:
+        user_doc = await cl_users.find_one({"chatId": user_id}, {"aiLimits": 1})
+        limits = resolve_user_ai_limits(user_doc, await get_ai_settings())
+        limit = limits["dailySearchLimit"]
+    return await consume_daily_quota(user_id, "searchCount", limit)
 
 
 def ai_memory_scope(user_id: str) -> str:
@@ -7416,16 +7704,12 @@ async def sweep_ai_temp_files_task() -> None:
 async def get_ai_usage_status(
     request: Request, current_user: dict = Depends(get_current_user)
 ):
-    status = await get_usage_status(current_user["chatId"])
+    status = await get_usage_status(current_user["chatId"], current_user)
     return {
         **status,
-        "limit": AI_DAILY_TOKEN_LIMIT,
-        "used": AI_DAILY_TOKEN_LIMIT - round(
-            (status["tokens"]["remainingPercent"] / 100) * AI_DAILY_TOKEN_LIMIT
-        ),
-        "remaining": round(
-            (status["tokens"]["remainingPercent"] / 100) * AI_DAILY_TOKEN_LIMIT
-        ),
+        "limit": status["tokens"]["limit"],
+        "used": status["tokens"]["used"],
+        "remaining": status["tokens"]["remaining"],
     }
 
 
@@ -7498,11 +7782,13 @@ async def upload_ai_file(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = current_user["chatId"]
-    usage = await get_usage_status(user_id)
+    usage = await get_usage_status(user_id, current_user)
+    if not usage.get("aiEnabled", True):
+        raise HTTPException(status_code=403, detail=usage.get("aiDisabledMessage") or AI_DISABLED_DEFAULT_MESSAGE)
     if usage["tokens"]["exhausted"]:
         raise HTTPException(status_code=400, detail="سهمیه توکن امروز شما تکمیل شده است.")
     if usage["files"]["remaining"] <= 0:
-        raise HTTPException(status_code=400, detail="سقف ۵ فایل روزانه شما تکمیل شده است.")
+        raise HTTPException(status_code=400, detail=f"سقف {usage['files']['limit']} فایل روزانه شما تکمیل شده است.")
 
     original_name = Path(str(file.filename or "")).name
     extension = Path(original_name).suffix.lower()

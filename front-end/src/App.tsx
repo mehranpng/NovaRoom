@@ -555,7 +555,7 @@ export function App() {
             }
         };
         loadAIUsage();
-    }, [isAuthenticated]);
+    }, [isAuthenticated, showAIChat]);
 
     useEffect(() => {
         if (!isAuthenticated || !activeAIChatId) return;
@@ -1458,17 +1458,26 @@ export function App() {
         )));
     }, [activeAIChatId]);
 
-    const handleAIError = useCallback((payload: { message: string; code?: string; remaining?: number; usage?: AIUsageStatus }) => {
+    const handleAIError = useCallback((payload: { message: string; code?: string; clientId?: string; aiChatId?: string; remaining?: number; usage?: AIUsageStatus }) => {
         const message = String(payload?.message || 'خطا در سرویس هوش مصنوعی');
         notify({ message, type: payload?.code === 'ai_daily_limit_reached' ? 'info' : 'error' });
         if (payload?.usage?.tokens) {
             setAIUsageStatus(payload.usage);
         }
+        if (payload?.clientId) {
+            const targetId = String(payload.aiChatId || activeAIChatId || '');
+            if (targetId) {
+                setAIMessagesByChat((prev) => ({
+                    ...prev,
+                    [targetId]: (prev[targetId] || []).filter((m) => m.id !== payload.clientId),
+                }));
+            }
+        }
         setAITyping(false);
         setAIResponding(false);
         setAIReasoningPending(false);
         setAIRespondingChatId(null);
-    }, []);
+    }, [activeAIChatId]);
 
     
     const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen, sendTyping, sendUploadStatus, reconnectExhausted, reconnectNow, sendAIMessage, stopAIGeneration } = useWebSocket({
@@ -2982,16 +2991,20 @@ export function App() {
         if (!currentUser) return false;
         if (!text.trim() && !attachment) return false;
         if (aiSendInFlightRef.current) return false;
+        if (aiUsageStatus.aiEnabled === false && currentUser.adminLevel !== 'admin0') {
+            notify({ message: aiUsageStatus.aiDisabledMessage || 'به دلایل فنی Nova AI موقتا غیرفعال هست', type: 'error' });
+            return false;
+        }
         if (aiUsageStatus.tokens.exhausted) {
-            notify({ message: 'سهمیه ۲۰٬۰۰۰ توکنی امروز شما تکمیل شده است. تا ۰۰:۰۰ به وقت تهران صبر کنید.', type: 'info' });
+            notify({ message: 'سهمیه توکن امروز شما تکمیل شده است. تا ۰۰:۰۰ به وقت تهران صبر کنید.', type: 'info' });
             return false;
         }
         if (useWebSearch && aiUsageStatus.search.remaining <= 0) {
-            notify({ message: 'سقف ۳ جستجوی روزانه شما تکمیل شده است.', type: 'info' });
+            notify({ message: `سقف ${aiUsageStatus.search.limit} جستجوی روزانه شما تکمیل شده است.`, type: 'info' });
             return false;
         }
         if (attachment && aiUsageStatus.files.remaining <= 0) {
-            notify({ message: 'سقف ۵ فایل روزانه شما تکمیل شده است.', type: 'info' });
+            notify({ message: `سقف ${aiUsageStatus.files.limit} فایل روزانه شما تکمیل شده است.`, type: 'info' });
             return false;
         }
         aiSendInFlightRef.current = true;

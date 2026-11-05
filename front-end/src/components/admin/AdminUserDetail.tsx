@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, Clock, Copy, KeyRound, Loader2, ShieldCheck, Trash2, UserCheck, X } from 'lucide-react';
+import { Bot, Check, ChevronDown, Clock, Copy, KeyRound, Loader2, RotateCcw, Save, ShieldCheck, Trash2, UserCheck, X } from 'lucide-react';
 import { apiFetch } from '../../config/api';
 import { cx } from '../../utils/cx';
 import { notify } from '../../utils/notificationBus';
@@ -44,6 +44,16 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [deleteTyped, setDeleteTyped] = useState('');
     const [deleteLoading, setDeleteLoading] = useState(false);
+    const [aiCardOpen, setAiCardOpen] = useState(false);
+    const [aiLimitMode, setAiLimitMode] = useState<'global' | 'custom'>('global');
+    const [userTokenLimit, setUserTokenLimit] = useState('20000');
+    const [userSearchLimit, setUserSearchLimit] = useState('3');
+    const [userFileLimit, setUserFileLimit] = useState('5');
+    const [aiLimitsSaving, setAiLimitsSaving] = useState(false);
+    const [resetUserTokens, setResetUserTokens] = useState(true);
+    const [resetUserSearch, setResetUserSearch] = useState(true);
+    const [resetUserFiles, setResetUserFiles] = useState(true);
+    const [aiResetLoading, setAiResetLoading] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -54,9 +64,18 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
         setConfirmModal(null);
         setDeleteModalOpen(false);
         setDeleteTyped('');
+        setAiCardOpen(false);
         apiFetch(`/admin/users/${encodeURIComponent(chatId)}`)
             .then((data) => {
-                if (!cancelled) setDetail(data);
+                if (!cancelled) {
+                    setDetail(data);
+                    if (data?.aiLimits) {
+                        setAiLimitMode(data.aiLimits.mode === 'custom' ? 'custom' : 'global');
+                        setUserTokenLimit(String(data.aiLimits.dailyTokenLimit ?? 20000));
+                        setUserSearchLimit(String(data.aiLimits.dailySearchLimit ?? 3));
+                        setUserFileLimit(String(data.aiLimits.dailyFileLimit ?? 5));
+                    }
+                }
             })
             .catch(() => {
                 if (!cancelled) notify({ type: 'error', message: 'دریافت اطلاعات کاربر ممکن نشد' });
@@ -170,6 +189,71 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
             window.setTimeout(() => setCopiedChatId(false), 1500);
         } catch {
             notify({ type: 'error', message: 'کپی آیدی ممکن نشد' });
+        }
+    };
+
+    const handleAiModeSelect = (nextMode: 'global' | 'custom') => {
+        setAiLimitMode(nextMode);
+        if (nextMode === 'global' && detail?.aiLimits?.globalDefaults) {
+            setUserTokenLimit(String(detail.aiLimits.globalDefaults.dailyTokenLimit));
+            setUserSearchLimit(String(detail.aiLimits.globalDefaults.dailySearchLimit));
+            setUserFileLimit(String(detail.aiLimits.globalDefaults.dailyFileLimit));
+        }
+    };
+
+    const saveUserAiLimits = async () => {
+        if (!detail || aiLimitsSaving) return;
+        const tokenNum = Number.parseInt(userTokenLimit, 10);
+        const searchNum = Number.parseInt(userSearchLimit, 10);
+        const fileNum = Number.parseInt(userFileLimit, 10);
+        if (aiLimitMode === 'custom' && (!Number.isFinite(tokenNum) || tokenNum < 0 || !Number.isFinite(searchNum) || searchNum < 0 || !Number.isFinite(fileNum) || fileNum < 0)) {
+            notify({ type: 'error', message: 'مقادیر محدودیت باید عدد صحیح و نامنفی باشند' });
+            return;
+        }
+        setAiLimitsSaving(true);
+        try {
+            const updatedLimits = await apiFetch(`/admin/users/${encodeURIComponent(detail.chatId)}/ai-limits`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    mode: aiLimitMode,
+                    dailyTokenLimit: aiLimitMode === 'custom' ? tokenNum : undefined,
+                    dailySearchLimit: aiLimitMode === 'custom' ? searchNum : undefined,
+                    dailyFileLimit: aiLimitMode === 'custom' ? fileNum : undefined,
+                }),
+            });
+            setDetail({ ...detail, aiLimits: updatedLimits });
+            setAiLimitMode(updatedLimits.mode);
+            setUserTokenLimit(String(updatedLimits.dailyTokenLimit));
+            setUserSearchLimit(String(updatedLimits.dailySearchLimit));
+            setUserFileLimit(String(updatedLimits.dailyFileLimit));
+            notify({ type: 'success', message: 'محدودیت هوش مصنوعی کاربر ذخیره شد' });
+        } catch {
+            notify({ type: 'error', message: 'ذخیره محدودیت کاربر ممکن نشد' });
+        } finally {
+            setAiLimitsSaving(false);
+        }
+    };
+
+    const resetUserAiUsage = async () => {
+        if (!detail || aiResetLoading || (!resetUserTokens && !resetUserSearch && !resetUserFiles)) return;
+        setAiResetLoading(true);
+        try {
+            const data = await apiFetch(`/admin/users/${encodeURIComponent(detail.chatId)}/ai-reset`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    tokens: resetUserTokens,
+                    search: resetUserSearch,
+                    files: resetUserFiles,
+                }),
+            });
+            if (data?.aiUsage) {
+                setDetail({ ...detail, aiUsage: data.aiUsage });
+            }
+            notify({ type: 'success', message: 'محدودیت‌های انتخاب‌شده برای کاربر ریست شد' });
+        } catch {
+            notify({ type: 'error', message: 'ریست محدودیت کاربر ممکن نشد' });
+        } finally {
+            setAiResetLoading(false);
         }
     };
 
@@ -300,6 +384,171 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
                                 <span className="adm-kv__value adm-kv__value--ltr">{detail.sessionsCount}</span>
                             </div>
                         </div>
+                    </div>
+
+                    <div className="adm-card">
+                        <button
+                            type="button"
+                            className="adm-collapse__header"
+                            onClick={() => setAiCardOpen((v) => !v)}
+                            aria-expanded={aiCardOpen}
+                        >
+                            <span className="adm-card__title">
+                                <Bot size={18} />
+                                محدودیت‌های Nova AI
+                            </span>
+                            <ChevronDown size={18} className={cx('adm-collapse__chevron', aiCardOpen && 'adm-collapse__chevron--open')} />
+                        </button>
+
+                        {aiCardOpen && (<>
+                        {detail.aiUsage && (
+                            <div className="adm-kv" style={{ marginTop: 8 }}>
+                                <div className="adm-kv__row">
+                                    <span className="adm-kv__label">توکن مصرفی امروز</span>
+                                    <span className="adm-kv__value adm-kv__value--ltr">
+                                        {detail.aiUsage.tokensUsed} / {detail.aiLimits?.dailyTokenLimit ?? 20000}
+                                    </span>
+                                </div>
+                                <div className="adm-kv__row">
+                                    <span className="adm-kv__label">سرچ امروز</span>
+                                    <span className="adm-kv__value adm-kv__value--ltr">
+                                        {detail.aiUsage.searchUsed} / {detail.aiLimits?.dailySearchLimit ?? 3}
+                                    </span>
+                                </div>
+                                <div className="adm-kv__row">
+                                    <span className="adm-kv__label">تصویر و فایل امروز</span>
+                                    <span className="adm-kv__value adm-kv__value--ltr">
+                                        {detail.aiUsage.filesUsed} / {detail.aiLimits?.dailyFileLimit ?? 5}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="adm-duration">
+                            <span className="adm-duration__label">نوع محدودیت</span>
+                            <div className="adm-chips adm-chips--wrap">
+                                <button
+                                    type="button"
+                                    className={cx('adm-chip', 'adm-tap', aiLimitMode === 'global' && 'adm-chip--active')}
+                                    onClick={() => handleAiModeSelect('global')}
+                                    disabled={isPurging}
+                                >
+                                    سراسری
+                                </button>
+                                <button
+                                    type="button"
+                                    className={cx('adm-chip', 'adm-tap', aiLimitMode === 'custom' && 'adm-chip--active')}
+                                    onClick={() => handleAiModeSelect('custom')}
+                                    disabled={isPurging}
+                                >
+                                    شخصی‌سازی شده
+                                </button>
+                            </div>
+                        </div>
+
+                        {aiLimitMode === 'custom' && (
+                            <div className="adm-grid-inputs">
+                                <div className="adm-field">
+                                    <label className="adm-label">کل توکن‌های مجاز روزانه</label>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        inputMode="numeric"
+                                        dir="ltr"
+                                        className="adm-input"
+                                        value={userTokenLimit}
+                                        onChange={(e) => setUserTokenLimit(e.target.value)}
+                                        disabled={isPurging}
+                                    />
+                                </div>
+                                <div className="adm-field">
+                                    <label className="adm-label">تعداد مجاز سرچ روزانه</label>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        inputMode="numeric"
+                                        dir="ltr"
+                                        className="adm-input"
+                                        value={userSearchLimit}
+                                        onChange={(e) => setUserSearchLimit(e.target.value)}
+                                        disabled={isPurging}
+                                    />
+                                </div>
+                                <div className="adm-field">
+                                    <label className="adm-label">تعداد مجاز تصویر و فایل روزانه</label>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        inputMode="numeric"
+                                        dir="ltr"
+                                        className="adm-input"
+                                        value={userFileLimit}
+                                        onChange={(e) => setUserFileLimit(e.target.value)}
+                                        disabled={isPurging}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        <button
+                            type="button"
+                            className="adm-btn adm-btn--primary adm-btn--block adm-card__action"
+                            onClick={saveUserAiLimits}
+                            disabled={aiLimitsSaving || isPurging}
+                        >
+                            {aiLimitsSaving ? <Loader2 size={18} className="adm-spin" /> : <Save size={18} />}
+                            ذخیره محدودیت هوش مصنوعی
+                        </button>
+
+                        <div className="adm-duration" style={{ marginTop: 18 }}>
+                            <span className="adm-duration__label">ریست مصرف امروز این کاربر</span>
+                            <div className="adm-check-list" style={{ marginTop: 4 }}>
+                                <button
+                                    type="button"
+                                    className="adm-check-item adm-tap"
+                                    onClick={() => setResetUserTokens((v) => !v)}
+                                    disabled={isPurging}
+                                >
+                                    <span>توکن‌های مصرفی</span>
+                                    <span className={cx('adm-check-box', resetUserTokens && 'adm-check-box--checked')}>
+                                        {resetUserTokens && <Check size={14} />}
+                                    </span>
+                                </button>
+                                <button
+                                    type="button"
+                                    className="adm-check-item adm-tap"
+                                    onClick={() => setResetUserSearch((v) => !v)}
+                                    disabled={isPurging}
+                                >
+                                    <span>تعداد سرچ</span>
+                                    <span className={cx('adm-check-box', resetUserSearch && 'adm-check-box--checked')}>
+                                        {resetUserSearch && <Check size={14} />}
+                                    </span>
+                                </button>
+                                <button
+                                    type="button"
+                                    className="adm-check-item adm-tap"
+                                    onClick={() => setResetUserFiles((v) => !v)}
+                                    disabled={isPurging}
+                                >
+                                    <span>تعداد تصویر و فایل</span>
+                                    <span className={cx('adm-check-box', resetUserFiles && 'adm-check-box--checked')}>
+                                        {resetUserFiles && <Check size={14} />}
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            className="adm-btn adm-btn--block adm-tap adm-card__action"
+                            onClick={resetUserAiUsage}
+                            disabled={aiResetLoading || isPurging || (!resetUserTokens && !resetUserSearch && !resetUserFiles)}
+                        >
+                            {aiResetLoading ? <Loader2 size={18} className="adm-spin" /> : <RotateCcw size={18} />}
+                            ریست موارد انتخاب‌شده برای کاربر
+                        </button>
+                        </>)}
                     </div>
 
                     <div className="adm-actions">

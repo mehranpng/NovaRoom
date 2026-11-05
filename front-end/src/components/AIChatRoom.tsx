@@ -811,7 +811,7 @@ export function AIChatRoom({
 
     const toggleWebSearch = () => {
         if (usageStatus.search.remaining <= 0 && !webSearchEnabled) {
-            notify({ message: 'سقف ۳ جستجوی روزانه شما تکمیل شده است.', type: 'info' });
+            notify({ message: `سقف ${toPersianDigits(usageStatus.search.limit)} جستجوی روزانه شما تکمیل شده است.`, type: 'info' });
             return;
         }
         setWebSearchEnabled((prev) => {

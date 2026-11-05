@@ -159,7 +159,12 @@ export interface AIAttachmentMeta {
 export interface AIUsageStatus {
     dateKey: string;
     resetTimezone: string;
+    aiEnabled?: boolean;
+    aiDisabledMessage?: string;
     tokens: {
+        used?: number;
+        remaining?: number;
+        limit?: number;
         usedPercent: number;
         remainingPercent: number;
         exhausted: boolean;

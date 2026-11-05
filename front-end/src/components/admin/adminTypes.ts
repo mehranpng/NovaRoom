@@ -1,3 +1,29 @@
+export interface AdminAISettings {
+    enabled: boolean;
+    dailyTokenLimit: number;
+    dailySearchLimit: number;
+    dailyFileLimit: number;
+    disabledMessage: string;
+}
+
+export interface AdminUserAILimits {
+    mode: 'global' | 'custom';
+    dailyTokenLimit: number;
+    dailySearchLimit: number;
+    dailyFileLimit: number;
+    globalDefaults?: {
+        dailyTokenLimit: number;
+        dailySearchLimit: number;
+        dailyFileLimit: number;
+    };
+}
+
+export interface AdminUserAIUsage {
+    tokensUsed: number;
+    searchUsed: number;
+    filesUsed: number;
+}
+
 export interface AdminUserItem {
     chatId: string;
     name: string;
@@ -19,6 +45,8 @@ export interface AdminUserDetailData extends AdminUserItem {
     email?: string | null;
     sessionsCount: number;
     hasPassword: boolean;
+    aiLimits?: AdminUserAILimits;
+    aiUsage?: AdminUserAIUsage;
 }
 
 export interface RegisterLink {
