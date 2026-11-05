@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronLeft, UserRound } from 'lucide-react';
 import { apiFetch } from '../../config/api';
@@ -18,6 +18,16 @@ interface ChessUserProfileProps {
 }
 
 const HISTORY_PAGE_SIZE = 30;
+const PROFILE_FRESH_MS = 10_000;
+
+interface ProfileSnapshot {
+    history: ChessGameView[];
+    hasMore: boolean;
+    scrollTop: number;
+    updatedAt: number;
+}
+
+const profileSnapshots = new Map<string, ProfileSnapshot>();
 
 const REASON_LABELS: Record<string, string> = {
     checkmate: 'کیش و مات',
@@ -40,28 +50,56 @@ export function ChessUserProfile({
     onOpenGame,
 }: ChessUserProfileProps) {
     const targetUser = entry.user;
-    const [history, setHistory] = useState<ChessGameView[]>([]);
-    const [hasMore, setHasMore] = useState(false);
-    const [loading, setLoading] = useState(true);
+    const cachedProfile = profileSnapshots.get(targetUser.chatId);
+    const [history, setHistory] = useState<ChessGameView[]>(() => cachedProfile?.history ?? []);
+    const [hasMore, setHasMore] = useState(() => cachedProfile?.hasMore ?? false);
+    const [loading, setLoading] = useState(() => !cachedProfile);
     const [loadingMore, setLoadingMore] = useState(false);
     const sentinelRef = useRef<HTMLDivElement | null>(null);
+    const contentRef = useRef<HTMLDivElement | null>(null);
     const loadingMoreRef = useRef(false);
+    const scrollRestoredRef = useRef(false);
+
+    useLayoutEffect(() => {
+        if (scrollRestoredRef.current) return;
+        const el = contentRef.current;
+        const top = profileSnapshots.get(targetUser.chatId)?.scrollTop;
+        if (!el || top == null) return;
+        el.scrollTop = top;
+        scrollRestoredRef.current = true;
+    }, [targetUser.chatId]);
+
+    const rememberScroll = () => {
+        const snapshot = profileSnapshots.get(targetUser.chatId);
+        if (!snapshot) return;
+        snapshot.scrollTop = contentRef.current?.scrollTop ?? 0;
+    };
 
     useEffect(() => {
+        const cached = profileSnapshots.get(targetUser.chatId);
+        if (cached && (cached.history.length > HISTORY_PAGE_SIZE || Date.now() - cached.updatedAt < PROFILE_FRESH_MS)) return;
         let cancelled = false;
-        setLoading(true);
         apiFetch(`/chess/games/history?userId=${encodeURIComponent(targetUser.chatId)}&skip=0&limit=${HISTORY_PAGE_SIZE}`)
             .then((res) => {
                 if (cancelled) return;
                 const games: ChessGameView[] = Array.isArray(res?.games) ? res.games : [];
+                const nextHasMore = Boolean(res?.hasMore);
                 seedChessGames(games);
                 setHistory(games);
-                setHasMore(Boolean(res?.hasMore));
+                setHasMore(nextHasMore);
+                profileSnapshots.set(targetUser.chatId, {
+                    history: games,
+                    hasMore: nextHasMore,
+                    scrollTop: profileSnapshots.get(targetUser.chatId)?.scrollTop ?? 0,
+                    updatedAt: Date.now(),
+                });
             })
             .catch(() => {
                 if (cancelled) return;
-                setHistory([]);
-                setHasMore(false);
+                if (!profileSnapshots.has(targetUser.chatId)) {
+                    setHistory([]);
+                    setHasMore(false);
+                }
             })
             .finally(() => {
                 if (!cancelled) setLoading(false);
@@ -80,12 +118,20 @@ export function ChessUserProfile({
                 `/chess/games/history?userId=${encodeURIComponent(targetUser.chatId)}&skip=${history.length}&limit=${HISTORY_PAGE_SIZE}`,
             );
             const nextGames: ChessGameView[] = Array.isArray(res?.games) ? res.games : [];
+            const nextHasMore = Boolean(res?.hasMore);
             seedChessGames(nextGames);
             setHistory((prev) => {
                 const seen = new Set(prev.map((g) => g.id));
-                return [...prev, ...nextGames.filter((g) => !seen.has(g.id))];
+                const merged = [...prev, ...nextGames.filter((g) => !seen.has(g.id))];
+                profileSnapshots.set(targetUser.chatId, {
+                    history: merged,
+                    hasMore: nextHasMore,
+                    scrollTop: profileSnapshots.get(targetUser.chatId)?.scrollTop ?? 0,
+                    updatedAt: Date.now(),
+                });
+                return merged;
             });
-            setHasMore(Boolean(res?.hasMore));
+            setHasMore(nextHasMore);
         } catch {
             setHasMore(false);
         } finally {
@@ -139,7 +185,7 @@ export function ChessUserProfile({
                 <h1 className="profile__header-title">پروفایل شطرنج</h1>
             </div>
 
-            <div className="profile__content">
+            <div className="profile__content" ref={contentRef}>
                 <div className="chess-lobby__inner">
                     <div className="chess-card chess-user-profile__card">
                         <div className="chess-user-profile__header">
@@ -192,7 +238,10 @@ export function ChessUserProfile({
                         <button
                             type="button"
                             className="chess-primary-btn chess-secondary-btn--icon"
-                            onClick={onOpenContactInfo}
+                            onClick={() => {
+                                rememberScroll();
+                                onOpenContactInfo();
+                            }}
                         >
                             <UserRound size={17} />
                             <span>مشاهده پروفایل کاربر</span>
@@ -223,7 +272,10 @@ export function ChessUserProfile({
                                         <div
                                             key={g.id}
                                             className="chess-history__item"
-                                            onClick={() => onOpenGame(g.id)}
+                                            onClick={() => {
+                                                rememberScroll();
+                                                onOpenGame(g.id);
+                                            }}
                                         >
                                             <div className="chess-history__main">
                                                 {oppInfo?.isGuest ? (

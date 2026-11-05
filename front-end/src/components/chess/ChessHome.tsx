@@ -578,6 +578,7 @@ export function ChessHome({ currentUser, chats, onOpenGame, onOpenAiGame, onSele
                                                 type="button"
                                                 className="chess-leaderboard__item"
                                                 onClick={() => {
+                                                    if (entry.user.chatId === currentUser.chatId) return;
                                                     rememberScroll();
                                                     onSelectLeaderboardEntry(entry);
                                                 }}
