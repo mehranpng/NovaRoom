@@ -30,6 +30,9 @@ interface SearchRequest {
     fen: string;
     movetimeMs: number;
     skillLevel: number;
+    depth: number;
+    multiPv: number;
+    minRankRatio: number;
 }
 
 interface PendingSearch {
@@ -42,6 +45,7 @@ interface ActiveSearch extends PendingSearch {
     startedAt: number;
     cancelled: boolean;
     metrics: SearchMetrics;
+    candidates: string[];
     timer: number;
 }
 
@@ -240,6 +244,7 @@ export class StockfishEngine {
             startedAt: performance.now(),
             cancelled: false,
             metrics: emptyMetrics(),
+            candidates: [],
             timer: 0,
         };
         this.active.timer = window.setTimeout(
@@ -248,9 +253,10 @@ export class StockfishEngine {
         );
         this.setStatus('searching');
 
+        worker.postMessage(`setoption name MultiPV value ${request.multiPv}`);
         worker.postMessage(`setoption name Skill Level value ${request.skillLevel}`);
         worker.postMessage(`position fen ${request.fen}`);
-        worker.postMessage(`go movetime ${request.movetimeMs}`);
+        worker.postMessage(`go depth ${request.depth} movetime ${request.movetimeMs}`);
     }
 
     private stopActive(): void {
@@ -292,6 +298,15 @@ export class StockfishEngine {
         const nps = readNumber(line, 'nps');
         const time = readNumber(line, 'time');
         const score = /(?:^| )score (cp|mate) (-?\d+)/.exec(line);
+        const mateIn = score?.[1] === 'mate' ? Number(score[2]) : null;
+        const pvMove = /(?:^| )pv ([a-h][1-8][a-h][1-8][qrbn]?)/.exec(line)?.[1];
+
+        if (depth !== null && depth > active.metrics.depth) {
+            active.candidates = [];
+        }
+        if (pvMove && mateIn !== -1 && !active.candidates.includes(pvMove)) {
+            active.candidates.push(pvMove);
+        }
 
         active.metrics = {
             depth: depth ?? active.metrics.depth,
@@ -300,7 +315,7 @@ export class StockfishEngine {
             nps: nps ?? active.metrics.nps,
             timeMs: time ?? active.metrics.timeMs,
             scoreCp: score?.[1] === 'cp' ? Number(score[2]) : active.metrics.scoreCp,
-            mateIn: score?.[1] === 'mate' ? Number(score[2]) : active.metrics.mateIn,
+            mateIn: mateIn ?? active.metrics.mateIn,
         };
     }
 
@@ -315,8 +330,17 @@ export class StockfishEngine {
         if (active.cancelled) {
             active.resolve(null);
         } else {
+            let chosen = token && token !== '(none)' ? token : null;
+            if (chosen && active.request.multiPv > 1 && active.candidates.length > 1) {
+                const start = Math.min(
+                    active.candidates.length - 1,
+                    Math.floor(active.candidates.length * active.request.minRankRatio),
+                );
+                const pool = active.candidates.slice(start);
+                chosen = pool[Math.floor(Math.random() * pool.length)] ?? chosen;
+            }
             active.resolve({
-                bestmove: token && token !== '(none)' ? token : null,
+                bestmove: chosen,
                 metrics: active.metrics,
                 elapsedMs: Math.round(performance.now() - active.startedAt),
             });

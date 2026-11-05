@@ -164,8 +164,8 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
     const gameOver = position.isGameOver() || threefoldRepetition || timedOut;
     const isPlayerTurn = position.turn() === playerCode && !gameOver;
     const engineReady = engineStatus === 'ready' || engineStatus === 'searching';
-    const thinking = engineStatus === 'searching' && !isPlayerTurn && !gameOver;
     const hasEngineError = engineError !== null || engineStatus === 'error';
+    const thinking = !isPlayerTurn && !gameOver && !hasEngineError;
     const difficultyConfig = AI_DIFFICULTIES[difficulty];
     const aiName = 'استاک‌فیش';
 
@@ -263,6 +263,7 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
         if (!engine) return;
 
         let cancelled = false;
+        let delayTimer: number | null = null;
         const searchedFen = fen;
 
         engine
@@ -270,6 +271,9 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
                 fen: searchedFen,
                 movetimeMs: difficultyConfig.movetimeMs,
                 skillLevel: difficultyConfig.skillLevel,
+                depth: difficultyConfig.depth,
+                multiPv: difficultyConfig.multiPv,
+                minRankRatio: difficultyConfig.minRankRatio,
             })
             .then((result) => {
                 if (cancelled || !result) return;
@@ -281,48 +285,52 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
                     setEngineError('engine_illegal_move');
                     return;
                 }
-                if (fenRef.current !== searchedFen) return;
+                const bestmove = result.bestmove;
+                const waitMs = Math.max(0, difficultyConfig.movetimeMs - result.elapsedMs);
+                delayTimer = window.setTimeout(() => {
+                    if (cancelled || fenRef.current !== searchedFen) return;
 
-                const board = new Chess(searchedFen);
-                const from = result.bestmove.slice(0, 2) as Square;
-                const to = result.bestmove.slice(2, 4) as Square;
-                const promo = result.bestmove.length > 4 ? (result.bestmove[4] as PromotionPiece) : undefined;
+                    const board = new Chess(searchedFen);
+                    const from = bestmove.slice(0, 2) as Square;
+                    const to = bestmove.slice(2, 4) as Square;
+                    const promo = bestmove.length > 4 ? (bestmove[4] as PromotionPiece) : undefined;
 
-                try {
-                    const move = board.move({ from, to, promotion: promo });
-                    if (!move) {
+                    try {
+                        const move = board.move({ from, to, promotion: promo });
+                        if (!move) {
+                            setEngineError('engine_illegal_move');
+                            return;
+                        }
+                        playChessSound(
+                            soundForMove(
+                                {
+                                    capture: move.isCapture(),
+                                    castle: move.isKingsideCastle() || move.isQueensideCastle(),
+                                    promotion: move.isPromotion(),
+                                    check: board.inCheck(),
+                                },
+                                false,
+                            ),
+                        );
+                        const nowMs = Date.now();
+                        setLine((prev) => {
+                            const last = prev[prev.length - 1];
+                            if (!last || last.fen !== searchedFen) return prev;
+                            return [
+                                ...prev,
+                                {
+                                    fen: board.fen(),
+                                    lastMove: { from, to },
+                                    san: move.san,
+                                    playerMs: last.playerMs,
+                                    at: nowMs,
+                                },
+                            ];
+                        });
+                    } catch {
                         setEngineError('engine_illegal_move');
-                        return;
                     }
-                    playChessSound(
-                        soundForMove(
-                            {
-                                capture: move.isCapture(),
-                                castle: move.isKingsideCastle() || move.isQueensideCastle(),
-                                promotion: move.isPromotion(),
-                                check: board.inCheck(),
-                            },
-                            false,
-                        ),
-                    );
-                    const nowMs = Date.now();
-                    setLine((prev) => {
-                        const last = prev[prev.length - 1];
-                        if (!last || last.fen !== searchedFen) return prev;
-                        return [
-                            ...prev,
-                            {
-                                fen: board.fen(),
-                                lastMove: { from, to },
-                                san: move.san,
-                                playerMs: last.playerMs,
-                                at: nowMs,
-                            },
-                        ];
-                    });
-                } catch {
-                    setEngineError('engine_illegal_move');
-                }
+                }, waitMs);
             })
             .catch((err: unknown) => {
                 if (!cancelled) {
@@ -332,6 +340,7 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
 
         return () => {
             cancelled = true;
+            if (delayTimer !== null) window.clearTimeout(delayTimer);
             engine.stop();
         };
     }, [difficultyConfig, engineReady, fen, gameOver, pageVisible, phase, playerCode, position]);
