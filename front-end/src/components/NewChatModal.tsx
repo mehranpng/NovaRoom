@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Users, Link as LinkIcon, ChevronLeft, Copy, CheckCheck, Lock } from 'lucide-react';
+import { Search, Users, Link as LinkIcon, ChevronLeft, Copy, CheckCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { apiFetch } from '../config/api';
 import { type User } from '../types';
@@ -108,6 +108,8 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
                 setCreatedGroupLink(res.inviteLink);
                 setGroupName('');
             }
+        } catch (error) {
+            setGroupError(error instanceof Error ? error.message : 'ساخت گروه با خطا مواجه شد');
         } finally {
             setCreating(false);
         }
@@ -123,8 +125,8 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
         setJoining(true);
         try {
             await onJoinGroup(inviteCode);
-        } catch {
-            setJoinError('لینک دعوت نامعتبر است یا گروه یافت نشد');
+        } catch (error) {
+            setJoinError(error instanceof Error ? error.message : 'لینک دعوت نامعتبر است یا گروه یافت نشد');
         } finally {
             setJoining(false);
         }
@@ -136,7 +138,8 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
         setTimeout(() => setCopied(false), 2000);
     };
 
-    const isVerified = Boolean(currentUser?.verified);
+    const isAdmin = Boolean(currentUser?.adminLevel);
+    const groupLimitLabel = isAdmin ? 'حداکثر ۳۰ گروه' : 'حداکثر ۲ گروه';
     const trimmedQuery = query.trim().replace(/^@+/, '');
     const searchDirection = textDirection(query.trim());
     const groupNameDirection = textDirection(groupName.trim());
@@ -250,59 +253,50 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
                             style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
                         >
                             <div style={{ ...surfaceStyle, padding: 16 }}>
-                                <p className="profile__field-label" style={{ marginBottom: 10 }}>ساخت گروه</p>
-                                {isVerified ? (
-                                    <>
-                                        <div style={{ position: 'relative' }}>
-                                            <input
-                                                type="text"
-                                                className="profile__field-input"
-                                                style={{ borderRadius: 9999, background: 'var(--bg-primary)', direction: groupNameDirection, textAlign: groupNameDirection === 'rtl' ? 'right' : 'left' }}
-                                                placeholder="نام گروه"
-                                                value={groupName}
-                                                onChange={(e) => {
-                                                    setGroupName(e.target.value);
-                                                    if (groupError) setGroupError('');
-                                                }}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' && !creating) handleCreateGroup();
-                                                }}
-                                            />
-                                        </div>
-                                        {groupError && <p className="new-chat-screen__error">{groupError}</p>}
-                                        <button
-                                            type="button"
-                                            className="new-chat-screen__action new-chat-screen__action--primary"
-                                            onClick={handleCreateGroup}
-                                            disabled={creating}
-                                        >
-                                            <Users size={16} />
-                                            {creating ? 'در حال ساخت...' : 'ساخت گروه جدید'}
-                                        </button>
+                                <p className="profile__field-label" style={{ marginBottom: 10 }}>ساخت گروه ({groupLimitLabel})</p>
+                                <div style={{ position: 'relative' }}>
+                                    <input
+                                        type="text"
+                                        className="profile__field-input"
+                                        style={{ borderRadius: 9999, background: 'var(--bg-primary)', direction: groupNameDirection, textAlign: groupNameDirection === 'rtl' ? 'right' : 'left' }}
+                                        placeholder="نام گروه"
+                                        value={groupName}
+                                        onChange={(e) => {
+                                            setGroupName(e.target.value);
+                                            if (groupError) setGroupError('');
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !creating) handleCreateGroup();
+                                        }}
+                                    />
+                                </div>
+                                {groupError && <p className="new-chat-screen__error">{groupError}</p>}
+                                <button
+                                    type="button"
+                                    className="new-chat-screen__action new-chat-screen__action--primary"
+                                    onClick={handleCreateGroup}
+                                    disabled={creating}
+                                >
+                                    <Users size={16} />
+                                    {creating ? 'در حال ساخت...' : 'ساخت گروه جدید'}
+                                </button>
 
-                                        {createdGroupLink && (
-                                            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-primary)' }}>
-                                                <p className="profile__field-label" style={{ marginBottom: 8, color: 'var(--accent-primary)' }}>گروه ساخته شد</p>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                    <span className="new-chat-screen__invite">
-                                                        {createdGroupLink}
-                                                    </span>
-                                                    <button
-                                                        type="button"
-                                                        onClick={handleCopy}
-                                                        className={`new-chat-screen__copy${copied ? ' new-chat-screen__copy--copied' : ''}`}
-                                                    >
-                                                        {copied ? <CheckCheck size={14} /> : <Copy size={14} />}
-                                                        {copied ? 'کپی شد' : 'کپی'}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </>
-                                ) : (
-                                    <div className="new-chat-screen__notice">
-                                        <Lock size={16} style={{ flexShrink: 0 }} />
-                                        <span>ساخت گروه فقط برای کاربران تأییدشده در دسترس است</span>
+                                {createdGroupLink && (
+                                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-primary)' }}>
+                                        <p className="profile__field-label" style={{ marginBottom: 8, color: 'var(--accent-primary)' }}>گروه ساخته شد</p>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <span className="new-chat-screen__invite">
+                                                {createdGroupLink}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={handleCopy}
+                                                className={`new-chat-screen__copy${copied ? ' new-chat-screen__copy--copied' : ''}`}
+                                            >
+                                                {copied ? <CheckCheck size={14} /> : <Copy size={14} />}
+                                                {copied ? 'کپی شد' : 'کپی'}
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
                             </div>

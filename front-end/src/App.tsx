@@ -2620,6 +2620,7 @@ export function App() {
                         avatar: '',
                         online: false,
                         verified: false,
+                        createdBy: currentUser?.chatId ?? '',
                     },
                     lastMessage: {
                         id: '',
@@ -2639,7 +2640,7 @@ export function App() {
             return res;
         } catch (error) {
             console.error(error);
-            alert('ساخت گروه با خطا مواجه شد');
+            throw error;
         }
     }, [loadChats, currentUser?.chatId]);
 
@@ -2673,7 +2674,9 @@ export function App() {
 
         if (!code) return;
 
-        handleJoinGroup(code);
+        handleJoinGroup(code).catch((error) => {
+            alert(error instanceof Error ? error.message : 'لینک دعوت نامعتبر است یا گروه یافت نشد');
+        });
         url.searchParams.delete('groupInvite');
         window.history.replaceState({}, '', `${url.pathname}${url.search}`);
     }, [isAuthenticated, handleJoinGroup]);
@@ -3130,6 +3133,7 @@ export function App() {
                 lastSeenCategory: (chat.otherUser as any)?.lastSeenCategory,
                 verified: Boolean((chat.otherUser as any)?.verified),
                 registrationDate: (chat.otherUser as any)?.registrationDate,
+                createdBy: (chat.otherUser as any)?.createdBy,
                 ...(typeof (chat.otherUser as any)?.blockedByMe !== 'undefined' ? { blockedByMe: Boolean((chat.otherUser as any)?.blockedByMe) } : {}),
                 ...(typeof (chat.otherUser as any)?.blockedByOther !== 'undefined' ? { blockedByOther: Boolean((chat.otherUser as any)?.blockedByOther) } : {}),
             };

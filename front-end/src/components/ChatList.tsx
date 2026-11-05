@@ -333,12 +333,6 @@ function safeJsonParse<T>(value: string | null): T | null {
     }
 }
 
-function resolveVerified(val: any): boolean {
-    if (val === null || val === undefined) return false;
-    if (val === false || val === 0 || val === 'false' || val === '0') return false;
-    return true;
-}
-
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const token = localStorage.getItem('token');
     const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -426,8 +420,6 @@ export const ChatList = memo(function ChatList({
             return changed ? next : prev;
         });
     }, [chats, activeChatId]);
-
-    const isVerifiedUser = resolveVerified((currentUser as any)?.verified);
 
     const [pinnedIds, setPinnedIds] = useState<string[]>([]);
     const pinnedIdsRef = useRef<string[]>([]);
@@ -1070,7 +1062,8 @@ export const ChatList = memo(function ChatList({
                         const blockedRelation = Boolean((chat.otherUser as any)?.blockedByMe || (chat.otherUser as any)?.blockedByOther);
                         const unreadCount = Math.max(0, Number(chat.unreadCount || 0));
                         const groupStats = group ? getGroupStats(chat) : null;
-                        const menuItemCount = group ? (isVerifiedUser ? 3 : 2) : 2;
+                        const canManageGroup = Boolean(currentUser.adminLevel) || (group && chat.otherUser?.createdBy === currentUser.chatId);
+                        const menuItemCount = group ? (canManageGroup ? 3 : 2) : 2;
 
                         return (
                             <button
@@ -1265,7 +1258,7 @@ export const ChatList = memo(function ChatList({
                                 خروج از گروه
                             </button>
 
-                            {isVerifiedUser && (
+                            {(Boolean(currentUser.adminLevel) || actionMenuChat?.otherUser?.createdBy === currentUser.chatId) && (
                                 <button
                                     className="popover__item popover__item--danger"
                                     type="button"

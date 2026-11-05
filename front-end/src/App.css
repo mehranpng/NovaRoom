@@ -4244,6 +4244,14 @@ html.keyboard-open .chat-room__input-area {
     color: var(--accent-soft-text);
 }
 
+.profile__groups-limit {
+    margin-inline-start: auto;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    direction: rtl;
+}
+
 .profile__groups-empty {
     margin: 2px 2px 4px;
     font-size: 13px;

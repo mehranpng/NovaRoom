@@ -13,7 +13,7 @@ import { apiFetch } from '../config/api';
 import { ImageMediaViewer } from './ImageMediaViewer';
 import { encryptAvatarBytesClientSide } from '../utils/e2ee';
 import { copyText } from '../utils/clipboard';
-import { formatLastSeen, resolveVerified, toPersianDigits } from '../utils/format';
+import { formatLastSeen, toPersianDigits } from '../utils/format';
 
 interface ContactInfoProps {
     user: User;
@@ -174,7 +174,9 @@ export function ContactInfo({
         apiFetch('/profile/me')
             .then((me) => {
                 if (cancelled) return;
-                setCanEditGroup(resolveVerified(me?.verified ?? me?.user?.verified));
+                const isAdmin = Boolean(me?.adminLevel);
+                const isCreator = String(user.createdBy || '') === String(me?.chatId || '');
+                setCanEditGroup(isAdmin || isCreator);
             })
             .catch(() => {
                 if (cancelled) return;
@@ -184,7 +186,7 @@ export function ContactInfo({
         return () => {
             cancelled = true;
         };
-    }, [isGroup]);
+    }, [isGroup, user.chatId, user.createdBy]);
 
     useEffect(() => {
         if (!isGroup || !onOpenMembers || !autoOpenMembers) return;
@@ -382,7 +384,7 @@ export function ContactInfo({
 
                     <h2 className="profile__name">
                         {user.name}
-                        {!isGroup && user.verified ? <VerifiedBadge size={17} /> : null}
+                        {!isGroup && user.verified ? <VerifiedBadge size={20} /> : null}
                     </h2>
 
                     {isGroup ? (

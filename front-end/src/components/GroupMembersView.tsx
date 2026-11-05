@@ -25,7 +25,7 @@ export type GroupMember = {
 type GroupMembersViewProps = {
     contact: User;
     currentUserId: string;
-    isVerifiedUser: boolean;
+    canManageGroup: boolean;
     groupMembers: Record<string, GroupMember>;
     membersLoading: boolean;
     chatStats: { totalMembers: number; onlineMembers: number } | null;
@@ -40,7 +40,7 @@ type GroupMembersViewProps = {
 export function GroupMembersView({
     contact,
     currentUserId,
-    isVerifiedUser,
+    canManageGroup,
     groupMembers,
     membersLoading,
     chatStats,
@@ -119,7 +119,7 @@ export function GroupMembersView({
                 <button className="contact-info__back back-icon-btn" onClick={onBack} type="button"><ChevronLeft size={22} /></button>
                 <div className="contact-info__title">اطلاعات گروه</div>
                 <div className="contact-info__spacer" />
-                {isVerifiedUser && (
+                {canManageGroup && (
                     <button
                         type="button"
                         className="icon-btn"

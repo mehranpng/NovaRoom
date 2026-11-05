@@ -275,6 +275,9 @@ export function ChatRoom({
     const isGroupChat = isOfficialChannel || currentChat?.chatType === 'group';
     const isDirectChat = !isGroupChat;
     const isVerifiedUser = resolveVerified(currentUser?.verified);
+    const canManageGroup = Boolean(isGroupChat && !isOfficialChannel && (
+        currentUser?.adminLevel || String(contact.createdBy || '') === currentUserId
+    ));
     const canSendInOfficialChannel = !isOfficialChannel || isVerifiedUser;
     const canSwipeToReply = !(isOfficialChannel && !isVerifiedUser);
     const blockedByOther = Boolean((contact as any)?.blockedByOther);
@@ -1257,9 +1260,9 @@ export function ChatRoom({
         return selectedMessageIds.filter((id: string) => {
             const msg = messagesById.get(id);
             if (!msg) return false;
-            return msg.senderId === currentUserId || (isGroupChat && isVerifiedUser);
+            return msg.senderId === currentUserId || canManageGroup;
         });
-    }, [selectedMessageIds, messages, currentUserId, isGroupChat, isVerifiedUser]);
+    }, [selectedMessageIds, messages, currentUserId, canManageGroup]);
 
     const canDeleteAnySelected = selectedMessageIds.length > 0 && deletableSelectedIds.length === selectedMessageIds.length;
 
@@ -2262,7 +2265,7 @@ export function ChatRoom({
             <GroupMembersView
                 contact={contact}
                 currentUserId={currentUserId}
-                isVerifiedUser={isVerifiedUser}
+                canManageGroup={canManageGroup}
                 groupMembers={groupMembers}
                 membersLoading={membersLoading}
                 chatStats={chatStats}
@@ -2461,7 +2464,7 @@ export function ChatRoom({
                                                 <LogOut size={16} />
                                                 خروج از گروه
                                             </button>
-                                            {isVerifiedUser && (
+                                            {canManageGroup && (
                                                 <button
                                                     className="popover__item popover__item--danger"
                                                     onClick={openDeleteChatConfirm}
@@ -2591,14 +2594,15 @@ export function ChatRoom({
                 const activeMsg = messagesById.get(msgMenu.id);
                 if (!activeMsg) return null;
                 const activeMsgIsMine = activeMsg.senderId === currentUserId;
-                const canDeleteActiveMsg = activeMsgIsMine || (isGroupChat && isVerifiedUser);
+                const canDeleteActiveMsg = activeMsgIsMine || canManageGroup;
                 const showSeenByAction = isGroupChat && activeMsgIsMine && !isOfficialChannel;
                 const canReplyInMessageMenu = !(isOfficialChannel && !isVerifiedUser);
                 const hasCaption = Boolean((activeMsg.text || '').trim());
                 const isChessMsg = Boolean(activeMsg.chessInvite);
                 const showCopyAction = !isChessMsg && (!activeMsg.file || hasCaption);
                 const showDownloadAction = Boolean(activeMsg.file?.fileId && msgMenu.isFileDownloaded);
-                const canTogglePin = pinnedMessage?.id === activeMsg.id || !((isGroupChat || isOfficialChannel) && !isVerifiedUser);
+                const canTogglePin = pinnedMessage?.id === activeMsg.id
+                    || (isOfficialChannel ? isVerifiedUser : !isGroupChat || canManageGroup);
 
                 return (
                     <div ref={msgMenuRef} className="popover popover--mini"

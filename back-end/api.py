@@ -193,6 +193,9 @@ VALID_REACTIONS = [
 ]
 
 MAX_PINNED_CHATS = 20
+MAX_GROUP_MEMBERS = 30
+GROUP_CREATE_LIMIT_ADMIN = 30
+GROUP_CREATE_LIMIT_USER = 2
 MAX_CHAT_MESSAGE_LENGTH = 6000
 MAX_AI_MESSAGE_LENGTH = 3000
 MAX_AI_MESSAGES_PER_CHAT = 60
@@ -1361,6 +1364,12 @@ def get_admin_level(user: dict) -> Optional[str]:
         return "admin0"
     level = user.get("adminLevel")
     return level if level == "admin1" else None
+
+
+def can_manage_group(user: dict, chat: dict) -> bool:
+    if get_admin_level(user) is not None:
+        return True
+    return str(chat.get("createdBy") or "") == str(user.get("chatId") or "")
 
 
 async def require_admin0(current_user: dict = Depends(get_current_user)):
@@ -3372,11 +3381,6 @@ async def create_group(
     req: GroupCreateRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    if not bool(current_user.get("verified", False)):
-        raise HTTPException(
-            status_code=403, detail="Only verified users can create groups"
-        )
-
     name = (req.name or "").strip()
     if len(name) < 3:
         raise HTTPException(
@@ -3386,6 +3390,20 @@ async def create_group(
         raise HTTPException(status_code=400, detail="Group name is too long")
 
     creator_id = current_user["chatId"]
+    group_limit = (
+        GROUP_CREATE_LIMIT_ADMIN
+        if get_admin_level(current_user) is not None
+        else GROUP_CREATE_LIMIT_USER
+    )
+    created_groups = await cl_chats.count_documents(
+        {"chatType": "group", "createdBy": creator_id}
+    )
+    if created_groups >= group_limit:
+        raise HTTPException(
+            status_code=403,
+            detail=f"محدودیت ساخت گروه: حداکثر {group_limit} گروه",
+        )
+
     chat_id = f"grp_{uuid.uuid4().hex[:16]}"
     invite_code = uuid.uuid4().hex[:12]
     now = utc_now()
@@ -3431,10 +3449,34 @@ async def join_group(
         raise HTTPException(status_code=404, detail="Group not found")
 
     user_id = current_user["chatId"]
-    await cl_chats.update_one(
-        {"_id": group_chat["_id"]},
+    participants = group_chat.get("participants", []) or []
+    if user_id not in participants and len(participants) >= MAX_GROUP_MEMBERS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"ظرفیت گروه تکمیل شده است (حداکثر {MAX_GROUP_MEMBERS} عضو)",
+        )
+
+    updated = await cl_chats.update_one(
+        {
+            "_id": group_chat["_id"],
+            "$expr": {
+                "$lt": [
+                    {"$size": {"$ifNull": ["$participants", []]}},
+                    MAX_GROUP_MEMBERS,
+                ]
+            },
+        },
         {"$addToSet": {"participants": user_id}, "$set": {"updatedAt": utc_now()}},
     )
+    if updated.modified_count == 0:
+        refreshed = await cl_chats.find_one(
+            {"_id": group_chat["_id"]}, {"participants": 1}
+        )
+        if user_id not in ((refreshed or {}).get("participants", []) or []):
+            raise HTTPException(
+                status_code=400,
+                detail=f"ظرفیت گروه تکمیل شده است (حداکثر {MAX_GROUP_MEMBERS} عضو)",
+            )
 
     return {
         "chatId": group_chat["_id"],
@@ -3490,13 +3532,6 @@ async def update_group(
     req: GroupUpdateRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    if not bool(current_user.get("verified", False)):
-        raise HTTPException(
-            status_code=403, detail="Only verified users can update groups"
-        )
-
-    my_id = current_user["chatId"]
-
     chat = await cl_chats.find_one({"_id": chat_id})
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -3504,7 +3539,7 @@ async def update_group(
     if chat.get("chatType") != "group":
         raise HTTPException(status_code=400, detail="Not a group chat")
 
-    if my_id not in (chat.get("participants", []) or []):
+    if not can_manage_group(current_user, chat):
         raise HTTPException(status_code=403, detail="Not allowed")
 
     update_data = {}
@@ -3706,6 +3741,7 @@ async def get_chat_list(
                         )
                     ),
                     "isGroup": is_group,
+                    "createdBy": chat.get("createdBy") if is_group else None,
                 },
                 "lastMessage": last_msg,
                 "pinnedMessage": pinned_msg,
@@ -3949,15 +3985,11 @@ async def delete_chat(
         raise HTTPException(status_code=404, detail="Chat not found")
 
     participants = chat.get("participants", [])
-    if my_id not in participants:
+    if chat.get("chatType") == "group":
+        if not can_manage_group(current_user, chat):
+            raise HTTPException(status_code=403, detail="Not allowed")
+    elif my_id not in participants:
         raise HTTPException(status_code=403, detail="Not allowed")
-
-    if chat.get("chatType") == "group" and not bool(
-        current_user.get("verified", False)
-    ):
-        raise HTTPException(
-            status_code=403, detail="Only verified users can delete groups"
-        )
 
     file_ids: set = set()
     async for msg in cl_messages.find({"chatId": chat_id}, {"file": 1}):
@@ -4738,8 +4770,8 @@ async def pin_message(
             raise HTTPException(status_code=404, detail="Chat not found")
         if user_id not in (chat_doc.get("participants", []) or []):
             raise HTTPException(status_code=403, detail="Forbidden")
-        if chat_doc.get("chatType") == "group" and not bool(
-            current_user.get("verified", False)
+        if chat_doc.get("chatType") == "group" and not can_manage_group(
+            current_user, chat_doc
         ):
             raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -4827,7 +4859,7 @@ async def unpin_message(
             raise HTTPException(status_code=403, detail="Forbidden")
 
     is_group = bool(chat_doc and chat_doc.get("chatType") == "group")
-    if is_group and not bool(current_user.get("verified", False)):
+    if is_group and not can_manage_group(current_user, chat_doc):
         current_pinned = chat_doc.get("pinnedMessage") or {}
         pinned_id = current_pinned.get("id") if isinstance(current_pinned, dict) else None
         if pinned_id:
@@ -4887,7 +4919,8 @@ async def batch_delete_messages(
 
     if not is_saved and not is_official:
         chat_doc = await cl_chats.find_one(
-            {"_id": chat_id}, {"participants": 1, "pinnedMessage": 1}
+            {"_id": chat_id},
+            {"participants": 1, "pinnedMessage": 1, "chatType": 1, "createdBy": 1},
         )
         if not chat_doc or user_id not in (chat_doc.get("participants", []) or []):
             raise HTTPException(status_code=403, detail="Forbidden")
@@ -4905,8 +4938,15 @@ async def batch_delete_messages(
     if not msgs:
         return {"ok": True, "deletedIds": []}
 
-    is_verified = bool(current_user.get("verified", False))
-    authorized_msgs = [m for m in msgs if m.get("senderId") == user_id or is_verified]
+    is_group = bool(chat_doc and chat_doc.get("chatType") == "group")
+    can_delete_others = (
+        can_manage_group(current_user, chat_doc)
+        if is_group
+        else bool(current_user.get("verified", False))
+    )
+    authorized_msgs = [
+        m for m in msgs if m.get("senderId") == user_id or can_delete_others
+    ]
     if not authorized_msgs:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -6829,9 +6869,18 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 if msg.get("senderId") != chat_id:
                     requester = await cl_users.find_one(
-                        {"chatId": chat_id}, {"verified": 1}
+                        {"chatId": chat_id},
+                        {"verified": 1, "adminLevel": 1, "profile.username": 1},
                     )
-                    if not requester or not bool(requester.get("verified", False)):
+                    if not requester:
+                        continue
+                    permission_chat = await cl_chats.find_one(
+                        {"_id": chat_id_target}, {"chatType": 1, "createdBy": 1}
+                    )
+                    if permission_chat and permission_chat.get("chatType") == "group":
+                        if not can_manage_group(requester, permission_chat):
+                            continue
+                    elif not bool(requester.get("verified", False)):
                         continue
 
                 saved_chat_id = get_saved_messages_id(chat_id)

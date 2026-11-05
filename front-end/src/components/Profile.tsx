@@ -52,6 +52,7 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
     const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
     const [usernameHint, setUsernameHint] = useState<string>('');
     const checkTimerRef = useRef<number | null>(null);
+    const groupCreationLimit = user.adminLevel ? 30 : 2;
 
     const nameRef = useRef<HTMLInputElement | null>(null);
     const usernameRef = useRef<HTMLInputElement | null>(null);
@@ -310,7 +311,7 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
 
                     <h2 className="profile__name">
                         {user.name}
-                        {user.verified ? <VerifiedBadge size={17} /> : null}
+                        {user.verified ? <VerifiedBadge size={20} /> : null}
                     </h2>
                     <p className="profile__username-display">@{user.username}</p>
 
@@ -501,6 +502,9 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
                                 <div className="profile__section-title">
                                     <span className="profile__section-icon"><Users size={15} /></span>
                                     گروه‌های ساخته‌شده توسط شما
+                                    <span className="profile__groups-limit">
+                                        {toPersianDigits(ownedGroups.length)} از {toPersianDigits(groupCreationLimit)}
+                                    </span>
                                 </div>
                                 {ownedGroups.length === 0 ? (
                                     <p className="profile__groups-empty">هنوز گروهی نساخته‌اید.</p>
