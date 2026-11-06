@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Copy, Eye, MoreVertical, Pencil, Smile, Trash2, X, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload, Download, Pin, AtSign, Heart } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, Eye, MoreVertical, Pencil, Smile, Trash2, X, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload, Download, Pin, AtSign, Heart, Bell, BellOff, BellMinus } from 'lucide-react';
 import { AnimatePresence, motion } from "framer-motion";
 import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata, PendingAttachment, PendingForwardDraft, PinnedMessage } from '../types';
 import { Avatar } from './Avatar';
@@ -22,6 +22,7 @@ import { formatDayLabel, formatLastSeen, formatMessageTime, messageDayKey, resol
 import { copyText } from '../utils/clipboard';
 import { triggerHaptic } from '../utils/haptics';
 import { updateSearchPillsFade } from '../utils/searchPillsFade';
+import { getChatNotifyMode, setChatNotifyMode, useNotificationPrefs } from '../utils/pushNotifications';
 import { ChatMessageItem, type ReactionEntry } from './ChatMessageItem';
 import { ChatComposer, type ChatComposerSendPayload } from './ChatComposer';
 import { GroupMembersView, type GroupMember } from './GroupMembersView';
@@ -294,8 +295,11 @@ export function ChatRoom({
     const canSwipeToReply = !(isOfficialChannel && !isVerifiedUser);
     const blockedByOther = Boolean((contact as any)?.blockedByOther);
     const isContactBlocked = isDirectChat && !chatId.startsWith('saved_messages_') && (blockedByOther || Boolean(isUserBlocked?.(contact)));
+    const notifyPrefs = useNotificationPrefs();
+    const notifyMode = getChatNotifyMode(notifyPrefs, chatId);
 
     const [chatMenuOpen, setChatMenuOpen] = useState(false);
+    const [chatMenuSubmenu, setChatMenuSubmenu] = useState<null | 'notifications'>(null);
     const [confirmDeleteChat, setConfirmDeleteChat] = useState(false);
     const [confirmLeaveGroup, setConfirmLeaveGroup] = useState(false);
     const [confirmDeleteMsg, setConfirmDeleteMsg] = useState<string | null>(null);
@@ -1441,6 +1445,37 @@ export function ChatRoom({
     }, []);
 
     useEffect(() => {
+        if (!chatMenuOpen) return;
+        const closeMenu = () => setChatMenuOpen(false);
+        window.addEventListener('scroll', closeMenu, true);
+        window.addEventListener('resize', closeMenu);
+        return () => {
+            window.removeEventListener('scroll', closeMenu, true);
+            window.removeEventListener('resize', closeMenu);
+        };
+    }, [chatMenuOpen]);
+
+    useEffect(() => {
+        if (!chatMenuOpen) return;
+        const dismiss = (event: MouseEvent) => {
+            const target = event.target as Node;
+            if (menuRef.current?.contains(target)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            setChatMenuOpen(false);
+            setMsgMenu(null);
+            setReactionMenu(null);
+            setSeenByMenu(null);
+        };
+        document.addEventListener('click', dismiss, true);
+        return () => document.removeEventListener('click', dismiss, true);
+    }, [chatMenuOpen]);
+
+    useEffect(() => {
+        if (!chatMenuOpen) setChatMenuSubmenu(null);
+    }, [chatMenuOpen]);
+
+    useEffect(() => {
         return () => {
             if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
             if (highlightRafRef.current) cancelAnimationFrame(highlightRafRef.current);
@@ -2228,7 +2263,11 @@ export function ChatRoom({
         const room = roomRef.current;
         if (!room) return;
 
-        
+        if (chatMenuOpen) {
+            setChatMenuOpen(false);
+            return;
+        }
+
         if (msgMenu || reactionMenu || seenByMenu) {
             setMsgMenu(null);
             setReactionMenu(null);
@@ -2766,51 +2805,132 @@ export function ChatRoom({
                         </div>
                     </button>
 
-                    {!isSavedMessages && !isOfficialChannel && (
+                    {!isSavedMessages && !isOfficialChannel && chatId !== 'pending' && (
                         <div className="chat-room__header-actions" ref={menuRef}>
                             <button
                                 className="icon-btn"
                                 onClick={() => setChatMenuOpen((v) => !v)}
                                 aria-label="More"
-                                disabled={!canDeleteChat}
-                                style={!canDeleteChat ? { opacity: 0.4, cursor: 'default' } : undefined}
                                 type="button"
                             >
                                 <MoreVertical size={20} />
                             </button>
 
-                            {chatMenuOpen && canDeleteChat && (
-                                <div className="popover popover--mini popover--right">
-                                    {isGroupChat ? (
+                            {chatMenuOpen && (
+                                <div
+                                    className="popover popover--mini popover--right"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                    }}
+                                >
+                                    {isGroupChat && chatMenuSubmenu !== 'notifications' ? (
+                                        <button
+                                            className="popover__item"
+                                            onClick={() => setChatMenuSubmenu('notifications')}
+                                            type="button"
+                                        >
+                                            <Bell size={16} />
+                                            اعلان‌ها
+                                            <ChevronRight size={16} style={{ marginInlineStart: 'auto', opacity: 0.5 }} />
+                                        </button>
+                                    ) : chatMenuSubmenu === 'notifications' ? (
                                         <>
                                             <button
-                                                className="popover__item popover__item--danger"
-                                                onClick={openLeaveGroupConfirm}
+                                                type="button"
+                                                className="popover__item"
+                                                onClick={() => setChatMenuSubmenu(null)}
+                                                style={{ direction: 'rtl', justifyContent: 'flex-end', gap: 6, padding: '4px 10px 8px', fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}
+                                            >
+                                                <span>اعلان‌ها</span>
+                                                <ChevronLeft size={16} />
+                                            </button>
+                                            <button
+                                                className="popover__item"
+                                                onClick={() => {
+                                                    setChatMenuOpen(false);
+                                                    void setChatNotifyMode(chatId, 'all');
+                                                }}
                                                 type="button"
                                             >
-                                                <LogOut size={16} />
-                                                خروج از گروه
+                                                <Bell size={16} />
+                                                همه پیام‌ها
+                                                {notifyMode === 'all' && <Check size={16} style={{ marginInlineStart: 'auto' }} />}
                                             </button>
-                                            {canManageGroup && (
+                                            <button
+                                                className="popover__item"
+                                                onClick={() => {
+                                                    setChatMenuOpen(false);
+                                                    void setChatNotifyMode(chatId, 'mentions');
+                                                }}
+                                                type="button"
+                                            >
+                                                <BellMinus size={16} />
+                                                فقط منشن و پاسخ
+                                                {notifyMode === 'mentions' && <Check size={16} style={{ marginInlineStart: 'auto' }} />}
+                                            </button>
+                                            <button
+                                                className="popover__item"
+                                                onClick={() => {
+                                                    setChatMenuOpen(false);
+                                                    void setChatNotifyMode(chatId, 'muted');
+                                                }}
+                                                type="button"
+                                            >
+                                                <BellOff size={16} />
+                                                بی‌صدا
+                                                {notifyMode === 'muted' && <Check size={16} style={{ marginInlineStart: 'auto' }} />}
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <button
+                                            className="popover__item"
+                                            onClick={() => {
+                                                setChatMenuOpen(false);
+                                                void setChatNotifyMode(chatId, notifyMode === 'muted' ? 'all' : 'muted');
+                                            }}
+                                            type="button"
+                                        >
+                                            {notifyMode === 'muted' ? <Bell size={16} /> : <BellOff size={16} />}
+                                            {notifyMode === 'muted' ? 'باصدا کردن' : 'بی‌صدا کردن'}
+                                        </button>
+                                    )}
+
+                                    {canDeleteChat && chatMenuSubmenu !== 'notifications' && (
+                                        <>
+                                            <div style={{ height: 1, background: 'var(--glass-border)', margin: '4px 6px' }} />
+                                            {isGroupChat ? (
+                                                <>
+                                                    <button
+                                                        className="popover__item popover__item--danger"
+                                                        onClick={openLeaveGroupConfirm}
+                                                        type="button"
+                                                    >
+                                                        <LogOut size={16} />
+                                                        خروج از گروه
+                                                    </button>
+                                                    {canManageGroup && (
+                                                        <button
+                                                            className="popover__item popover__item--danger"
+                                                            onClick={openDeleteChatConfirm}
+                                                            type="button"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                            حذف گروه
+                                                        </button>
+                                                    )}
+                                                </>
+                                            ) : (
                                                 <button
                                                     className="popover__item popover__item--danger"
                                                     onClick={openDeleteChatConfirm}
                                                     type="button"
                                                 >
                                                     <Trash2 size={16} />
-                                                    حذف گروه
+                                                    حذف گفتگو
                                                 </button>
                                             )}
                                         </>
-                                    ) : (
-                                        <button
-                                            className="popover__item popover__item--danger"
-                                            onClick={openDeleteChatConfirm}
-                                            type="button"
-                                        >
-                                            <Trash2 size={16} />
-                                            حذف گفتگو
-                                        </button>
                                     )}
                                 </div>
                             )}
@@ -3220,6 +3340,8 @@ export function ChatRoom({
                     onTypingChange={handleTypingChange}
                     onRegisterUploadFile={handleRegisterUploadFile}
                     onInputFocus={handleInputFocus}
+                    notificationsMuted={notifyMode === 'muted'}
+                    onToggleNotifications={isOfficialChannel && !isVerifiedUser ? () => void setChatNotifyMode(chatId, notifyMode === 'muted' ? 'all' : 'muted') : undefined}
                 />
             </div>
 

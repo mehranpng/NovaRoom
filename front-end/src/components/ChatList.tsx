@@ -1,4 +1,4 @@
-import { Search, Plus, LogOut, Bookmark, Trash2, RefreshCw, Pin, PinOff, MessageSquarePlus, X, AtSign, Heart } from 'lucide-react';
+import { Search, Plus, LogOut, Bookmark, Trash2, RefreshCw, Pin, PinOff, MessageSquarePlus, X, AtSign, Heart, Bell, BellOff, BellMinus, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Chat, User } from '../types';
@@ -10,6 +10,7 @@ import { EmptyState } from './EmptyState';
 import { ChatListSkeleton } from './ChatListSkeleton';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { API_BASE_URL } from '../config/api';
+import { getChatNotifyMode, setChatNotifyMode, useNotificationPrefs } from '../utils/pushNotifications';
 
 interface ChatListProps {
     chats: Chat[];
@@ -380,6 +381,7 @@ export const ChatList = memo(function ChatList({
     const [searchQuery, setSearchQuery] = useState('');
     const [searchOpen, setSearchOpen] = useState(false);
     const searchInputRef = useRef<HTMLInputElement | null>(null);
+    const notifyPrefs = useNotificationPrefs();
     useDarkMode();
 
     const isMobile = useIsMobile(768);
@@ -425,6 +427,7 @@ export const ChatList = memo(function ChatList({
     const pinnedIdsRef = useRef<string[]>([]);
 
     const [chatActionMenu, setChatActionMenu] = useState<null | { chatId: string; top: number; left: number }>(null);
+    const [actionMenuSubmenu, setActionMenuSubmenu] = useState<null | 'notifications'>(null);
     const chatItemsRef = useRef<HTMLDivElement | null>(null);
     const chatActionMenuRef = useRef<HTMLDivElement | null>(null);
     const chatActionBtnRef = useRef<HTMLElement | null>(null);
@@ -718,6 +721,7 @@ export const ChatList = memo(function ChatList({
 
     const openActionMenu = (chatId: string, btnEl: HTMLElement, menuItemCount: number, allowToggle = true) => {
         chatActionBtnRef.current = btnEl;
+        setActionMenuSubmenu(null);
         menuOpenedAtRef.current = Date.now();
         const r = btnEl.getBoundingClientRect();
         const menuWidth = 190;
@@ -782,6 +786,10 @@ export const ChatList = memo(function ChatList({
             window.removeEventListener('mouseup', release);
         };
     }, [menuPressSuppressed]);
+
+    useEffect(() => {
+        if (!chatActionMenu) setActionMenuSubmenu(null);
+    }, [chatActionMenu]);
 
     useEffect(() => {
         if (!chatActionMenu) return;
@@ -855,6 +863,9 @@ export const ChatList = memo(function ChatList({
     const actionMenuPinned = actionMenuChat ? isPinned(actionMenuChat.id) : false;
     const actionMenuSaved = actionMenuChat ? actionMenuChat.id === savedMessagesId : false;
     const actionMenuGroup = actionMenuChat ? isGroupChat(actionMenuChat) : false;
+    const actionMenuOfficial = actionMenuChat?.id === 'official-channel';
+    const actionMenuGroupNotifications = actionMenuGroup && !actionMenuOfficial;
+    const actionMenuMode = actionMenuChat ? getChatNotifyMode(notifyPrefs, actionMenuChat.id) : 'all';
 
     return (
         <div className={cx('chat-list', chatActionMenu && 'chat-list--menu-open', menuPressSuppressed && 'chat-list--press-suppressed')} style={{ position: 'relative' }}>
@@ -965,6 +976,7 @@ export const ChatList = memo(function ChatList({
                         const pinned = isPinned(chat.id);
                         const group = !isSaved && isGroupChat(chat);
                         const isOfficial = chat.id === 'official-channel';
+                        const notifyMode = getChatNotifyMode(notifyPrefs, chat.id);
 
                         if (isSaved) {
                             return (
@@ -1065,7 +1077,9 @@ export const ChatList = memo(function ChatList({
                         const unreadReactionCount = (!isOfficial && !isSaved) ? (chat.unreadReactionIds?.length || 0) : 0;
                         const groupStats = group ? getGroupStats(chat) : null;
                         const canManageGroup = Boolean(currentUser.adminLevel) || (group && chat.otherUser?.createdBy === currentUser.chatId);
-                        const menuItemCount = group ? (canManageGroup ? 3 : 2) : 2;
+                        const menuItemCount = group
+                            ? (canManageGroup ? 4 : 3)
+                            : (isOfficial ? 2 : 3);
 
                         return (
                             <button
@@ -1154,6 +1168,11 @@ export const ChatList = memo(function ChatList({
                                                     style={{ opacity: 0.95, fill: 'currentColor' }}
                                                 />
                                             ) : null}
+                                            {notifyMode === 'muted' ? (
+                                                <BellOff size={14} className="chat-list__mute-icon" aria-label="بی‌صدا" />
+                                            ) : notifyMode === 'mentions' ? (
+                                                <BellMinus size={14} className="chat-list__mute-icon" aria-label="فقط منشن و پاسخ" />
+                                            ) : null}
                                         </span>
 
                                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -1191,7 +1210,7 @@ export const ChatList = memo(function ChatList({
                                                     </span>
                                                 )}
                                                 {unreadCount > 0 && (
-                                                    <span className="chat-list__unread-badge">{toPersianDigits(unreadCount)}</span>
+                                                    <span className={cx('chat-list__unread-badge', notifyMode === 'muted' && 'chat-list__unread-badge--muted')}>{toPersianDigits(unreadCount)}</span>
                                                 )}
                                             </div>
                                         )}
@@ -1240,41 +1259,149 @@ export const ChatList = memo(function ChatList({
                         e.stopPropagation();
                     }}
                 >
-                    <button
-                        className="popover__item"
-                        type="button"
-                        onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setChatActionMenu(null);
-                            togglePin(actionMenuChat.id);
-                        }}
-                        disabled={Boolean(pinBusy[actionMenuChat.id])}
-                        style={pinBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
-                    >
-                        {actionMenuPinned ? <PinOff size={16} /> : <Pin size={16} />}
-                        {actionMenuPinned ? 'برداشتن سنجاق' : 'سنجاق'}
-                    </button>
-
-                    {actionMenuSaved || actionMenuChat?.id === 'official-channel' ? null : actionMenuGroup ? (
+                    {actionMenuSubmenu === 'notifications' && actionMenuGroupNotifications ? (
                         <>
                             <button
-                                className="popover__item popover__item--danger"
+                                type="button"
+                                className="popover__item"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setActionMenuSubmenu(null);
+                                }}
+                                style={{ direction: 'rtl', justifyContent: 'flex-end', gap: 6, padding: '4px 10px 8px', fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}
+                            >
+                                <span>اعلان‌ها</span>
+                                <ChevronLeft size={16} />
+                            </button>
+                            <button
+                                className="popover__item"
                                 type="button"
                                 onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
                                     setChatActionMenu(null);
-                                    requestLeaveGroup(actionMenuChat.id);
+                                    void setChatNotifyMode(actionMenuChat.id, 'all');
                                 }}
-                                disabled={Boolean(actionBusy[actionMenuChat.id])}
-                                style={actionBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
                             >
-                                <LogOut size={16} />
-                                خروج از گروه
+                                <Bell size={16} />
+                                همه پیام‌ها
+                                {actionMenuMode === 'all' && <Check size={16} style={{ marginInlineStart: 'auto' }} />}
+                            </button>
+                            <button
+                                className="popover__item"
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setChatActionMenu(null);
+                                    void setChatNotifyMode(actionMenuChat.id, 'mentions');
+                                }}
+                            >
+                                <BellMinus size={16} />
+                                فقط منشن و پاسخ
+                                {actionMenuMode === 'mentions' && <Check size={16} style={{ marginInlineStart: 'auto' }} />}
+                            </button>
+                            <button
+                                className="popover__item"
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setChatActionMenu(null);
+                                    void setChatNotifyMode(actionMenuChat.id, 'muted');
+                                }}
+                            >
+                                <BellOff size={16} />
+                                بی‌صدا
+                                {actionMenuMode === 'muted' && <Check size={16} style={{ marginInlineStart: 'auto' }} />}
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <button
+                                className="popover__item"
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setChatActionMenu(null);
+                                    togglePin(actionMenuChat.id);
+                                }}
+                                disabled={Boolean(pinBusy[actionMenuChat.id])}
+                                style={pinBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
+                            >
+                                {actionMenuPinned ? <PinOff size={16} /> : <Pin size={16} />}
+                                {actionMenuPinned ? 'برداشتن سنجاق' : 'سنجاق'}
                             </button>
 
-                            {(Boolean(currentUser.adminLevel) || actionMenuChat?.otherUser?.createdBy === currentUser.chatId) && (
+                            {actionMenuSaved ? null : actionMenuGroupNotifications ? (
+                                <button
+                                    className="popover__item"
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setActionMenuSubmenu('notifications');
+                                    }}
+                                >
+                                    <Bell size={16} />
+                                    اعلان‌ها
+                                    <ChevronRight size={16} style={{ marginInlineStart: 'auto', opacity: 0.5 }} />
+                                </button>
+                            ) : (
+                                <button
+                                    className="popover__item"
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setChatActionMenu(null);
+                                        void setChatNotifyMode(actionMenuChat.id, actionMenuMode === 'all' ? 'muted' : 'all');
+                                    }}
+                                >
+                                    {actionMenuMode === 'all' ? <BellOff size={16} /> : <Bell size={16} />}
+                                    {actionMenuMode === 'all' ? 'بی‌صدا کردن' : 'باصدا کردن'}
+                                </button>
+                            )}
+
+                            {actionMenuSaved || actionMenuChat?.id === 'official-channel' ? null : actionMenuGroup ? (
+                                <>
+                                    <button
+                                        className="popover__item popover__item--danger"
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setChatActionMenu(null);
+                                            requestLeaveGroup(actionMenuChat.id);
+                                        }}
+                                        disabled={Boolean(actionBusy[actionMenuChat.id])}
+                                        style={actionBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
+                                    >
+                                        <LogOut size={16} />
+                                        خروج از گروه
+                                    </button>
+
+                                    {(Boolean(currentUser.adminLevel) || actionMenuChat?.otherUser?.createdBy === currentUser.chatId) && (
+                                        <button
+                                            className="popover__item popover__item--danger"
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setChatActionMenu(null);
+                                                requestDeleteChat(actionMenuChat.id, true);
+                                            }}
+                                            disabled={Boolean(actionBusy[actionMenuChat.id])}
+                                            style={actionBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
+                                        >
+                                            <Trash2 size={16} />
+                                            حذف گروه
+                                        </button>
+                                    )}
+                                </>
+                            ) : (
                                 <button
                                     className="popover__item popover__item--danger"
                                     type="button"
@@ -1282,32 +1409,16 @@ export const ChatList = memo(function ChatList({
                                         e.preventDefault();
                                         e.stopPropagation();
                                         setChatActionMenu(null);
-                                        requestDeleteChat(actionMenuChat.id, true);
+                                        requestDeleteChat(actionMenuChat.id, false);
                                     }}
                                     disabled={Boolean(actionBusy[actionMenuChat.id])}
                                     style={actionBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
                                 >
                                     <Trash2 size={16} />
-                                    حذف گروه
+                                    حذف گفتگو
                                 </button>
                             )}
                         </>
-                    ) : (
-                        <button
-                            className="popover__item popover__item--danger"
-                            type="button"
-                            onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setChatActionMenu(null);
-                                requestDeleteChat(actionMenuChat.id, false);
-                            }}
-                            disabled={Boolean(actionBusy[actionMenuChat.id])}
-                            style={actionBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
-                        >
-                            <Trash2 size={16} />
-                            حذف گفتگو
-                        </button>
                     )}
                 </div>
             )}

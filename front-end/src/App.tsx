@@ -27,6 +27,15 @@ import { useDarkMode, syncThemeColor } from './hooks/useDarkMode';
 import { BottomNavbar } from './components/BottomNavbar';
 import { ChessScreen } from './components/chess/ChessScreen';
 import { ChessJoinPage } from './components/chess/ChessJoinPage';
+import {
+    closeChatNotifications,
+    ensurePushSubscription,
+    getPermission,
+    loadNotificationPrefs,
+    playNotificationSound,
+    registerServiceWorker,
+    unsubscribePush,
+} from './utils/pushNotifications';
 import './App.css';
 
 
@@ -347,6 +356,44 @@ export function App() {
             receiveSoundRef.current = null;
         };
     }, [isAuthenticated, isAuthChecking]);
+
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        void registerServiceWorker();
+        void loadNotificationPrefs();
+        if (getPermission() === 'granted') {
+            void ensurePushSubscription();
+        }
+    }, [isAuthenticated]);
+
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        const onMessage = (event: MessageEvent) => {
+            if (event.data?.type === 'nr-open-url' && typeof event.data.url === 'string' && event.data.url.startsWith('/')) {
+                navigate(event.data.url);
+            }
+            if (event.data?.type === 'nr-push-shown') {
+                playNotificationSound();
+            }
+        };
+        const container = typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined;
+        container?.addEventListener('message', onMessage);
+        return () => container?.removeEventListener('message', onMessage);
+    }, [isAuthenticated, navigate]);
+
+    useEffect(() => {
+        if (view === 'chatRoom' && activeChatId) {
+            void closeChatNotifications(activeChatId);
+        }
+    }, [activeChatId, view]);
+
+    useEffect(() => {
+        const handler = () => {
+            void loadNotificationPrefs();
+        };
+        window.addEventListener('novaroom:notify_settings_changed', handler);
+        return () => window.removeEventListener('novaroom:notify_settings_changed', handler);
+    }, []);
 
     useEffect(() => {
         if (desktopSidebarWidth == null) return;
@@ -722,11 +769,15 @@ export function App() {
             navigate('/login', { replace: true });
         };
 
-        apiFetch('/auth/logout', { method: 'POST' })
-            .catch((err) => {
-                console.warn('Logout session cleanup failed:', err);
-            })
-            .finally(finalizeLogout);
+        void unsubscribePush()
+            .catch(() => void 0)
+            .finally(() => {
+                apiFetch('/auth/logout', { method: 'POST' })
+                    .catch((err) => {
+                        console.warn('Logout session cleanup failed:', err);
+                    })
+                    .finally(finalizeLogout);
+            });
     }, [navigate]);
 
     const handleTypingStatus = useCallback((chatId: string, userId: string, isTyping: boolean) => {
@@ -1791,6 +1842,9 @@ export function App() {
         }, 15000);
 
         const handleVisibilityOrFocus = () => {
+            if (viewRef.current === 'chatRoom' && activeChatIdRef.current) {
+                void closeChatNotifications(activeChatIdRef.current);
+            }
             void syncFromServer();
         };
         document.addEventListener('visibilitychange', handleVisibilityOrFocus);
@@ -2049,6 +2103,10 @@ export function App() {
         }
         if (pathname === '/settings/privacy') {
             setView('settingsPrivacy');
+            return;
+        }
+        if (pathname === '/settings/notifications') {
+            setView('settingsNotifications');
             return;
         }
         if (pathname === '/settings/data-storage') {
@@ -3504,7 +3562,7 @@ export function App() {
                             <>
                                 <Settings
                                     key={view}
-                                    section={view === 'settingsDevices' ? 'devices' : view === 'settingsTheme' ? 'theme' : view === 'settingsLogs' ? 'logs' : view === 'settingsDataStorage' ? 'dataStorage' : view === 'settingsPrivacy' ? 'privacy' : view === 'settingsAdmin' ? 'adminMenu' : view === 'settingsAdminPanel' ? 'adminPanel' : view === 'settingsAdminLinks' ? 'adminLinks' : 'menu'}
+                                    section={view === 'settingsDevices' ? 'devices' : view === 'settingsTheme' ? 'theme' : view === 'settingsLogs' ? 'logs' : view === 'settingsDataStorage' ? 'dataStorage' : view === 'settingsPrivacy' ? 'privacy' : view === 'settingsNotifications' ? 'notifications' : view === 'settingsAdmin' ? 'adminMenu' : view === 'settingsAdminPanel' ? 'adminPanel' : view === 'settingsAdminLinks' ? 'adminLinks' : 'menu'}
                                     adminSection={adminPanelSection}
                                     onAdminSectionChange={(adminSection) => navigate(adminSection === 'settings' ? '/settings/admin/panel' : `/settings/admin/panel/${adminSection}`)}
                                     onOpenSection={(section) => navigate(section === 'logs' ? '/settings/devices/logs' : section === 'dataStorage' ? '/settings/data-storage' : section === 'privacy' ? '/settings/privacy' : section === 'adminMenu' ? '/settings/admin' : section === 'adminPanel' ? '/settings/admin/panel' : section === 'adminLinks' ? '/settings/admin/links' : `/settings/${section}`)}

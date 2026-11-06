@@ -15,4 +15,5 @@ pypdf==6.21.4
 chess==1.11.2
 boto3==1.43.123
 cryptography>=42.0.0
+pywebpush==2.0.3
 

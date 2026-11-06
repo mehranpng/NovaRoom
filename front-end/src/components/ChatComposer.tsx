@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pencil, X } from 'lucide-react';
+import { Bell, BellOff, Pencil, X } from 'lucide-react';
 import { SendIcon } from './SendIcon';
 import type { MessageReply, PendingAttachment, PendingForwardDraft } from '../types';
 import { pendingUploadedFileByChat } from '../utils/pendingUploads';
@@ -45,6 +45,8 @@ type ChatComposerProps = {
     onTypingChange?: (chatId: string, isTyping: boolean) => void;
     onRegisterUploadFile: (handler: ((file: File) => void) | null) => void;
     onInputFocus: () => void;
+    notificationsMuted?: boolean;
+    onToggleNotifications?: () => void;
 };
 
 function isMobileKeyboardInput() {
@@ -85,6 +87,8 @@ export const ChatComposer = memo(function ChatComposer({
     onTypingChange,
     onRegisterUploadFile,
     onInputFocus,
+    notificationsMuted = false,
+    onToggleNotifications,
 }: ChatComposerProps) {
     const [text, setText] = useState(() => (editingId ? editDraft : ''));
     const [caretPos, setCaretPos] = useState(0);
@@ -357,9 +361,20 @@ export const ChatComposer = memo(function ChatComposer({
                         {blockedMessage}
                     </div>
                 ) : !canSend ? (
-                    <div className="chat-room__blocked-box" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-primary)', background: 'var(--bg-secondary)' }}>
-                        فقط کاربران تاییدشده می‌توانند در این کانال پیام ارسال کنند.
-                    </div>
+                    onToggleNotifications ? (
+                        <button
+                            type="button"
+                            className="chat-room__blocked-box chat-room__blocked-box--action"
+                            onClick={onToggleNotifications}
+                        >
+                            {notificationsMuted ? <Bell size={15} /> : <BellOff size={15} />}
+                            {notificationsMuted ? 'باصدا کردن اعلان‌ها' : 'بی‌صدا کردن اعلان‌ها'}
+                        </button>
+                    ) : (
+                        <div className="chat-room__blocked-box" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-primary)', background: 'var(--bg-secondary)' }}>
+                            فقط کاربران تاییدشده می‌توانند در این کانال پیام ارسال کنند.
+                        </div>
+                    )
                 ) : (
                     <>
                         <FileUpload

@@ -44,6 +44,7 @@ import json
 from bson import ObjectId
 import re
 import uuid
+import urllib.parse
 import jdatetime
 from ai_service import (
     extract_urls_from_text,
@@ -56,6 +57,7 @@ from ai_service import (
 from api_reaction_helper import aggregate_reactions
 import chess_service
 from chess_service import ChessError
+from pywebpush import webpush, WebPushException
 from file_service import (
     UPLOAD_DIR,
     save_uploaded_file,
@@ -150,6 +152,10 @@ cl_pending_file_deletions = db["pending_file_deletions"]
 cl_register_links = db["register_links"]
 cl_password_links = db["password_links"]
 cl_app_settings = db["app_settings"]
+cl_push_subscriptions = db["push_subscriptions"]
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "").strip()
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "").strip()
+VAPID_SUBJECT = os.getenv("VAPID_SUBJECT", "mailto:admin@novaroom.org").strip()
 
 active_connections: Dict[str, List[WebSocket]] = {}
 active_ai_connections: Dict[str, List[WebSocket]] = {}
@@ -1836,6 +1842,9 @@ async def logout(
         {"$set": {"login.sessions": next_sessions}, "$unset": {"login.token": ""}},
     )
     await _sync_login_seen_by_with_sessions(user["chatId"], next_sessions)
+    await cl_push_subscriptions.delete_many(
+        {"userId": user["chatId"], "tokenHash": token_hash}
+    )
     user_id = user["chatId"]
     for ws in list(active_connections.get(user_id, [])):
         try:
@@ -2327,6 +2336,7 @@ async def run_account_purge(user_id: str) -> None:
             except Exception as e:
                 print(f"AI temp file purge warning: {e}")
         await cl_ai_temp_files.delete_many({"userId": user_id})
+        await cl_push_subscriptions.delete_many({"userId": user_id})
 
         await cl_register_links.delete_many({"createdBy": user_id})
         await cl_password_links.delete_many(
@@ -2421,6 +2431,7 @@ async def startup_db():
             cl_users.create_index("deletion.scheduledFor", sparse=True),
             cl_messages.create_index("senderId"),
             cl_ai_temp_files.create_index("userId"),
+            cl_push_subscriptions.create_index("userId"),
             return_exceptions=True,
         )
         AI_TEMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -2525,6 +2536,166 @@ async def migrate_unencrypted_messages():
             )
         if updates:
             await cl_ai_chats.update_one({"_id": c["_id"]}, {"$set": updates})
+
+
+class PushSubscriptionKeys(BaseModel):
+    p256dh: str = Field(..., min_length=1, max_length=200)
+    auth: str = Field(..., min_length=1, max_length=100)
+
+
+class PushSubscribeRequest(BaseModel):
+    endpoint: str = Field(..., min_length=10, max_length=1000)
+    keys: PushSubscriptionKeys
+
+
+class PushUnsubscribeRequest(BaseModel):
+    endpoint: str = Field(..., min_length=10, max_length=1000)
+
+
+class NotificationSettingsUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    sound: Optional[bool] = None
+
+
+class ChatNotifyModeUpdate(BaseModel):
+    mode: Literal["all", "muted", "mentions"]
+
+
+@app.get("/push/vapid-public-key")
+@limiter.limit("60/minute")
+async def get_vapid_public_key(request: Request):
+    return {"publicKey": VAPID_PUBLIC_KEY}
+
+
+@app.post("/push/subscribe")
+@limiter.limit("20/minute;200/hour")
+async def push_subscribe(
+    request: Request,
+    body: PushSubscribeRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    user = await get_user_from_session_token(credentials.credentials)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    endpoint = body.endpoint.strip()
+    if not endpoint.startswith("https://"):
+        raise HTTPException(status_code=400, detail="Invalid endpoint")
+    me = user["chatId"]
+    sub_id = hashlib.sha256(endpoint.encode("utf-8")).hexdigest()
+    existing = await cl_push_subscriptions.find_one({"_id": sub_id}, {"_id": 1})
+    count = await cl_push_subscriptions.count_documents({"userId": me})
+    if not existing and count >= 20:
+        oldest = (
+            await cl_push_subscriptions.find({"userId": me}, {"_id": 1})
+            .sort("updatedAt", 1)
+            .limit(count - 19)
+            .to_list(None)
+        )
+        if oldest:
+            await cl_push_subscriptions.delete_many(
+                {"_id": {"$in": [doc["_id"] for doc in oldest]}}
+            )
+    now = utc_now()
+    await cl_push_subscriptions.update_one(
+        {"_id": sub_id},
+        {
+            "$set": {
+                "userId": me,
+                "tokenHash": hash_access_token(credentials.credentials),
+                "endpoint": endpoint,
+                "keys": {"p256dh": body.keys.p256dh, "auth": body.keys.auth},
+                "userAgent": str(request.headers.get("user-agent") or "")[:300],
+                "updatedAt": now,
+            },
+            "$setOnInsert": {"createdAt": now},
+        },
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@app.post("/push/unsubscribe")
+@limiter.limit("20/minute")
+async def push_unsubscribe(
+    request: Request,
+    body: PushUnsubscribeRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    user = await get_user_from_session_token(credentials.credentials)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    sub_id = hashlib.sha256(body.endpoint.strip().encode("utf-8")).hexdigest()
+    await cl_push_subscriptions.delete_one(
+        {"_id": sub_id, "userId": user["chatId"]}
+    )
+    return {"ok": True}
+
+
+@app.get("/profile/me/notifications")
+@limiter.limit("100/minute;2000/hour")
+async def get_notification_settings(
+    request: Request, current_user: dict = Depends(get_current_user)
+):
+    return _notification_prefs(current_user)
+
+
+@app.put("/profile/me/notifications")
+@limiter.limit("30/minute")
+async def update_notification_settings(
+    request: Request,
+    body: NotificationSettingsUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    me = current_user["chatId"]
+    updates: Dict[str, Any] = {}
+    if body.enabled is not None:
+        updates["settings.notifications.enabled"] = bool(body.enabled)
+    if body.sound is not None:
+        updates["settings.notifications.sound"] = bool(body.sound)
+    if updates:
+        await cl_users.update_one({"chatId": me}, {"$set": updates})
+    user = await cl_users.find_one({"chatId": me}, {"settings": 1})
+    return _notification_prefs(user or {})
+
+
+@app.put("/profile/me/notifications/chats/{chat_id}")
+@limiter.limit("30/minute;300/hour")
+async def update_chat_notify_mode(
+    request: Request,
+    chat_id: str,
+    body: ChatNotifyModeUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    me = current_user["chatId"]
+    if not chat_id or "." in chat_id or chat_id.startswith("$"):
+        raise HTTPException(status_code=400, detail="Invalid chatId")
+    if chat_id == get_saved_messages_id(me):
+        raise HTTPException(status_code=400, detail="Saved messages is not supported")
+    chat = None
+    if not is_official_channel_chat(chat_id):
+        chat = await cl_chats.find_one(
+            {"_id": chat_id}, {"participants": 1, "chatType": 1}
+        )
+        if not chat:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        if me not in (chat.get("participants") or []):
+            raise HTTPException(status_code=403, detail="Forbidden")
+    if body.mode == "mentions" and not (chat and chat.get("chatType") == "group"):
+        raise HTTPException(
+            status_code=400, detail="Mentions mode is only for groups"
+        )
+    if body.mode == "all":
+        await cl_users.update_one(
+            {"chatId": me}, {"$unset": {f"settings.chatNotifyModes.{chat_id}": ""}}
+        )
+    else:
+        await cl_users.update_one(
+            {"chatId": me},
+            {"$set": {f"settings.chatNotifyModes.{chat_id}": body.mode}},
+        )
+    user = await cl_users.find_one({"chatId": me}, {"settings": 1})
+    await broadcast([me], {"type": "notify_settings_changed"})
+    return _notification_prefs(user or {})
 
 
 @app.get("/profile/me/pins")
@@ -6166,6 +6337,21 @@ async def forward_message(
         }
         await broadcast(participants_to_notify, msg_payload)
 
+    if not is_target_saved:
+        target_chat_meta = await cl_chats.find_one(
+            {"_id": target_chat_id}, {"chatType": 1}
+        )
+        schedule_push(
+            notify_chat_message(
+                target_chat_id,
+                user_id,
+                participants_to_notify,
+                bool(target_chat_meta and target_chat_meta.get("chatType") == "group"),
+                is_target_official,
+                [],
+            )
+        )
+
     return {
         "success": True,
         "messageId": created_ids[-1],
@@ -6201,6 +6387,198 @@ async def broadcast(user_ids: Iterable[str], payload: dict):
     await asyncio.gather(
         *(safe_send(uid, payload) for uid in set(user_ids)), return_exceptions=True
     )
+
+
+def _notif_settings(user_doc) -> dict:
+    raw = ((user_doc or {}).get("settings") or {}).get("notifications") or {}
+    if not isinstance(raw, dict):
+        raw = {}
+    return {
+        "enabled": bool(raw.get("enabled", True)),
+        "sound": bool(raw.get("sound", True)),
+    }
+
+
+def _chat_notify_modes(user_doc) -> dict:
+    raw = ((user_doc or {}).get("settings") or {}).get("chatNotifyModes") or {}
+    if not isinstance(raw, dict):
+        return {}
+    return {str(key): value for key, value in raw.items() if value in ("muted", "mentions")}
+
+
+def _notification_prefs(user_doc) -> dict:
+    settings = _notif_settings(user_doc)
+    return {
+        "enabled": settings["enabled"],
+        "sound": settings["sound"],
+        "chatModes": _chat_notify_modes(user_doc),
+    }
+
+
+def _send_webpush_sync(sub: dict, payload: dict) -> Optional[int]:
+    try:
+        webpush(
+            subscription_info={"endpoint": sub["endpoint"], "keys": sub["keys"]},
+            data=json.dumps(payload, ensure_ascii=False),
+            vapid_private_key=VAPID_PRIVATE_KEY,
+            vapid_claims={"sub": VAPID_SUBJECT},
+            ttl=86400,
+            headers={"Urgency": "high"},
+        )
+        return None
+    except WebPushException as error:
+        response = getattr(error, "response", None)
+        return response.status_code if response is not None else 0
+    except Exception:
+        return 0
+
+
+_push_tasks: set = set()
+
+
+def schedule_push(coro) -> None:
+    task = asyncio.create_task(coro)
+    _push_tasks.add(task)
+    task.add_done_callback(_push_tasks.discard)
+
+
+async def push_to_users(user_ids: Iterable[str], payload_for_user) -> None:
+    if not VAPID_PUBLIC_KEY or not VAPID_PRIVATE_KEY:
+        return
+    ids = sorted({str(uid) for uid in user_ids if uid})
+    if not ids:
+        return
+    try:
+        users = await cl_users.find(
+            {"chatId": {"$in": ids}, **NOT_PURGING},
+            {"chatId": 1, "settings": 1, "login.sessions": 1},
+        ).to_list(len(ids))
+        for user in users:
+            settings = _notif_settings(user)
+            if not settings["enabled"]:
+                continue
+            payload = payload_for_user(user)
+            if payload is None:
+                continue
+            payload = dict(payload)
+            payload["silent"] = not settings["sound"]
+            uid = user.get("chatId")
+            valid_hashes = {
+                session.get("tokenHash") for session in _normalize_session_list(user)
+            }
+            subscriptions = await cl_push_subscriptions.find({"userId": uid}).to_list(
+                None
+            )
+            if not subscriptions:
+                continue
+            active = [
+                sub for sub in subscriptions if sub.get("tokenHash") in valid_hashes
+            ]
+            stale_ids = [
+                sub["_id"]
+                for sub in subscriptions
+                if sub.get("tokenHash") not in valid_hashes
+            ]
+            statuses = await asyncio.gather(
+                *(
+                    asyncio.to_thread(_send_webpush_sync, sub, payload)
+                    for sub in active
+                )
+            )
+            stale_ids.extend(
+                sub["_id"]
+                for sub, status in zip(active, statuses)
+                if status in (404, 410)
+            )
+            if stale_ids:
+                await cl_push_subscriptions.delete_many(
+                    {"_id": {"$in": stale_ids}}
+                )
+    except Exception:
+        traceback.print_exc()
+
+
+async def notify_chat_message(
+    chat_id_target: str,
+    sender_id: str,
+    participants: List[str],
+    is_group: bool,
+    is_official: bool,
+    mention_user_ids: List[str],
+) -> None:
+    recipients = [p for p in set(participants or []) if p and p != sender_id]
+    if not recipients:
+        return
+    sender = await cl_users.find_one(
+        {"chatId": sender_id}, {"profile.name": 1, "profile.username": 1}
+    )
+    sender_profile = (sender or {}).get("profile") or {}
+    sender_name = str(
+        sender_profile.get("name") or sender_profile.get("username") or "کاربر"
+    )
+    chat_title = sender_name
+    if is_official:
+        chat_title = "کانال رسمی"
+    elif is_group:
+        chat = await cl_chats.find_one({"_id": chat_id_target}, {"groupName": 1})
+        chat_title = str((chat or {}).get("groupName") or sender_name)
+    base = {
+        "kind": "chat",
+        "chatId": chat_id_target,
+        "chatType": "official" if is_official else ("group" if is_group else "direct"),
+        "senderName": sender_name,
+        "chatTitle": chat_title,
+        "url": f"/chat/{urllib.parse.quote(chat_id_target, safe='')}",
+        "icon": "/logo/icon-192.png",
+    }
+    mentioned_ids = {str(uid) for uid in (mention_user_ids or []) if uid}
+
+    def payload_for_user(user_doc) -> Optional[dict]:
+        uid = str(user_doc.get("chatId") or "")
+        mode = _chat_notify_modes(user_doc).get(chat_id_target, "all")
+        if mode == "muted":
+            return None
+        mentioned = uid in mentioned_ids
+        if mode == "mentions" and not (is_group and mentioned):
+            return None
+        payload = dict(base)
+        payload["mentioned"] = mentioned
+        return payload
+
+    await push_to_users(recipients, payload_for_user)
+
+
+def _is_in_chess_room(game_id: str, user_id: str) -> bool:
+    return any(
+        ws.client_state == WebSocketState.CONNECTED
+        for ws in chess_rooms.get(game_id, {}).get(user_id, [])
+    )
+
+
+async def notify_chess_joined(game: dict, joiner_id: str) -> None:
+    creator = game.get("creatorId")
+    if not creator or chess_service.is_guest_id(creator):
+        return
+    if _is_in_chess_room(game["_id"], creator):
+        return
+    if chess_service.is_guest_id(joiner_id):
+        joiner_name = "مهمان"
+    else:
+        joiner = await cl_users.find_one(
+            {"chatId": joiner_id}, {"profile.name": 1, "profile.username": 1}
+        )
+        joiner_profile = (joiner or {}).get("profile") or {}
+        joiner_name = str(
+            joiner_profile.get("name") or joiner_profile.get("username") or "کاربر"
+        )
+    payload = {
+        "kind": "chess",
+        "gameId": game["_id"],
+        "senderName": joiner_name,
+        "url": f"/chess/game/{game['_id']}",
+        "icon": "/logo/icon-192.png",
+    }
+    await push_to_users([creator], lambda user_doc: dict(payload))
 
 
 def chess_online(game_id: str, game: dict) -> dict:
@@ -7498,6 +7876,17 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     }
 
                     await broadcast(participants, msg_payload)
+                    if not is_saved:
+                        schedule_push(
+                            notify_chat_message(
+                                chat_id_target,
+                                chat_id,
+                                participants,
+                                is_group_chat,
+                                is_official,
+                                unread_mention_user_ids,
+                            )
+                        )
 
             elif data.get("type") == "edit_message":
                 chat_id_target = data.get("chatId")
@@ -8937,6 +9326,9 @@ async def invite_to_chess_game(
             },
         },
     )
+    schedule_push(
+        notify_chat_message(chat_id, me, [me, target_id], False, False, [])
+    )
     return {"ok": True}
 
 
@@ -9036,6 +9428,16 @@ async def share_chess_game(
             },
         },
     )
+    schedule_push(
+        notify_chat_message(
+            chat_id,
+            me,
+            participants,
+            bool(chat_doc and chat_doc.get("chatType") == "group"),
+            False,
+            [],
+        )
+    )
     return {"ok": True}
 
 
@@ -9066,6 +9468,7 @@ async def accept_chess_game(
         game, _ = await chess_run(game_id, lambda g, n: chess_service.join(g, me, n))
     except ChessError as error:
         raise chess_http_error(error)
+    schedule_push(notify_chess_joined(game, me))
     return {"game": await chess_response(game)}
 
 
@@ -9117,6 +9520,7 @@ async def join_chess_by_link(
             game, _ = await chess_run(game_id, lambda g, n: chess_service.join_by_link(g, me, n))
         except ChessError as error:
             raise chess_http_error(error)
+        schedule_push(notify_chess_joined(game, me))
         return {"game": await chess_response(game), "mode": "user"}
 
     guest_token = (body.guestToken if body else None) or ""
@@ -9141,6 +9545,7 @@ async def join_chess_by_link(
         )
     except ChessError as error:
         raise chess_http_error(error)
+    schedule_push(notify_chess_joined(game, guest_id))
     return {
         "game": await chess_response(game),
         "mode": "guest",

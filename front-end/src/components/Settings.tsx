@@ -1,18 +1,20 @@
-import { ChevronLeft, HardDrive, Laptop, LayoutDashboard, Link2, Palette, Shield, ShieldCheck } from 'lucide-react';
+import { Bell, ChevronLeft, HardDrive, Laptop, LayoutDashboard, Link2, Palette, Shield, ShieldCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Devices } from './Devices';
 import { ThemeSettings } from './ThemeSettings';
 import { LoginLogs } from './LoginLogs';
 import { DataStorageSettings } from './DataStorageSettings';
 import { PrivacySettings } from './PrivacySettings';
+import { NotificationSettings } from './NotificationSettings';
 import { AdminPanel } from './admin/AdminPanel';
 import { AdminLinksPage } from './admin/AdminLinksPage';
 import { screenVariants } from '../utils/screenMotion';
 import { cx } from '../utils/cx';
 import { useScrollFade } from '../hooks/useScrollFade';
+import { getPermission, getPushSupport, useNotificationPrefs } from '../utils/pushNotifications';
 import type { User } from '../types';
 
-type SettingsSection = 'menu' | 'devices' | 'theme' | 'logs' | 'dataStorage' | 'privacy' | 'adminMenu' | 'adminPanel' | 'adminLinks';
+type SettingsSection = 'menu' | 'devices' | 'theme' | 'logs' | 'dataStorage' | 'privacy' | 'notifications' | 'adminMenu' | 'adminPanel' | 'adminLinks';
 
 interface SettingsProps {
     section: SettingsSection;
@@ -29,6 +31,8 @@ interface SettingsProps {
 
 export function Settings({ section, adminSection, onAdminSectionChange, onOpenSection, onBackToMenu, loginEvents, hasUnseenLoginLogs, currentUser, onUpdateCurrentUser, onLogout }: SettingsProps) {
     const { scrolled, handleScroll } = useScrollFade();
+    const notifyPrefs = useNotificationPrefs();
+    const notificationsBlocked = getPushSupport() === 'supported' && notifyPrefs.enabled && getPermission() === 'denied';
     if (section === 'devices') {
         return <Devices onBack={onBackToMenu} onOpenLogs={() => onOpenSection('logs')} hasUnseenLoginLogs={hasUnseenLoginLogs} />;
     }
@@ -37,6 +41,9 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
     }
     if (section === 'privacy') {
         return <PrivacySettings onBack={onBackToMenu} currentUser={currentUser} onUpdateCurrentUser={onUpdateCurrentUser} onLogout={onLogout} />;
+    }
+    if (section === 'notifications') {
+        return <NotificationSettings onBack={onBackToMenu} />;
     }
     if (section === 'adminPanel') {
         return (
@@ -141,6 +148,19 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textAlign: 'right' }}>
                         <Palette size={18} /> تم و شخصی سازی
                     </span>
+                    <ChevronLeft size={18} style={{ marginInlineStart: 8 }} />
+                </button>
+
+                <button
+                    type="button"
+                    className="popover__item"
+                    onClick={() => onOpenSection('notifications')}
+                    style={{ border: '1px solid var(--glass-border)', background: 'var(--glass-surface-soft)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', boxShadow: 'var(--shadow-xs), var(--glass-specular)', borderRadius: 9999, height: 60, justifyContent: 'space-between', direction: 'rtl', padding: '6px 22px', position: 'relative' }}
+                >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textAlign: 'right' }}>
+                        <Bell size={18} /> اعلان‌ها
+                    </span>
+                    {notificationsBlocked && <span className="adm-dot-danger" aria-hidden="true" />}
                     <ChevronLeft size={18} style={{ marginInlineStart: 8 }} />
                 </button>
 
