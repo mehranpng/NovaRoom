@@ -9,7 +9,7 @@ interface ForwardModalProps {
     isOpen: boolean;
     chats: Chat[];
     currentUserId: string;
-    currentUserVerified?: boolean;
+    currentUserIsAdmin?: boolean;
     forwardCount?: number;
     title?: string;
     hideSavedMessages?: boolean;
@@ -22,7 +22,7 @@ interface ForwardModalProps {
 const toPersianDigits = (num: number | string) =>
     String(num).replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d, 10)]);
 
-export function ForwardModal({ isOpen, chats, currentUserId, currentUserVerified = false, forwardCount, title, hideSavedMessages = false, onClose, onForward, onSelectTargetChat, onSelectChat }: ForwardModalProps) {
+export function ForwardModal({ isOpen, chats, currentUserId, currentUserIsAdmin = false, forwardCount, title, hideSavedMessages = false, onClose, onForward, onSelectTargetChat, onSelectChat }: ForwardModalProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const dragControls = useDragControls();
 
@@ -55,7 +55,7 @@ export function ForwardModal({ isOpen, chats, currentUserId, currentUserVerified
 
     const availableChats = sortedChats.filter((chat) => {
         if (chat.id.startsWith('saved_messages_')) return false;
-        if (chat.id === 'official-channel' && !currentUserVerified) return false;
+        if (chat.id === 'official-channel' && !currentUserIsAdmin) return false;
         if (!chat.otherUser) return false;
         if (chat.id === 'official-channel') return true;
         if (!chat.lastMessage) return false;

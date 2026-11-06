@@ -290,11 +290,12 @@ export function ChatRoom({
     const isGroupChat = isOfficialChannel || currentChat?.chatType === 'group';
     const isDirectChat = !isGroupChat;
     const isVerifiedUser = resolveVerified(currentUser?.verified);
+    const isAdminUser = Boolean(currentUser?.adminLevel);
     const canManageGroup = Boolean(isGroupChat && !isOfficialChannel && (
         currentUser?.adminLevel || String(contact.createdBy || '') === currentUserId
     ));
-    const canSendInOfficialChannel = !isOfficialChannel || isVerifiedUser;
-    const canSwipeToReply = !(isOfficialChannel && !isVerifiedUser);
+    const canSendInOfficialChannel = !isOfficialChannel || isAdminUser;
+    const canSwipeToReply = !(isOfficialChannel && !isAdminUser);
     const blockedByOther = Boolean((contact as any)?.blockedByOther);
     const isContactBlocked = isDirectChat && !chatId.startsWith('saved_messages_') && (blockedByOther || Boolean(isUserBlocked?.(contact)));
     const notifyPrefs = useNotificationPrefs();
@@ -3065,7 +3066,7 @@ export function ChatRoom({
                 const activeMsgIsMine = activeMsg.senderId === currentUserId;
                 const canDeleteActiveMsg = activeMsgIsMine || canManageGroup;
                 const showSeenByAction = isGroupChat && activeMsgIsMine && !isOfficialChannel;
-                const canReplyInMessageMenu = !(isOfficialChannel && !isVerifiedUser);
+                const canReplyInMessageMenu = !(isOfficialChannel && !isAdminUser);
                 const hasCaption = Boolean((activeMsg.text || '').trim());
                 const isChessMsg = Boolean(activeMsg.chessInvite);
                 const showCopyAction = !isChessMsg && (!activeMsg.file || hasCaption);
@@ -3357,7 +3358,7 @@ export function ChatRoom({
                     onRegisterUploadFile={handleRegisterUploadFile}
                     onInputFocus={handleInputFocus}
                     notificationsMuted={notifyMode === 'muted'}
-                    onToggleNotifications={isOfficialChannel && !isVerifiedUser ? () => void setChatNotifyMode(chatId, notifyMode === 'muted' ? 'all' : 'muted') : undefined}
+                    onToggleNotifications={isOfficialChannel && !isAdminUser ? () => void setChatNotifyMode(chatId, notifyMode === 'muted' ? 'all' : 'muted') : undefined}
                 />
             </div>
 
@@ -3365,7 +3366,7 @@ export function ChatRoom({
                 isOpen={forwardModalOpen}
                 chats={chats}
                 currentUserId={currentUserId}
-                currentUserVerified={isVerifiedUser}
+                currentUserIsAdmin={isAdminUser}
                 forwardCount={forwardingMessageIds.length || (forwardingMessageId ? 1 : 0)}
                 onClose={() => {
                     setForwardModalOpen(false);

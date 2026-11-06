@@ -5927,9 +5927,9 @@ async def forward_message(
     saved_chat_id = get_saved_messages_id(user_id)
     is_target_saved = target_chat_id == saved_chat_id
     is_target_official = is_official_channel_chat(target_chat_id)
-    if is_target_official and not bool(current_user.get("verified", False)):
+    if is_target_official and get_admin_level(current_user) is None:
         raise HTTPException(
-            status_code=403, detail="Only verified users can send in official channel"
+            status_code=403, detail="Only admins can send in official channel"
         )
     if not is_target_saved and not is_target_official:
         target_chat = await cl_chats.find_one({"_id": target_chat_id})
@@ -7740,11 +7740,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 is_saved = chat_id_target == saved_chat_id
                 is_official = is_official_channel_chat(chat_id_target)
 
-                if is_official and not bool(user.get("verified", False)):
+                if is_official and get_admin_level(user) is None:
                     await websocket.send_json(
                         {
                             "type": "error",
-                            "error": "Only verified users can send in official channel",
+                            "error": "Only admins can send in official channel",
                         }
                     )
                     continue
@@ -7914,7 +7914,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 saved_chat_id = get_saved_messages_id(chat_id)
                 is_saved = chat_id_target == saved_chat_id
                 is_official = is_official_channel_chat(chat_id_target)
-                if is_official and not bool(user.get("verified", False)):
+                if is_official and get_admin_level(user) is None:
                     continue
                 is_group_chat = False
                 edited_mention_user_ids: List[str] = []

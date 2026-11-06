@@ -372,7 +372,7 @@ export const ChatComposer = memo(function ChatComposer({
                         </button>
                     ) : (
                         <div className="chat-room__blocked-box" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-primary)', background: 'var(--bg-secondary)' }}>
-                            فقط کاربران تاییدشده می‌توانند در این کانال پیام ارسال کنند.
+                            فقط ادمین‌ها می‌توانند در این کانال پیام ارسال کنند.
                         </div>
                     )
                 ) : (

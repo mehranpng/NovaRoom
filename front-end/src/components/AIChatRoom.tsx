@@ -47,7 +47,7 @@ interface AIChatRoomProps {
     onRenameAIChat: (chatId: string, nextTitle: string) => Promise<boolean>;
     respondingAIChatId?: string | null;
     temporaryMode?: boolean;
-    currentUserVerified?: boolean;
+    currentUserIsAdmin?: boolean;
 }
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000; 
@@ -232,7 +232,7 @@ export function AIChatRoom({
     onRenameAIChat,
     respondingAIChatId = null,
     temporaryMode = false,
-    currentUserVerified = false,
+    currentUserIsAdmin = false,
 }: AIChatRoomProps) {
     const MAX_AI_MESSAGE_LENGTH = 3000;
     const [text, setText] = useState('');
@@ -2037,7 +2037,7 @@ export function AIChatRoom({
                 isOpen={forwardModalOpen}
                 chats={chats}
                 currentUserId={currentUserId}
-                currentUserVerified={currentUserVerified}
+                currentUserIsAdmin={currentUserIsAdmin}
                 forwardCount={forwardingMessageIds.length || (forwardingMessageId ? 1 : 0)}
                 onClose={() => {
                     setForwardModalOpen(false);

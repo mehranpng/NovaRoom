@@ -3463,7 +3463,7 @@ export function App() {
                             onRenameAIChat={handleRenameAIChat}
                             respondingAIChatId={aiRespondingChatId}
                             temporaryMode={temporaryAIChat}
-                            currentUserVerified={Boolean((currentUser as any)?.verified)}
+                            currentUserIsAdmin={Boolean(currentUser?.adminLevel)}
                         />
                     </main>
                 )}
