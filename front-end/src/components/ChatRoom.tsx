@@ -75,6 +75,7 @@ interface ChatRoomProps {
     onOpenDirectChat?: (user: User) => void;
     onOpenProfile?: () => void;
     onOpenAIChat?: () => void;
+    onOpenSavedMessages?: () => void;
     onOpenContactInfo?: (chatId: string) => void;
     forceContactInfoOpen?: boolean;
     onCloseForcedContactInfo?: (chatId: string) => void;
@@ -241,6 +242,7 @@ export function ChatRoom({
     onOpenDirectChat,
     onOpenProfile,
     onOpenAIChat,
+    onOpenSavedMessages,
     onOpenContactInfo,
     forceContactInfoOpen = false,
     onCloseForcedContactInfo,
@@ -1075,6 +1077,16 @@ export function ChatRoom({
         const cleanUsername = String(rawUsername || '').trim().replace(/^@+/, '');
         if (!cleanUsername) return;
 
+        const selfUsername = String(currentUser?.username || '').trim();
+        if (
+            onOpenSavedMessages
+            && selfUsername
+            && selfUsername.toLowerCase() === cleanUsername.toLowerCase()
+        ) {
+            onOpenSavedMessages();
+            return;
+        }
+
         mentionAbortRef.current?.abort();
         const controller = new AbortController();
         mentionAbortRef.current = controller;
@@ -1098,6 +1110,10 @@ export function ChatRoom({
             setResolvingMention(false);
 
             if (resolvedUser && resolvedUser.chatId) {
+                if (onOpenSavedMessages && String(resolvedUser.chatId) === currentUserId) {
+                    onOpenSavedMessages();
+                    return;
+                }
                 maybeSaveScroll(chatId);
                 restoringFromInfoRef.current = true;
                 setForwardSourceUser({
@@ -1126,7 +1142,7 @@ export function ChatRoom({
                 mentionAbortRef.current = null;
             }
         }
-    }, [chatId, shakeMessageBubble]);
+    }, [chatId, currentUser?.username, currentUserId, onOpenSavedMessages, shakeMessageBubble]);
 
     const doDownloadMessageFile = async (m: Message) => {
         if (!m.file?.fileId) return;

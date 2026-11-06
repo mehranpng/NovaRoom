@@ -3604,6 +3604,7 @@ export function App() {
                                 onOpenDirectChat={(user) => handleUserSelectedFromModal(user)}
                                 onOpenProfile={handleOpenProfile}
                                 onOpenAIChat={handleOpenAIChat}
+                                onOpenSavedMessages={handleOpenSavedMessages}
                                 onOpenContactInfo={(targetChatId) => navigate(`/chat/${encodeURIComponent(targetChatId)}?panel=info`)}
                                 forceContactInfoOpen={isInfoRouteActive}
                                 onCloseForcedContactInfo={(currentChatId) => {

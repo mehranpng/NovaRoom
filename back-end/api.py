@@ -9193,11 +9193,25 @@ async def get_chess_history(
     current_user: dict = Depends(get_current_user),
 ):
     target_id = str(userId or "").strip() or current_user["chatId"]
+    player_filter = (
+        [
+            {
+                "players.white": target_id,
+                "players.black": {"$not": {"$regex": r"^guest_"}},
+            },
+            {
+                "players.black": target_id,
+                "players.white": {"$not": {"$regex": r"^guest_"}},
+            },
+        ]
+        if str(userId or "").strip()
+        else [{"players.white": target_id}, {"players.black": target_id}]
+    )
     query = {
         "status": "finished",
         "reason": {"$nin": list(chess_service.ABORTED_REASONS)},
         "result": {"$ne": "*"},
-        "$or": [{"players.white": target_id}, {"players.black": target_id}],
+        "$or": player_filter,
     }
     docs = (
         await cl_chess_games.find(query)
