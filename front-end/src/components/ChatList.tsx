@@ -388,40 +388,8 @@ export const ChatList = memo(function ChatList({
 
     const [localChats, setLocalChats] = useState<Chat[]>(chats);
     useEffect(() => {
-        setLocalChats((prev) => {
-            const prevById = new Map(prev.map((c) => [c.id, c]));
-            let changed = prev.length !== chats.length;
-            const next = chats.map((chat, idx) => {
-                const prevChat = prevById.get(chat.id);
-                if (!prevChat) {
-                    changed = true;
-                    return chat;
-                }
-
-                const incomingUnread = Number(chat.unreadCount || 0);
-                const previousUnread = Number(prevChat.unreadCount || 0);
-                const isActive = Boolean(activeChatId) && chat.id === activeChatId;
-                const sameLastMessageId = Boolean(
-                    prevChat.lastMessage?.id &&
-                    chat.lastMessage?.id &&
-                    prevChat.lastMessage.id === chat.lastMessage.id
-                );
-
-                const shouldKeepPreviousUnread = !isActive && sameLastMessageId && incomingUnread === 0 && previousUnread > 0;
-                const resolvedUnread = shouldKeepPreviousUnread ? previousUnread : incomingUnread;
-
-                const nextChat = resolvedUnread === chat.unreadCount
-                    ? chat
-                    : { ...chat, unreadCount: resolvedUnread };
-
-                if (nextChat !== prev[idx]) {
-                    changed = true;
-                }
-                return nextChat;
-            });
-            return changed ? next : prev;
-        });
-    }, [chats, activeChatId]);
+        setLocalChats(chats);
+    }, [chats]);
 
     const [pinnedIds, setPinnedIds] = useState<string[]>([]);
     const pinnedIdsRef = useRef<string[]>([]);

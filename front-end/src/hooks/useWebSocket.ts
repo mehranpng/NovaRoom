@@ -101,6 +101,7 @@ export function useWebSocket({
     const reconnectAttemptsRef = useRef(0);
     const lastPongAtRef = useRef<number>(Date.now());
     const pendingRequestsRef = useRef<Map<string, { resolve: (data: any) => void; reject: (error: Error) => void; timeoutId: number }>>(new Map());
+    const pendingSeenByChatRef = useRef<Map<string, string>>(new Map());
     const requestCounterRef = useRef(0);
     const hiddenDisconnectRef = useRef(false);
     const offlineTimerRef = useRef<number | null>(null);
@@ -209,15 +210,31 @@ export function useWebSocket({
         const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
+            if (socketRef.current !== ws) {
+                try { ws.close(); } catch { }
+                return;
+            }
             isConnectedRef.current = true;
             reconnectAttemptsRef.current = 0;
             setReconnectExhausted(false);
             setConnectionState('connected');
             lastPongAtRef.current = Date.now();
             onConnectionChangeRef.current?.(true);
+            if (pendingSeenByChatRef.current.size > 0) {
+                const entries = Array.from(pendingSeenByChatRef.current.entries());
+                pendingSeenByChatRef.current.clear();
+                for (const [seenChatId, seenMaxId] of entries) {
+                    try {
+                        ws.send(JSON.stringify({ type: 'seen', chatId: seenChatId, maxMessageId: seenMaxId }));
+                    } catch {
+                        pendingSeenByChatRef.current.set(seenChatId, seenMaxId);
+                    }
+                }
+            }
         };
 
         ws.onmessage = (event) => {
+            if (socketRef.current !== ws) return;
             const processMessage = async () => {
                 const data = JSON.parse(event.data);
                 const dataTypeRaw = String(data?.type || '').trim();
@@ -397,6 +414,7 @@ export function useWebSocket({
         };
 
         ws.onclose = () => {
+            if (socketRef.current !== ws) return;
             isConnectedRef.current = false;
             setConnectionState('connecting');
             onConnectionChangeRef.current?.(false);
@@ -406,6 +424,7 @@ export function useWebSocket({
         };
 
         ws.onerror = (err) => {
+            if (socketRef.current !== ws) return;
             console.error('WebSocket error:', err);
         };
 
@@ -467,7 +486,12 @@ export function useWebSocket({
     const sendSeen = useCallback(
         (chatId: string, maxMessageId: string) => {
             if (!chatId || !maxMessageId) return;
-            send({ type: 'seen', chatId, maxMessageId });
+            const sent = send({ type: 'seen', chatId, maxMessageId });
+            if (!sent) {
+                pendingSeenByChatRef.current.set(chatId, maxMessageId);
+            } else {
+                pendingSeenByChatRef.current.delete(chatId);
+            }
         },
         [send]
     );
@@ -618,11 +642,11 @@ export function useWebSocket({
     const disconnect = useCallback(() => {
         shouldReconnectRef.current = false;
         clearReconnectTimer();
-
+        const ws = socketRef.current;
+        socketRef.current = null;
         try {
-            socketRef.current?.close();
+            ws?.close();
         } finally {
-            socketRef.current = null;
             rejectAllPendingRequests('WebSocket disconnected');
             isConnectedRef.current = false;
             setConnectionState('disconnected');
@@ -682,10 +706,11 @@ export function useWebSocket({
         reconnectAttemptsRef.current = 0;
         setReconnectExhausted(false);
         clearReconnectTimer();
+        const ws = socketRef.current;
+        socketRef.current = null;
         try {
-            socketRef.current?.close();
+            ws?.close();
         } finally {
-            socketRef.current = null;
             connect();
         }
     }, [connect]);
@@ -745,27 +770,24 @@ export function useWebSocket({
             notifyPresenceOffline();
             shouldReconnectRef.current = false;
             clearReconnectTimer();
+            const ws = socketRef.current;
+            socketRef.current = null;
+            isConnectedRef.current = false;
             try {
-                socketRef.current?.close(1000, 'client_inactive');
+                ws?.close(1000, 'client_inactive');
             } catch {
-                socketRef.current = null;
             }
         };
 
         const restoreOnline = () => {
             clearOfflineTimer();
             if (document.visibilityState !== 'visible') return;
-            if (!hiddenDisconnectRef.current && socketRef.current?.readyState === WebSocket.OPEN) return;
+            if (!hiddenDisconnectRef.current && (socketRef.current?.readyState === WebSocket.OPEN || socketRef.current?.readyState === WebSocket.CONNECTING)) return;
             hiddenDisconnectRef.current = false;
             shouldReconnectRef.current = true;
             reconnectAttemptsRef.current = 0;
             setReconnectExhausted(false);
             connect();
-            window.setTimeout(() => {
-                if (document.visibilityState !== 'visible') return;
-                if (socketRef.current?.readyState === WebSocket.OPEN || socketRef.current?.readyState === WebSocket.CONNECTING) return;
-                connect();
-            }, 800);
         };
 
         const handleVisibilityChange = () => {

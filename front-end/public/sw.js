@@ -4,14 +4,37 @@ self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim(
 
 const toPersianNumber = (value) => Number(value).toLocaleString('fa-IR');
 
-const pathFor = (data) =>
-    data.kind === 'chess' ? '/chess/game/' + data.gameId : '/chat/' + encodeURIComponent(data.chatId);
+const activeChatByClient = new Map();
 
-const isViewingPath = (windows, path) =>
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'nr-active-chat' && event.source && event.source.id) {
+        if (event.data.chatId) {
+            activeChatByClient.set(event.source.id, String(event.data.chatId));
+        } else {
+            activeChatByClient.delete(event.source.id);
+        }
+    }
+});
+
+const pathFor = (data) => {
+    if (data.kind === 'chess') return '/chess/game/' + data.gameId;
+    if (data.chatId === 'official-channel') return '/official-channel';
+    return '/chat/' + encodeURIComponent(data.chatId);
+};
+
+const isViewingTarget = (windows, data, path) =>
     windows.some((client) => {
-        if (!client.focused || client.visibilityState !== 'visible') return false;
+        if (client.visibilityState !== 'visible') return false;
+        if (data.kind !== 'chess' && data.chatId && activeChatByClient.get(client.id) === String(data.chatId)) {
+            return true;
+        }
         try {
-            return new URL(client.url).pathname === path;
+            const pathname = new URL(client.url).pathname;
+            if (pathname === path) return true;
+            if (data.kind !== 'chess' && data.chatId) {
+                return decodeURIComponent(pathname) === '/chat/' + String(data.chatId);
+            }
+            return false;
         } catch {
             return false;
         }
@@ -22,7 +45,7 @@ async function handlePush(event) {
     if (!data) return;
     const path = pathFor(data);
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    if (isViewingPath(windows, path)) return;
+    if (isViewingTarget(windows, data, path)) return;
 
     const tag =
         data.kind === 'chess' ? 'chess:' + data.gameId : 'chat:' + data.chatId;
@@ -64,7 +87,7 @@ async function handlePush(event) {
     });
 
     if (!data.silent && hasTab) {
-        windows.forEach((client) => client.postMessage({ type: 'nr-push-shown' }));
+        windows.forEach((client) => client.postMessage({ type: 'nr-push-shown', chatId: data.chatId || null }));
     }
 }
 
