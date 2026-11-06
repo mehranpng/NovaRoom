@@ -4757,6 +4757,8 @@ async def get_messages(
                 "hasNewer": False,
                 "oldestCursor": None,
                 "newestCursor": None,
+                "firstUnreadId": None,
+                "unreadCount": 0,
             }
         oldest = payload[0]
         newest = payload[-1]
@@ -4790,6 +4792,8 @@ async def get_messages(
                 "cursorTs": newest["timestamp"],
                 "cursorId": newest["id"],
             },
+            "firstUnreadId": None,
+            "unreadCount": 0,
         }
 
     participants: List[str] = []
@@ -4800,11 +4804,6 @@ async def get_messages(
         participants = chat_doc.get("participants", []) if chat_doc else []
         if current_user_id not in participants:
             raise HTTPException(status_code=403, detail="Not allowed")
-
-    await cl_messages.update_many(
-        {"chatId": chat_id, "seenBy": {"$ne": current_user_id}},
-        {"$addToSet": {"seenBy": current_user_id}},
-    )
 
     if around_id:
         target_oid = await try_object_id(around_id)
@@ -4926,7 +4925,25 @@ async def get_messages(
             "hasNewer": False,
             "oldestCursor": None,
             "newestCursor": None,
+            "firstUnreadId": None,
+            "unreadCount": 0,
         }
+    first_unread = await cl_messages.find_one(
+        {
+            "chatId": chat_id,
+            "senderId": {"$ne": current_user_id},
+            "seenBy": {"$ne": current_user_id},
+        },
+        sort=[("timestamp", 1), ("_id", 1)],
+        projection={"_id": 1},
+    )
+    unread_count = await cl_messages.count_documents(
+        {
+            "chatId": chat_id,
+            "senderId": {"$ne": current_user_id},
+            "seenBy": {"$ne": current_user_id},
+        }
+    )
     oldest = payload[0]
     newest = payload[-1]
     return {
@@ -4953,6 +4970,8 @@ async def get_messages(
         ),
         "oldestCursor": {"cursorTs": oldest["timestamp"], "cursorId": oldest["id"]},
         "newestCursor": {"cursorTs": newest["timestamp"], "cursorId": newest["id"]},
+        "firstUnreadId": str(first_unread["_id"]) if first_unread else None,
+        "unreadCount": unread_count,
     }
 
 
@@ -7731,16 +7750,41 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
             elif data.get("type") == "seen":
                 chat_id_target = data.get("chatId")
-                if chat_id_target:
-                    saved_chat_id = get_saved_messages_id(chat_id)
-                    if chat_id_target == saved_chat_id:
-                        continue
+                max_id = data.get("maxMessageId")
+                if not chat_id_target or not isinstance(max_id, str) or not max_id:
+                    continue
+                max_oid = await try_object_id(max_id)
+                if not max_oid:
+                    continue
+                saved_chat_id = get_saved_messages_id(chat_id)
+                if chat_id_target == saved_chat_id:
+                    continue
 
-                    if is_official_channel_chat(chat_id_target):
-                        await cl_messages.update_many(
-                            {"chatId": chat_id_target, "seenBy": {"$ne": chat_id}},
-                            {"$addToSet": {"seenBy": chat_id}},
-                        )
+                max_msg = await cl_messages.find_one(
+                    {"_id": max_oid, "chatId": chat_id_target}, {"timestamp": 1}
+                )
+                if not max_msg:
+                    continue
+
+                seen_filter = {
+                    "chatId": chat_id_target,
+                    "senderId": {"$ne": chat_id},
+                    "seenBy": {"$ne": chat_id},
+                    "$or": [
+                        {"timestamp": {"$lt": max_msg.get("timestamp")}},
+                        {
+                            "timestamp": max_msg.get("timestamp"),
+                            "_id": {"$lte": max_oid},
+                        },
+                    ],
+                }
+
+                if is_official_channel_chat(chat_id_target):
+                    result = await cl_messages.update_many(
+                        seen_filter,
+                        {"$addToSet": {"seenBy": chat_id}},
+                    )
+                    if result.modified_count > 0:
                         user_ids = await cl_users.distinct(
                             "chatId", {"chatId": {"$ne": chat_id}}
                         )
@@ -7751,31 +7795,33 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                                     "type": "messages_seen",
                                     "chatId": chat_id_target,
                                     "byUserId": chat_id,
+                                    "maxMessageId": max_id,
                                 },
                             )
-                        continue
+                    continue
 
-                    chat_doc = await cl_chats.find_one(
-                        {"_id": chat_id_target}, {"participants": 1}
+                chat_doc = await cl_chats.find_one(
+                    {"_id": chat_id_target}, {"participants": 1}
+                )
+                if not chat_doc or chat_id not in chat_doc.get("participants", []):
+                    continue
+
+                result = await cl_messages.update_many(
+                    seen_filter,
+                    {"$addToSet": {"seenBy": chat_id}},
+                )
+
+                if result.modified_count > 0:
+                    participants = chat_doc.get("participants", [])
+                    await broadcast(
+                        [p for p in participants if p != chat_id],
+                        {
+                            "type": "messages_seen",
+                            "chatId": chat_id_target,
+                            "byUserId": chat_id,
+                            "maxMessageId": max_id,
+                        },
                     )
-                    if not chat_doc or chat_id not in chat_doc.get("participants", []):
-                        continue
-
-                    await cl_messages.update_many(
-                        {"chatId": chat_id_target, "seenBy": {"$ne": chat_id}},
-                        {"$addToSet": {"seenBy": chat_id}},
-                    )
-
-                    if chat_doc:
-                        participants = chat_doc.get("participants", [])
-                        await broadcast(
-                            [p for p in participants if p != chat_id],
-                            {
-                                "type": "messages_seen",
-                                "chatId": chat_id_target,
-                                "byUserId": chat_id,
-                            },
-                        )
 
             elif data.get("type") == "typing":
                 chat_id_target = data.get("chatId")

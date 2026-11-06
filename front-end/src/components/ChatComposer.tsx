@@ -88,7 +88,7 @@ export const ChatComposer = memo(function ChatComposer({
 }: ChatComposerProps) {
     const [text, setText] = useState(() => (editingId ? editDraft : ''));
     const [caretPos, setCaretPos] = useState(0);
-    const [activeMentionIndex, setActiveMentionIndex] = useState(0);
+    const [activeMentionIndex, setActiveMentionIndex] = useState(-1);
     const [attachment, setAttachment] = useState<PendingAttachment | null>(() => pendingUploadedFileByChat[chatId] ?? null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const typingTimeoutRef = useRef<number | null>(null);
@@ -195,7 +195,7 @@ export const ChatComposer = memo(function ChatComposer({
     }, [mentionMatch, mentionCandidates]);
 
     useEffect(() => {
-        setActiveMentionIndex(0);
+        setActiveMentionIndex(-1);
     }, [mentionMatch?.query, mentionMatch?.start]);
 
     const selectMentionCandidate = (member: MentionCandidate) => {
@@ -388,17 +388,17 @@ export const ChatComposer = memo(function ChatComposer({
                                 if (filteredMentions.length > 0) {
                                     if (e.key === 'ArrowDown') {
                                         e.preventDefault();
-                                        setActiveMentionIndex((prev) => (prev + 1) % filteredMentions.length);
+                                        setActiveMentionIndex((prev) => (prev < 0 ? 0 : (prev + 1) % filteredMentions.length));
                                         return;
                                     }
                                     if (e.key === 'ArrowUp') {
                                         e.preventDefault();
-                                        setActiveMentionIndex((prev) => (prev - 1 + filteredMentions.length) % filteredMentions.length);
+                                        setActiveMentionIndex((prev) => (prev < 0 ? filteredMentions.length - 1 : (prev - 1 + filteredMentions.length) % filteredMentions.length));
                                         return;
                                     }
                                     if ((e.key === 'Enter' && !e.shiftKey && !isMobileKeyboardInput()) || e.key === 'Tab') {
                                         e.preventDefault();
-                                        const target = filteredMentions[activeMentionIndex] || filteredMentions[0];
+                                        const target = activeMentionIndex >= 0 ? filteredMentions[activeMentionIndex] : filteredMentions[0];
                                         if (target) selectMentionCandidate(target);
                                         return;
                                     }

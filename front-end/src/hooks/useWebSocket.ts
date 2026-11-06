@@ -11,7 +11,7 @@ interface UseWebSocketProps {
     onMessageEdited?: (chatId: string, message: any) => void;
     onMessageDeleted?: (chatId: string, messageId: string, lastMessage?: any, messageIds?: string[]) => void;
     onUserStatusChange?: (userId: string, online: boolean, lastSeen?: number | null) => void;
-    onMessagesSeen?: (chatId: string, byUserId?: string) => void;
+    onMessagesSeen?: (chatId: string, byUserId?: string, maxMessageId?: string) => void;
     onReactionUpdated?: (chatId: string, messageId: string, reactions: any[], unreadReactionUserIds?: string[]) => void;
     onTypingStatus?: (chatId: string, userId: string, isTyping: boolean) => void;
     onUploadStatus?: (chatId: string, userId: string, isUploading: boolean) => void;
@@ -34,7 +34,7 @@ type OutgoingEvent =
     | { type: 'message'; chatId: string; text: string; replyToId?: string; file?: FileMetadata; clientId?: string }
     | { type: 'edit_message'; chatId: string; messageId: string; text: string }
     | { type: 'delete_message'; chatId: string; messageId: string }
-    | { type: 'seen'; chatId: string }
+    | { type: 'seen'; chatId: string; maxMessageId: string }
     | { type: 'get_chats'; requestId: string }
     | { type: 'get_messages'; requestId: string; chatId: string; limit?: number }
     | { type: 'react_message'; requestId: string; chatId: string; messageId: string; emoji: string }
@@ -286,7 +286,8 @@ export function useWebSocket({
                 } else if (dataType === 'messages_seen') {
                     const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
                     const byUserId = String(data?.byUserId || data?.by_user_id || data?.payload?.byUserId || '').trim();
-                    if (resolvedChatId) onMessagesSeenRef.current?.(resolvedChatId, byUserId || undefined);
+                    const maxMessageId = String(data?.maxMessageId || data?.payload?.maxMessageId || '').trim();
+                    if (resolvedChatId) onMessagesSeenRef.current?.(resolvedChatId, byUserId || undefined, maxMessageId || undefined);
                 } else if (dataType === 'reaction_updated') {
                     const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
                     const resolvedMessageId = String(data?.messageId || data?.message_id || data?.payload?.messageId || data?.payload?.message_id || data?.message?.id || '').trim();
@@ -453,9 +454,9 @@ export function useWebSocket({
     );
 
     const sendSeen = useCallback(
-        (chatId: string) => {
-            if (!chatId) return;
-            send({ type: 'seen', chatId });
+        (chatId: string, maxMessageId: string) => {
+            if (!chatId || !maxMessageId) return;
+            send({ type: 'seen', chatId, maxMessageId });
         },
         [send]
     );

@@ -230,7 +230,7 @@ export function App() {
     
     
     
-    const [openChatUnread, setOpenChatUnread] = useState<{ chatId: string; count: number } | null>(null);
+    const [openChatUnread, setOpenChatUnread] = useState<{ chatId: string; count: number; firstUnreadId?: string | null; resolved?: boolean } | null>(null);
     const [desktopSidebarWidth, setDesktopSidebarWidth] = useState<number | null>(() => {
         try {
             const raw = localStorage.getItem(DESKTOP_SIDEBAR_KEY);
@@ -244,14 +244,6 @@ export function App() {
     const [isResizingDesktopLayout, setIsResizingDesktopLayout] = useState(false);
     const [loginEvents, setLoginEvents] = useState<any[]>([]);
     const [unseenLoginCount, setUnseenLoginCount] = useState(0);
-
-    const consumeOpenChatUnread = useCallback((id: string) => {
-        setOpenChatUnread((prev) => {
-            if (!prev) return prev;
-            if (prev.chatId !== id) return prev;
-            return null;
-        });
-    }, [authToken, currentUser?.chatId]);
 
     
     const [showAIChat, setShowAIChat] = useState(false);
@@ -304,7 +296,10 @@ export function App() {
     
     const activeChatIdRef = useRef<string | null>(null);
     const viewRef = useRef<View>('chatList');
-    const lastSeenAckMessageIdRef = useRef<Record<string, string>>({});
+    const readerStateRef = useRef({ atBottom: true });
+    const initialUnreadJumpRef = useRef('');
+    const currentUserRef = useRef<User | null>(currentUser);
+    currentUserRef.current = currentUser;
     const playedSendSoundIdsRef = useRef<Set<string>>(new Set());
     const lastReceiveSoundMessageRef = useRef<Record<string, string>>({});
     const interactiveOnlineTimersRef = useRef<Record<string, number>>({});
@@ -640,20 +635,11 @@ export function App() {
             }));
 
             
-            const currentActiveChatId = activeChatIdRef.current;
-            const currentView = viewRef.current;
-            const merged = normalized.map((c) => {
-                if (currentView === 'chatRoom' && currentActiveChatId && c.id === currentActiveChatId) {
-                    return { ...c, unreadCount: 0 };
-                }
-                return c;
-            });
-
             setChats((prev) => {
-                if (prev.length !== merged.length) return merged;
+                if (prev.length !== normalized.length) return normalized;
                 const prevById = new Map(prev.map((item) => [item.id, item]));
                 let changed = false;
-                const next = merged.map((chat, idx) => {
+                const next = normalized.map((chat, idx) => {
                     const prevChat = prevById.get(chat.id);
                     if (!prevChat) {
                         changed = true;
@@ -921,7 +907,11 @@ export function App() {
             const myId = currentUser?.chatId;
             const isIncoming = Boolean(myId) && newMsg.senderId !== myId;
             const isActiveChat = activeChatIdRef.current === chatId && viewRef.current === 'chatRoom';
-            const shouldIncrementUnread = isIncoming && !isActiveChat;
+            const canReadNow = isActiveChat
+                && readerStateRef.current.atBottom
+                && document.visibilityState === 'visible'
+                && document.hasFocus();
+            const shouldIncrementUnread = isIncoming && !canReadNow;
 
             if (isIncoming && isActiveChat) {
                 const lastPlayedForChat = lastReceiveSoundMessageRef.current[chatId];
@@ -1162,6 +1152,9 @@ export function App() {
         }
     }, [messages, authToken]);
 
+    const jumpToMessageRef = useRef(handleJumpToMessage);
+    jumpToMessageRef.current = handleJumpToMessage;
+
     const handleUserStatusChange = useCallback((userId: string, online: boolean, lastSeen?: number | null) => {
         const normalizedUserId = String(userId || '').trim();
         if (!normalizedUserId) return;
@@ -1235,7 +1228,7 @@ export function App() {
         }));
     }, []);
 
-    const handleMessagesSeen = useCallback((chatId: string, byUserId?: string) => {
+    const handleMessagesSeen = useCallback((chatId: string, byUserId?: string, maxMessageId?: string) => {
         if (byUserId) {
             touchInteractiveUser(byUserId);
         }
@@ -1255,19 +1248,22 @@ export function App() {
             });
             return;
         }
+        const myId = currentUserRef.current?.chatId;
+        if (!myId) return;
         setMessages(prev => {
             const list = prev[chatId];
             if (!list) return prev;
+            const maxIndex = maxMessageId ? list.findIndex(m => m.id === maxMessageId) : -1;
             let changed = false;
-            const next = list.map(m => {
-                if (m.seen) return m;
+            const next = list.map((m, index) => {
+                if (m.senderId !== myId || m.seen) return m;
+                if (maxIndex >= 0 && index > maxIndex) return m;
                 changed = true;
                 return { ...m, seen: true };
             });
             return changed ? { ...prev, [chatId]: next } : prev;
         });
-        setChats(prev => prev.map(c => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
-    }, []);
+    }, [touchInteractiveUser]);
 
     const handleReactionUpdated = useCallback((chatId: string, messageId: string, reactions: any[], unreadReactionUserIds?: string[]) => {
         setMessages(prev => {
@@ -1645,7 +1641,7 @@ export function App() {
 
     const fetchPagedMessages = useCallback(async (
         chatId: string,
-        params?: { direction?: 'latest' | 'older' | 'newer'; cursorTs?: number; cursorId?: string; mode?: 'replace' | 'prepend' | 'append'; finalizeInitialLoad?: boolean }
+        params?: { direction?: 'latest' | 'older' | 'newer'; cursorTs?: number; cursorId?: string; mode?: 'replace' | 'prepend' | 'append'; finalizeInitialLoad?: boolean; initialOpen?: boolean }
     ) => {
         const direction = params?.direction || 'latest';
         const mode = params?.mode || 'replace';
@@ -1662,6 +1658,27 @@ export function App() {
         const chunk: Message[] = await Promise.all(
             rawChunk.map((message) => decryptMessageClientSide(message, authToken || '', chatId))
         );
+
+        if (params?.initialOpen && direction === 'latest' && mode === 'replace') {
+            const serverUnread = Number(res?.unreadCount);
+            const firstUnreadId = typeof res?.firstUnreadId === 'string' && res.firstUnreadId ? res.firstUnreadId : null;
+            setOpenChatUnread((prev) => {
+                if (!prev || prev.chatId !== chatId || prev.resolved) return prev;
+                return {
+                    ...prev,
+                    count: Number.isFinite(serverUnread) ? serverUnread : prev.count,
+                    firstUnreadId,
+                    resolved: true,
+                };
+            });
+            if (firstUnreadId && chunk.length > 0 && activeChatIdRef.current === chatId && !chunk.some((m) => m.id === firstUnreadId)) {
+                const jumpKey = `${chatId}:${firstUnreadId}`;
+                if (initialUnreadJumpRef.current !== jumpKey) {
+                    initialUnreadJumpRef.current = jumpKey;
+                    void jumpToMessageRef.current?.(chatId, firstUnreadId);
+                }
+            }
+        }
 
         setMessages((prev) => {
             const existing = prev[chatId] || [];
@@ -1730,11 +1747,6 @@ export function App() {
             const currentActive = activeChatIdRef.current;
             if (currentActive) {
                 fetchPagedMessages(currentActive, { direction: 'latest', mode: 'replace' })
-                    .then(() => {
-                        if (currentUser && currentActive !== `saved_messages_${currentUser.chatId}`) {
-                            sendSeen(currentActive);
-                        }
-                    })
                     .catch((err) => console.error('Failed to sync messages after reconnect', err));
             }
         }
@@ -1766,10 +1778,6 @@ export function App() {
                 } else if (!userIsViewingHistory && messagesLoadedOnceRef.current[targetChatId]) {
                     await fetchPagedMessages(targetChatId, { direction: 'latest', mode: 'replace' });
                 }
-
-                if (currentUser && targetChatId !== `saved_messages_${currentUser.chatId}`) {
-                    sendSeen(targetChatId);
-                }
             } catch (err) {
                 console.warn('Realtime recovery sync failed', err);
             } finally {
@@ -1800,7 +1808,6 @@ export function App() {
         loadChats,
         fetchPagedMessages,
         currentUser,
-        sendSeen,
         showAIChat,
     ]);
 
@@ -1855,7 +1862,9 @@ export function App() {
 
         
         const openingUnread = chatsRef.current.find(c => c.id === chatId)?.unreadCount || 0;
-        setOpenChatUnread({ chatId, count: openingUnread });
+        setOpenChatUnread({ chatId, count: openingUnread, firstUnreadId: null, resolved: false });
+        readerStateRef.current = { atBottom: true };
+        initialUnreadJumpRef.current = '';
 
         activeChatIdRef.current = chatId;
         viewRef.current = 'chatRoom';
@@ -1913,24 +1922,17 @@ export function App() {
         try {
             if (hasImmediateMessages) {
                 setMessagesLoadedOnce(prev => (prev[chatId] ? prev : { ...prev, [chatId]: true }));
-                if (currentUser && chatId !== `saved_messages_${currentUser.chatId}`) {
-                    sendSeen(chatId);
-                }
-                void fetchPagedMessages(chatId, { direction: 'latest', mode: 'replace' });
+                void fetchPagedMessages(chatId, { direction: 'latest', mode: 'replace', initialOpen: true });
                 return;
             }
 
-            let loadedCount = await fetchPagedMessages(chatId, { direction: 'latest', mode: 'replace', finalizeInitialLoad: true });
+            let loadedCount = await fetchPagedMessages(chatId, { direction: 'latest', mode: 'replace', finalizeInitialLoad: true, initialOpen: true });
             if (loadedCount === 0 && chatLoadRequestRef.current === requestId) {
                 await new Promise((resolve) => window.setTimeout(resolve, 180));
-                loadedCount = await fetchPagedMessages(chatId, { direction: 'latest', mode: 'replace', finalizeInitialLoad: true });
+                loadedCount = await fetchPagedMessages(chatId, { direction: 'latest', mode: 'replace', finalizeInitialLoad: true, initialOpen: true });
             }
             if (chatLoadRequestRef.current !== requestId) return;
             setMessagesLoadedOnce(prev => (prev[chatId] ? prev : { ...prev, [chatId]: true }));
-
-            if (currentUser && chatId !== `saved_messages_${currentUser.chatId}`) {
-                sendSeen(chatId);
-            }
         } catch (err) {
             console.error(err);
         } finally {
@@ -1939,7 +1941,7 @@ export function App() {
                 setMessagesLoading(prev => (prev[chatId] ? { ...prev, [chatId]: false } : prev));
             }
         }
-    }, [sendSeen, currentUser, navigate, fetchPagedMessages]);
+    }, [currentUser, navigate, fetchPagedMessages]);
 
     const handleDragHoverChat = useCallback((chatId: string) => {
         if (!chatId) return;
@@ -2195,25 +2197,35 @@ export function App() {
         return () => window.removeEventListener('popstate', keepAtChatList);
     }, [isAuthenticated, location.pathname, navigate]);
 
-    useEffect(() => {
-        if (!activeChatId || !currentUser) return;
-        if (view !== 'chatRoom') return;
-        if (activeChatId === `saved_messages_${currentUser.chatId}`) return;
+    const handleReaderStateChange = useCallback((state: { atBottom: boolean }) => {
+        readerStateRef.current = state;
+    }, []);
 
-        const activeMsgs = messages[activeChatId] || [];
-        if (!activeMsgs.length) return;
-
-        const lastMsg = activeMsgs[activeMsgs.length - 1];
-        if (!lastMsg || lastMsg.senderId === currentUser.chatId) return;
-
-        const ackKey = `${activeChatId}:${lastMsg.id}`;
-        if (lastSeenAckMessageIdRef.current[activeChatId] === ackKey) return;
-
-        lastSeenAckMessageIdRef.current[activeChatId] = ackKey;
-        sendSeen(activeChatId);
-    }, [messages, activeChatId, currentUser, view, sendSeen]);
-
-
+    const handleMarkRead = useCallback((maxMessageId: string, newlyReadCount: number) => {
+        const chatId = activeChatIdRef.current;
+        if (!chatId || chatId === 'pending') return;
+        sendSeen(chatId, maxMessageId);
+        setChats((prev) => prev.map((c) => (
+            c.id === chatId
+                ? { ...c, unreadCount: Math.max(0, Number(c.unreadCount || 0) - Math.max(0, newlyReadCount)) }
+                : c
+        )));
+        const myId = currentUserRef.current?.chatId;
+        if (!myId) return;
+        setMessages((prev) => {
+            const list = prev[chatId];
+            if (!list) return prev;
+            const maxIndex = list.findIndex((m) => m.id === maxMessageId);
+            if (maxIndex === -1) return prev;
+            let changed = false;
+            const next = list.map((m, index) => {
+                if (index > maxIndex || m.senderId === myId || m.seen) return m;
+                changed = true;
+                return { ...m, seen: true };
+            });
+            return changed ? { ...prev, [chatId]: next } : prev;
+        });
+    }, [sendSeen]);
 
     const handleSendMessage = useCallback(async (payload: { text: string; replyToId?: string; editMessageId?: string; attachment?: PendingAttachment }) => {
         if (!currentUser) return;
@@ -2858,6 +2870,7 @@ export function App() {
         if (!showAIChat) {
             disposeChatSession(activeChatIdRef.current);
         }
+        setOpenChatUnread(null);
         setView('chatList');
         setPendingUser(null);
         setShowAIChat(false);
@@ -2868,6 +2881,7 @@ export function App() {
 
     const handleCloseChat = () => {
         disposeChatSession(activeChatIdRef.current);
+        setOpenChatUnread(null);
         setActiveChatId(null);
         setPendingUser(null);
         setShowAIChat(false);
@@ -3310,6 +3324,9 @@ export function App() {
     const initialUnreadCount = openChatUnread?.chatId && openChatUnread.chatId === (activeChatId || 'pending')
         ? openChatUnread.count
         : 0;
+    const initialFirstUnreadId = openChatUnread?.chatId && openChatUnread.chatId === (activeChatId || 'pending')
+        ? (openChatUnread.firstUnreadId || null)
+        : null;
 
     const currentSearchParams = new URLSearchParams(location.search);
     const isInfoRouteActive = currentSearchParams.get('panel') === 'info' && view !== 'profile' && view !== 'profileEdit';
@@ -3540,7 +3557,9 @@ export function App() {
                                     navigate(backChatId && backChatId !== 'pending' ? `/chat/${encodeURIComponent(backChatId)}` : '/');
                                 }}
                                 initialUnreadCount={initialUnreadCount}
-                                onConsumeInitialUnread={consumeOpenChatUnread}
+                                initialFirstUnreadId={initialFirstUnreadId}
+                                onMarkRead={handleMarkRead}
+                                onReaderStateChange={handleReaderStateChange}
                                 onForwardMessage={handleForwardMessage}
                                 pendingForwardDraft={activeChatId ? (pendingForwardDrafts[activeChatId] || null) : null}
                                 onSetPendingForwardDraft={handleSetPendingForwardDraft}

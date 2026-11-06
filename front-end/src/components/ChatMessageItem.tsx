@@ -62,7 +62,6 @@ export type ChatMessageItemProps = {
     isHighlighted: boolean;
     isSelected: boolean;
     showUnreadSeparator: boolean;
-    unreadCountForUi: number;
     isMenuActive: boolean;
     isSeenForUi: boolean;
     messageSeenCount: number;
@@ -350,7 +349,6 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     isHighlighted,
     isSelected,
     showUnreadSeparator,
-    unreadCountForUi,
     isMenuActive,
     isSeenForUi,
     messageSeenCount,
@@ -460,17 +458,15 @@ export const ChatMessageItem = memo(function ChatMessageItem({
             )}
 
             {showUnreadSeparator && (
-                <div ref={unreadSeparatorRef} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', justifyContent: 'center' }}>
-                    <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 999, padding: '6px 10px', fontFamily: 'Vazir, sans-serif' }}>
-                        پیام‌های خوانده نشده{unreadCountForUi > 0 ? ` (${toPersianDigits(unreadCountForUi)})` : ''}
+                <div ref={unreadSeparatorRef} className="chat-room__unread-separator">
+                    <div className="chat-room__unread-label">
+                        پیام‌های خوانده نشده
                     </div>
-                    <div style={{ height: 1, background: 'var(--border-primary)', flex: 1, opacity: 0.8 }} />
                 </div>
             )}
 
             <div
-                className={`${isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`} ${isHighlighted ? 'message-row--flash' : ''} ${isSelected ? 'message-row--selected' : ''} ${isSelectionModeActive ? 'message-row--selecting' : ''} ${isSwiping ? 'message-row--swiping' : ''}`}
+                className={`${isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`} ${isHighlighted ? 'message-row--flash' : ''} ${isSelected || isMenuActive ? 'message-row--selected' : ''} ${isSelectionModeActive ? 'message-row--selecting' : ''} ${isSwiping ? 'message-row--swiping' : ''}`}
                 onClickCapture={(e) => {
                     if (isUploading) return;
                     if (consumeSuppressedClick()) {
@@ -488,11 +484,17 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                 }}
                 onClick={(e) => {
                     if (isUploading) return;
-                    if (!isSelectionModeActive) return;
                     if (consumeSuppressedClick()) return;
                     if (Date.now() < swipeRef.current.blockClickUntil) return;
+                    if (isSelectionModeActive) {
+                        e.stopPropagation();
+                        actions.toggleSelect(message.id);
+                        return;
+                    }
+                    const target = e.target as HTMLElement;
+                    if (target.closest('.message-bubble') || target.closest('.message-select-indicator')) return;
                     e.stopPropagation();
-                    actions.toggleSelect(message.id);
+                    actions.openMenu(message.id, bubbleRef.current || (e.currentTarget as HTMLElement), e.clientX, e.clientY);
                 }}
                 onPointerDown={(e) => {
                     if (e.pointerType === 'mouse' && e.button === 0) startLongPress(e.clientX, e.clientY);
@@ -612,6 +614,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
 
                 <div
                     ref={setBubbleRef}
+                    data-message-id={message.id}
                     className={isMine
                         ? `message-bubble message-bubble--mine ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isSelected ? 'message-bubble--selected' : ''} ${isUploading ? 'message-bubble--uploading' : ''}`
                         : `message-bubble message-bubble--theirs ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isSelected ? 'message-bubble--selected' : ''} ${isUploading ? 'message-bubble--uploading' : ''}`}
@@ -640,9 +643,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                         transform: 'translateX(0px)',
                         transition: 'transform 140ms ease-out, box-shadow 220ms ease',
                         touchAction: 'auto',
-                        boxShadow: isMenuActive
-                            ? 'inset 0 0 0 2px color-mix(in srgb, var(--accent-primary) 36%, transparent)'
-                            : 'inset 0 0 0 2px rgba(0,0,0,0)',
+                        boxShadow: 'inset 0 0 0 2px rgba(0,0,0,0)',
                     }}
                 >
                     {isGroupChat && !isMine && !isBigEmojiOnly && (shape === 'msg-shape--single' || shape === 'msg-shape--first') && (
