@@ -107,6 +107,7 @@ export interface Message {
     forwarding?: boolean;
     unreadMentionUserIds?: string[];
     unreadReactionUserIds?: string[];
+    systemType?: 'member_joined' | string;
 }
 
 export interface ChatLastMessage {
@@ -132,6 +133,7 @@ export interface Chat {
     id: string;
     participantIds: string[];
     chatType?: 'direct' | 'group';
+    membershipClosed?: boolean;
     lastMessage?: ChatLastMessage | null;
     pinnedMessage?: PinnedMessage | null;
     unreadCount: number;
@@ -286,3 +288,16 @@ export interface ChessInvite {
 }
 
 export type View = 'chatList' | 'chatRoom' | 'newChat' | 'profile' | 'profileEdit' | 'settings' | 'settingsDevices' | 'settingsTheme' | 'settingsLogs' | 'settingsDataStorage' | 'settingsPrivacy' | 'settingsNotifications' | 'settingsAdmin' | 'settingsAdminPanel' | 'settingsAdminLinks' | 'chess';
+
+export interface GroupPreview {
+    chatId: string;
+    name: string;
+    avatar: string;
+    totalMembers: number;
+    onlineMembers?: number;
+    alreadyMember?: boolean;
+    membershipClosed?: boolean;
+    isBanned?: boolean;
+    inviteCode?: string;
+    verified?: boolean;
+}

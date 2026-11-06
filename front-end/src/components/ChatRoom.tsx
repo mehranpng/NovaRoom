@@ -2,11 +2,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Copy, Eye, MoreVertical, Pencil, Smile, Trash2, X, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload, Download, Pin, AtSign, Heart, Bell, BellOff, BellMinus } from 'lucide-react';
 import { AnimatePresence, motion } from "framer-motion";
-import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata, PendingAttachment, PendingForwardDraft, PinnedMessage } from '../types';
+import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata, PendingAttachment, PendingForwardDraft, PinnedMessage, GroupPreview } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { API_BASE_URL, apiFetch, getMessageSeenBy } from '../config/api';
 import { ContactInfo } from './ContactInfo';
+import { GroupJoinSheet } from './GroupJoinSheet';
 import { cx } from '../utils/cx';
 import { isElementScrolled } from '../utils/scrollFade';
 import { ChatMessagesSkeleton } from './ChatMessagesSkeleton';
@@ -114,6 +115,7 @@ interface ChatRoomProps {
     unreadReactionIds?: string[];
     onAckMention?: (chatId: string, messageId: string) => void | Promise<void>;
     onAckReaction?: (chatId: string, messageId: string) => void | Promise<void>;
+    onJoinGroupByCode?: (inviteCode: string) => Promise<void>;
 }
 
 function bubbleShape(prevSameSender: boolean, nextSameSender: boolean) {
@@ -219,7 +221,11 @@ function membersEqual(a: Record<string, GroupMember>, b: Record<string, GroupMem
             && left.avatar === right.avatar
             && left.bio === right.bio
             && left.verified === right.verified
-            && left.online === right.online;
+            && left.online === right.online
+            && left.lastSeen === right.lastSeen
+            && left.lastSeenCategory === right.lastSeenCategory
+            && left.isMember === right.isMember
+            && left.isBanned === right.isBanned;
     });
 }
 
@@ -281,6 +287,7 @@ export function ChatRoom({
     unreadReactionIds = [],
     onAckMention,
     onAckReaction,
+    onJoinGroupByCode,
 }: ChatRoomProps) {
     const currentChat = useMemo(
         () => chats.find((c) => c.id === chatId) || null,
@@ -366,7 +373,10 @@ export function ChatRoom({
     const [isJumpingToLatest, setIsJumpingToLatest] = useState(false);
     const [localLoadingOlder, setLocalLoadingOlder] = useState(false);
     const [localLoadingNewer, setLocalLoadingNewer] = useState(false);
-    const [chatStats, setChatStats] = useState<{ totalMembers: number; onlineMembers: number } | null>(null);
+    const [chatStats, setChatStats] = useState<{ totalMembers: number; onlineMembers: number; membershipClosed?: boolean } | null>(null);
+    const [invitePreviewGroup, setInvitePreviewGroup] = useState<GroupPreview | null>(null);
+    const [joiningPreviewGroup, setJoiningPreviewGroup] = useState(false);
+    const [invitePreviewError, setInvitePreviewError] = useState('');
     const [groupMembers, setGroupMembers] = useState<Record<string, GroupMember>>(() => (isGroupChat ? readCachedGroupMembers(chatId) : {}));
     const groupMembersSnapshotRef = useRef<Record<string, GroupMember> | null>(null);
     const [membersResolved, setMembersResolved] = useState<boolean>(() => !isGroupChat || Object.keys(readCachedGroupMembers(chatId)).length > 0);
@@ -839,10 +849,11 @@ export function ChatRoom({
                 if (!cancelled) {
                     const totalMembers = Number(stats?.totalMembers || 0);
                     const onlineMembers = Number(stats?.onlineMembers || 0);
+                    const membershipClosed = Boolean(stats?.membershipClosed);
                     setChatStats((prev) => (
-                        prev && prev.totalMembers === totalMembers && prev.onlineMembers === onlineMembers
+                        prev && prev.totalMembers === totalMembers && prev.onlineMembers === onlineMembers && Boolean(prev.membershipClosed) === membershipClosed
                             ? prev
-                            : { totalMembers, onlineMembers }
+                            : { totalMembers, onlineMembers, membershipClosed }
                     ));
                 }
             } catch {
@@ -887,6 +898,10 @@ export function ChatRoom({
                             chatId: id,
                             verified: m.verified,
                             online: id === currentUserId ? true : Boolean(m.online),
+                            lastSeen: m.lastSeen ?? null,
+                            lastSeenCategory: m.lastSeenCategory ?? null,
+                            isMember: m.isMember !== false,
+                            isBanned: Boolean(m.isBanned),
                         };
                     });
                     if (!membersEqual(groupMembersSnapshotRef.current ?? {}, map)) {
@@ -1144,6 +1159,70 @@ export function ChatRoom({
             }
         }
     }, [chatId, currentUser?.username, currentUserId, onOpenSavedMessages, shakeMessageBubble]);
+
+    const triggerInvalidLinkFeedback = useCallback((messageId?: string) => {
+        if (messageId) shakeMessageBubble(messageId);
+    }, [shakeMessageBubble]);
+
+    const openGroupInvite = useCallback(async (inviteCode: string, messageId?: string) => {
+        const code = String(inviteCode || '').trim();
+        if (!code || resolvingMention) return;
+        setResolvingMention(true);
+        setInvitePreviewError('');
+        try {
+            const preview = await apiFetch(`/groups/preview/${encodeURIComponent(code)}`);
+            if (!preview?.chatId) {
+                triggerInvalidLinkFeedback(messageId);
+                return;
+            }
+            setInvitePreviewGroup(preview as GroupPreview);
+        } catch {
+            triggerInvalidLinkFeedback(messageId);
+        } finally {
+            setResolvingMention(false);
+        }
+    }, [resolvingMention, triggerInvalidLinkFeedback]);
+
+    const handleConfirmJoinFromChat = async (group: GroupPreview) => {
+        const code = group.inviteCode || '';
+        if (!code || !onJoinGroupByCode) return;
+        setJoiningPreviewGroup(true);
+        setInvitePreviewError('');
+        try {
+            await onJoinGroupByCode(code);
+            setInvitePreviewGroup(null);
+        } catch (error) {
+            setInvitePreviewError(error instanceof Error ? error.message : 'خطا در عضویت در گروه');
+        } finally {
+            setJoiningPreviewGroup(false);
+        }
+    };
+
+    const handleBanMember = useCallback(async (targetChatId: string) => {
+        if (!chatId || !targetChatId) return;
+        try {
+            await apiFetch(`/groups/${encodeURIComponent(chatId)}/ban/${encodeURIComponent(targetChatId)}`, {
+                method: 'POST',
+            });
+        } catch {
+            return;
+        }
+        setGroupMembers((prev) => {
+            const existing = prev[targetChatId];
+            if (!existing) return prev;
+            return {
+                ...prev,
+                [targetChatId]: {
+                    ...existing,
+                    isMember: false,
+                    isBanned: true,
+                },
+            };
+        });
+        setChatStats((prev) => (
+            prev ? { ...prev, totalMembers: Math.max(1, prev.totalMembers - 1) } : prev
+        ));
+    }, [chatId]);
 
     const doDownloadMessageFile = async (m: Message) => {
         if (!m.file?.fileId) return;
@@ -2080,6 +2159,7 @@ export function ChatRoom({
     const mentionCandidates = useMemo(() => {
         if (!isGroupChat || isOfficialChannel) return [];
         return Object.entries(groupMembers)
+            .filter(([, m]) => m.isMember !== false)
             .map(([id, m]) => ({
                 chatId: m.chatId || id,
                 name: m.name || '',
@@ -2402,6 +2482,7 @@ export function ChatRoom({
         setReplySwipeLocked,
         toggleReasoning,
         openMention,
+        openGroupInvite,
     });
     messageHandlerStateRef.current = {
         openMessageMenu,
@@ -2419,6 +2500,7 @@ export function ChatRoom({
         setReplySwipeLocked,
         toggleReasoning,
         openMention,
+        openGroupInvite,
     };
 
     const messageActions = useMemo(() => ({
@@ -2446,6 +2528,9 @@ export function ChatRoom({
         swipeLock: (locked: boolean) => messageHandlerStateRef.current.setReplySwipeLocked(locked),
         openMention: (username: string, messageId: string) => {
             void messageHandlerStateRef.current.openMention(username, messageId);
+        },
+        openGroupInvite: (inviteCode: string, messageId?: string) => {
+            void messageHandlerStateRef.current.openGroupInvite(inviteCode, messageId);
         },
         registerEl: (messageId: string, el: HTMLDivElement | null) => {
             if (!el) {
@@ -2549,6 +2634,7 @@ export function ChatRoom({
                 isBlocked: !isGroupChat && blocked,
                 hideOnlineStatus: !isGroupChat && (Boolean(infoUser?.blockedByOther) || blocked),
                 isInteractiveOnline: Boolean(interactiveOnlineUsers && infoUser?.chatId && interactiveOnlineUsers[infoUser.chatId]),
+                membershipClosed: isGroupChat ? Boolean(chatStats?.membershipClosed || currentChat?.membershipClosed) : undefined,
                 onToggleBlock: !isGroupChat ? onToggleBlockUser : undefined,
                 onBack: () => {
                     setShowContactInfo(false);
@@ -2674,6 +2760,7 @@ export function ChatRoom({
                     restoringFromInfoRef.current = true;
                     setViewingMemberId(memberId);
                 }}
+                onBanMember={handleBanMember}
             />
         );
     }
@@ -3375,6 +3462,19 @@ export function ChatRoom({
                 }}
                 onSelectTargetChat={handleForwardFromModal}
                 onSelectChat={onSelectChat}
+            />
+
+            <GroupJoinSheet
+                open={Boolean(invitePreviewGroup)}
+                group={invitePreviewGroup}
+                joining={joiningPreviewGroup}
+                error={invitePreviewError}
+                onClose={() => {
+                    if (joiningPreviewGroup) return;
+                    setInvitePreviewGroup(null);
+                    setInvitePreviewError('');
+                }}
+                onConfirmJoin={handleConfirmJoinFromChat}
             />
 
             {copyToast && (

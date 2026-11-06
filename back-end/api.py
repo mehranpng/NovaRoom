@@ -1192,6 +1192,7 @@ class GroupCreateRequest(BaseModel):
 class GroupUpdateRequest(BaseModel):
     name: Optional[str] = None
     avatar: Optional[str] = None
+    membershipClosed: Optional[bool] = None
 
 
 class GroupJoinRequest(BaseModel):
@@ -4119,6 +4120,54 @@ async def create_group(
     }
 
 
+@app.get("/groups/preview/{invite_code}")
+@limiter.limit("60/minute;1000/hour")
+async def preview_group_by_invite(
+    request: Request,
+    invite_code: str,
+    current_user: dict = Depends(get_current_user),
+):
+    code = (invite_code or "").strip()
+    if not code:
+        raise HTTPException(status_code=400, detail="لینک دعوت نامعتبر است")
+
+    chat = await cl_chats.find_one({"inviteCode": code, "chatType": "group"})
+    if not chat:
+        raise HTTPException(status_code=404, detail="گروهی با این لینک یافت نشد")
+
+    user_id = current_user["chatId"]
+    participants = chat.get("participants", []) or []
+    banned_users = chat.get("bannedUsers", []) or []
+    already_member = user_id in participants
+    is_banned = user_id in banned_users
+    membership_closed = bool(chat.get("membershipClosed", False))
+    if not already_member and (is_banned or membership_closed):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "شما از این گروه مسدود شده‌اید"
+                if is_banned
+                else "عضویت در این گروه بسته شده است"
+            ),
+        )
+
+    online_count = await cl_users.count_documents(
+        {"chatId": {"$in": participants}, "online": True}
+    )
+    return {
+        "chatId": chat["_id"],
+        "name": chat.get("groupName", "گروه"),
+        "avatar": chat.get("groupAvatar", ""),
+        "totalMembers": len(participants),
+        "onlineMembers": online_count,
+        "alreadyMember": already_member,
+        "membershipClosed": membership_closed,
+        "isBanned": is_banned,
+        "inviteCode": chat.get("inviteCode", ""),
+        "verified": bool(chat.get("verified", False)),
+    }
+
+
 @app.post("/groups/join")
 @limiter.limit("20/minute;100/hour")
 async def join_group(
@@ -4138,6 +4187,16 @@ async def join_group(
 
     user_id = current_user["chatId"]
     participants = group_chat.get("participants", []) or []
+    already_member = user_id in participants
+    if not already_member:
+        if user_id in (group_chat.get("bannedUsers", []) or []):
+            raise HTTPException(
+                status_code=403, detail="شما از این گروه مسدود شده‌اید و امکان عضویت مجدد ندارید"
+            )
+        if group_chat.get("membershipClosed", False):
+            raise HTTPException(
+                status_code=403, detail="عضویت در این گروه توسط مدیر بسته شده است"
+            )
     if user_id not in participants and len(participants) >= MAX_GROUP_MEMBERS:
         raise HTTPException(
             status_code=400,
@@ -4166,11 +4225,146 @@ async def join_group(
                 detail=f"ظرفیت گروه تکمیل شده است (حداکثر {MAX_GROUP_MEMBERS} عضو)",
             )
 
+    if not already_member:
+        token = str(current_user.get("_session_token") or "")
+        chat_scope = f"chat:{group_chat['_id']}"
+        profile = current_user.get("profile") or {}
+        user_full_name = (
+            str(profile.get("name") or "").strip()
+            or str(profile.get("username") or "").strip()
+            or "کاربر"
+        )
+        join_text = f"{user_full_name} به گروه پیوست."
+        encrypted_text = encrypt_scoped_text(join_text, token, chat_scope)
+        now = utc_now()
+        message_doc = {
+            "chatId": group_chat["_id"],
+            "senderId": user_id,
+            "text": encrypted_text,
+            "textEncrypted": True,
+            "timestamp": now,
+            "seenBy": [user_id],
+            "replyTo": None,
+            "reactions": [],
+            "unreadMentionUserIds": [],
+            "unreadReactionUserIds": [],
+            "systemType": "member_joined",
+        }
+        inserted = await cl_messages.insert_one(message_doc)
+        msg_id = str(inserted.inserted_id)
+        await cl_chats.update_one(
+            {"_id": group_chat["_id"]},
+            {
+                "$set": {
+                    "lastMessage": {
+                        "id": msg_id,
+                        "text": encrypted_text,
+                        "senderId": user_id,
+                        "timestamp": now,
+                        "file": None,
+                    },
+                    "updatedAt": now,
+                }
+            },
+        )
+        await broadcast(
+            list(participants) + [user_id],
+            {
+                "type": "new_message",
+                "chatId": group_chat["_id"],
+                "message": {
+                    "id": msg_id,
+                    "chatId": group_chat["_id"],
+                    "senderId": user_id,
+                    "text": encrypted_text,
+                    "timestamp": dt_to_epoch_ms(now),
+                    "seen": True,
+                    "seenBy": [user_id],
+                    "replyTo": None,
+                    "edited": False,
+                    "reactions": [],
+                    "file": None,
+                    "systemType": "member_joined",
+                },
+            },
+        )
+
     return {
         "chatId": group_chat["_id"],
         "name": group_chat.get("groupName", "گروه بدون نام"),
+        "avatar": group_chat.get("groupAvatar", ""),
+        "chatType": "group",
+        "inviteCode": group_chat.get("inviteCode", ""),
+        "creatorId": group_chat.get("createdBy", ""),
+        "membershipClosed": bool(group_chat.get("membershipClosed", False)),
+        "alreadyMember": already_member,
         "inviteLink": build_group_invite_link(invite_code),
     }
+
+
+async def send_group_system_message(
+    chat_id: str,
+    sender_id: str,
+    text: str,
+    system_type: str,
+    recipients: List[str],
+    token: str = "",
+):
+    now = utc_now()
+    encrypted_text = encrypt_scoped_text(text, token, f"chat:{chat_id}")
+    message_doc = {
+        "chatId": chat_id,
+        "senderId": sender_id,
+        "text": encrypted_text,
+        "textEncrypted": True,
+        "timestamp": now,
+        "seenBy": [sender_id],
+        "replyTo": None,
+        "reactions": [],
+        "unreadMentionUserIds": [],
+        "unreadReactionUserIds": [],
+        "systemType": system_type,
+    }
+    inserted = await cl_messages.insert_one(message_doc)
+    msg_id = str(inserted.inserted_id)
+    await cl_chats.update_one(
+        {"_id": chat_id},
+        {
+            "$set": {
+                "lastMessage": {
+                    "id": msg_id,
+                    "text": encrypted_text,
+                    "senderId": sender_id,
+                    "timestamp": now,
+                    "file": None,
+                },
+                "updatedAt": now,
+            }
+        },
+    )
+    if recipients:
+        await broadcast(
+            recipients,
+            {
+                "type": "new_message",
+                "chatId": chat_id,
+                "message": {
+                    "id": msg_id,
+                    "chatId": chat_id,
+                    "senderId": sender_id,
+                    "text": encrypted_text,
+                    "timestamp": dt_to_epoch_ms(now),
+                    "seen": True,
+                    "seenBy": [sender_id],
+                    "replyTo": None,
+                    "edited": False,
+                    "reactions": [],
+                    "file": None,
+                    "systemType": system_type,
+                },
+            },
+        )
+    return msg_id
 
 
 @app.post("/groups/{chat_id}/leave")
@@ -4209,6 +4403,21 @@ async def leave_group(
         await release_files(file_ids)
         return {"message": "Group deleted (no members left)"}
 
+    profile = current_user.get("profile") or {}
+    leaver_name = (
+        str(profile.get("name") or "").strip()
+        or str(profile.get("username") or "").strip()
+        or "کاربر"
+    )
+    await send_group_system_message(
+        chat_id,
+        my_id,
+        f"{leaver_name} گروه را ترک کرد.",
+        "member_left",
+        remaining,
+        str(current_user.get("_session_token") or ""),
+    )
+
     return {"message": "Left group"}
 
 
@@ -4245,6 +4454,9 @@ async def update_group(
     if req.avatar is not None:
         update_data["groupAvatar"] = str(req.avatar).strip()
 
+    if req.membershipClosed is not None:
+        update_data["membershipClosed"] = bool(req.membershipClosed)
+
     if not update_data:
         return {"message": "No changes"}
 
@@ -4252,7 +4464,143 @@ async def update_group(
 
     await cl_chats.update_one({"_id": chat_id}, {"$set": update_data})
 
-    return {"message": "Group updated"}
+    updated = await cl_chats.find_one({"_id": chat_id}) or chat
+    return {
+        "chatId": chat_id,
+        "name": updated.get("groupName", "گروه"),
+        "avatar": updated.get("groupAvatar", ""),
+        "chatType": "group",
+        "inviteCode": updated.get("inviteCode", ""),
+        "creatorId": updated.get("createdBy", ""),
+        "membershipClosed": bool(updated.get("membershipClosed", False)),
+    }
+
+
+@app.get("/groups/{chat_id}/bans")
+@limiter.limit("60/minute;1000/hour")
+async def get_group_banned_users(
+    request: Request, chat_id: str, current_user: dict = Depends(get_current_user)
+):
+    chat = await cl_chats.find_one({"_id": chat_id, "chatType": "group"})
+    if not chat:
+        raise HTTPException(status_code=404, detail="گروه یافت نشد")
+    if not can_manage_group(current_user, chat):
+        raise HTTPException(status_code=403, detail="دسترسی غیرمجاز")
+
+    banned_ids = chat.get("bannedUsers", []) or []
+    if not banned_ids:
+        return {"bannedUsers": []}
+
+    users = await cl_users.find({"chatId": {"$in": banned_ids}}).to_list(len(banned_ids))
+    token = str(current_user.get("_session_token") or "")
+    my_blocked_ids = set(_get_blocked_from_user_doc(current_user))
+    result = []
+    for u in users:
+        profile = u.get("profile") or {}
+        uid = str(u.get("chatId") or "")
+        blocked_pair = (
+            uid in my_blocked_ids
+            or current_user["chatId"] in set(_get_blocked_from_user_doc(u))
+        )
+        presence = await resolve_user_presence_for_viewer(
+            current_user, u, blocked=bool(blocked_pair)
+        )
+        result.append(
+            {
+                "chatId": uid,
+                "name": str(profile.get("name") or "").strip() or profile.get("username") or "کاربر",
+                "username": profile.get("username", ""),
+                "avatar": "" if blocked_pair else profile.get("avatar", ""),
+                "bio": decrypt_user_bio(u, token) if presence.get("bioVisible") else "",
+                "verified": bool(u.get("verified", False)),
+            }
+        )
+    return {"bannedUsers": result}
+
+
+@app.post("/groups/{chat_id}/ban/{target_chat_id}")
+@limiter.limit("30/minute;300/hour")
+async def ban_user_from_group(
+    request: Request,
+    chat_id: str,
+    target_chat_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    chat = await cl_chats.find_one({"_id": chat_id, "chatType": "group"})
+    if not chat:
+        raise HTTPException(status_code=404, detail="گروه یافت نشد")
+    if not can_manage_group(current_user, chat):
+        raise HTTPException(
+            status_code=403, detail="فقط سازنده یا ادمین گروه می‌تواند کاربر را مسدود کند"
+        )
+    if target_chat_id == str(chat.get("createdBy") or "") or target_chat_id == current_user["chatId"]:
+        raise HTTPException(
+            status_code=400, detail="امکان مسدودسازی این کاربر وجود ندارد"
+        )
+
+    await cl_chats.update_one(
+        {"_id": chat_id},
+        {
+            "$pull": {"participants": target_chat_id},
+            "$addToSet": {"bannedUsers": target_chat_id},
+            "$set": {"updatedAt": utc_now()},
+        },
+    )
+
+    await safe_send(target_chat_id, {"type": "group_banned", "chatId": chat_id})
+
+    remaining = [
+        pid for pid in (chat.get("participants", []) or []) if pid != target_chat_id
+    ]
+    target_user = await cl_users.find_one(
+        {"chatId": target_chat_id}, {"profile": 1}
+    )
+    target_profile = (target_user or {}).get("profile") or {}
+    removed_name = (
+        str(target_profile.get("name") or "").strip()
+        or str(target_profile.get("username") or "").strip()
+        or "کاربر"
+    )
+    await send_group_system_message(
+        chat_id,
+        target_chat_id,
+        f"{removed_name} از گروه حذف شد.",
+        "member_removed",
+        remaining,
+        str(current_user.get("_session_token") or ""),
+    )
+    await broadcast(
+        remaining,
+        {
+            "type": "group_member_removed",
+            "chatId": chat_id,
+            "removedUserId": target_chat_id,
+        },
+    )
+    return {"status": "ok", "bannedUserId": target_chat_id}
+
+
+@app.delete("/groups/{chat_id}/ban/{target_chat_id}")
+@limiter.limit("30/minute;300/hour")
+async def unban_user_from_group(
+    request: Request,
+    chat_id: str,
+    target_chat_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    chat = await cl_chats.find_one({"_id": chat_id, "chatType": "group"})
+    if not chat:
+        raise HTTPException(status_code=404, detail="گروه یافت نشد")
+    if not can_manage_group(current_user, chat):
+        raise HTTPException(
+            status_code=403, detail="فقط سازنده یا ادمین گروه می‌تواند مسدودیت را لغو کند"
+        )
+
+    await cl_chats.update_one(
+        {"_id": chat_id},
+        {"$pull": {"bannedUsers": target_chat_id}, "$set": {"updatedAt": utc_now()}},
+    )
+    return {"status": "ok", "unbannedUserId": target_chat_id}
 
 
 @app.get("/chats")
@@ -4404,6 +4752,9 @@ async def get_chat_list(
                 "id": chat["_id"],
                 "participantIds": chat.get("participants", []),
                 "chatType": "group" if is_group else "direct",
+                "membershipClosed": (
+                    bool(chat.get("membershipClosed", False)) if is_group else False
+                ),
                 "otherUser": {
                     "chatId": (
                         chat["_id"]
@@ -4620,6 +4971,9 @@ async def get_chat_stats(
         "chatType": chat.get("chatType", "direct"),
         "totalMembers": total_members,
         "onlineMembers": online_members,
+        "inviteCode": chat.get("inviteCode", ""),
+        "creatorId": chat.get("createdBy", ""),
+        "membershipClosed": bool(chat.get("membershipClosed", False)),
     }
 
 
@@ -4688,41 +5042,52 @@ async def get_chat_members(
     if my_id not in participants:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    users = await cl_users.find({"chatId": {"$in": participants}}).to_list(200)
+    banned_users = chat.get("bannedUsers", []) or []
+    participants_set = set(participants)
+    banned_set = set(banned_users)
+    sender_ids = await cl_messages.distinct("senderId", {"chatId": chat_id})
+    all_user_ids = list(
+        participants_set
+        | banned_set
+        | {s for s in sender_ids if isinstance(s, str) and s}
+    )
+    users = await cl_users.find({"chatId": {"$in": all_user_ids}}).to_list(500)
+    my_blocked_ids = set(_get_blocked_from_user_doc(current_user))
     result = []
     for u in users:
+        uid = str(u.get("chatId") or "")
+        if not uid:
+            continue
         u_blocked_ids = set(_get_blocked_from_user_doc(u))
-        blocked_by_other = my_id in u_blocked_ids
+        blocked_pair = (uid in my_blocked_ids) or (my_id in u_blocked_ids)
         presence = await resolve_user_presence_for_viewer(
             current_user,
             u,
-            blocked=bool(blocked_by_other),
+            blocked=bool(blocked_pair),
         )
 
         profile = u.get("profile", {})
         result.append(
             {
-                "chatId": u.get("chatId", ""),
+                "chatId": uid,
                 "name": profile.get("name")
                 or profile.get("username")
-                or u.get("chatId", ""),
+                or uid,
                 "username": profile.get("username", ""),
-                "avatar": (
-                    profile.get("avatar", "")
-                    if presence.get("avatarVisible") and not blocked_by_other
-                    else ""
-                ),
+                "avatar": "" if blocked_pair else profile.get("avatar", ""),
                 "bio": (
                     decrypt_user_bio(
                         u, str(current_user.get("_session_token") or "")
                     )
-                    if presence.get("bioVisible")
+                    if presence.get("bioVisible") and not blocked_pair
                     else ""
                 ),
                 "verified": u.get("verified", False),
                 "online": presence["online"],
                 "lastSeen": presence.get("lastSeen"),
                 "lastSeenCategory": presence.get("lastSeenCategory"),
+                "isMember": uid in participants_set,
+                "isBanned": uid in banned_set,
             }
         )
     return result
@@ -4915,6 +5280,7 @@ async def get_messages(
                 "searchEnabled": bool(m.get("searchEnabled", False)),
                 "searchStatus": str(m.get("searchStatus") or ""),
                 "searchSources": m.get("searchSources") or "",
+                "systemType": m.get("systemType"),
                 "clientId": m.get("clientId"),
             }
             for m in msgs
@@ -5083,6 +5449,7 @@ async def get_messages(
             "searchStatus": str(m.get("searchStatus") or ""),
             "searchSources": m.get("searchSources") or "",
             "chessInvite": m.get("chessInvite"),
+            "systemType": m.get("systemType"),
             "clientId": m.get("clientId"),
         }
         for m in msgs
@@ -5822,7 +6189,9 @@ async def batch_delete_messages(
     if not oids:
         return {"ok": True, "deletedIds": []}
 
-    msgs = await cl_messages.find({"_id": {"$in": oids}, "chatId": chat_id}).to_list(len(oids))
+    msgs = await cl_messages.find(
+        {"_id": {"$in": oids}, "chatId": chat_id, "systemType": {"$exists": False}}
+    ).to_list(len(oids))
     if not msgs:
         return {"ok": True, "deletedIds": []}
 
@@ -7910,6 +8279,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 msg = await cl_messages.find_one({"_id": oid, "chatId": chat_id_target})
                 if not msg or msg.get("senderId") != chat_id:
                     continue
+                if msg.get("systemType"):
+                    continue
 
                 saved_chat_id = get_saved_messages_id(chat_id)
                 is_saved = chat_id_target == saved_chat_id
@@ -8053,6 +8424,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 msg = await cl_messages.find_one({"_id": oid, "chatId": chat_id_target})
                 if not msg:
+                    continue
+                if msg.get("systemType"):
                     continue
 
                 if msg.get("senderId") != chat_id:

@@ -32,6 +32,7 @@ type ChatMessageActions = {
     swipeLock: (locked: boolean) => void;
     registerEl: (messageId: string, el: HTMLDivElement | null) => void;
     openMention: (username: string, messageId: string) => void;
+    openGroupInvite: (inviteCode: string, messageId?: string) => void;
 };
 
 export type ChatMessageItemProps = {
@@ -252,17 +253,45 @@ function transformMarkdownChildren(
     return children;
 }
 
+function extractGroupInviteCodeFromUrl(rawUrl: string): string | null {
+    const cleaned = rawUrl.replace(/[.,!?;:)\]}]+$/, '');
+    const match =
+        cleaned.match(/^(?:senoroom|novaroom):\/\/group\/([a-zA-Z0-9]+)$/i)
+        || cleaned.match(/^https?:\/\/[^\s/]+\/group\/([a-zA-Z0-9]+)\/?$/i)
+        || cleaned.match(/[?&]groupInvite=([a-zA-Z0-9]+)/i);
+    return match ? match[1] : null;
+}
+
+const GET_URL_SPLIT_REGEX = /((?:https?:\/\/|www\.|(?:senoroom|novaroom):\/\/group\/)[^\s<]+)/gi;
+
 function renderTextWithLinks(
     text: string,
     onMentionClick?: (username: string) => void,
+    onGroupInviteClick?: (inviteCode: string) => void,
 ): React.ReactNode {
-    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
-    const isUrl = (value: string) => /^(https?:\/\/[^\s]+|www\.[^\s]+)$/i.test(value);
-    const parts = text.split(urlRegex);
+    const isUrl = (value: string) => /^(https?:\/\/|www\.|(?:senoroom|novaroom):\/\/group\/)/i.test(value);
+    const parts = text.split(GET_URL_SPLIT_REGEX);
     return parts.map((part, idx) => {
         if (!part) return null;
         if (isUrl(part)) {
-            const href = part.startsWith('http') ? part : `https://${part}`;
+            const inviteCode = extractGroupInviteCodeFromUrl(part);
+            if (inviteCode && onGroupInviteClick) {
+                return (
+                    <button
+                        key={`${part}-${idx}`}
+                        type="button"
+                        dir="ltr"
+                        className="md-link message-mention-link"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onGroupInviteClick(inviteCode);
+                        }}
+                    >
+                        {part}
+                    </button>
+                );
+            }
+            const href = part.startsWith('http') || part.startsWith('www.') ? (part.startsWith('http') ? part : `https://${part}`) : part;
             return <a key={`${part}-${idx}`} className="md-link" href={href} target="_blank" rel="noopener noreferrer">{part}</a>;
         }
         return renderSegmentWithMentions(part, `seg-${idx}`, onMentionClick);
@@ -274,15 +303,20 @@ const MemoMessageTextContent = memo(function MemoMessageTextContent({
     isBigEmojiOnly,
     emojiOnlyClass,
     onMentionClick,
+    onGroupInviteClick,
 }: {
     rawText: string;
     isBigEmojiOnly: boolean;
     emojiOnlyClass: string;
     onMentionClick?: (username: string) => void;
+    onGroupInviteClick?: (inviteCode: string) => void;
 }) {
     const normalized = useMemo(() => normalizeMessageTextForRender(rawText), [rawText]);
     const isMarkdown = useMemo(() => hasMarkdownSyntax(normalized), [normalized]);
-    const linkedNodes = useMemo(() => (isMarkdown ? null : renderTextWithLinks(normalized, onMentionClick)), [isMarkdown, normalized, onMentionClick]);
+    const linkedNodes = useMemo(
+        () => (isMarkdown ? null : renderTextWithLinks(normalized, onMentionClick, onGroupInviteClick)),
+        [isMarkdown, normalized, onMentionClick, onGroupInviteClick],
+    );
     const isLtr = useMemo(() => isLtrText(normalized), [normalized]);
     const components = useMemo(
         () => (onMentionClick ? buildMarkdownComponents(onMentionClick) : markdownComponents),
@@ -440,6 +474,15 @@ export const ChatMessageItem = memo(function ChatMessageItem({
         actions.openMention(username, message.id);
     }, [isUploading, isSelectionModeActive, actions, message.id]);
 
+    const handleGroupInviteClick = useCallback((inviteCode: string) => {
+        if (isUploading) return;
+        if (isSelectionModeActive) {
+            actions.toggleSelect(message.id);
+            return;
+        }
+        actions.openGroupInvite(inviteCode, message.id);
+    }, [isUploading, isSelectionModeActive, actions, message.id]);
+
     const senderColor = useMemo(() => {
         if (!message.senderId) return SENDER_COLORS[0];
         const idx = Math.abs(String(message.senderId).split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % SENDER_COLORS.length;
@@ -448,6 +491,29 @@ export const ChatMessageItem = memo(function ChatMessageItem({
 
     const searchSources = message.searchSources || [];
     const showSearchBlock = Boolean(message.searchEnabled && (searchSources.length > 0 || message.searchStatus === 'searching'));
+
+    if (message.systemType) {
+        return (
+            <div className="message-item">
+                {dayBreak && (
+                    <div className="chat-room__date-separator">
+                        <div className="chat-room__date-label">{dayLabel}</div>
+                    </div>
+                )}
+                <div
+                    ref={(el) => actions.registerEl(message.id, el)}
+                    id={`msg-${message.id}`}
+                    data-message-id={message.id}
+                    className="chat-room__unread-separator chat-room__system-join"
+                    dir="rtl"
+                >
+                    <div className="chat-room__unread-label" dir="rtl">
+                        {message.text}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="message-item">
@@ -799,6 +865,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                             isBigEmojiOnly={isBigEmojiOnly}
                             emojiOnlyClass={emojiOnlyClass}
                             onMentionClick={handleMentionClick}
+                            onGroupInviteClick={handleGroupInviteClick}
                         />
                     )}
                     {message.text && !message.chessInvite && message.reasoningEnabled && message.reasoningContent && (
@@ -808,6 +875,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                 isBigEmojiOnly={isBigEmojiOnly}
                                 emojiOnlyClass={emojiOnlyClass}
                                 onMentionClick={handleMentionClick}
+                                onGroupInviteClick={handleGroupInviteClick}
                             />
                         </div>
                     )}

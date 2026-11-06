@@ -17,6 +17,7 @@ interface UseWebSocketProps {
     onUploadStatus?: (chatId: string, userId: string, isUploading: boolean) => void;
     onMessagePinned?: (chatId: string, pinnedMessage: any) => void;
     onMessageUnpinned?: (chatId: string) => void;
+    onGroupBanned?: (chatId: string) => void;
     onConnectionChange?: (isConnected: boolean) => void;
     onReconnectExhausted?: () => void;
     onAINewMessage?: (message: any) => void;
@@ -75,6 +76,7 @@ export function useWebSocket({
     onUploadStatus,
     onMessagePinned,
     onMessageUnpinned,
+    onGroupBanned,
     onConnectionChange,
     onReconnectExhausted,
     onAINewMessage,
@@ -114,6 +116,7 @@ export function useWebSocket({
     const onUploadStatusRef = useRef(onUploadStatus);
     const onMessagePinnedRef = useRef(onMessagePinned);
     const onMessageUnpinnedRef = useRef(onMessageUnpinned);
+    const onGroupBannedRef = useRef(onGroupBanned);
     const onConnectionChangeRef = useRef(onConnectionChange);
     const onReconnectExhaustedRef = useRef(onReconnectExhausted);
     const onAINewMessageRef = useRef(onAINewMessage);
@@ -136,6 +139,7 @@ export function useWebSocket({
     useEffect(() => { onUploadStatusRef.current = onUploadStatus; }, [onUploadStatus]);
     useEffect(() => { onMessagePinnedRef.current = onMessagePinned; }, [onMessagePinned]);
     useEffect(() => { onMessageUnpinnedRef.current = onMessageUnpinned; }, [onMessageUnpinned]);
+    useEffect(() => { onGroupBannedRef.current = onGroupBanned; }, [onGroupBanned]);
     useEffect(() => { onConnectionChangeRef.current = onConnectionChange; }, [onConnectionChange]);
     useEffect(() => { onReconnectExhaustedRef.current = onReconnectExhausted; }, [onReconnectExhausted]);
     useEffect(() => { onAINewMessageRef.current = onAINewMessage; }, [onAINewMessage]);
@@ -325,6 +329,11 @@ export function useWebSocket({
                     const resolvedChatId = String(resolvedChatIdFromPayload || data.chatId || '').trim();
                     if (resolvedChatId) {
                         onMessageUnpinnedRef.current?.(resolvedChatId);
+                    }
+                } else if (dataType === 'group_banned') {
+                    const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
+                    if (resolvedChatId) {
+                        onGroupBannedRef.current?.(resolvedChatId);
                     }
                 } else if (data.type === 'ai_response') {
                     onAINewMessageRef.current?.(data.message);

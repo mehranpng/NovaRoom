@@ -8609,3 +8609,254 @@ html.no-blur-effect .chat-list__header,
     color: var(--text-secondary);
     flex-shrink: 0;
 }
+
+.group-join-sheet__body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 20px 24px;
+    gap: 10px;
+    text-align: center;
+}
+
+.group-join-sheet__name {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-top: 4px;
+}
+
+.group-join-sheet__meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.group-join-sheet__error {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+    font-size: 12.5px;
+}
+
+.group-join-sheet__btn {
+    width: 100%;
+    margin-top: 10px;
+    height: 44px;
+    border-radius: 999px;
+    border: none;
+    background: var(--accent-primary);
+    color: #ffffff;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: transform 0.12s ease, background-color 0.15s ease;
+}
+
+.group-join-sheet__btn:hover:not(:disabled) {
+    background: var(--accent-hover, var(--accent-primary));
+}
+
+.group-join-sheet__btn:active:not(:disabled) {
+    transform: scale(0.97);
+    background: var(--accent-hover, var(--accent-primary));
+}
+
+.group-join-sheet__btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.group-settings-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+    text-align: right;
+}
+
+.group-settings-toggle-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
+.group-settings-toggle-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.group-settings-toggle-desc {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.group-settings-switch {
+    position: relative;
+    width: 44px;
+    height: 25px;
+    border-radius: 999px;
+    border: none;
+    background: rgba(148, 163, 184, 0.35);
+    padding: 2px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color 0.18s ease, transform 0.12s ease;
+}
+
+.group-settings-switch.is-on {
+    background: var(--accent-primary);
+}
+
+.group-settings-switch:active {
+    transform: scale(0.97);
+}
+
+.group-settings-switch:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.group-settings-switch__thumb {
+    display: block;
+    width: 21px;
+    height: 21px;
+    border-radius: 999px;
+    background: #ffffff;
+    transition: transform 0.18s ease;
+    transform: translateX(0);
+}
+
+.group-settings-switch.is-on .group-settings-switch__thumb {
+    transform: translateX(-19px);
+}
+
+.group-settings-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.group-settings-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.group-settings-ban-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.group-settings-ban-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: var(--bg-secondary);
+}
+
+.group-settings-ban-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+    text-align: right;
+}
+
+.group-settings-ban-name {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 0;
+}
+
+.group-settings-ban-username {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.group-settings-unban-btn {
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-family: inherit;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform 0.12s ease, background-color 0.15s ease;
+}
+
+.group-settings-unban-btn:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.18);
+}
+
+.group-settings-unban-btn:active:not(:disabled) {
+    transform: scale(0.97);
+}
+
+.group-settings-unban-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.chat-room__system-join {
+    cursor: default;
+    user-select: none;
+}
+
+.message-text button.md-link {
+    border: none;
+    padding: 0;
+    font: inherit;
+    text-align: inherit;
+}
+
+.contact-info__owner-badge {
+    flex-shrink: 0;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-soft-text);
+    font-size: 11.5px;
+    font-weight: 700;
+}
+
+.animate-spin {
+    animation: spin 0.8s linear infinite;
+}

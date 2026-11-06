@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ChevronLeft, Copy, Pencil, Search, Users } from 'lucide-react';
+import { Ban, ChevronLeft, Copy, Search, Settings, Users } from 'lucide-react';
 import type { User } from '../types';
 import { Avatar, extractFileIdFromAvatar, getAvatarDisplayUrl } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -20,6 +21,8 @@ export type GroupMember = {
     online?: boolean;
     lastSeen?: number | string | null;
     lastSeenCategory?: 'recently' | 'within_week' | 'within_month' | 'long_time_ago' | null;
+    isMember?: boolean;
+    isBanned?: boolean;
 };
 
 type GroupMembersViewProps = {
@@ -35,6 +38,7 @@ type GroupMembersViewProps = {
     onEditGroup: () => void;
     onOpenProfile: () => void;
     onViewMember: (memberId: string) => void;
+    onBanMember?: (targetChatId: string) => Promise<void> | void;
 };
 
 export function GroupMembersView({
@@ -50,11 +54,19 @@ export function GroupMembersView({
     onEditGroup,
     onOpenProfile,
     onViewMember,
+    onBanMember,
 }: GroupMembersViewProps) {
     const [memberSearch, setMemberSearch] = useState('');
     const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId: string; fileName: string } | null>(null);
+    const [menuState, setMenuState] = useState<{ member: GroupMember; x: number; y: number } | null>(null);
+    const longPressTimerRef = useRef<number | null>(null);
+    const longPressTriggeredRef = useRef(false);
     const navigate = useNavigate();
     const location = useLocation();
+
+    useEffect(() => () => {
+        if (longPressTimerRef.current) window.clearTimeout(longPressTimerRef.current);
+    }, []);
 
     const isAvatarRoute = new URLSearchParams(location.search).get('avatar') === '1';
 
@@ -87,20 +99,36 @@ export function GroupMembersView({
         setOpenedGroupAvatar(null);
     };
 
-    const membersList = Object.values(groupMembers);
+    const membersList = Object.values(groupMembers).filter((m) => m.isMember !== false);
     const filtered = memberSearch.trim()
         ? membersList.filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()) || m.username.toLowerCase().includes(memberSearch.toLowerCase()))
         : membersList;
 
     const isMemberOnline = (m: GroupMember) => Boolean((interactiveOnlineUsers && m.chatId && interactiveOnlineUsers[m.chatId]) || m.online);
 
+    const lastSeenValue = (m: GroupMember): number => {
+        if (typeof m.lastSeen === 'number') return m.lastSeen;
+        if (typeof m.lastSeen === 'string') {
+            const parsed = Date.parse(m.lastSeen);
+            return Number.isFinite(parsed) ? parsed : 0;
+        }
+        return 0;
+    };
+
+    const memberRank = (m: GroupMember): number => {
+        if (isMemberOnline(m)) return 0;
+        if (m.lastSeen != null) return 1;
+        if (m.lastSeenCategory === 'recently') return 2;
+        if (m.lastSeenCategory) return 3;
+        return 4;
+    };
+
     const sortedFiltered = [...filtered].sort((a, b) => {
-        if (a.chatId === currentUserId && b.chatId !== currentUserId) return -1;
-        if (a.chatId !== currentUserId && b.chatId === currentUserId) return 1;
-        const aOnline = isMemberOnline(a);
-        const bOnline = isMemberOnline(b);
-        if (aOnline && !bOnline) return -1;
-        if (!aOnline && bOnline) return 1;
+        if (a.chatId === currentUserId) return -1;
+        if (b.chatId === currentUserId) return 1;
+        const rankDiff = memberRank(a) - memberRank(b);
+        if (rankDiff !== 0) return rankDiff;
+        if (memberRank(a) === 1) return lastSeenValue(b) - lastSeenValue(a);
         return 0;
     });
     const onlineCount = membersList.filter(isMemberOnline).length;
@@ -123,11 +151,11 @@ export function GroupMembersView({
                     <button
                         type="button"
                         className="icon-btn"
-                        aria-label="Edit group"
-                        title="ویرایش گروه"
+                        aria-label="تنظیمات گروه"
+                        title="تنظیمات گروه"
                         onClick={onEditGroup}
                     >
-                        <Pencil size={18} />
+                        <Settings size={19} />
                     </button>
                 )}
             </div>
@@ -165,14 +193,12 @@ export function GroupMembersView({
                     </div>
                 )}
 
-                <div className="contact-info__card" style={{ padding: '8px 12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Search size={15} style={{ opacity: 0.5, flexShrink: 0 }} />
-                        <input type="text" placeholder="جستجو در اعضا..." value={memberSearch} onChange={e => setMemberSearch(e.target.value)}
-                            style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, fontSize: 14, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', direction: 'rtl' }} />
-                    </div>
+                <div className="contact-info__card" style={{ padding: '8px 12px', position: 'relative' }}>
+                    <Search size={15} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', opacity: 0.5, pointerEvents: 'none' }} />
+                    <input type="text" placeholder="جستجو در اعضا..." value={memberSearch} onChange={e => setMemberSearch(e.target.value)}
+                        style={{ width: '100%', boxSizing: 'border-box', border: 'none', background: 'transparent', outline: 'none', paddingRight: 26, fontSize: 14, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', direction: 'rtl' }} />
                 </div>
-                <div className="contact-info__members-title">اعضا ({toPersianDigits(membersList.length)})</div>
+                <div className="contact-info__members-title" style={{ textAlign: 'right' }}>اعضا</div>
                 <div className="contact-info__card" style={{ padding: 0, overflow: 'hidden' }}>
                     {membersLoading && membersList.length === 0 ? (
                         Array.from({ length: 6 }).map((_, idx) => (
@@ -187,37 +213,140 @@ export function GroupMembersView({
                     ) : sortedFiltered.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)', fontSize: 14 }}>عضوی یافت نشد</div>
                     ) : (
-                        sortedFiltered.map((member, idx) => (
-                            <div key={member.chatId}
-                                onClick={() => {
-                                    if (member.chatId === currentUserId) onOpenProfile();
-                                    else onViewMember(member.chatId);
-                                }}
-                                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer', borderTop: idx > 0 ? '1px solid var(--border-primary)' : 'none', transition: 'background 0.15s' }}
-                                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
-                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                            >
-                                <Avatar name={member.name} size="md" src={member.avatar} online={isMemberOnline(member)} />
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>
-                                        {member.name}
-                                        {resolveVerified(member.verified) && <VerifiedBadge size={14} />}
+                        sortedFiltered.map((member, idx) => {
+                            const canBanThisMember = Boolean(
+                                canManageGroup
+                                && onBanMember
+                                && member.chatId
+                                && member.chatId !== currentUserId
+                                && member.chatId !== contact.createdBy
+                            );
+
+                            const openMemberMenu = (x: number, y: number) => {
+                                setMenuState({ member, x, y });
+                            };
+
+                            return (
+                                <div key={member.chatId}
+                                    onClick={() => {
+                                        if (longPressTriggeredRef.current) {
+                                            longPressTriggeredRef.current = false;
+                                            return;
+                                        }
+                                        if (member.chatId === currentUserId) onOpenProfile();
+                                        else onViewMember(member.chatId);
+                                    }}
+                                    onContextMenu={(e) => {
+                                        if (!canBanThisMember) return;
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        openMemberMenu(e.clientX, e.clientY);
+                                    }}
+                                    onTouchStart={(e) => {
+                                        if (!canBanThisMember) return;
+                                        longPressTriggeredRef.current = false;
+                                        const touch = e.touches[0];
+                                        if (!touch) return;
+                                        const { clientX, clientY } = touch;
+                                        if (longPressTimerRef.current) window.clearTimeout(longPressTimerRef.current);
+                                        longPressTimerRef.current = window.setTimeout(() => {
+                                            longPressTimerRef.current = null;
+                                            longPressTriggeredRef.current = true;
+                                            if (navigator.vibrate) navigator.vibrate(18);
+                                            openMemberMenu(clientX, clientY);
+                                            window.setTimeout(() => {
+                                                longPressTriggeredRef.current = false;
+                                            }, 700);
+                                        }, 450);
+                                    }}
+                                    onTouchMove={() => {
+                                        if (!longPressTimerRef.current) return;
+                                        window.clearTimeout(longPressTimerRef.current);
+                                        longPressTimerRef.current = null;
+                                    }}
+                                    onTouchEnd={() => {
+                                        if (!longPressTimerRef.current) return;
+                                        window.clearTimeout(longPressTimerRef.current);
+                                        longPressTimerRef.current = null;
+                                    }}
+                                    onTouchCancel={() => {
+                                        if (!longPressTimerRef.current) return;
+                                        window.clearTimeout(longPressTimerRef.current);
+                                        longPressTimerRef.current = null;
+                                    }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer', borderTop: idx > 0 ? '1px solid var(--border-primary)' : 'none', transition: 'background 0.15s' }}
+                                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+                                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                >
+                                    <Avatar name={member.name} size="md" src={member.avatar} online={isMemberOnline(member)} />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>
+                                            {member.name}
+                                            {resolveVerified(member.verified) && <VerifiedBadge size={14} />}
+                                        </div>
+                                        <div style={{ fontSize: 13, marginTop: 2 }}>
+                                            {isMemberOnline(member) ? (
+                                                <span className="status-online-text">آنلاین</span>
+                                            ) : (
+                                                <span style={{ color: 'var(--text-secondary)' }}>
+                                                    {formatLastSeen(member, { isInteractiveOnline: isMemberOnline(member) })}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div style={{ fontSize: 13, marginTop: 2 }}>
-                                        {isMemberOnline(member) ? (
-                                            <span className="status-online-text">آنلاین</span>
-                                        ) : (
-                                            <span style={{ color: 'var(--text-secondary)' }}>
-                                                {formatLastSeen(member, { isInteractiveOnline: isMemberOnline(member) })}
-                                            </span>
-                                        )}
-                                    </div>
+                                    {contact.createdBy && member.chatId === contact.createdBy && (
+                                        <span className="contact-info__owner-badge">مالک</span>
+                                    )}
                                 </div>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
             </div>
+            {menuState && createPortal(
+                <div
+                    className="fixed inset-0"
+                    style={{ position: 'fixed', inset: 0, zIndex: 220 }}
+                    onPointerDown={(e) => {
+                        if (e.target !== e.currentTarget) return;
+                        setMenuState(null);
+                    }}
+                    onContextMenu={(e) => {
+                        e.preventDefault();
+                    }}
+                >
+                    <div
+                        className="popover popover--mini"
+                        dir="rtl"
+                        style={{
+                            position: 'fixed',
+                            top: Math.min(menuState.y, window.innerHeight - 72),
+                            left: Math.min(Math.max(12, menuState.x - 90), window.innerWidth - 240),
+                            right: 'auto',
+                            zIndex: 221,
+                            minWidth: 210,
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                    >
+                        <button
+                            type="button"
+                            className="popover__item popover__item--danger"
+                            onPointerDown={async (e) => {
+                                e.stopPropagation();
+                                const targetId = menuState.member.chatId;
+                                setMenuState(null);
+                                if (targetId && onBanMember) await onBanMember(targetId);
+                            }}
+                        >
+                            <Ban size={16} />
+                            حذف و مسدودسازی از گروه
+                        </button>
+                    </div>
+                </div>,
+                document.body,
+            )}
+
             {openedGroupAvatar && isAvatarRoute && (
                 <ImageMediaViewer
                     imageUrl={openedGroupAvatar.url}

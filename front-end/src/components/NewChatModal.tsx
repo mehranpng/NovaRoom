@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, Users, Link as LinkIcon, ChevronLeft, Copy, CheckCheck } from 'lucide-react';
+import { Search, Users, Link as LinkIcon, ChevronLeft, Copy, CheckCheck, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { apiFetch } from '../config/api';
-import { type User } from '../types';
+import { type GroupPreview, type User } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
+import { GroupJoinSheet } from './GroupJoinSheet';
 import { screenVariants } from '../utils/screenMotion';
 import { cx } from '../utils/cx';
 import { useScrollFade } from '../hooks/useScrollFade';
@@ -14,6 +15,7 @@ interface NewChatScreenProps {
     onUserSelected: (user: User) => void;
     onCreateGroup: (groupName: string) => Promise<any> | any;
     onJoinGroup: (inviteCode: string) => Promise<void> | void;
+    onGroupCreated?: (chatId: string) => void;
     currentUser?: User | null;
 }
 
@@ -51,7 +53,7 @@ const extractInviteCode = (rawValue: string): string => {
     return value;
 };
 
-export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGroup, currentUser }: NewChatScreenProps) {
+export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGroup, onGroupCreated, currentUser }: NewChatScreenProps) {
     const { scrolled, handleScroll } = useScrollFade();
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<User[]>([]);
@@ -65,6 +67,9 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
     const [joining, setJoining] = useState(false);
     const [groupError, setGroupError] = useState<string>('');
     const [joinError, setJoinError] = useState<string>('');
+    const [searchingInvite, setSearchingInvite] = useState(false);
+    const [previewGroup, setPreviewGroup] = useState<GroupPreview | null>(null);
+    const [joinSheetError, setJoinSheetError] = useState('');
     const [ownedGroups, setOwnedGroups] = useState<OwnedGroup[]>([]);
     const [copiedGroup, setCopiedGroup] = useState<string>('');
 
@@ -126,6 +131,11 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
         setCreating(true);
         try {
             const res = await onCreateGroup(normalized);
+            if (res?.chatId && onGroupCreated) {
+                setGroupName('');
+                onGroupCreated(res.chatId);
+                return;
+            }
             if (res?.inviteLink) {
                 setCreatedGroupLink(res.inviteLink);
                 setGroupName('');
@@ -138,18 +148,41 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
         }
     };
 
-    const handleJoinGroup = async () => {
+    const handleSearchByLink = async (e?: React.FormEvent) => {
+        e?.preventDefault();
         const inviteCode = extractInviteCode(inviteInput);
         if (!inviteCode) {
             setJoinError('لینک یا کد دعوت گروه را وارد کنید');
             return;
         }
         setJoinError('');
+        setJoinSheetError('');
+        setSearchingInvite(true);
+        try {
+            const preview = await apiFetch(`/groups/preview/${encodeURIComponent(inviteCode)}`);
+            if (preview?.chatId) {
+                setPreviewGroup(preview as GroupPreview);
+            } else {
+                setJoinError('گروهی با این لینک یافت نشد');
+            }
+        } catch (error) {
+            setJoinError(error instanceof Error ? error.message : 'گروهی با این لینک یافت نشد');
+        } finally {
+            setSearchingInvite(false);
+        }
+    };
+
+    const handleConfirmJoinGroup = async (group: GroupPreview) => {
+        const inviteCode = group.inviteCode || extractInviteCode(inviteInput);
+        if (!inviteCode) return;
+        setJoinSheetError('');
         setJoining(true);
         try {
             await onJoinGroup(inviteCode);
+            setPreviewGroup(null);
+            setInviteInput('');
         } catch (error) {
-            setJoinError(error instanceof Error ? error.message : 'لینک دعوت نامعتبر است یا گروه یافت نشد');
+            setJoinSheetError(error instanceof Error ? error.message : 'خطا در عضویت در گروه');
         } finally {
             setJoining(false);
         }
@@ -332,33 +365,31 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
 
                             <div style={{ ...surfaceStyle, padding: 16 }}>
                                 <p className="profile__field-label" style={{ marginBottom: 10 }}>عضویت با لینک</p>
-                                <div style={{ position: 'relative' }}>
-                                    <LinkIcon size={16} style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
-                                    <input
-                                        type="text"
-                                        className="profile__field-input"
-                                        style={{ paddingRight: 40, borderRadius: 9999, background: 'var(--bg-primary)' }}
-                                        placeholder="novaroom://group/INVITE_CODE"
-                                        value={inviteInput}
-                                        onChange={(e) => {
-                                            setInviteInput(e.target.value);
-                                            if (joinError) setJoinError('');
-                                        }}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && !joining) handleJoinGroup();
-                                        }}
-                                    />
-                                </div>
-                                {joinError && <p className="new-chat-screen__error">{joinError}</p>}
-                                <button
-                                    type="button"
-                                    className="new-chat-screen__action"
-                                    onClick={handleJoinGroup}
-                                    disabled={joining}
-                                >
-                                    <LinkIcon size={16} />
-                                    {joining ? 'در حال عضویت...' : 'عضویت در گروه'}
-                                </button>
+                                <form onSubmit={handleSearchByLink}>
+                                    <div style={{ position: 'relative' }}>
+                                        <LinkIcon size={16} style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
+                                        <input
+                                            type="text"
+                                            className="profile__field-input"
+                                            style={{ paddingRight: 40, borderRadius: 9999, background: 'var(--bg-primary)' }}
+                                            placeholder="novaroom://group/INVITE_CODE"
+                                            value={inviteInput}
+                                            onChange={(e) => {
+                                                setInviteInput(e.target.value);
+                                                if (joinError) setJoinError('');
+                                            }}
+                                        />
+                                    </div>
+                                    {joinError && <p className="new-chat-screen__error">{joinError}</p>}
+                                    <button
+                                        type="submit"
+                                        className="new-chat-screen__action"
+                                        disabled={searchingInvite || !inviteInput.trim()}
+                                    >
+                                        {searchingInvite ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+                                        {searchingInvite ? 'در حال جستجو...' : 'جستجو'}
+                                    </button>
+                                </form>
                             </div>
 
                             <div style={{ ...surfaceStyle, padding: 16, marginTop: 18, direction: 'rtl', textAlign: 'right' }}>
@@ -390,6 +421,19 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
                     )}
                 </div>
             </div>
+
+            <GroupJoinSheet
+                open={Boolean(previewGroup)}
+                group={previewGroup}
+                joining={joining}
+                error={joinSheetError}
+                onClose={() => {
+                    if (joining) return;
+                    setPreviewGroup(null);
+                    setJoinSheetError('');
+                }}
+                onConfirmJoin={handleConfirmJoinGroup}
+            />
         </motion.div>
     );
 }

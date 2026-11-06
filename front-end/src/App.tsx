@@ -1078,6 +1078,21 @@ export function App() {
         setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, pinnedMessage: null } : c)));
     }, []);
 
+    const handleGroupBanned = useCallback((bannedChatId: string) => {
+        setChats((prev) => prev.filter((c) => c.id !== bannedChatId));
+        setMessages((prev) => {
+            const { [bannedChatId]: _, ...rest } = prev;
+            return rest;
+        });
+        if (activeChatIdRef.current === bannedChatId) {
+            setActiveChatId(null);
+            setPendingUser(null);
+            setShowAIChat(false);
+            setView('chatList');
+            navigate('/', { replace: true });
+        }
+    }, [navigate]);
+
     const handlePinMessage = useCallback(async (chatId: string, messageId: string) => {
         try {
             const res = await apiFetch(`/chats/${encodeURIComponent(chatId)}/pin/${encodeURIComponent(messageId)}`, {
@@ -1622,6 +1637,7 @@ export function App() {
         onUploadStatus: handleUploadStatus,
         onMessagePinned: handleMessagePinned,
         onMessageUnpinned: handleMessageUnpinned,
+        onGroupBanned: handleGroupBanned,
         onConnectionChange: setWsConnected,
         onReconnectExhausted: handleWsReconnectExhausted,
         onAINewMessage: handleNewAIMessage,
@@ -3490,6 +3506,7 @@ export function App() {
                                 onUserSelected={handleUserSelectedFromModal}
                                 onCreateGroup={handleCreateGroup}
                                 onJoinGroup={handleJoinGroup}
+                                onGroupCreated={handleSelectChat}
                                 currentUser={currentUser}
                             />
                         ) : view === 'chess' && currentUser ? (
@@ -3647,6 +3664,7 @@ export function App() {
                                 unreadReactionIds={activeChat?.unreadReactionIds || EMPTY_IDS}
                                 onAckMention={handleAckMention}
                                 onAckReaction={handleAckReaction}
+                                onJoinGroupByCode={handleJoinGroup}
                             />
                         ) : (
                             <EmptyState />

@@ -1,4 +1,4 @@
-import { ChevronLeft, Copy, Check, Calendar, Link2, MessageCircle, Pencil, X, Save, Image as ImageIcon, Trash2, RotateCcw, Ban, FileText, AtSign, UserRound, Hash } from 'lucide-react';
+import { ChevronLeft, Copy, Check, Calendar, Link2, MessageCircle, Save, Image as ImageIcon, Trash2, RotateCcw, Ban, FileText, AtSign, UserRound, Hash, Settings, Loader2, Lock, UserX } from 'lucide-react';
 import { motion } from "framer-motion";
 import { screenVariants } from '../utils/screenMotion';
 import { useScrollFade } from '../hooks/useScrollFade';
@@ -11,6 +11,7 @@ import { Avatar, extractFileIdFromAvatar, getAvatarDisplayUrl } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { apiFetch } from '../config/api';
 import { ImageMediaViewer } from './ImageMediaViewer';
+import { ImageEditorModal } from './ImageEditorModal';
 import { encryptAvatarBytesClientSide } from '../utils/e2ee';
 import { copyText } from '../utils/clipboard';
 import { formatLastSeen, toPersianDigits } from '../utils/format';
@@ -26,6 +27,7 @@ interface ContactInfoProps {
     onOpenMembers?: () => void;
     autoOpenMembers?: boolean;
     startInEditMode?: boolean;
+    membershipClosed?: boolean;
 }
 
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
@@ -46,6 +48,7 @@ export function ContactInfo({
     onOpenMembers,
     autoOpenMembers = true,
     startInEditMode = false,
+    membershipClosed = false,
 }: ContactInfoProps) {
     const { scrolled, handleScroll } = useScrollFade();
     const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -59,6 +62,12 @@ export function ContactInfo({
     const [resolvedRegistrationDate, setResolvedRegistrationDate] = useState<string>(String(user.registrationDate ?? '').trim());
     const [registrationLoading, setRegistrationLoading] = useState(false);
     const [openedProfileImage, setOpenedProfileImage] = useState<{ url: string; fileId: string } | null>(null);
+    const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
+    const [groupMembershipClosed, setGroupMembershipClosed] = useState(Boolean(membershipClosed));
+    const [bannedUsers, setBannedUsers] = useState<User[]>([]);
+    const [loadingBans, setLoadingBans] = useState(false);
+    const [bansLoaded, setBansLoaded] = useState(false);
+    const [unbanningId, setUnbanningId] = useState<string | null>(null);
     const navigate = useNavigate();
     const location = useLocation();
     const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -189,6 +198,36 @@ export function ContactInfo({
     }, [isGroup, user.chatId, user.createdBy]);
 
     useEffect(() => {
+        setGroupMembershipClosed(Boolean(membershipClosed));
+    }, [membershipClosed]);
+
+    useEffect(() => {
+        if (!isGroup || !editingGroup || !user.chatId || !canEditGroup) return;
+        let cancelled = false;
+        setLoadingBans(true);
+        apiFetch(`/groups/${encodeURIComponent(user.chatId)}/bans`)
+            .then((res) => {
+                if (cancelled) return;
+                setBannedUsers(Array.isArray(res?.bannedUsers) ? res.bannedUsers : []);
+            })
+            .catch(() => {
+                if (!cancelled) setBannedUsers([]);
+            })
+            .finally(() => {
+                if (cancelled) return;
+                setLoadingBans(false);
+                setBansLoaded(true);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [isGroup, editingGroup, user.chatId, canEditGroup]);
+
+    useEffect(() => {
+        if (!editingGroup) setBansLoaded(false);
+    }, [editingGroup]);
+
+    useEffect(() => {
         if (!isGroup || !onOpenMembers || !autoOpenMembers) return;
         onOpenMembers();
     }, [autoOpenMembers, isGroup, onOpenMembers, user.chatId]);
@@ -289,12 +328,49 @@ export function ContactInfo({
 
             
             window.dispatchEvent(new Event('novaroom:refresh_chats'));
-            setEditingGroup(false);
+            if (onOpenMembers) onOpenMembers();
+            else setEditingGroup(false);
         } catch (e) {
             console.error(e);
             setError('ویرایش گروه با خطا مواجه شد');
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleToggleMembershipClosed = async () => {
+        if (!user.chatId || saving) return;
+        const next = !groupMembershipClosed;
+        setGroupMembershipClosed(next);
+        setSaving(true);
+        setError(null);
+        try {
+            await apiFetch(`/groups/${encodeURIComponent(user.chatId)}`, {
+                method: 'PUT',
+                body: JSON.stringify({ membershipClosed: next }),
+            });
+            window.dispatchEvent(new Event('novaroom:refresh_chats'));
+        } catch {
+            setGroupMembershipClosed(!next);
+            setError('تغییر وضعیت عضویت گروه با خطا مواجه شد');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleUnbanUser = async (targetChatId: string) => {
+        if (!user.chatId || unbanningId) return;
+        setUnbanningId(targetChatId);
+        setError(null);
+        try {
+            await apiFetch(`/groups/${encodeURIComponent(user.chatId)}/ban/${encodeURIComponent(targetChatId)}`, {
+                method: 'DELETE',
+            });
+            setBannedUsers((prev) => prev.filter((u) => u.chatId !== targetChatId));
+        } catch {
+            setError('رفع مسدودیت با خطا مواجه شد');
+        } finally {
+            setUnbanningId(null);
         }
     };
 
@@ -306,6 +382,7 @@ export function ContactInfo({
 
     return (
         <motion.div
+            key={isGroup && editingGroup ? 'group-settings' : 'contact-info-main'}
             className="contact-info"
             variants={screenVariants}
             initial="hidden"
@@ -315,48 +392,42 @@ export function ContactInfo({
             <div className={cx('header-fade', 'header-fade--screen', scrolled && 'header-fade--visible')} aria-hidden="true" />
             <div className="profile__header">
                 <div className="profile__header-side">
-                    <button className="profile__header-back back-icon-btn" onClick={onBack} aria-label="بازگشت" type="button">
+                    <button
+                        className="profile__header-back back-icon-btn"
+                        onClick={() => {
+                            if (isGroup && editingGroup && onOpenMembers) {
+                                onOpenMembers();
+                                return;
+                            }
+                            onBack();
+                        }}
+                        aria-label="بازگشت"
+                        type="button"
+                    >
                         <ChevronLeft size={22} />
                     </button>
                 </div>
-                <h1 className="profile__header-title">{isGroup ? 'اطلاعات گروه' : 'اطلاعات مخاطب'}</h1>
+                <h1 className="profile__header-title">{isGroup ? (editingGroup ? 'تنظیمات گروه' : 'اطلاعات گروه') : 'اطلاعات مخاطب'}</h1>
                 {isGroup && canEditGroup && (
                     <div className="profile__header-actions">
                         {editingGroup ? (
-                            <>
-                                <button
-                                    type="button"
-                                    className="profile__cancel-btn"
-                                    onClick={() => {
-                                        setError(null);
-                                        setGroupName(String(user.name ?? ''));
-                                        setGroupAvatar(String(user.avatar ?? ''));
-                                        setAvatarTouched(false);
-                                        setEditingGroup(false);
-                                    }}
-                                    disabled={saving}
-                                >
-                                    <X size={15} />
-                                    <span className="profile__btn-label">انصراف</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    className="profile__save-btn"
-                                    onClick={saveGroup}
-                                    disabled={saving}
-                                >
-                                    <Save size={15} />
-                                    <span className="profile__btn-label">{saving ? 'در حال ذخیره' : 'ذخیره'}</span>
-                                </button>
-                            </>
+                            <button
+                                type="button"
+                                className="profile__save-btn"
+                                onClick={saveGroup}
+                                disabled={saving}
+                            >
+                                <Save size={15} />
+                                <span className="profile__btn-label">{saving ? 'در حال ذخیره' : 'ذخیره'}</span>
+                            </button>
                         ) : (
                             <button
                                 type="button"
                                 className="profile__edit-btn"
                                 onClick={() => setEditingGroup(true)}
                             >
-                                <Pencil size={15} />
-                                ویرایش
+                                <Settings size={15} />
+                                تنظیمات
                             </button>
                         )}
                     </div>
@@ -443,11 +514,17 @@ export function ContactInfo({
                                 type="file"
                                 accept="image/*"
                                 style={{ display: 'none' }}
-                                onChange={async (e) => {
+                                onChange={(e) => {
                                     const f = e.target.files?.[0];
-                                    if (!f) return;
-                                    await uploadGroupAvatar(f);
-                                    e.currentTarget.value = '';
+                                    if (f) {
+                                        if (f.type === 'image/gif' || /\.gif$/i.test(f.name)) {
+                                            setError('فرمت GIF برای عکس گروه پشتیبانی نمی\u200cشود. لطفاً یک تصویر ثابت انتخاب کنید.');
+                                        } else {
+                                            setError(null);
+                                            setPendingAvatarFile(f);
+                                        }
+                                        e.currentTarget.value = '';
+                                    }
                                 }}
                             />
                         </div>
@@ -456,25 +533,125 @@ export function ContactInfo({
 
                 <div className="profile__fields" onScroll={handleScroll}>
                     {isGroup && canEditGroup && editingGroup && (
-                        <div className="profile__card">
-                            <div className="profile__section-title">
-                                <span className="profile__section-icon"><Pencil size={15} /></span>
-                                ویرایش گروه
-                            </div>
+                        <>
+                            {loadingBans || !bansLoaded ? (
+                                <>
+                                    <div className="profile__card">
+                                        <div className="skeleton" style={{ height: 16, width: '42%', borderRadius: 8, marginBottom: 14 }} />
+                                        <div className="skeleton" style={{ height: 44, width: '100%', borderRadius: 14 }} />
+                                    </div>
+                                    <div className="profile__card">
+                                        <div className="skeleton" style={{ height: 16, width: '55%', borderRadius: 8, marginBottom: 12 }} />
+                                        <div className="skeleton" style={{ height: 12, width: '80%', borderRadius: 8 }} />
+                                    </div>
+                                    <div className="profile__card">
+                                        <div className="skeleton" style={{ height: 16, width: '35%', borderRadius: 8, marginBottom: 14 }} />
+                                        {Array.from({ length: 3 }).map((_, i) => (
+                                            <div key={`ban-skeleton-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                                                <span className="skeleton" style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0 }} />
+                                                <span className="skeleton" style={{ height: 13, flex: 1, borderRadius: 8 }} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="profile__card">
+                                        <div className="profile__section-title">
+                                            <span className="profile__section-icon"><Settings size={15} /></span>
+                                            تنظیمات گروه
+                                        </div>
 
-                            <div className="profile__field-group" style={{ marginBottom: 0 }}>
-                                <label className="profile__field-label">نام گروه</label>
-                                <input
-                                    value={groupName}
-                                    onChange={(e) => setGroupName(e.target.value)}
-                                    placeholder={String(user.name ?? '') || 'مثلاً تیم توسعه'}
-                                    className="profile__field-input"
-                                    disabled={saving}
-                                />
-                            </div>
+                                        <div className="profile__field-group" style={{ marginBottom: 0 }}>
+                                            <label className="profile__field-label">نام گروه</label>
+                                            <input
+                                                value={groupName}
+                                                onChange={(e) => setGroupName(e.target.value)}
+                                                placeholder={String(user.name ?? '') || 'مثلاً تیم توسعه'}
+                                                className="profile__field-input"
+                                                style={{ borderRadius: 9999 }}
+                                                disabled={saving}
+                                            />
+                                        </div>
 
-                            {error && <p className="contact-info__error">{error}</p>}
-                        </div>
+                                        {error && <p className="contact-info__error">{error}</p>}
+                                    </div>
+
+                                    <div className="profile__card">
+                                        <div className="group-settings-toggle-row" onClick={handleToggleMembershipClosed}>
+                                            <div className="group-settings-toggle-info">
+                                                <div className="group-settings-toggle-title">
+                                                    <Lock size={16} />
+                                                    <span>بستن عضویت گروه</span>
+                                                </div>
+                                                <p className="group-settings-toggle-desc">
+                                                    در صورت فعال بودن، کاربران جدید نمی‌توانند از طریق لینک دعوت وارد گروه شوند.
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                role="switch"
+                                                aria-checked={groupMembershipClosed}
+                                                disabled={saving}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    void handleToggleMembershipClosed();
+                                                }}
+                                                className={`group-settings-switch${groupMembershipClosed ? ' is-on' : ''}`}
+                                            >
+                                                <span className="group-settings-switch__thumb" />
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="profile__card">
+                                        <div className="group-settings-section-head">
+                                            <div className="profile__section-title">
+                                                <span className="profile__section-icon"><UserX size={15} /></span>
+                                                لیست حذف‌شده‌ها
+                                            </div>
+                                        </div>
+
+                                        {bannedUsers.length === 0 ? (
+                                            <div className="group-settings-empty">
+                                                <span>کاربری در لیست مسدودشده‌ها وجود ندارد.</span>
+                                            </div>
+                                        ) : (
+                                            <div className="group-settings-ban-list">
+                                                {bannedUsers.map((bu) => (
+                                                    <div key={bu.chatId} className="group-settings-ban-item">
+                                                        <Avatar name={bu.name} size="sm" src={bu.avatar} />
+                                                        <div className="group-settings-ban-info">
+                                                            <div className="group-settings-ban-name">
+                                                                <span className="truncate">{bu.name}</span>
+                                                                {bu.verified && <VerifiedBadge size={14} />}
+                                                            </div>
+                                                            {bu.username && (
+                                                                <div className="group-settings-ban-username" dir="ltr">
+                                                                    @{bu.username}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            disabled={unbanningId === bu.chatId}
+                                                            onClick={() => bu.chatId && void handleUnbanUser(bu.chatId)}
+                                                            className="group-settings-unban-btn"
+                                                        >
+                                                            {unbanningId === bu.chatId ? (
+                                                                <Loader2 size={14} className="animate-spin" />
+                                                            ) : (
+                                                                <span>رفع مسدودیت</span>
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </>
                     )}
 
                     {canOpenChat && (
@@ -593,7 +770,7 @@ export function ContactInfo({
                                 </div>
                             )}
 
-                            {user.username && (
+                            {user.username && !editingGroup && (
                                 <div className="profile__card">
                                     <div className="profile__section-title">
                                         <span className="profile__section-icon"><Link2 size={15} /></span>
@@ -633,6 +810,18 @@ export function ContactInfo({
                         if (params.has('avatar')) return void navigate(-1);
                         setOpenedProfileImage(null);
                     }}
+                />
+            )}
+
+            {pendingAvatarFile && (
+                <ImageEditorModal
+                    imageFile={pendingAvatarFile}
+                    squareCrop
+                    onSend={(file) => {
+                        setPendingAvatarFile(null);
+                        void uploadGroupAvatar(file);
+                    }}
+                    onCancel={() => setPendingAvatarFile(null)}
                 />
             )}
         </motion.div>
