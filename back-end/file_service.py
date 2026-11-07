@@ -108,16 +108,24 @@ def _file_key() -> bytes:
 
 
 def _xor_stream(data: bytes, key: bytes, nonce: bytes) -> bytes:
-    out = bytearray(len(data))
+    total = len(data)
+    if total == 0:
+        return b""
+    out = bytearray(total)
+    prefix = key + nonce
     counter = 0
-    idx = 0
-    while idx < len(data):
-        block = hashlib.sha256(key + nonce + counter.to_bytes(8, "big")).digest()
-        for b in block:
-            if idx >= len(data):
-                break
-            out[idx] = data[idx] ^ b
-            idx += 1
+    for idx in range(0, total, 32):
+        block = hashlib.sha256(prefix + counter.to_bytes(8, "big")).digest()
+        chunk = data[idx : idx + 32]
+        clen = len(chunk)
+        if clen == 32:
+            out[idx : idx + 32] = (
+                int.from_bytes(chunk, "big") ^ int.from_bytes(block, "big")
+            ).to_bytes(32, "big")
+        else:
+            out[idx : idx + clen] = (
+                int.from_bytes(chunk, "big") ^ int.from_bytes(block[:clen], "big")
+            ).to_bytes(clen, "big")
         counter += 1
     return bytes(out)
 
@@ -339,7 +347,7 @@ async def read_file_content(file_id: str) -> Optional[bytes]:
         return None
 
     if raw.startswith(FILE_MAGIC):
-        return decrypt_file_bytes(raw)
+        return await asyncio.to_thread(decrypt_file_bytes, raw)
     return raw
 
 

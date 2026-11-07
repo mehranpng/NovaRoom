@@ -328,8 +328,11 @@ def apply_move(game, user_id, uci, now):
         "promotion": move.promotion is not None,
     }
     board.push(move)
-    event["check"] = board.is_check()
+    in_check = board.is_check()
+    event["check"] = in_check
     game["moves"].append({"uci": uci, "san": san})
+    game["fen"] = board.fen()
+    game["inCheck"] = in_check
     if timed:
         game["clocks"][color] = remaining + (game["incMs"] if ply >= 2 else 0)
     game["lastMoveAt"] = now
@@ -495,7 +498,12 @@ def _disconnect_view(game):
 
 
 def public_view(game, now, online):
-    board = board_of(game)
+    fen = game.get("fen")
+    in_check = game.get("inCheck")
+    if not fen or in_check is None:
+        board = board_of(game)
+        fen = board.fen()
+        in_check = board.is_check()
     ply = len(game["moves"])
     last = game["moves"][-1]["uci"] if ply else None
     active = game["status"] == "active"
@@ -512,7 +520,7 @@ def public_view(game, now, online):
         "baseMs": game["baseMs"],
         "incMs": game["incMs"],
         "moves": game["moves"],
-        "fen": board.fen(),
+        "fen": fen,
         "turn": turn_by_ply(game),
         "clocks": game["clocks"],
         "lastMoveAt": game["lastMoveAt"],
@@ -525,7 +533,7 @@ def public_view(game, now, online):
         "result": game["result"],
         "reason": game["reason"],
         "drawOfferedBy": game["drawOfferedBy"],
-        "inCheck": board.is_check(),
+        "inCheck": bool(in_check),
         "online": online,
         "createdAt": game["createdAt"],
         "finishedAt": game.get("finishedAt"),

@@ -2,6 +2,8 @@ import os
 import re
 import json
 import asyncio
+import socket
+import ipaddress
 from openai import AsyncOpenAI
 from typing import List, Dict, AsyncIterator, Any, Optional
 from pathlib import Path
@@ -458,6 +460,30 @@ def extract_urls_from_text(text: str) -> List[str]:
     return seen
 
 
+def _is_safe_public_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        for info in socket.getaddrinfo(hostname, None):
+            ip = ipaddress.ip_address(info[4][0])
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_multicast
+                or ip.is_reserved
+                or ip.is_unspecified
+            ):
+                return False
+        return True
+    except Exception:
+        return False
+
+
 async def _fetch_single_url_deepseek(
     http: Any,
     api_key: str,
@@ -490,13 +516,16 @@ async def _fetch_single_url_deepseek(
             continue
     for candidate in candidates:
         try:
+            if not await asyncio.to_thread(_is_safe_public_url, candidate):
+                continue
             resp = await http.get(
                 candidate,
                 headers={"User-Agent": "Mozilla/5.0 (compatible; NovaAI/1.0)"},
-                follow_redirects=True,
+                follow_redirects=False,
             )
             if resp.status_code == 200 and resp.text:
-                cleaned = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", resp.text, flags=re.S | re.I)
+                raw_html = resp.text[:250_000]
+                cleaned = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", raw_html, flags=re.S | re.I)
                 cleaned = re.sub(r"<[^>]+>", " ", cleaned)
                 cleaned = re.sub(r"\s+", " ", cleaned).strip()
                 if cleaned:

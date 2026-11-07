@@ -323,16 +323,24 @@ def _is_server_managed_scope(scope: str) -> bool:
 
 
 def _xor_stream(data: bytes, key: bytes, nonce: bytes) -> bytes:
-    out = bytearray(len(data))
+    total = len(data)
+    if total == 0:
+        return b""
+    out = bytearray(total)
+    prefix = key + nonce
     counter = 0
-    idx = 0
-    while idx < len(data):
-        block = hashlib.sha256(key + nonce + counter.to_bytes(8, "big")).digest()
-        for b in block:
-            if idx >= len(data):
-                break
-            out[idx] = data[idx] ^ b
-            idx += 1
+    for idx in range(0, total, 32):
+        block = hashlib.sha256(prefix + counter.to_bytes(8, "big")).digest()
+        chunk = data[idx : idx + 32]
+        clen = len(chunk)
+        if clen == 32:
+            out[idx : idx + 32] = (
+                int.from_bytes(chunk, "big") ^ int.from_bytes(block, "big")
+            ).to_bytes(32, "big")
+        else:
+            out[idx : idx + clen] = (
+                int.from_bytes(chunk, "big") ^ int.from_bytes(block[:clen], "big")
+            ).to_bytes(clen, "big")
         counter += 1
     return bytes(out)
 
@@ -370,21 +378,21 @@ def _decrypt_scoped_text_raw(value: str, token: str, scope: str) -> str:
         nonce = raw[:ENC_NONCE_SIZE]
         body = raw[ENC_NONCE_SIZE:-ENC_TAG_SIZE]
         tag = raw[-ENC_TAG_SIZE:]
-        candidate_keys = [
-            _derive_enc_key(token, scope),
-            _derive_enc_key("", scope),
-            _derive_enc_key_legacy_shared(scope),
-            _derive_enc_key_legacy_scoped_tokenhash(token, scope),
-            _derive_enc_key_legacy_token_raw(token, scope),
-            _derive_enc_key(token, scope, DEFAULT_DEV_SECRET_KEY),
-            _derive_enc_key_legacy_shared(scope, DEFAULT_DEV_SECRET_KEY),
-            _derive_enc_key_legacy_scoped_tokenhash(token, scope, DEFAULT_DEV_SECRET_KEY),
-            _derive_enc_key_legacy_token_raw(token, scope, DEFAULT_DEV_SECRET_KEY),
-        ]
-        for key in candidate_keys:
-            expected = hmac.new(key, nonce + body, hashlib.sha256).digest()[
-                :ENC_TAG_SIZE
-            ]
+        candidate_key_builders = (
+            lambda: _derive_enc_key(token, scope),
+            lambda: _derive_enc_key("", scope),
+            lambda: _derive_enc_key_legacy_shared(scope),
+            lambda: _derive_enc_key_legacy_scoped_tokenhash(token, scope),
+            lambda: _derive_enc_key_legacy_token_raw(token, scope),
+            lambda: _derive_enc_key(token, scope, DEFAULT_DEV_SECRET_KEY),
+            lambda: _derive_enc_key_legacy_shared(scope, DEFAULT_DEV_SECRET_KEY),
+            lambda: _derive_enc_key_legacy_scoped_tokenhash(token, scope, DEFAULT_DEV_SECRET_KEY),
+            lambda: _derive_enc_key_legacy_token_raw(token, scope, DEFAULT_DEV_SECRET_KEY),
+        )
+        mac_input = nonce + body
+        for build_key in candidate_key_builders:
+            key = build_key()
+            expected = hmac.new(key, mac_input, hashlib.sha256).digest()[:ENC_TAG_SIZE]
             if not hmac.compare_digest(tag, expected):
                 continue
             return _xor_stream(body, key, nonce).decode("utf-8", errors="ignore")
@@ -585,10 +593,12 @@ async def _remap_forward_file_to_target_chat(
     if is_audio:
         remapped_raw = source_raw
     else:
-        plain = decrypt_client_file_bytes(source_raw, source_scope)
-        if plain is None:
-            plain = source_raw
-        remapped_raw = encrypt_client_file_bytes(plain, target_scope)
+        def _reencrypt_file() -> bytes:
+            plain_bytes = decrypt_client_file_bytes(source_raw, source_scope)
+            if plain_bytes is None:
+                plain_bytes = source_raw
+            return encrypt_client_file_bytes(plain_bytes, target_scope)
+        remapped_raw = await asyncio.to_thread(_reencrypt_file)
 
     remapped_meta = await save_uploaded_file(
         remapped_raw,
@@ -1135,13 +1145,11 @@ async def sweep_orphaned_uploads_task() -> None:
 
 
 async def jwt_encode_async(payload: dict) -> str:
-    return await asyncio.to_thread(jwt.encode, payload, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
 async def jwt_decode_async(token: str) -> dict:
-    return await asyncio.to_thread(
-        jwt.decode, token, SECRET_KEY, algorithms=[ALGORITHM]
-    )
+    return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
 
 
 async def bcrypt_checkpw_async(password: str, stored_hash: str) -> bool:
@@ -1527,11 +1535,17 @@ async def get_user_from_session_token(token: str) -> Optional[dict]:
             {"chatId": chat_id},
             {"$set": {"login.sessions": sessions}, "$unset": {"login.token": ""}},
         )
-    if any(s.get("tokenHash") == token_hash for s in sessions):
-        await cl_users.update_one(
-            {"chatId": chat_id, "login.sessions.tokenHash": token_hash},
-            {"$set": {"login.sessions.$.lastUsedAt": utc_now()}},
-        )
+    matched_session = next(
+        (s for s in sessions if s.get("tokenHash") == token_hash), None
+    )
+    if matched_session is not None:
+        now = utc_now()
+        last_used = matched_session.get("lastUsedAt")
+        if not isinstance(last_used, datetime) or (now - last_used).total_seconds() >= 300:
+            await cl_users.update_one(
+                {"chatId": chat_id, "login.sessions.tokenHash": token_hash},
+                {"$set": {"login.sessions.$.lastUsedAt": now}},
+            )
         return user
 
     legacy_token = ((user.get("login") or {}).get("token") or "").strip()
@@ -2450,7 +2464,6 @@ async def startup_db():
     except Exception as e:
         print(f"Startup DB warning: {e}")
     asyncio.create_task(migrate_unencrypted_messages())
-    asyncio.create_task(encrypt_existing_uploads())
     asyncio.create_task(sweep_ai_temp_files_task())
     asyncio.create_task(retry_pending_file_deletions_task())
     asyncio.create_task(sweep_orphaned_uploads_task())
@@ -2459,14 +2472,7 @@ async def startup_db():
 
 
 async def migrate_unencrypted_messages():
-    async for m in cl_messages.find(
-        {
-            "$or": [
-                {"textEncrypted": {"$ne": True}},
-                {"text": {"$not": {"$regex": f"^{ENC_PREFIX}"}}},
-            ]
-        }
-    ):
+    async for m in cl_messages.find({"textEncrypted": {"$ne": True}}):
         chat_scope = f"chat:{m.get('chatId', '')}"
         updates: Dict[str, Any] = {"textEncrypted": True}
         txt = str(m.get("text") or "")
@@ -4701,6 +4707,27 @@ async def get_chat_list(
             cid = str(doc.get("chatId") or "")
             reaction_ids_map.setdefault(cid, []).append(str(doc["_id"]))
 
+    viewer_vis = privacy_visibility(current_user.get("settings"), "lastSeenVisibility")
+    friend_check_ids = [
+        uid
+        for uid, udoc in user_by_id.items()
+        if uid != my_id
+        and (
+            viewer_vis == "friends"
+            or "friends"
+            in (
+                privacy_visibility(udoc.get("settings"), "lastSeenVisibility"),
+                privacy_visibility(udoc.get("settings"), "avatarVisibility"),
+                privacy_visibility(udoc.get("settings"), "bioVisibility"),
+            )
+        )
+    ]
+    if friend_check_ids:
+        await asyncio.gather(
+            *(has_mutual_interaction(my_id, uid) for uid in friend_check_ids),
+            return_exceptions=True,
+        )
+
     for chat in chats:
         is_group = chat.get("chatType") == "group"
         other_id = next(
@@ -5573,10 +5600,7 @@ async def download_file(
     if not validate_file_access(file_id):
         raise HTTPException(status_code=404, detail="File not found")
 
-    decrypted = await read_file_content(file_id)
-    if decrypted is None:
-        raise HTTPException(status_code=404, detail="File not found")
-    etag = hashlib.sha256(decrypted).hexdigest()
+    etag = hashlib.sha256(file_id.encode("utf-8")).hexdigest()
     incoming_etag = request.headers.get("if-none-match", "").strip('"')
     if incoming_etag and incoming_etag == etag:
         return Response(
@@ -5587,6 +5611,10 @@ async def download_file(
                 "Vary": "Authorization",
             },
         )
+
+    decrypted = await read_file_content(file_id)
+    if decrypted is None:
+        raise HTTPException(status_code=404, detail="File not found")
 
     file_path = get_file_path(file_id)
     last_modified = None
@@ -6812,12 +6840,18 @@ def _send_webpush_sync(sub: dict, payload: dict) -> Optional[int]:
 
 
 _push_tasks: set = set()
+_push_semaphore = asyncio.Semaphore(8)
 
 
 def schedule_push(coro) -> None:
     task = asyncio.create_task(coro)
     _push_tasks.add(task)
     task.add_done_callback(_push_tasks.discard)
+
+
+async def _send_webpush_bounded(sub: dict, payload: dict) -> Optional[int]:
+    async with _push_semaphore:
+        return await asyncio.to_thread(_send_webpush_sync, sub, payload)
 
 
 async def push_to_users(user_ids: Iterable[str], payload_for_user) -> None:
@@ -6831,7 +6865,24 @@ async def push_to_users(user_ids: Iterable[str], payload_for_user) -> None:
             {"chatId": {"$in": ids}, **NOT_PURGING},
             {"chatId": 1, "settings": 1, "login.sessions": 1},
         ).to_list(len(ids))
+        if not users:
+            return
+        all_subs = await cl_push_subscriptions.find(
+            {"userId": {"$in": [u.get("chatId") for u in users if u.get("chatId")]}}
+        ).to_list(None)
+        if not all_subs:
+            return
+        subs_by_user: Dict[str, List[dict]] = {}
+        for sub in all_subs:
+            subs_by_user.setdefault(str(sub.get("userId") or ""), []).append(sub)
+
+        jobs: List[Tuple[dict, dict]] = []
+        stale_ids: List[Any] = []
         for user in users:
+            uid = str(user.get("chatId") or "")
+            subscriptions = subs_by_user.get(uid)
+            if not subscriptions:
+                continue
             settings = _notif_settings(user)
             payload = payload_for_user(user)
             if payload is None:
@@ -6843,38 +6894,26 @@ async def push_to_users(user_ids: Iterable[str], payload_for_user) -> None:
                 continue
             payload = dict(payload)
             payload["silent"] = not settings["sound"]
-            uid = user.get("chatId")
             valid_hashes = {
                 session.get("tokenHash") for session in _normalize_session_list(user)
             }
-            subscriptions = await cl_push_subscriptions.find({"userId": uid}).to_list(
-                None
-            )
-            if not subscriptions:
-                continue
-            active = [
-                sub for sub in subscriptions if sub.get("tokenHash") in valid_hashes
-            ]
-            stale_ids = [
-                sub["_id"]
-                for sub in subscriptions
-                if sub.get("tokenHash") not in valid_hashes
-            ]
+            for sub in subscriptions:
+                if sub.get("tokenHash") in valid_hashes:
+                    jobs.append((sub, payload))
+                else:
+                    stale_ids.append(sub["_id"])
+
+        if jobs:
             statuses = await asyncio.gather(
-                *(
-                    asyncio.to_thread(_send_webpush_sync, sub, payload)
-                    for sub in active
-                )
+                *(_send_webpush_bounded(sub, payload) for sub, payload in jobs)
             )
             stale_ids.extend(
                 sub["_id"]
-                for sub, status in zip(active, statuses)
+                for (sub, _), status in zip(jobs, statuses)
                 if status in (404, 410)
             )
-            if stale_ids:
-                await cl_push_subscriptions.delete_many(
-                    {"_id": {"$in": stale_ids}}
-                )
+        if stale_ids:
+            await cl_push_subscriptions.delete_many({"_id": {"$in": stale_ids}})
     except Exception:
         traceback.print_exc()
 
@@ -7178,6 +7217,9 @@ async def chess_backfill_stats():
                         )
             except Exception:
                 continue
+            finally:
+                if not lock.locked():
+                    chess_locks.pop(game_id, None)
     except Exception as e:
         print(f"Chess backfill warning: {e}")
 
@@ -7196,6 +7238,8 @@ async def chess_run(game_id: str, action):
             await chess_apply_elo_if_needed(game)
         await cl_chess_games.replace_one({"_id": game_id}, game)
         chess_schedule(game)
+    if game.get("status") == "finished" and not lock.locked():
+        chess_locks.pop(game_id, None)
     await chess_send_all(game_id, game, event)
     return game, event
 
@@ -7674,6 +7718,7 @@ async def stream_ai_reply(
     full_reasoning_content = ""
     raw_usage_tokens = 0
     stream_started_at = time.time()
+    last_db_flush_at = 0.0
     first_main_content_at: Optional[float] = None
     try:
         async for chunk in generate_ai_response_stream(
@@ -7710,20 +7755,23 @@ async def stream_ai_reply(
             if not text_chunk and not (reasoning_chunk and reasoning_mode):
                 continue
 
-            await cl_ai_messages.update_one(
-                {"_id": result.inserted_id},
-                {
-                    "$set": {
-                        "content": encrypt_scoped_text(
-                            full_ai_response, session_token, ai_scope
-                        ),
-                        "reasoningContent": encrypt_scoped_text(
-                            full_reasoning_content, session_token, ai_scope
-                        ),
-                        "streamCompleted": False,
-                    }
-                },
-            )
+            now_ts = time.time()
+            if now_ts - last_db_flush_at >= 1.5:
+                last_db_flush_at = now_ts
+                await cl_ai_messages.update_one(
+                    {"_id": result.inserted_id},
+                    {
+                        "$set": {
+                            "content": encrypt_scoped_text(
+                                full_ai_response, session_token, ai_scope
+                            ),
+                            "reasoningContent": encrypt_scoped_text(
+                                full_reasoning_content, session_token, ai_scope
+                            ),
+                            "streamCompleted": False,
+                        }
+                    },
+                )
             await emit(
                 {
                     "type": "ai_response_chunk",
@@ -9010,21 +9058,24 @@ async def record_token_usage(user_id: str, raw_tokens: int, model_key: str) -> D
 
 
 async def consume_daily_quota(user_id: str, field: str, limit: int) -> bool:
-    day_key = tehran_day_key()
-    row = await cl_ai_usage.find_one({"userId": user_id, "dateKey": day_key})
-    used = max(0, int(row.get(field, 0))) if isinstance(row, dict) else 0
-    if used >= limit:
+    if limit <= 0:
         return False
+    day_key = tehran_day_key()
+    now = utc_now()
     await cl_ai_usage.update_one(
         {"userId": user_id, "dateKey": day_key},
-        {
-            "$inc": {field: 1},
-            "$set": {"updatedAt": utc_now()},
-            "$setOnInsert": {"createdAt": utc_now()},
-        },
+        {"$setOnInsert": {"createdAt": now, "updatedAt": now}},
         upsert=True,
     )
-    return True
+    res = await cl_ai_usage.update_one(
+        {
+            "userId": user_id,
+            "dateKey": day_key,
+            "$or": [{field: {"$exists": False}}, {field: {"$lt": limit}}],
+        },
+        {"$inc": {field: 1}, "$set": {"updatedAt": now}},
+    )
+    return res.modified_count > 0
 
 
 async def consume_file_quota(user_id: str, limit: Optional[int] = None) -> bool:
