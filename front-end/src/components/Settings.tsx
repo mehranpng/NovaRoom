@@ -12,6 +12,7 @@ import { screenVariants } from '../utils/screenMotion';
 import { cx } from '../utils/cx';
 import { useScrollFade } from '../hooks/useScrollFade';
 import { getPermission, getPushSupport, useNotificationPrefs } from '../utils/pushNotifications';
+import { triggerPwaInstall, usePwaInstall } from '../utils/pwaInstall';
 import type { User } from '../types';
 
 type SettingsSection = 'menu' | 'devices' | 'theme' | 'logs' | 'dataStorage' | 'privacy' | 'notifications' | 'adminMenu' | 'adminPanel' | 'adminLinks';
@@ -32,7 +33,8 @@ interface SettingsProps {
 export function Settings({ section, adminSection, onAdminSectionChange, onOpenSection, onBackToMenu, loginEvents, hasUnseenLoginLogs, currentUser, onUpdateCurrentUser, onLogout }: SettingsProps) {
     const { scrolled, handleScroll } = useScrollFade();
     const notifyPrefs = useNotificationPrefs();
-    const notificationsBlocked = getPushSupport() === 'supported' && notifyPrefs.enabled && getPermission() === 'denied';
+    const pwa = usePwaInstall();
+    const notificationsBlocked = getPushSupport() === 'supported' && (notifyPrefs.enabled || notifyPrefs.chess) && getPermission() === 'denied';
     if (section === 'devices') {
         return <Devices onBack={onBackToMenu} onOpenLogs={() => onOpenSection('logs')} hasUnseenLoginLogs={hasUnseenLoginLogs} />;
     }
@@ -127,6 +129,21 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
             </div>
 
             <div className="profile__content" onScroll={handleScroll} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: 12, paddingInline: 14, paddingTop: 68, flex: '0 0 auto' }}>
+                {pwa.isMobileWeb && (
+                    <button
+                        type="button"
+                        className="settings-install-card"
+                        onClick={() => void triggerPwaInstall()}
+                    >
+                        <img className="settings-install-card__logo" src="/logo/icon-192.png" alt="" />
+                        <span className="settings-install-card__copy">
+                            <span className="settings-install-card__title">نصب اپلیکیشن نواروم</span>
+                            <span className="settings-install-card__subtitle">دسترسی سریع‌تر از صفحه اصلی</span>
+                        </span>
+                        <span className="settings-install-card__action">نصب</span>
+                    </button>
+                )}
+
                 {currentUser?.adminLevel && (
                     <button
                         type="button"

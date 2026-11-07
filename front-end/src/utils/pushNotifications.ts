@@ -6,17 +6,19 @@ export type ChatNotifyMode = 'all' | 'muted' | 'mentions';
 export type PushSupport = 'supported' | 'unsupported' | 'needs-install';
 export type NotificationPrefs = {
     enabled: boolean;
+    chess: boolean;
     sound: boolean;
     chatModes: Record<string, ChatNotifyMode>;
 };
 
 const STORAGE_KEY = 'nr_notify_prefs';
-const DEFAULT_PREFS: NotificationPrefs = { enabled: true, sound: true, chatModes: {} };
+const DEFAULT_PREFS: NotificationPrefs = { enabled: true, chess: true, sound: true, chatModes: {} };
 
 const normalizePrefs = (value: unknown): NotificationPrefs => {
     const record = (value && typeof value === 'object' ? value : {}) as Partial<NotificationPrefs>;
     return {
         enabled: record.enabled !== false,
+        chess: record.chess !== false,
         sound: record.sound !== false,
         chatModes: record.chatModes && typeof record.chatModes === 'object' ? record.chatModes : {},
     };
@@ -170,7 +172,7 @@ export function getChatNotifyMode(current: NotificationPrefs, chatId: string): C
 }
 
 export async function updateNotificationPrefs(
-    patch: Partial<Pick<NotificationPrefs, 'enabled' | 'sound'>>
+    patch: Partial<Pick<NotificationPrefs, 'enabled' | 'chess' | 'sound'>>
 ): Promise<void> {
     const previous = prefs;
     setPrefs({ ...prefs, ...patch });
@@ -212,6 +214,17 @@ export async function closeChatNotifications(chatId: string): Promise<void> {
     try {
         const registration = await navigator.serviceWorker.getRegistration();
         const list = await registration?.getNotifications({ tag: 'chat:' + chatId });
+        list?.forEach((notification) => notification.close());
+    } catch {
+        void 0;
+    }
+}
+
+export async function closeChessNotifications(gameId: string): Promise<void> {
+    if (getPushSupport() !== 'supported') return;
+    try {
+        const registration = await navigator.serviceWorker.getRegistration();
+        const list = await registration?.getNotifications({ tag: 'chess:' + gameId });
         list?.forEach((notification) => notification.close());
     } catch {
         void 0;

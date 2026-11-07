@@ -11,6 +11,7 @@ import { ChatListSkeleton } from './ChatListSkeleton';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { API_BASE_URL } from '../config/api';
 import { getChatNotifyMode, setChatNotifyMode, useNotificationPrefs } from '../utils/pushNotifications';
+import { dismissPwaBanner, triggerPwaInstall, usePwaInstall } from '../utils/pwaInstall';
 
 interface ChatListProps {
     chats: Chat[];
@@ -834,6 +835,8 @@ export const ChatList = memo(function ChatList({
     const actionMenuOfficial = actionMenuChat?.id === 'official-channel';
     const actionMenuGroupNotifications = actionMenuGroup && !actionMenuOfficial;
     const actionMenuMode = actionMenuChat ? getChatNotifyMode(notifyPrefs, actionMenuChat.id) : 'all';
+    const pwa = usePwaInstall();
+    const showInstallBanner = pwa.isMobileWeb && !pwa.bannerDismissed;
 
     return (
         <div className={cx('chat-list', chatActionMenu && 'chat-list--menu-open', menuPressSuppressed && 'chat-list--press-suppressed')} style={{ position: 'relative' }}>
@@ -1193,12 +1196,48 @@ export const ChatList = memo(function ChatList({
 
             <button
                 type="button"
-                className="chat-list__fab"
+                className={cx('chat-list__fab', showInstallBanner && 'chat-list__fab--above-banner')}
                 onClick={onNewChatClick}
                 aria-label="گفتگوی جدید"
             >
                 <Plus size={24} />
             </button>
+
+            <AnimatePresence>
+                {showInstallBanner && (
+                    <motion.div
+                        className="pwa-install-banner"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                    >
+                        <button
+                            type="button"
+                            className="pwa-install-banner__main"
+                            onClick={() => void triggerPwaInstall()}
+                        >
+                            <span className="pwa-install-banner__icon" aria-hidden="true">
+                                <img src="/logo/icon-192.png" alt="" />
+                            </span>
+                            <span className="pwa-install-banner__text">
+                                برای تجربه بهتر، اپلیکیشن را نصب کنید
+                            </span>
+                        </button>
+                        <button
+                            type="button"
+                            className="pwa-install-banner__close"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                dismissPwaBanner();
+                            }}
+                            aria-label="بستن پیشنهاد نصب"
+                        >
+                            <X size={16} />
+                        </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {chatActionMenu && actionMenuChat && (
                 <div

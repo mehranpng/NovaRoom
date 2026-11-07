@@ -164,6 +164,7 @@ chess_rooms: Dict[str, Dict[str, List[WebSocket]]] = {}
 chess_latency: Dict[str, Dict[str, int]] = {}
 chess_locks: Dict[str, asyncio.Lock] = {}
 chess_timers: Dict[str, asyncio.TimerHandle] = {}
+chess_warn_timers: Dict[str, asyncio.TimerHandle] = {}
 chess_abandon_tasks: Dict[str, asyncio.Task] = {}
 CHESS_INVITE_TEXT = "♟ دعوت به بازی شطرنج"
 CHESS_SHARE_TEXT = "♟ نتیجه بازی شطرنج"
@@ -2170,6 +2171,9 @@ async def _drop_chess_game(game_id: str) -> None:
     handle = chess_timers.pop(game_id, None)
     if handle:
         handle.cancel()
+    warn_handle = chess_warn_timers.pop(game_id, None)
+    if warn_handle:
+        warn_handle.cancel()
     for key in [k for k in chess_abandon_tasks if k.startswith(f"{game_id}:")]:
         task = chess_abandon_tasks.pop(key, None)
         if task:
@@ -2555,6 +2559,7 @@ class PushUnsubscribeRequest(BaseModel):
 
 class NotificationSettingsUpdate(BaseModel):
     enabled: Optional[bool] = None
+    chess: Optional[bool] = None
     sound: Optional[bool] = None
 
 
@@ -2651,6 +2656,8 @@ async def update_notification_settings(
     updates: Dict[str, Any] = {}
     if body.enabled is not None:
         updates["settings.notifications.enabled"] = bool(body.enabled)
+    if body.chess is not None:
+        updates["settings.notifications.chess"] = bool(body.chess)
     if body.sound is not None:
         updates["settings.notifications.sound"] = bool(body.sound)
     if updates:
@@ -6764,6 +6771,7 @@ def _notif_settings(user_doc) -> dict:
         raw = {}
     return {
         "enabled": bool(raw.get("enabled", True)),
+        "chess": bool(raw.get("chess", True)),
         "sound": bool(raw.get("sound", True)),
     }
 
@@ -6779,6 +6787,7 @@ def _notification_prefs(user_doc) -> dict:
     settings = _notif_settings(user_doc)
     return {
         "enabled": settings["enabled"],
+        "chess": settings["chess"],
         "sound": settings["sound"],
         "chatModes": _chat_notify_modes(user_doc),
     }
@@ -6824,10 +6833,13 @@ async def push_to_users(user_ids: Iterable[str], payload_for_user) -> None:
         ).to_list(len(ids))
         for user in users:
             settings = _notif_settings(user)
-            if not settings["enabled"]:
-                continue
             payload = payload_for_user(user)
             if payload is None:
+                continue
+            is_chess = payload.get("kind") == "chess"
+            if is_chess and not settings["chess"]:
+                continue
+            if not is_chess and not settings["enabled"]:
                 continue
             payload = dict(payload)
             payload["silent"] = not settings["sound"]
@@ -6942,12 +6954,53 @@ async def notify_chess_joined(game: dict, joiner_id: str) -> None:
         )
     payload = {
         "kind": "chess",
+        "event": "joined",
         "gameId": game["_id"],
         "senderName": joiner_name,
         "url": f"/chess/game/{game['_id']}",
         "icon": "/logo/icon-192.png",
     }
     await push_to_users([creator], lambda user_doc: dict(payload))
+
+
+async def chess_on_warn(game_id: str, expected_key: str) -> None:
+    lock = chess_locks.setdefault(game_id, asyncio.Lock())
+    recipients: List[str] = []
+    rem_sec = 0
+    reason_kind = ""
+    async with lock:
+        chess_warn_timers.pop(game_id, None)
+        game = await cl_chess_games.find_one({"_id": game_id})
+        if not game or game.get("status") != "active":
+            return
+        spec = chess_service.warning_spec(game)
+        if not spec or spec["key"] != expected_key:
+            return
+        if game.get("lastWarnKey") == expected_key:
+            return
+        now = now_ms()
+        if now >= spec["deadline"] - 1000:
+            return
+        away = [uid for uid in spec["targets"] if not _is_in_chess_room(game_id, uid)]
+        if not away:
+            return
+        game["lastWarnKey"] = expected_key
+        await cl_chess_games.update_one(
+            {"_id": game_id}, {"$set": {"lastWarnKey": expected_key}}
+        )
+        recipients = away
+        rem_sec = max(1, int(round((spec["deadline"] - now) / 1000.0)))
+        reason_kind = spec["kind"]
+    payload = {
+        "kind": "chess",
+        "event": "timer_warning",
+        "reason": reason_kind,
+        "remainingSeconds": rem_sec,
+        "gameId": game_id,
+        "url": f"/chess/game/{game_id}",
+        "icon": "/logo/icon-192.png",
+    }
+    await push_to_users(recipients, lambda user_doc: dict(payload))
 
 
 def chess_online(game_id: str, game: dict) -> dict:
@@ -6990,6 +7043,9 @@ def chess_schedule(game: dict):
     handle = chess_timers.pop(game_id, None)
     if handle:
         handle.cancel()
+    warn_handle = chess_warn_timers.pop(game_id, None)
+    if warn_handle:
+        warn_handle.cancel()
     if game["status"] == "waiting":
         deadline = game["createdAt"] + chess_service.WAITING_TTL_MS
         delay = max(0.0, (deadline - now_ms()) / 1000) + 0.05
@@ -6997,13 +7053,27 @@ def chess_schedule(game: dict):
             delay, lambda: asyncio.create_task(chess_expire_waiting(game_id))
         )
         return
+    now = now_ms()
     deadline = chess_service.deadline_ms(game)
     if deadline is None:
         return
-    delay = max(0.0, (deadline - now_ms()) / 1000) + 0.05
+    delay = max(0.0, (deadline - now) / 1000) + 0.05
     chess_timers[game_id] = asyncio.get_running_loop().call_later(
         delay, lambda: asyncio.create_task(chess_on_deadline(game_id))
     )
+    spec = chess_service.warning_spec(game)
+    if (
+        spec
+        and game.get("lastWarnKey") != spec["key"]
+        and any(not _is_in_chess_room(game_id, uid) for uid in spec["targets"])
+    ):
+        warn_delay = max(0.5, (spec["warnAt"] - now) / 1000)
+        if now + warn_delay * 1000 < spec["deadline"] - 1000:
+            expected_key = spec["key"]
+            chess_warn_timers[game_id] = asyncio.get_running_loop().call_later(
+                warn_delay,
+                lambda: asyncio.create_task(chess_on_warn(game_id, expected_key)),
+            )
 
 
 async def chess_expire_waiting(game_id: str):
@@ -10169,6 +10239,9 @@ async def delete_chess_game(
         handle = chess_timers.pop(game_id, None)
         if handle:
             handle.cancel()
+        warn_handle = chess_warn_timers.pop(game_id, None)
+        if warn_handle:
+            warn_handle.cancel()
     chess_locks.pop(game_id, None)
     return {"ok": True}
 

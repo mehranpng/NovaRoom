@@ -57,7 +57,15 @@ async function handlePush(event) {
     let body = '';
     if (data.kind === 'chess') {
         title = 'شطرنج';
-        body = `${data.senderName} به بازی شما پیوست`;
+        if (data.event === 'timer_warning') {
+            const secText = toPersianNumber(data.remainingSeconds || 10);
+            body =
+                data.reason === 'double_disconnect'
+                    ? `اتصال قطع شده است! تا ${secText} ثانیه دیگر به بازی برگردید`
+                    : `نوبت شماست! اگر تا ${secText} ثانیه دیگر برنگردید بازی را واگذار می‌کنید`;
+        } else {
+            body = `${data.senderName} به بازی شما پیوست`;
+        }
     } else if (data.chatType === 'group') {
         title = data.chatTitle;
         body = data.mentioned
@@ -79,7 +87,7 @@ async function handlePush(event) {
         tag,
         renotify: true,
         icon: data.icon,
-        badge: '/logo/icon-192.png',
+        badge: '/logo/badge.png',
         dir: 'rtl',
         lang: 'fa',
         silent: data.silent || hasTab,

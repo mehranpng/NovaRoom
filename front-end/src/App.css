@@ -1066,6 +1066,311 @@ body,
     opacity: 1;
 }
 
+.chat-list__fab--above-banner {
+    bottom: 138px;
+}
+
+.pwa-install-banner {
+    position: absolute;
+    bottom: 78px;
+    left: 0;
+    right: 0;
+    margin-inline: auto;
+    width: calc(100% - 32px);
+    max-width: 380px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 4px 6px 4px 12px;
+    border-radius: 9999px;
+    background: var(--glass-surface-elevated);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--shadow-md), var(--glass-shadow);
+    z-index: 29;
+    box-sizing: border-box;
+    direction: rtl;
+}
+
+.pwa-install-banner__main {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 6px;
+    border: none;
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 700;
+    text-align: right;
+    cursor: pointer;
+    transition: transform var(--motion-fast) var(--motion-ease-standard);
+}
+
+.pwa-install-banner__main:active {
+    transform: scale(0.97);
+}
+
+.pwa-install-banner__icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    background: transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.pwa-install-banner__icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.pwa-install-banner__text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pwa-install-banner__close {
+    width: 32px;
+    height: 32px;
+    border-radius: 9999px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: transform var(--motion-fast) var(--motion-ease-standard), background var(--motion-fast) var(--motion-ease-standard);
+}
+
+.pwa-install-banner__close:active {
+    transform: scale(0.92);
+    background: var(--hover-bg);
+}
+
+.pwa-guide {
+    position: relative;
+    width: calc(100% - 32px);
+    max-width: 420px;
+    border-radius: 26px;
+    background: var(--glass-surface-elevated);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--shadow-lg), var(--glass-specular);
+    padding: 22px;
+    direction: rtl;
+    text-align: right;
+    box-sizing: border-box;
+}
+
+.pwa-guide__close {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    width: 34px;
+    height: 34px;
+    border-radius: 9999px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-surface-soft);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background var(--motion-fast) var(--motion-ease-standard), transform var(--motion-fast) var(--motion-ease-standard);
+}
+
+.pwa-guide__close:active {
+    transform: scale(0.92);
+    background: var(--hover-bg);
+}
+
+.pwa-guide__header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-inline-end: 30px;
+}
+
+.pwa-guide__logo {
+    width: 54px;
+    height: 54px;
+    border-radius: 16px;
+    object-fit: contain;
+    flex-shrink: 0;
+    display: block;
+}
+
+.pwa-guide__heading {
+    min-width: 0;
+}
+
+.pwa-guide__title {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.pwa-guide__subtitle {
+    margin: 6px 0 0;
+    font-size: 12.5px;
+    line-height: 1.75;
+    color: var(--text-secondary);
+}
+
+.pwa-guide__steps {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 18px;
+}
+
+.pwa-guide__step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 13px;
+    border-radius: 16px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-surface-soft);
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-primary);
+}
+
+.pwa-guide__step-number {
+    width: 24px;
+    height: 24px;
+    border-radius: 9999px;
+    background: var(--accent-primary);
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.pwa-guide__step-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.pwa-guide__step-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-surface-elevated);
+    color: var(--accent-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.pwa-guide__submit {
+    width: 100%;
+    height: 48px;
+    margin-top: 18px;
+    border: none;
+    border-radius: 9999px;
+    background: var(--accent-primary);
+    color: #ffffff;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background var(--motion-fast) var(--motion-ease-standard), transform var(--motion-fast) var(--motion-ease-standard);
+}
+
+.pwa-guide__submit:active {
+    transform: scale(0.97);
+    background: var(--accent-hover);
+}
+
+.settings-install-card {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 24px;
+    border: 1px solid color-mix(in srgb, var(--accent-primary) 34%, var(--glass-border));
+    background: var(--accent-soft);
+    color: var(--text-primary);
+    font-family: inherit;
+    direction: rtl;
+    text-align: right;
+    cursor: pointer;
+    box-sizing: border-box;
+    box-shadow: var(--shadow-xs), var(--glass-specular);
+    transition: transform var(--motion-fast) var(--motion-ease-standard), background var(--motion-fast) var(--motion-ease-standard);
+}
+
+.settings-install-card:active {
+    transform: scale(0.98);
+    background: color-mix(in srgb, var(--accent-primary) 14%, var(--accent-soft));
+}
+
+.settings-install-card__logo {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    object-fit: contain;
+    flex-shrink: 0;
+    display: block;
+}
+
+.settings-install-card__copy {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.settings-install-card__title {
+    font-size: 14.5px;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.settings-install-card__subtitle {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--accent-soft-text);
+}
+
+.settings-install-card__action {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    border-radius: 9999px;
+    background: var(--accent-primary);
+    color: #ffffff;
+    font-size: 12.5px;
+    font-weight: 700;
+}
+
 .bottom-navbar-scrim {
     position: absolute;
     bottom: 0;

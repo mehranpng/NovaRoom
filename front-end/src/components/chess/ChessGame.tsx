@@ -18,6 +18,7 @@ import { copyText } from '../../utils/clipboard';
 import { cx } from '../../utils/cx';
 import { toPersianDigits } from '../../utils/format';
 import { notify } from '../../utils/notificationBus';
+import { closeChessNotifications } from '../../utils/pushNotifications';
 import { screenVariants } from '../../utils/screenMotion';
 import { Avatar } from '../Avatar';
 import { ForwardModal } from '../ForwardModal';
@@ -182,6 +183,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
     }, []);
 
     useEffect(() => {
+        void closeChessNotifications(gameId);
         const cached = getCachedChessGame(gameId);
         if (cached && cached.status === 'finished') {
             setGame(cached);

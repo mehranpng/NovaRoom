@@ -118,6 +118,8 @@ export function NotificationSettings({ onBack }: Props) {
         setPermission(result);
     };
 
+    const anyEnabled = prefs.enabled || prefs.chess;
+
     const toggleEnabled = async () => {
         const next = !prefs.enabled;
         if (next && getPermission() === 'default') {
@@ -127,8 +129,17 @@ export function NotificationSettings({ onBack }: Props) {
         await updateNotificationPrefs({ enabled: next });
     };
 
+    const toggleChess = async () => {
+        const next = !prefs.chess;
+        if (next && getPermission() === 'default') {
+            const result = await requestPermissionAndSubscribe();
+            setPermission(result);
+        }
+        await updateNotificationPrefs({ chess: next });
+    };
+
     const toggleSound = async () => {
-        if (!prefs.enabled) return;
+        if (!anyEnabled) return;
         const next = !prefs.sound;
         await updateNotificationPrefs({ sound: next });
         if (next) playNotificationSound();
@@ -140,6 +151,7 @@ export function NotificationSettings({ onBack }: Props) {
             await registration.showNotification('NovaRoom', {
                 body: 'اعلان‌ها به درستی کار می‌کنند',
                 icon: '/logo/icon-192.png',
+                badge: '/logo/badge.png',
                 dir: 'rtl',
                 lang: 'fa',
                 tag: 'nr-test',
@@ -229,18 +241,26 @@ export function NotificationSettings({ onBack }: Props) {
                 <div style={panelStyle}>
                     <div style={rowStyle}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <span style={{ fontSize: 14, fontWeight: 600 }}>اعلان‌ها</span>
-                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>دریافت اعلان پیام‌های جدید و بازی شطرنج</span>
+                            <span style={{ fontSize: 14, fontWeight: 600 }}>اعلان پیام‌ها</span>
+                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>دریافت اعلان پیام‌های جدید در گفتگوها و گروه‌ها</span>
                         </div>
                         <Switch enabled={prefs.enabled} onToggle={() => void toggleEnabled()} />
                     </div>
 
-                    <div style={{ ...rowStyle, opacity: prefs.enabled ? 1 : 0.5 }}>
+                    <div style={rowStyle}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <span style={{ fontSize: 14, fontWeight: 600 }}>اعلان شطرنج</span>
+                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>دریافت اعلان شروع بازی و هشدار تایمر شطرنج</span>
+                        </div>
+                        <Switch enabled={prefs.chess} onToggle={() => void toggleChess()} />
+                    </div>
+
+                    <div style={{ ...rowStyle, opacity: anyEnabled ? 1 : 0.5 }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             <span style={{ fontSize: 14, fontWeight: 600 }}>صدای اعلان</span>
                             <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>پخش صدا هنگام دریافت اعلان</span>
                         </div>
-                        <Switch enabled={prefs.sound} onToggle={() => void toggleSound()} disabled={!prefs.enabled} />
+                        <Switch enabled={prefs.sound} onToggle={() => void toggleSound()} disabled={!anyEnabled} />
                     </div>
                 </div>
 
@@ -249,8 +269,8 @@ export function NotificationSettings({ onBack }: Props) {
                         type="button"
                         className="notif-settings__test"
                         onClick={() => void testNotification()}
-                        disabled={!prefs.enabled}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', height: 52, borderRadius: 9999, border: '1px solid var(--glass-border)', background: 'var(--glass-surface-soft)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', boxShadow: 'var(--shadow-xs), var(--glass-specular)', color: 'var(--text-primary)', fontWeight: 600, fontSize: 14, fontFamily: 'inherit', cursor: prefs.enabled ? 'pointer' : 'default', opacity: prefs.enabled ? 1 : 0.5, transition: 'background .15s ease, transform .08s ease' }}
+                        disabled={!anyEnabled}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', height: 52, borderRadius: 9999, border: '1px solid var(--glass-border)', background: 'var(--glass-surface-soft)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', boxShadow: 'var(--shadow-xs), var(--glass-specular)', color: 'var(--text-primary)', fontWeight: 600, fontSize: 14, fontFamily: 'inherit', cursor: anyEnabled ? 'pointer' : 'default', opacity: anyEnabled ? 1 : 0.5, transition: 'background .15s ease, transform .08s ease' }}
                     >
                         <Bell size={16} />
                         آزمایش اعلان

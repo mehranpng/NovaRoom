@@ -417,6 +417,47 @@ def deadline_ms(game):
     return min((d for d, _ in items), default=None)
 
 
+def warning_spec(game):
+    items = _candidates(game)
+    if not items:
+        return None
+    deadline, kind = min(items, key=lambda x: x[0])
+    turn = turn_by_ply(game)
+    disc = game.get("disconnectedAt") or {}
+    w_disc = disc.get("white")
+    b_disc = disc.get("black")
+    if kind == "double_disconnect" and w_disc is not None and b_disc is not None:
+        start_ms = max(w_disc, b_disc)
+        targets = [
+            uid
+            for uid in (game["players"].get("white"), game["players"].get("black"))
+            if uid and not is_guest_id(uid)
+        ]
+    else:
+        t_disc = disc.get(turn)
+        start_ms = max(t_disc, game["lastMoveAt"]) if t_disc is not None else game["lastMoveAt"]
+        turn_uid = game["players"].get(turn)
+        targets = [turn_uid] if turn_uid and not is_guest_id(turn_uid) else []
+    if not targets:
+        return None
+    window_ms = max(1, deadline - start_ms)
+    if window_ms <= 12000:
+        delay_ms = max(2000, int(window_ms * 0.35))
+    else:
+        delay_ms = min(max(int(window_ms * 0.35), 5000), 30000)
+    warn_at = start_ms + delay_ms
+    if warn_at >= deadline - 1500:
+        return None
+    key = f"{len(game['moves'])}:{kind}:{start_ms}"
+    return {
+        "warnAt": warn_at,
+        "deadline": deadline,
+        "kind": kind,
+        "targets": targets,
+        "key": key,
+    }
+
+
 def check_deadline(game, now):
     items = [(d, k) for d, k in _candidates(game) if now >= d]
     if not items:

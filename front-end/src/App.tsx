@@ -19,6 +19,7 @@ import { MiniMusicPlayer } from './components/MiniMusicPlayer';
 import { MusicPlayerProvider } from './contexts/MusicPlayerContext';
 import { cx } from './utils/cx';
 import { NotificationCenter } from './components/NotificationCenter';
+import { PwaInstallModal } from './components/PwaInstallModal';
 import { notify } from './utils/notificationBus';
 import { decryptBioClientSide, decryptMessageClientSide, encryptChatTextClientSide } from './utils/e2ee';
 import { clearCachedTextValues, clearChatSnapshots, getChatSnapshot, saveChatSnapshot } from './utils/mediaCache';
@@ -3607,6 +3608,7 @@ export function App() {
     return (
         <MusicPlayerProvider>
             <NotificationCenter />
+            <PwaInstallModal />
             <div className={cx('app', 'app--resizable-desktop')} style={desktopSidebarWidth != null ? ({ ['--desktop-sidebar-width' as string]: `${desktopSidebarWidth}px` }) : undefined}>
                 {!showAIChat && (
                     <div className={cx('app__sidebar', (view === 'chatRoom' || view === 'newChat' || view === 'chess' || view === 'profile' || view === 'profileEdit' || String(view).startsWith('settings')) && 'app__sidebar--hidden-mobile')}>
