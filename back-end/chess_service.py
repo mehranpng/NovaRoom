@@ -230,6 +230,8 @@ def set_invitee(game, user_id, target_id):
         raise ChessError("forbidden")
     if not target_id or target_id == user_id:
         raise ChessError("bad_request")
+    if game.get("invitedChatId") or game.get("invitedGroupId"):
+        raise ChessError("already_invited")
     game["invitedChatId"] = target_id
     game["invitedGroupId"] = None
 
@@ -241,6 +243,8 @@ def set_group_invitee(game, user_id, group_id):
         raise ChessError("forbidden")
     if not group_id:
         raise ChessError("bad_request")
+    if game.get("invitedChatId") or game.get("invitedGroupId"):
+        raise ChessError("already_invited")
     game["invitedChatId"] = None
     game["invitedGroupId"] = group_id
 

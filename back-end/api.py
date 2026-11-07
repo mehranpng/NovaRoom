@@ -65,7 +65,6 @@ from file_service import (
     validate_file_access,
     read_file_content,
     get_file_path,
-    encrypt_existing_uploads,
     list_stored_files,
     MAX_FILE_SIZE,
     read_static_font,
@@ -81,13 +80,37 @@ if _root_env.exists():
 else:
     load_dotenv(find_dotenv(usecwd=True))
 
-limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
+def normalize_ip_address(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return text[:64]
+
+
+def extract_client_ip(request: Optional[Request]) -> str:
+    if not request:
+        return "127.0.0.1"
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        cleaned = normalize_ip_address(real_ip)
+        if cleaned:
+            return cleaned
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        parts = [p.strip() for p in str(forwarded).split(",") if p.strip()]
+        if parts:
+            return normalize_ip_address(parts[-1])
+    client = getattr(request, "client", None)
+    host = getattr(client, "host", "") if client else ""
+    return normalize_ip_address(host) or "127.0.0.1"
+
+
+limiter = Limiter(key_func=extract_client_ip, default_limits=["200/minute"])
 app = FastAPI(title="NovaRoom API")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 class ApiPrefixMiddleware:
-    """Allows endpoints to be called with or without the /api prefix"""
     def __init__(self, app):
         self.app = app
 
@@ -106,11 +129,14 @@ class ApiPrefixMiddleware:
                     scope["raw_path"] = raw[4:]
         await self.app(scope, receive, send)
 
+_cors_origins_raw = os.getenv("CORS_ORIGINS", "*").strip()
+_cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()] or ["*"]
+
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -120,9 +146,9 @@ app.add_middleware(ApiPrefixMiddleware)
 async def health_check():
     return {"status": "ok", "service": "NovaRoom API"}
 
-_raw_secret = os.getenv("SECRET_KEY", "")
-if not _raw_secret:
-    _raw_secret = "dev-secret-change-me"
+_raw_secret = os.getenv("SECRET_KEY", "").strip()
+if not _raw_secret or _raw_secret == "dev-secret-change-me":
+    raise RuntimeError("SECRET_KEY environment variable must be set to a strong secret")
 if len(_raw_secret.encode("utf-8")) < 32:
     SECRET_KEY = hashlib.sha256(_raw_secret.encode("utf-8")).hexdigest()
 else:
@@ -284,31 +310,8 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-DEFAULT_DEV_SECRET_KEY = hashlib.sha256(b"dev-secret-change-me").hexdigest()
-
-
 def _derive_enc_key(token: str, scope: str, secret: str = SECRET_KEY) -> bytes:
     material = f"{secret}|{scope}".encode("utf-8")
-    return hashlib.sha256(material).digest()
-
-
-def _derive_enc_key_legacy_shared(scope: str, secret: str = SECRET_KEY) -> bytes:
-    material = f"{secret}|shared|{scope}".encode("utf-8")
-    return hashlib.sha256(material).digest()
-
-
-def _derive_enc_key_legacy_scoped_tokenhash(
-    token: str, scope: str, secret: str = SECRET_KEY
-) -> bytes:
-    token_hint = hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()[:16]
-    material = f"{secret}|{scope}|{token_hint}".encode("utf-8")
-    return hashlib.sha256(material).digest()
-
-
-def _derive_enc_key_legacy_token_raw(
-    token: str, scope: str, secret: str = SECRET_KEY
-) -> bytes:
-    material = f"{secret}|{token}|{scope}".encode("utf-8")
     return hashlib.sha256(material).digest()
 
 
@@ -380,14 +383,6 @@ def _decrypt_scoped_text_raw(value: str, token: str, scope: str) -> str:
         tag = raw[-ENC_TAG_SIZE:]
         candidate_key_builders = (
             lambda: _derive_enc_key(token, scope),
-            lambda: _derive_enc_key("", scope),
-            lambda: _derive_enc_key_legacy_shared(scope),
-            lambda: _derive_enc_key_legacy_scoped_tokenhash(token, scope),
-            lambda: _derive_enc_key_legacy_token_raw(token, scope),
-            lambda: _derive_enc_key(token, scope, DEFAULT_DEV_SECRET_KEY),
-            lambda: _derive_enc_key_legacy_shared(scope, DEFAULT_DEV_SECRET_KEY),
-            lambda: _derive_enc_key_legacy_scoped_tokenhash(token, scope, DEFAULT_DEV_SECRET_KEY),
-            lambda: _derive_enc_key_legacy_token_raw(token, scope, DEFAULT_DEV_SECRET_KEY),
         )
         mac_input = nonce + body
         for build_key in candidate_key_builders:
@@ -1306,16 +1301,6 @@ class BatchDeleteMessagesRequest(BaseModel):
     messageIds: List[str]
 
 
-class OfficialChSendRequest(BaseModel):
-    text: str
-    replyToId: Optional[str] = None
-    file: Optional[dict] = None
-
-
-class OfficialChEditRequest(BaseModel):
-    text: str
-
-
 async def create_access_token(data: dict) -> str:
     to_encode = data.copy()
     expire = utc_now() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
@@ -1332,29 +1317,6 @@ def normalize_device_name(value: Any) -> str:
     if not text:
         return ""
     return text[:120]
-
-
-def normalize_ip_address(value: Any) -> str:
-    text = str(value or "").strip()
-    if not text:
-        return ""
-    return text[:64]
-
-
-def extract_client_ip(request: Optional[Request]) -> str:
-    if not request:
-        return ""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        first = str(forwarded).split(",")[0].strip()
-        if first:
-            return normalize_ip_address(first)
-    real_ip = request.headers.get("x-real-ip")
-    if real_ip:
-        return normalize_ip_address(real_ip)
-    client = getattr(request, "client", None)
-    host = getattr(client, "host", "") if client else ""
-    return normalize_ip_address(host)
 
 
 def _normalize_session_list(user_doc: dict) -> List[dict]:
@@ -2403,6 +2365,8 @@ async def account_deletion_worker() -> None:
 
 @app.on_event("startup")
 async def startup_db():
+    if int(os.getenv("WEB_CONCURRENCY", "1")) > 1:
+        raise RuntimeError("NovaRoom uses in-memory WebSocket/chess state and must run with --workers 1")
     try:
         try:
             await cl_users.drop_index("login.email_1")
@@ -2463,90 +2427,11 @@ async def startup_db():
             chess_schedule(g)
     except Exception as e:
         print(f"Startup DB warning: {e}")
-    asyncio.create_task(migrate_unencrypted_messages())
     asyncio.create_task(sweep_ai_temp_files_task())
     asyncio.create_task(retry_pending_file_deletions_task())
     asyncio.create_task(sweep_orphaned_uploads_task())
     asyncio.create_task(chess_backfill_stats())
     asyncio.create_task(account_deletion_worker())
-
-
-async def migrate_unencrypted_messages():
-    async for m in cl_messages.find({"textEncrypted": {"$ne": True}}):
-        chat_scope = f"chat:{m.get('chatId', '')}"
-        updates: Dict[str, Any] = {"textEncrypted": True}
-        txt = str(m.get("text") or "")
-        if txt and not is_ciphertext(txt):
-            updates["text"] = encrypt_scoped_text(
-                txt, LEGACY_BOOTSTRAP_TOKEN, chat_scope
-            )
-        reply = m.get("replyTo")
-        if isinstance(reply, dict):
-            r_txt = str(reply.get("text") or "")
-            if r_txt and not is_ciphertext(r_txt):
-                updates["replyTo"] = {
-                    **reply,
-                    "text": encrypt_scoped_text(
-                        r_txt, LEGACY_BOOTSTRAP_TOKEN, chat_scope
-                    ),
-                }
-        reasoning = str(m.get("reasoningContent") or "")
-        if reasoning and not is_ciphertext(reasoning):
-            updates["reasoningContent"] = encrypt_scoped_text(
-                reasoning, LEGACY_BOOTSTRAP_TOKEN, chat_scope
-            )
-        if updates:
-            await cl_messages.update_one({"_id": m["_id"]}, {"$set": updates})
-
-    async for m in cl_ai_messages.find(
-        {
-            "$or": [
-                {"contentEncrypted": {"$ne": True}},
-                {"content": {"$not": {"$regex": f"^{ENC_PREFIX}"}}},
-            ]
-        }
-    ):
-        ai_scope = f"ai:{m.get('aiChatId', '')}"
-        updates = {"contentEncrypted": True}
-        content = str(m.get("content") or "")
-        if content and not is_ciphertext(content):
-            updates["content"] = encrypt_scoped_text(
-                content, LEGACY_BOOTSTRAP_TOKEN, ai_scope
-            )
-        reasoning = str(m.get("reasoningContent") or "")
-        if reasoning and not is_ciphertext(reasoning):
-            updates["reasoningContent"] = encrypt_scoped_text(
-                reasoning, LEGACY_BOOTSTRAP_TOKEN, ai_scope
-            )
-        if updates:
-            await cl_ai_messages.update_one({"_id": m["_id"]}, {"$set": updates})
-
-    async for c in cl_ai_chats.find(
-        {
-            "$or": [
-                {"titleEncrypted": {"$ne": True}},
-                {"summaryEncrypted": {"$ne": True}},
-                {"title": {"$not": {"$regex": f"^{ENC_PREFIX}"}}},
-                {"summary": {"$not": {"$regex": f"^{ENC_PREFIX}"}}},
-            ]
-        }
-    ):
-        chat_id = str(c.get("_id"))
-        scope = f"ai-chat-meta:{chat_id}"
-        updates: Dict[str, Any] = {
-            "titleEncrypted": True,
-            "summaryEncrypted": True,
-        }
-        title = str(c.get("title") or "")
-        summary = str(c.get("summary") or "")
-        if title and not is_ciphertext(title):
-            updates["title"] = encrypt_scoped_text(title, LEGACY_BOOTSTRAP_TOKEN, scope)
-        if summary and not is_ciphertext(summary):
-            updates["summary"] = encrypt_scoped_text(
-                summary, LEGACY_BOOTSTRAP_TOKEN, scope
-            )
-        if updates:
-            await cl_ai_chats.update_one({"_id": c["_id"]}, {"$set": updates})
 
 
 class PushSubscriptionKeys(BaseModel):
@@ -2590,7 +2475,20 @@ async def push_subscribe(
     if not user:
         raise HTTPException(status_code=401, detail="Invalid token")
     endpoint = body.endpoint.strip()
-    if not endpoint.startswith("https://"):
+    parsed_ep = urllib.parse.urlparse(endpoint)
+    host = (parsed_ep.hostname or "").lower()
+    allowed_push_Suffixes = (
+        ".googleapis.com",
+        ".google.com",
+        ".mozilla.com",
+        ".mozaws.net",
+        ".apple.com",
+        ".windows.com",
+        ".notify.windows.com",
+    )
+    if parsed_ep.scheme != "https" or not any(
+        host == s.lstrip(".") or host.endswith(s) for s in allowed_push_Suffixes
+    ):
         raise HTTPException(status_code=400, detail="Invalid endpoint")
     me = user["chatId"]
     sub_id = hashlib.sha256(endpoint.encode("utf-8")).hexdigest()
@@ -3211,16 +3109,6 @@ async def admin_delete_register_link(
     return {"deleted": True}
 
 
-def parse_registration_date_key(value: Any) -> Tuple[int, int, int]:
-    parts = [int(x) for x in re.findall(r"\d+", str(value or ""))]
-    if len(parts) >= 3:
-        if parts[0] > 1000:
-            return (parts[0], parts[1], parts[2])
-        if parts[2] > 1000:
-            return (parts[2], parts[1], parts[0])
-    return (0, 0, 0)
-
-
 @app.get("/admin/users")
 @limiter.limit("60/minute;600/hour")
 async def admin_list_users(
@@ -3282,40 +3170,35 @@ async def admin_list_users(
         else:
             raise HTTPException(status_code=400, detail="Invalid cursor")
 
-    docs = await cl_users.find(
-        query,
-        {
-            "chatId": 1,
-            "profile.name": 1,
-            "profile.username": 1,
-            "profile.avatar": 1,
-            "verified": 1,
-            "adminLevel": 1,
-            "online": 1,
-            "wsConnectionCount": 1,
-            "registrationDate": 1,
-            "createdAt": 1,
-            "login.sessions": 1,
-            "deletion": 1,
-        },
-    ).to_list(None)
-
-    newest_first = filter_value == "newest"
-    fallback_date = (0, 0, 0) if newest_first else (9999, 99, 99)
-    docs.sort(
-        key=lambda doc: (
-            parse_registration_date_key(doc.get("registrationDate"))
-            if parse_registration_date_key(doc.get("registrationDate")) != (0, 0, 0)
-            else fallback_date,
-            dt_to_epoch_ms(doc.get("createdAt")) if doc.get("createdAt") else 0,
-            str(doc.get("_id") or ""),
-        ),
-        reverse=newest_first,
+    sort_dir = -1 if filter_value == "newest" else 1
+    total: Optional[int] = (
+        await cl_users.count_documents(query) if offset == 0 else None
     )
-
-    total: Optional[int] = len(docs) if offset == 0 else None
-    page_docs = docs[offset : offset + page_size]
-    has_more = offset + page_size < len(docs)
+    fetched = (
+        await cl_users.find(
+            query,
+            {
+                "chatId": 1,
+                "profile.name": 1,
+                "profile.username": 1,
+                "profile.avatar": 1,
+                "verified": 1,
+                "adminLevel": 1,
+                "online": 1,
+                "wsConnectionCount": 1,
+                "registrationDate": 1,
+                "createdAt": 1,
+                "login.sessions": 1,
+                "deletion": 1,
+            },
+        )
+        .sort([("createdAt", sort_dir), ("_id", sort_dir)])
+        .skip(offset)
+        .limit(page_size + 1)
+        .to_list(page_size + 1)
+    )
+    has_more = len(fetched) > page_size
+    page_docs = fetched[:page_size]
     items = [
         {
             "chatId": doc.get("chatId"),
@@ -5547,6 +5430,62 @@ async def get_messages(
     }
 
 
+async def _read_upload_bounded(upload: UploadFile, max_bytes: int) -> bytes:
+    chunks: List[bytes] = []
+    total = 0
+    while True:
+        chunk = await upload.read(65536)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File size exceeds maximum allowed size of {max_bytes / (1024*1024)}MB",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+async def _user_can_access_file(user_id: str, file_id: str) -> bool:
+    if not _is_valid_file_id(file_id):
+        return False
+    url_val = f"/files/{file_id}"
+    if await cl_users.find_one(
+        {"$or": [{"profile.avatar": file_id}, {"profile.avatar": url_val}]},
+        {"_id": 1},
+    ):
+        return True
+    if await cl_chats.find_one(
+        {"$or": [{"groupAvatar": file_id}, {"groupAvatar": url_val}]},
+        {"_id": 1},
+    ):
+        return True
+    msg = await cl_messages.find_one(
+        {
+            "$or": [
+                {"file.fileId": file_id},
+                {"file.previewFileId": file_id},
+                {"file.coverArtFileId": file_id},
+                {"file.previewUrl": url_val},
+                {"file.thumbUrl": url_val},
+                {"file.imagePreviewUrl": url_val},
+                {"file.coverArtUrl": url_val},
+            ]
+        },
+        {"chatId": 1, "senderId": 1},
+    )
+    if not msg:
+        return True
+    chat_id = str(msg.get("chatId") or "")
+    if chat_id == get_saved_messages_id(user_id) or is_official_channel_chat(chat_id):
+        return True
+    if msg.get("senderId") == user_id:
+        return True
+    chat = await cl_chats.find_one({"_id": chat_id, "participants": user_id}, {"_id": 1})
+    return bool(chat)
+
+
 @app.post("/files/upload")
 @limiter.limit("30/minute;500/hour")
 async def upload_file(
@@ -5556,13 +5495,7 @@ async def upload_file(
     duration: Optional[float] = Form(None),
     current_user: dict = Depends(get_current_user),
 ):
-    file_content = await file.read()
-
-    if len(file_content) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File size exceeds maximum allowed size of {MAX_FILE_SIZE / (1024*1024)}MB",
-        )
+    file_content = await _read_upload_bounded(file, MAX_FILE_SIZE)
 
     try:
         file_metadata = await save_uploaded_file(
@@ -5572,7 +5505,7 @@ async def upload_file(
         if duration is not None and duration > 0:
             file_metadata["duration"] = float(duration)
         if preview is not None:
-            preview_content = await preview.read()
+            preview_content = await _read_upload_bounded(preview, MAX_FILE_SIZE)
             if preview_content:
                 preview_meta = await save_uploaded_file(
                     preview_content,
@@ -5583,6 +5516,8 @@ async def upload_file(
                     file_metadata["previewUrl"] = f"/files/{preview_meta.get('fileId')}"
 
         return {"success": True, "file": file_metadata}
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -5599,6 +5534,8 @@ async def download_file(
 ):
     if not validate_file_access(file_id):
         raise HTTPException(status_code=404, detail="File not found")
+    if not await _user_can_access_file(current_user["chatId"], file_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     etag = hashlib.sha256(file_id.encode("utf-8")).hexdigest()
     incoming_etag = request.headers.get("if-none-match", "").strip('"')
@@ -5648,10 +5585,11 @@ async def remove_uploaded_file(
     file_id: str,
     current_user: dict = Depends(get_current_user),
 ):
-    file_doc = await cl_messages.find_one({"file.fileId": file_id}, {"_id": 1})
-    if file_doc:
+    if not _is_valid_file_id(file_id):
+        raise HTTPException(status_code=400, detail="Invalid file ID")
+    if await _file_still_referenced(file_id):
         raise HTTPException(
-            status_code=409, detail="File is already attached to a message"
+            status_code=409, detail="File is already attached or in use"
         )
 
     if not validate_file_access(file_id):
@@ -5740,6 +5678,20 @@ async def get_static_stockfish(filename: str, request: Request):
     raise HTTPException(status_code=404, detail="Engine file not found")
 
 
+async def _verify_chat_participation(user_id: str, chat_id: str) -> List[str]:
+    if chat_id == get_saved_messages_id(user_id):
+        return [user_id]
+    if is_official_channel_chat(chat_id):
+        return await cl_users.distinct("chatId", {})
+    chat_doc = await cl_chats.find_one({"_id": chat_id}, {"participants": 1})
+    if not chat_doc:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    participants = chat_doc.get("participants", []) or []
+    if user_id not in participants:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return participants
+
+
 @app.post("/chats/{chat_id}/messages/{message_id}/react")
 @limiter.limit("30/minute;500/hour")
 async def add_reaction(
@@ -5749,12 +5701,13 @@ async def add_reaction(
     req: ReactionRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    """Add or toggle a reaction to a message"""
     user_id = current_user["chatId"]
     emoji = req.emoji
 
     if emoji not in VALID_REACTIONS:
         raise HTTPException(status_code=400, detail="Invalid emoji")
+
+    participants = await _verify_chat_participation(user_id, chat_id)
 
     oid = await try_object_id(message_id)
     if not oid:
@@ -5813,14 +5766,8 @@ async def add_reaction(
 
     aggregated_reactions = aggregate_reactions(reactions)
 
-    participants = [user_id] if is_saved else []
-    if not is_saved:
-        participants_doc = await cl_chats.find_one(
-            {"_id": chat_id}, {"participants": 1}
-        )
-        participants = (
-            participants_doc.get("participants", []) if participants_doc else []
-        )
+    if is_official:
+        participants = []
 
     if participants:
         await broadcast(
@@ -5917,8 +5864,8 @@ async def remove_reaction(
     message_id: str,
     current_user: dict = Depends(get_current_user),
 ):
-    """Remove user's reaction from a message"""
     user_id = current_user["chatId"]
+    participants = await _verify_chat_participation(user_id, chat_id)
 
     oid = await try_object_id(message_id)
     if not oid:
@@ -5960,14 +5907,8 @@ async def remove_reaction(
 
     aggregated_reactions = aggregate_reactions(reactions)
 
-    participants = [user_id] if is_saved else []
-    if not is_saved:
-        participants_doc = await cl_chats.find_one(
-            {"_id": chat_id}, {"participants": 1}
-        )
-        participants = (
-            participants_doc.get("participants", []) if participants_doc else []
-        )
+    if is_official:
+        participants = []
 
     if participants:
         await broadcast(
@@ -5993,6 +5934,7 @@ async def ack_message_mention(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = current_user["chatId"]
+    await _verify_chat_participation(user_id, chat_id)
     oid = await try_object_id(message_id)
     if not oid:
         raise HTTPException(status_code=400, detail="Invalid message ID")
@@ -6012,6 +5954,7 @@ async def ack_message_reaction(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = current_user["chatId"]
+    await _verify_chat_participation(user_id, chat_id)
     oid = await try_object_id(message_id)
     if not oid:
         raise HTTPException(status_code=400, detail="Invalid message ID")
@@ -6050,7 +5993,7 @@ async def pin_message(
     is_saved = chat_id == saved_chat_id
     is_official = is_official_channel_chat(chat_id)
 
-    if is_official and not bool(current_user.get("verified", False)):
+    if is_official and get_admin_level(current_user) is None:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     chat_doc = None
@@ -6137,7 +6080,7 @@ async def unpin_message(
     is_saved = chat_id == saved_chat_id
     is_official = is_official_channel_chat(chat_id)
 
-    if is_official and not bool(current_user.get("verified", False)):
+    if is_official and get_admin_level(current_user) is None:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     chat_doc = None
@@ -6234,7 +6177,7 @@ async def batch_delete_messages(
     can_delete_others = (
         can_manage_group(current_user, chat_doc)
         if is_group
-        else bool(current_user.get("verified", False))
+        else (get_admin_level(current_user) is not None)
     )
     authorized_msgs = [
         m for m in msgs if m.get("senderId") == user_id or can_delete_others
@@ -8201,20 +8144,52 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 text = data.get("text", "")
                 reply_to_id = data.get("replyToId")
                 client_id = data.get("clientId")
-                file_data = data.get("file")
-                if isinstance(file_data, dict):
+                raw_file = data.get("file")
+                file_data = None
+                if isinstance(raw_file, dict):
+                    fid = str(raw_file.get("fileId") or "").strip()
+                    if not _is_valid_file_id(fid):
+                        continue
+                    candidate_ids = collect_file_ids({"file": raw_file})
+                    conflict = False
+                    for cid in candidate_ids:
+                        if await _file_still_referenced(cid):
+                            conflict = True
+                            break
+                    if conflict:
+                        continue
+                    try:
+                        file_size = int(raw_file.get("fileSize") or 0)
+                    except (TypeError, ValueError):
+                        file_size = 0
+                    sanitized_file: Dict[str, Any] = {
+                        "fileId": fid,
+                        "fileName": str(raw_file.get("fileName") or "file")[:255],
+                        "fileSize": max(0, min(file_size, MAX_FILE_SIZE)),
+                        "mimeType": str(raw_file.get("mimeType") or "application/octet-stream")[:120],
+                        "uploadedBy": chat_id,
+                    }
+                    for k in ("previewFileId", "coverArtFileId"):
+                        val = str(raw_file.get(k) or "").strip()
+                        if _is_valid_file_id(val):
+                            sanitized_file[k] = val
+                    for k in ("previewUrl", "thumbUrl", "imagePreviewUrl", "coverArtUrl"):
+                        ref_id = _file_id_from_url(raw_file.get(k))
+                        if ref_id:
+                            sanitized_file[k] = f"/files/{ref_id}"
+                    for k in ("title", "artist"):
+                        if isinstance(raw_file.get(k), str):
+                            sanitized_file[k] = raw_file[k][:200]
                     for key in ("width", "height"):
                         try:
-                            value = int(file_data.get(key))
+                            value = int(raw_file.get(key))
+                            if 1 <= value <= 20000:
+                                sanitized_file[key] = value
                         except (TypeError, ValueError):
-                            file_data.pop(key, None)
-                            continue
-                        if 1 <= value <= 20000:
-                            file_data[key] = value
-                        else:
-                            file_data.pop(key, None)
-                    file_data.pop("localUrl", None)
-                    file_data.pop("upload", None)
+                            pass
+                    if isinstance(raw_file.get("duration"), (int, float)) and 0 < float(raw_file["duration"]) <= 86400:
+                        sanitized_file["duration"] = float(raw_file["duration"])
+                    file_data = sanitized_file
                 if not isinstance(text, str):
                     continue
                 if len(text) > MAX_CHAT_MESSAGE_LENGTH:
@@ -8559,7 +8534,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     if permission_chat and permission_chat.get("chatType") == "group":
                         if not can_manage_group(requester, permission_chat):
                             continue
-                    elif not bool(requester.get("verified", False)):
+                    elif get_admin_level(requester) is None:
                         continue
 
                 saved_chat_id = get_saved_messages_id(chat_id)
@@ -9243,11 +9218,9 @@ async def upload_ai_file(
     extension = Path(original_name).suffix.lower()
     if extension not in AI_ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail="فرمت فایل پشتیبانی نمی‌شود.")
-    data = await file.read()
+    data = await _read_upload_bounded(file, AI_MAX_FILE_SIZE)
     if not data:
         raise HTTPException(status_code=400, detail="فایل خالی است.")
-    if len(data) > AI_MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="حجم فایل بیشتر از ۱۰ مگابایت است.")
 
     unique_name = f"{uuid.uuid4().hex}{extension}"
     file_path = await save_ai_temp_file(data, unique_name)

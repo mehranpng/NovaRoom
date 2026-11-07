@@ -103,7 +103,9 @@ FILE_TAG_SIZE = 16
 
 
 def _file_key() -> bytes:
-    raw_secret = os.getenv("SECRET_KEY", "") or "dev-secret-change-me"
+    raw_secret = os.getenv("SECRET_KEY", "").strip()
+    if not raw_secret or raw_secret == "dev-secret-change-me":
+        raise RuntimeError("SECRET_KEY environment variable must be set")
     return hashlib.sha256(f"{raw_secret}|file-storage".encode("utf-8")).digest()
 
 
@@ -453,7 +455,3 @@ async def read_static_stockfish(filename: str) -> Optional[bytes]:
         except Exception:
             pass
     return None
-
-
-async def encrypt_existing_uploads() -> int:
-    return 0
