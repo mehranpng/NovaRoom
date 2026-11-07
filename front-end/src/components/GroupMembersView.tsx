@@ -334,7 +334,7 @@ export function GroupMembersView({
                         <button
                             type="button"
                             className="popover__item popover__item--danger"
-                            onPointerDown={(e) => {
+                            onClick={(e) => {
                                 e.stopPropagation();
                                 const member = menuState.member;
                                 setMenuState(null);
