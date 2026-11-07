@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, Users, Link as LinkIcon, ChevronLeft, Copy, CheckCheck, Loader2 } from 'lucide-react';
+import { Search, Users, Link as LinkIcon, ChevronLeft, Copy, Check, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { apiFetch } from '../config/api';
 import { type GroupPreview, type User } from '../types';
@@ -9,6 +9,8 @@ import { GroupJoinSheet } from './GroupJoinSheet';
 import { screenVariants } from '../utils/screenMotion';
 import { cx } from '../utils/cx';
 import { useScrollFade } from '../hooks/useScrollFade';
+import { toPersianDigits } from '../utils/format';
+import { copyText } from '../utils/clipboard';
 
 interface NewChatScreenProps {
     onClose: () => void;
@@ -71,14 +73,18 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
     const [previewGroup, setPreviewGroup] = useState<GroupPreview | null>(null);
     const [joinSheetError, setJoinSheetError] = useState('');
     const [ownedGroups, setOwnedGroups] = useState<OwnedGroup[]>([]);
+    const [ownedGroupsLoading, setOwnedGroupsLoading] = useState(true);
     const [copiedGroup, setCopiedGroup] = useState<string>('');
 
     const loadOwnedGroups = useCallback(async () => {
+        setOwnedGroupsLoading(true);
         try {
             const groups = await apiFetch('/profile/groups');
             setOwnedGroups(Array.isArray(groups) ? groups : []);
         } catch (err) {
             console.error(err);
+        } finally {
+            setOwnedGroupsLoading(false);
         }
     }, []);
 
@@ -160,11 +166,16 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
         setSearchingInvite(true);
         try {
             const preview = await apiFetch(`/groups/preview/${encodeURIComponent(inviteCode)}`);
-            if (preview?.chatId) {
-                setPreviewGroup(preview as GroupPreview);
-            } else {
+            if (!preview?.chatId) {
                 setJoinError('گروهی با این لینک یافت نشد');
+                return;
             }
+            if (preview.alreadyMember) {
+                setInviteInput('');
+                await onJoinGroup(preview.inviteCode || inviteCode);
+                return;
+            }
+            setPreviewGroup(preview as GroupPreview);
         } catch (error) {
             setJoinError(error instanceof Error ? error.message : 'گروهی با این لینک یافت نشد');
         } finally {
@@ -188,27 +199,43 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
         }
     };
 
-    const handleCopy = () => {
-        void navigator.clipboard.writeText(createdGroupLink);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+    const handleCopy = async () => {
+        try {
+            await copyText(createdGroupLink);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            alert('کپی انجام نشد');
+        }
     };
 
-    const handleCopyGroupLink = (inviteLink: string, chatId: string) => {
-        void navigator.clipboard.writeText(inviteLink);
-        setCopiedGroup(chatId);
-        setTimeout(() => setCopiedGroup(''), 2000);
+    const handleCopyGroupLink = async (inviteLink: string, chatId: string) => {
+        try {
+            await copyText(inviteLink);
+            setCopiedGroup(chatId);
+            setTimeout(() => setCopiedGroup(''), 2000);
+        } catch {
+            alert('کپی انجام نشد');
+        }
+    };
+
+    const handleEnterOwnedGroup = (group: OwnedGroup) => {
+        if (onGroupCreated) {
+            onGroupCreated(group.chatId);
+            return;
+        }
+        void onJoinGroup(group.inviteCode);
     };
 
     const isAdmin = Boolean(currentUser?.adminLevel);
-    const groupLimitLabel = isAdmin ? 'حداکثر ۳۰ گروه' : 'حداکثر ۲ گروه';
+    const groupLimit = isAdmin ? 30 : 2;
     const trimmedQuery = query.trim().replace(/^@+/, '');
     const searchDirection = textDirection(query.trim());
     const groupNameDirection = textDirection(groupName.trim());
 
     const tabs: Array<{ key: 'chat' | 'group'; label: string; icon: typeof Search }> = [
-        { key: 'chat', label: 'چت خصوصی', icon: Search },
         { key: 'group', label: 'گروه', icon: Users },
+        { key: 'chat', label: 'چت خصوصی', icon: Search },
     ];
 
     return (
@@ -315,7 +342,7 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
                             style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
                         >
                             <div style={{ ...surfaceStyle, padding: 16 }}>
-                                <p className="profile__field-label" style={{ marginBottom: 10 }}>ساخت گروه ({groupLimitLabel})</p>
+                                <p className="profile__field-label" style={{ marginBottom: 10 }}>ساخت گروه</p>
                                 <div style={{ position: 'relative' }}>
                                     <input
                                         type="text"
@@ -352,10 +379,11 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
                                             </span>
                                             <button
                                                 type="button"
-                                                onClick={handleCopy}
-                                                className={`new-chat-screen__copy${copied ? ' new-chat-screen__copy--copied' : ''}`}
+                                                onClick={() => void handleCopy()}
+                                                className="new-chat-screen__copy"
+                                                style={copied ? { color: '#22c55e' } : undefined}
                                             >
-                                                {copied ? <CheckCheck size={14} /> : <Copy size={14} />}
+                                                {copied ? <Check size={14} /> : <Copy size={14} />}
                                                 {copied ? 'کپی شد' : 'کپی'}
                                             </button>
                                         </div>
@@ -393,8 +421,29 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
                             </div>
 
                             <div style={{ ...surfaceStyle, padding: 16, marginTop: 18, direction: 'rtl', textAlign: 'right' }}>
-                                <p className="profile__field-label" style={{ marginBottom: 10 }}>گروه‌های ساخته‌شده شما</p>
-                                {ownedGroups.length === 0 ? (
+                                <div className="profile__groups-head">
+                                    <p className="profile__field-label" style={{ margin: 0 }}>گروه‌های ساخته‌شده شما</p>
+                                    {ownedGroupsLoading ? (
+                                        <span className="skeleton" style={{ width: 36, height: 12, borderRadius: 6 }} />
+                                    ) : (
+                                        <span className="profile__groups-limit">
+                                            {toPersianDigits(ownedGroups.length)}/{toPersianDigits(groupLimit)}
+                                        </span>
+                                    )}
+                                </div>
+                                {ownedGroupsLoading ? (
+                                    <div className="profile__groups-list">
+                                        {Array.from({ length: 2 }).map((_, index) => (
+                                            <div className="profile__group-item" key={`owned-group-skeleton-${index}`}>
+                                                <div className="profile__group-main" style={{ flex: 1 }}>
+                                                    <span className="skeleton" style={{ display: 'block', width: '52%', height: 13, borderRadius: 8, marginBottom: 7 }} />
+                                                    <span className="skeleton" style={{ display: 'block', width: '34%', height: 11, borderRadius: 8 }} />
+                                                </div>
+                                                <span className="skeleton" style={{ width: 86, height: 34, borderRadius: 9999 }} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : ownedGroups.length === 0 ? (
                                     <p className="profile__groups-empty">هنوز گروهی نساخته‌اید.</p>
                                 ) : (
                                     <div className="profile__groups-list">
@@ -404,14 +453,24 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
                                                     <p className="profile__group-name">{group.name}</p>
                                                     <p className="profile__group-code">{group.inviteCode}</p>
                                                 </div>
-                                                <button
-                                                    type="button"
-                                                    className={`new-chat-screen__copy${copiedGroup === group.chatId ? ' new-chat-screen__copy--copied' : ''}`}
-                                                    onClick={() => handleCopyGroupLink(group.inviteLink, group.chatId)}
-                                                >
-                                                    {copiedGroup === group.chatId ? <CheckCheck size={14} /> : <LinkIcon size={14} />}
-                                                    {copiedGroup === group.chatId ? 'کپی شد' : 'کپی لینک دعوت'}
-                                                </button>
+                                                <div className="profile__group-actions">
+                                                    <button
+                                                        type="button"
+                                                        className="profile__group-enter"
+                                                        onClick={() => handleEnterOwnedGroup(group)}
+                                                    >
+                                                        ورود به گروه
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className={cx('profile__group-copy', 'profile__group-copy--icon', copiedGroup === group.chatId && 'profile__group-copy--copied')}
+                                                        onClick={() => void handleCopyGroupLink(group.inviteLink, group.chatId)}
+                                                        aria-label="کپی لینک دعوت"
+                                                        title="کپی لینک دعوت"
+                                                    >
+                                                        {copiedGroup === group.chatId ? <Check size={15} /> : <LinkIcon size={15} />}
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>

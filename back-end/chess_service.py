@@ -102,6 +102,7 @@ def new_game(creator_id, color, time_control, now):
         "_id": None,
         "creatorId": creator_id,
         "invitedChatId": None,
+        "invitedGroupId": None,
         "players": players,
         "timeControl": time_control,
         "baseMs": tc["baseMs"],
@@ -230,6 +231,30 @@ def set_invitee(game, user_id, target_id):
     if not target_id or target_id == user_id:
         raise ChessError("bad_request")
     game["invitedChatId"] = target_id
+    game["invitedGroupId"] = None
+
+
+def set_group_invitee(game, user_id, group_id):
+    if game["status"] != "waiting":
+        raise ChessError("not_joinable")
+    if user_id != game["creatorId"]:
+        raise ChessError("forbidden")
+    if not group_id:
+        raise ChessError("bad_request")
+    game["invitedChatId"] = None
+    game["invitedGroupId"] = group_id
+
+
+def _seat_opponent(game, user_id, now, rated):
+    seat = "black" if game["players"]["white"] else "white"
+    game["players"][seat] = user_id
+    game["rated"] = rated
+    game["status"] = "active"
+    game["startedAt"] = now
+    game["lastMoveAt"] = now
+    game["disconnectedAt"] = {"white": None, "black": None}
+    game["disconnectUsedMs"] = {"white": 0, "black": 0}
+    return {"kind": "opponent_joined"}
 
 
 def join(game, user_id, now):
@@ -237,15 +262,9 @@ def join(game, user_id, now):
         raise ChessError("not_joinable")
     if user_id == game["creatorId"] or user_id != game["invitedChatId"]:
         raise ChessError("forbidden")
-    seat = "black" if game["players"]["white"] else "white"
-    game["players"][seat] = user_id
-    game["rated"] = not is_guest_id(game["creatorId"]) and not is_guest_id(user_id)
-    game["status"] = "active"
-    game["startedAt"] = now
-    game["lastMoveAt"] = now
-    game["disconnectedAt"] = {"white": None, "black": None}
-    game["disconnectUsedMs"] = {"white": 0, "black": 0}
-    return {"kind": "opponent_joined"}
+    return _seat_opponent(
+        game, user_id, now, not is_guest_id(game["creatorId"]) and not is_guest_id(user_id)
+    )
 
 
 def join_by_link(game, user_id, now, guest_token=None):
@@ -255,20 +274,27 @@ def join_by_link(game, user_id, now, guest_token=None):
         raise ChessError("forbidden")
     if game.get("invitedChatId") and game["invitedChatId"] != user_id:
         raise ChessError("forbidden")
-    seat = "black" if game["players"]["white"] else "white"
-    game["players"][seat] = user_id
+    if game.get("invitedGroupId") and game["invitedChatId"] != user_id:
+        raise ChessError("forbidden")
     if is_guest_id(user_id):
         game["guestId"] = user_id
         game["guestToken"] = guest_token
-        game["rated"] = False
-    else:
-        game["rated"] = not is_guest_id(game["creatorId"])
-    game["status"] = "active"
-    game["startedAt"] = now
-    game["lastMoveAt"] = now
-    game["disconnectedAt"] = {"white": None, "black": None}
-    game["disconnectUsedMs"] = {"white": 0, "black": 0}
-    return {"kind": "opponent_joined"}
+    return _seat_opponent(
+        game,
+        user_id,
+        now,
+        False if is_guest_id(user_id) else not is_guest_id(game["creatorId"]),
+    )
+
+
+def join_group(game, user_id, group_id, now):
+    if game["status"] != "waiting":
+        raise ChessError("not_joinable")
+    if not user_id or user_id == game["creatorId"]:
+        raise ChessError("forbidden")
+    if not game.get("invitedGroupId") or game["invitedGroupId"] != group_id:
+        raise ChessError("forbidden")
+    return _seat_opponent(game, user_id, now, not is_guest_id(game["creatorId"]))
 
 
 def apply_move(game, user_id, uci, now):
@@ -439,6 +465,7 @@ def public_view(game, now, online):
         "status": game["status"],
         "creatorId": game["creatorId"],
         "invitedChatId": game["invitedChatId"],
+        "invitedGroupId": game.get("invitedGroupId"),
         "players": game["players"],
         "timeControl": game["timeControl"],
         "baseMs": game["baseMs"],

@@ -1197,6 +1197,10 @@ export function ChatRoom({
                 triggerInvalidLinkFeedback(messageId);
                 return;
             }
+            if (preview.alreadyMember && onJoinGroupByCode) {
+                await onJoinGroupByCode(preview.inviteCode || code);
+                return;
+            }
             setInvitePreviewGroup(preview as GroupPreview);
         } catch {
             triggerInvalidLinkFeedback(messageId);
@@ -2236,7 +2240,7 @@ export function ChatRoom({
         return uploadingStatusLabel;
     }, [typingStatusLabel, uploadingStatusLabel]);
 
-    const scrollButtonBottom = composerHeight + 18;
+    const scrollButtonBottom = composerHeight + 22;
 
     const visibleUnreadMentionIds = useMemo(
         () => (isGroupChat && !isOfficialChannel && !isSavedMessages ? unreadMentionIds : []),

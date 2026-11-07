@@ -515,16 +515,13 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
         }
     }, [game, isParticipant, myColor, selected, tryMove]);
 
-    const directChats = useMemo(
+    const inviteChats = useMemo(
         () =>
             chats.filter(
                 (c) =>
-                    c.chatType !== 'group' &&
-                    !c.id.startsWith('grp_') &&
                     !c.id.startsWith('saved_messages_') &&
                     c.id !== 'official-channel' &&
-                    c.otherUser &&
-                    !c.otherUser.isGroup,
+                    c.otherUser,
             ),
         [chats],
     );
@@ -542,13 +539,19 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
 
     const sendInvite = async (chatId: string) => {
         const chat = chats.find((c) => c.id === chatId);
-        const targetChatId = chat?.participantIds.find((id) => id !== currentUser.chatId) || chat?.otherUser?.chatId;
+        const isGroup = chat?.chatType === 'group' || chatId.startsWith('grp_') || Boolean(chat?.otherUser?.isGroup);
+        const targetChatId = isGroup
+            ? chatId
+            : chat?.participantIds.find((id) => id !== currentUser.chatId) || chat?.otherUser?.chatId;
         if (!targetChatId) return;
         try {
-            await apiFetch(`/chess/games/${encodeURIComponent(gameId)}/invite`, {
-                method: 'POST',
-                body: JSON.stringify({ targetChatId }),
-            });
+            await apiFetch(
+                `/chess/games/${encodeURIComponent(gameId)}/${isGroup ? 'invite-group' : 'invite'}`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({ targetChatId }),
+                },
+            );
             notify({ message: 'دعوت ارسال شد.', type: 'success' });
             fetchDetails(gameId, true);
         } catch {
@@ -1190,9 +1193,9 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
 
             <ForwardModal
                 isOpen={inviteOpen}
-                chats={directChats}
+                chats={inviteChats}
                 currentUserId={currentUser.chatId}
-                title="ارسال بازی به چت"
+                title="ارسال بازی به چت یا گروه"
                 hideSavedMessages
                 onClose={() => setInviteOpen(false)}
                 onSelectTargetChat={sendInvite}

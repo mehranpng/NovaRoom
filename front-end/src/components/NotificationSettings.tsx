@@ -86,6 +86,7 @@ export function NotificationSettings({ onBack }: Props) {
     const prefs = useNotificationPrefs();
     const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(getPermission());
     const support = getPushSupport();
+    const statusCardPill = support !== 'needs-install' && (permission === 'granted' || support === 'unsupported');
 
     useEffect(() => {
         const refresh = () => setPermission(getPermission());
@@ -223,7 +224,7 @@ export function NotificationSettings({ onBack }: Props) {
             </div>
 
             <div className="profile__content" onScroll={handleScroll} style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingInline: 14, paddingTop: 68, flex: '0 0 auto' }}>
-                <div style={statusCardStyle}>{renderStatus()}</div>
+                <div style={statusCardPill ? statusCardStyle : panelStyle}>{renderStatus()}</div>
 
                 <div style={panelStyle}>
                     <div style={rowStyle}>

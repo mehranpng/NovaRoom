@@ -223,6 +223,7 @@ export interface ChessGameView {
     status: 'waiting' | 'active' | 'finished';
     creatorId: string;
     invitedChatId: string | null;
+    invitedGroupId?: string | null;
     inviteToken?: string | null;
     rated?: boolean;
     ratingChanges?: {
@@ -285,6 +286,7 @@ export interface ChessInvite {
     gameId: string;
     timeControl: string;
     shared?: boolean;
+    groupId?: string;
 }
 
 export type View = 'chatList' | 'chatRoom' | 'newChat' | 'profile' | 'profileEdit' | 'settings' | 'settingsDevices' | 'settingsTheme' | 'settingsLogs' | 'settingsDataStorage' | 'settingsPrivacy' | 'settingsNotifications' | 'settingsAdmin' | 'settingsAdminPanel' | 'settingsAdminLinks' | 'chess';

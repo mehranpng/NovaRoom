@@ -2067,7 +2067,7 @@ export function AIChatRoom({
                         style={{
                             position: 'absolute',
                             right: 12,
-                            bottom: (composerHeight || 56) + 18,
+                            bottom: (composerHeight || 56) + 22,
                             zIndex: 12,
                             color: 'var(--text-primary)',
                             cursor: 'pointer',

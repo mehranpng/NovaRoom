@@ -2717,7 +2717,7 @@ body,
     position: absolute;
     left: 12px;
     right: 12px;
-    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
     z-index: 25;
     margin: 0;
     padding: 0;
@@ -2734,7 +2734,7 @@ body,
 }
 
 html.keyboard-open .chat-room__input-area {
-    bottom: 10px;
+    bottom: 14px;
 }
 
 @supports (-webkit-touch-callout: none) {
@@ -2754,9 +2754,9 @@ html.keyboard-open .chat-room__input-area {
 
 .chat-room__text-input {
     flex: 1;
-    min-height: 46px;
+    min-height: 48px;
     max-height: 200px;
-    border-radius: 24px;
+    border-radius: 25px;
     background: var(--glass-surface);
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
@@ -2798,8 +2798,8 @@ html.keyboard-open .chat-room__input-area {
 
 .chat-room__send-btn {
     display: flex;
-    height: 46px;
-    width: 46px;
+    height: 48px;
+    width: 48px;
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
@@ -4313,12 +4313,20 @@ html.keyboard-open .chat-room__input-area {
     color: var(--accent-soft-text);
 }
 
+.profile__groups-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
 .profile__groups-limit {
     margin-inline-start: auto;
     font-size: 12px;
     font-weight: 600;
     color: var(--text-tertiary);
-    direction: rtl;
+    direction: ltr;
 }
 
 .profile__groups-empty {
@@ -4348,6 +4356,36 @@ html.keyboard-open .chat-room__input-area {
 
 .profile__group-main {
     min-width: 0;
+}
+
+.profile__group-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.profile__group-enter {
+    flex-shrink: 0;
+    border: 1px solid transparent;
+    background: var(--accent-primary);
+    color: #fff;
+    border-radius: 999px;
+    padding: 8px 13px;
+    font-size: 11.5px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.08s ease;
+}
+
+.profile__group-enter:hover {
+    background: var(--accent-hover);
+}
+
+.profile__group-enter:active {
+    background: var(--accent-hover);
+    transform: scale(0.97);
 }
 
 .profile__group-name {
@@ -4387,6 +4425,18 @@ html.keyboard-open .chat-room__input-area {
 .profile__group-copy:hover {
     background: var(--glass-surface-elevated);
     color: var(--accent-primary);
+}
+
+.profile__group-copy--icon {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    justify-content: center;
+}
+
+.profile__group-copy--copied,
+.profile__group-copy--copied:hover {
+    color: #22c55e;
 }
 
 @media (max-width: 520px) {
@@ -5118,8 +5168,8 @@ html.keyboard-open .chat-room__input-area {
     border-radius: 14px;
     background: transparent;
     color: inherit;
-    text-align: right;
-    direction: rtl;
+    text-align: left;
+    direction: ltr;
     font-family: inherit;
     cursor: pointer;
     transition: background var(--motion-fast) var(--motion-ease-standard), transform var(--motion-fast) var(--motion-ease-standard);
@@ -5159,7 +5209,7 @@ html.keyboard-open .chat-room__input-area {
     font-size: 12.5px;
     color: var(--text-secondary);
     direction: ltr;
-    text-align: right;
+    text-align: left;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -6430,8 +6480,8 @@ html.no-blur-effect .chat-list__header,
 }
 
 .ai-composer-plus-btn {
-    width: 44px;
-    height: 44px;
+    width: 46px;
+    height: 46px;
     border-radius: 9999px;
     border: 1px solid var(--glass-border);
     background: var(--glass-surface);

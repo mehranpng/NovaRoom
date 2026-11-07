@@ -9619,7 +9619,13 @@ async def get_chess_game(
     if not me:
         raise HTTPException(status_code=401, detail="unauthorized")
     color = chess_service.color_of(game, me)
-    if color is None and game.get("invitedChatId") != me and game.get("status") != "finished":
+    allowed = color is not None or game.get("invitedChatId") == me or game.get("status") == "finished"
+    if not allowed and game.get("invitedGroupId"):
+        group = await cl_chats.find_one(
+            {"_id": game["invitedGroupId"], "chatType": "group"}, {"participants": 1}
+        )
+        allowed = bool(group and me in (group.get("participants", []) or []))
+    if not allowed:
         raise HTTPException(status_code=403, detail="forbidden")
     view = await chess_response(game)
     view["me"] = color
@@ -9715,6 +9721,90 @@ async def invite_to_chess_game(
     )
     schedule_push(
         notify_chat_message(chat_id, me, [me, target_id], False, False, [])
+    )
+    return {"ok": True}
+
+
+@app.post("/chess/games/{game_id}/invite-group")
+@limiter.limit("30/minute")
+async def invite_chess_game_to_group(
+    request: Request,
+    game_id: str,
+    body: ChessInviteRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    me = current_user["chatId"]
+    group_id = str(body.targetChatId or "").strip()
+    if not group_id or group_id == me or group_id == OFFICIAL_CHANNEL_CHAT_ID:
+        raise HTTPException(status_code=400, detail="bad_request")
+    group = await cl_chats.find_one({"_id": group_id, "chatType": "group"})
+    if not group:
+        raise HTTPException(status_code=404, detail="not_found")
+    participants = group.get("participants", []) or []
+    if me not in participants:
+        raise HTTPException(status_code=403, detail="forbidden")
+    lock = chess_locks.setdefault(game_id, asyncio.Lock())
+    async with lock:
+        game = await cl_chess_games.find_one({"_id": game_id})
+        if not game:
+            raise HTTPException(status_code=404, detail="not_found")
+        try:
+            chess_service.set_group_invitee(game, me, group_id)
+        except ChessError as error:
+            raise chess_http_error(error)
+        await cl_chess_games.replace_one({"_id": game_id}, game)
+    now_dt = utc_now()
+    message_doc = {
+        "chatId": group_id,
+        "senderId": me,
+        "text": CHESS_INVITE_TEXT,
+        "textEncrypted": True,
+        "timestamp": now_dt,
+        "seenBy": [me],
+        "replyTo": None,
+        "reactions": [],
+        "chessInvite": {
+            "gameId": game_id,
+            "timeControl": game["timeControl"],
+            "groupId": group_id,
+        },
+    }
+    inserted = await cl_messages.insert_one(message_doc)
+    msg_id = str(inserted.inserted_id)
+    last_msg = {
+        "id": msg_id,
+        "text": CHESS_INVITE_TEXT,
+        "senderId": me,
+        "timestamp": now_dt,
+        "file": None,
+    }
+    await cl_chats.update_one(
+        {"_id": group_id},
+        {"$set": {"lastMessage": last_msg, "updatedAt": now_dt}},
+    )
+    await broadcast(
+        participants,
+        {
+            "type": "new_message",
+            "chatId": group_id,
+            "message": {
+                "id": msg_id,
+                "chatId": group_id,
+                "senderId": me,
+                "text": CHESS_INVITE_TEXT,
+                "timestamp": dt_to_epoch_ms(now_dt),
+                "seen": False,
+                "replyTo": None,
+                "edited": False,
+                "reactions": [],
+                "file": None,
+                "clientId": None,
+                "chessInvite": message_doc["chessInvite"],
+            },
+        },
+    )
+    schedule_push(
+        notify_chat_message(group_id, me, participants, True, False, [])
     )
     return {"ok": True}
 
@@ -9842,8 +9932,15 @@ async def accept_chess_game(
     if game.get("status") == "waiting" and now_ms() - game.get("createdAt", 0) >= chess_service.WAITING_TTL_MS:
         await chess_expire_waiting(game_id)
         raise HTTPException(status_code=404, detail="not_found")
+    invited_group_id = str(game.get("invitedGroupId") or "").strip()
     if game.get("invitedChatId") != me:
-        raise HTTPException(status_code=403, detail="forbidden")
+        if not invited_group_id:
+            raise HTTPException(status_code=403, detail="forbidden")
+        group = await cl_chats.find_one(
+            {"_id": invited_group_id, "chatType": "group"}, {"participants": 1}
+        )
+        if not group or me not in (group.get("participants", []) or []):
+            raise HTTPException(status_code=403, detail="forbidden")
     now = now_ms()
     my_active = await chess_find_blocking_game(me, now, only_active=True)
     if my_active and my_active["_id"] != game_id:
@@ -9852,7 +9949,13 @@ async def accept_chess_game(
     if creator_active and creator_active["_id"] != game_id:
         raise HTTPException(status_code=409, detail="already_in_game")
     try:
-        game, _ = await chess_run(game_id, lambda g, n: chess_service.join(g, me, n))
+        if invited_group_id:
+            game, _ = await chess_run(
+                game_id,
+                lambda g, n: chess_service.join_group(g, me, invited_group_id, n),
+            )
+        else:
+            game, _ = await chess_run(game_id, lambda g, n: chess_service.join(g, me, n))
     except ChessError as error:
         raise chess_http_error(error)
     schedule_push(notify_chess_joined(game, me))

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Ban, ChevronLeft, Copy, Search, Settings, Users } from 'lucide-react';
 import type { User } from '../types';
 import { Avatar, extractFileIdFromAvatar, getAvatarDisplayUrl } from './Avatar';
@@ -59,6 +59,8 @@ export function GroupMembersView({
     const [memberSearch, setMemberSearch] = useState('');
     const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId: string; fileName: string } | null>(null);
     const [menuState, setMenuState] = useState<{ member: GroupMember; x: number; y: number } | null>(null);
+    const [pendingRemoveMember, setPendingRemoveMember] = useState<GroupMember | null>(null);
+    const [removingMember, setRemovingMember] = useState(false);
     const longPressTimerRef = useRef<number | null>(null);
     const longPressTriggeredRef = useRef(false);
     const navigate = useNavigate();
@@ -332,11 +334,11 @@ export function GroupMembersView({
                         <button
                             type="button"
                             className="popover__item popover__item--danger"
-                            onPointerDown={async (e) => {
+                            onPointerDown={(e) => {
                                 e.stopPropagation();
-                                const targetId = menuState.member.chatId;
+                                const member = menuState.member;
                                 setMenuState(null);
-                                if (targetId && onBanMember) await onBanMember(targetId);
+                                if (member.chatId) setPendingRemoveMember(member);
                             }}
                         >
                             <Ban size={16} />
@@ -346,6 +348,67 @@ export function GroupMembersView({
                 </div>,
                 document.body,
             )}
+
+            <AnimatePresence>
+                {pendingRemoveMember && (
+                    <motion.div
+                        className="chat-room-modal-overlay"
+                        style={{ zIndex: 230 }}
+                        onClick={() => {
+                            if (removingMember) return;
+                            setPendingRemoveMember(null);
+                        }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.16, ease: 'easeOut' }}
+                    >
+                        <motion.div
+                            className="chat-room-confirm-modal"
+                            role="dialog"
+                            aria-modal="true"
+                            onClick={(e) => e.stopPropagation()}
+                            initial={{ opacity: 0, y: 12, scale: 0.985 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 8, scale: 0.985 }}
+                            transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                        >
+                            <h3 className="chat-room-confirm-modal__title">حذف از گروه؟</h3>
+                            <p className="chat-room-confirm-modal__text">
+                                {`«${pendingRemoveMember.name || 'این کاربر'}» از گروه حذف و مسدود شود؟`}
+                            </p>
+                            <div className="chat-room-confirm-modal__actions">
+                                <button
+                                    className="chat-room-confirm-modal__btn"
+                                    type="button"
+                                    disabled={removingMember}
+                                    onClick={() => setPendingRemoveMember(null)}
+                                >
+                                    انصراف
+                                </button>
+                                <button
+                                    className="chat-room-confirm-modal__btn chat-room-confirm-modal__btn--danger"
+                                    type="button"
+                                    disabled={removingMember}
+                                    onClick={async () => {
+                                        const targetId = pendingRemoveMember.chatId;
+                                        if (!targetId || !onBanMember) return;
+                                        setRemovingMember(true);
+                                        try {
+                                            await onBanMember(targetId);
+                                            setPendingRemoveMember(null);
+                                        } finally {
+                                            setRemovingMember(false);
+                                        }
+                                    }}
+                                >
+                                    {removingMember ? 'در حال حذف...' : 'حذف'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {openedGroupAvatar && isAvatarRoute && (
                 <ImageMediaViewer
