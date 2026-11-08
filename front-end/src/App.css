@@ -6333,6 +6333,7 @@ html.keyboard-open .chat-room__input-area {
     border: none;
     background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
     color: var(--accent-primary);
+    font-family: inherit;
     font-size: 16px;
     cursor: pointer;
     transition: transform 0.15s var(--motion-ease-standard), background 0.15s ease, color 0.15s ease;
