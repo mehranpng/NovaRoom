@@ -25,7 +25,7 @@ import { clearLocalE2EEIdentity, decryptBioClientSide, decryptClientText, decryp
 import { clearCachedTextValues, clearChatSnapshots, getChatSnapshot, saveChatSnapshot } from './utils/mediaCache';
 import { clearChessCache } from './utils/chessCache';
 import { useDarkMode, syncThemeColor, isVisualEffectsEnabled } from './hooks/useDarkMode';
-import { animateMessageDisintegration } from './utils/disintegrateMessage';
+import { SNAP_EFFECT_DURATION_MS } from './utils/snapConfig';
 import { BottomNavbar } from './components/BottomNavbar';
 import { ChessScreen } from './components/chess/ChessScreen';
 import { ChessJoinPage } from './components/chess/ChessJoinPage';
@@ -1161,6 +1161,58 @@ export function App() {
         }));
     }, [currentUser?.chatId]);
 
+    const deletingTimersRef = useRef<Map<string, number>>(new Map());
+
+    const markMessagesDeleting = useCallback((chatId: string, ids: string[]) => {
+        const freshIds = ids.filter((id) => !deletingTimersRef.current.has(`${chatId}:${id}`));
+        if (freshIds.length === 0) return;
+        const idsSet = new Set(freshIds);
+
+        setMessages((prev) => {
+            const arr = prev[chatId];
+            if (!arr) return prev;
+            return { ...prev, [chatId]: arr.map((m) => (idsSet.has(m.id) ? { ...m, isDeleting: true } : m)) };
+        });
+
+        freshIds.forEach((id) => {
+            const key = `${chatId}:${id}`;
+            const timer = window.setTimeout(() => {
+                deletingTimersRef.current.delete(key);
+                setMessages((prev) => {
+                    const arr = prev[chatId];
+                    if (!arr) return prev;
+                    return { ...prev, [chatId]: arr.filter((m) => m.id !== id) };
+                });
+            }, SNAP_EFFECT_DURATION_MS);
+            deletingTimersRef.current.set(key, timer);
+        });
+    }, []);
+
+    const cancelMessagesDeleting = useCallback((chatId: string, ids: string[]) => {
+        const idsSet = new Set(ids);
+        ids.forEach((id) => {
+            const key = `${chatId}:${id}`;
+            const timer = deletingTimersRef.current.get(key);
+            if (timer !== undefined) {
+                window.clearTimeout(timer);
+                deletingTimersRef.current.delete(key);
+            }
+        });
+        setMessages((prev) => {
+            const arr = prev[chatId];
+            if (!arr) return prev;
+            return { ...prev, [chatId]: arr.map((m) => (idsSet.has(m.id) ? { ...m, isDeleting: false } : m)) };
+        });
+    }, []);
+
+    useEffect(() => {
+        const timers = deletingTimersRef.current;
+        return () => {
+            timers.forEach((timer) => window.clearTimeout(timer));
+            timers.clear();
+        };
+    }, []);
+
     const handleMessageDeleted = useCallback((chatId: string, messageId: string, lastMessage?: any, messageIds?: string[]) => {
         const idsSet = new Set(messageIds && messageIds.length > 0 ? messageIds : (messageId ? [messageId] : []));
         if (idsSet.size === 0) return;
@@ -1191,21 +1243,17 @@ export function App() {
             };
         }));
 
-        if (activeChatIdRef.current === chatId && viewRef.current === 'chatRoom' && isVisualEffectsEnabled()) {
-            const targetEls = Array.from(idsSet)
-                .map((id) => document.querySelector<HTMLElement>(`.chat-room .message-bubble[data-message-id="${CSS.escape(id)}"]`))
-                .filter((el): el is HTMLElement => Boolean(el && el.isConnected && el.dataset.disintegrating !== '1'));
+        const hasVisibleBubble = activeChatIdRef.current === chatId
+            && viewRef.current === 'chatRoom'
+            && Array.from(idsSet).some((id) => document.querySelector(`.chat-room .message-bubble[data-message-id="${CSS.escape(id)}"]`));
 
-            if (targetEls.length > 0) {
-                void animateMessageDisintegration(targetEls).then(() => {
-                    removeMessagesFromState();
-                });
-                return;
-            }
+        if (hasVisibleBubble && isVisualEffectsEnabled()) {
+            markMessagesDeleting(chatId, Array.from(idsSet));
+            return;
         }
 
         removeMessagesFromState();
-    }, []);
+    }, [markMessagesDeleting]);
 
     const handleMessagePinned = useCallback(async (chatId: string, pinnedMessage: any) => {
         const decPinned = await decryptMessageClientSide(pinnedMessage, authToken || '', chatId);
@@ -2753,8 +2801,11 @@ export function App() {
             return;
         }
 
-        deleteViaWS(activeChatId, messageId);
-    }, [activeChatId, deleteViaWS]);
+        const chatIdAtDelete = activeChatId;
+        if (isVisualEffectsEnabled()) markMessagesDeleting(chatIdAtDelete, [messageId]);
+        const sent = deleteViaWS(chatIdAtDelete, messageId);
+        if (!sent) cancelMessagesDeleting(chatIdAtDelete, [messageId]);
+    }, [activeChatId, deleteViaWS, markMessagesDeleting, cancelMessagesDeleting]);
 
     const handleDeleteMessages = useCallback(async (messageIds: string[]) => {
         if (!activeChatId || messageIds.length === 0) return;
@@ -2781,21 +2832,20 @@ export function App() {
 
         if (persistedIds.length === 0) return;
 
-        setMessages((prev) => ({
-            ...prev,
-            [activeChatId]: (prev[activeChatId] || []).filter((m) => !persistedIds.includes(m.id)),
-        }));
+        const chatIdAtDelete = activeChatId;
+        if (isVisualEffectsEnabled()) markMessagesDeleting(chatIdAtDelete, persistedIds);
 
         try {
-            await apiFetch(`/chats/${encodeURIComponent(activeChatId)}/messages/batch-delete`, {
+            await apiFetch(`/chats/${encodeURIComponent(chatIdAtDelete)}/messages/batch-delete`, {
                 method: 'POST',
                 body: JSON.stringify({ messageIds: persistedIds }),
             });
         } catch (err) {
+            cancelMessagesDeleting(chatIdAtDelete, persistedIds);
             console.error('Failed to batch delete messages:', err);
-            void fetchPagedMessages(activeChatId, { direction: 'latest', mode: 'replace' });
+            void fetchPagedMessages(chatIdAtDelete, { direction: 'latest', mode: 'replace' });
         }
-    }, [activeChatId, messages, fetchPagedMessages]);
+    }, [activeChatId, messages, fetchPagedMessages, markMessagesDeleting, cancelMessagesDeleting]);
 
     const handleForwardMessage = useCallback(async (sourceChatId: string, messageIdOrIds: string | string[], targetChatId: string) => {
         const messageIds = (Array.isArray(messageIdOrIds) ? messageIdOrIds : [messageIdOrIds]).filter(Boolean);

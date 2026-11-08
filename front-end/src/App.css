@@ -9669,3 +9669,24 @@ html.no-blur-effect .chat-list__header,
 .animate-spin {
     animation: spin 0.8s linear infinite;
 }
+
+.snap-effect-ghost {
+    position: absolute;
+    transform-origin: bottom;
+    overflow: visible !important;
+    animation: snap-effect-scale 1s ease-in forwards !important;
+}
+
+.snap-effect-element {
+    overflow: visible;
+}
+
+.message-bubble[data-snapping="1"] {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+@keyframes snap-effect-scale {
+    0% { transform: scale(1); }
+    100% { transform: scale(1.2); }
+}

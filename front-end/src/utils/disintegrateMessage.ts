@@ -1,8 +1,13 @@
-const PARTICLE_STEP = 3;
+import { SNAP_EFFECT_DURATION_MS, SNAP_GRAIN_CSS_PX, SNAP_MAX_CANVAS_PARTICLES } from './snapConfig';
+
 const PADDING = 36;
-const DURATION = 680;
-const COLLAPSE_DELAY = 160;
-const COLLAPSE_DURATION = 240;
+const DURATION = SNAP_EFFECT_DURATION_MS;
+
+function resolveParticleStep(width: number, height: number): number {
+    const countAtBaseStep = (width * height) / (SNAP_GRAIN_CSS_PX * SNAP_GRAIN_CSS_PX);
+    if (countAtBaseStep <= SNAP_MAX_CANVAS_PARTICLES) return SNAP_GRAIN_CSS_PX;
+    return Math.sqrt((width * height) / SNAP_MAX_CANVAS_PARTICLES);
+}
 
 interface Particle {
     x: number;
@@ -165,11 +170,11 @@ function buildParticles(snap: HTMLCanvasElement, width: number, height: number):
     }
 
     const particles: Particle[] = [];
-    const step = Math.max(2, Math.min(5, Math.round(Math.sqrt((width * height) / 2600)) || PARTICLE_STEP));
+    const step = resolveParticleStep(width, height);
 
     for (let y = 0; y < snap.height; y += step) {
         for (let x = 0; x < snap.width; x += step) {
-            const idx = (y * snap.width + x) * 4;
+            const idx = (Math.floor(y) * snap.width + Math.floor(x)) * 4;
             const a = data[idx + 3];
             if (a < 24) continue;
             const normX = x / Math.max(1, snap.width);
@@ -234,42 +239,15 @@ function disintegrateElement(el: HTMLElement): Promise<void> {
             ctx.scale(dpr, dpr);
         }
 
-        const rowTarget = (el.closest('.message-item') as HTMLElement | null) || el;
-        const initialRowHeight = rowTarget.getBoundingClientRect().height;
-        rowTarget.style.height = `${initialRowHeight}px`;
-        rowTarget.style.overflow = 'hidden';
         el.style.visibility = 'hidden';
         el.style.pointerEvents = 'none';
-
-        let collapseStarted = false;
-        let resolved = false;
-        const finishResolve = () => {
-            if (resolved) return;
-            resolved = true;
-            resolve();
-        };
 
         const start = performance.now();
         const tick = (now: number) => {
             const elapsed = now - start;
-            if (!collapseStarted && elapsed >= COLLAPSE_DELAY) {
-                collapseStarted = true;
-                rowTarget.style.transition = `height ${COLLAPSE_DURATION}ms cubic-bezier(0.22, 1, 0.36, 1), margin ${COLLAPSE_DURATION}ms cubic-bezier(0.22, 1, 0.36, 1), padding ${COLLAPSE_DURATION}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${COLLAPSE_DURATION}ms ease`;
-                rowTarget.style.height = '0px';
-                rowTarget.style.marginTop = '0px';
-                rowTarget.style.marginBottom = '0px';
-                rowTarget.style.paddingTop = '0px';
-                rowTarget.style.paddingBottom = '0px';
-                rowTarget.style.opacity = '0';
-            }
-
-            if (elapsed >= COLLAPSE_DELAY + COLLAPSE_DURATION) {
-                finishResolve();
-            }
-
             if (!ctx) {
                 canvas.remove();
-                finishResolve();
+                resolve();
                 return;
             }
             ctx.clearRect(0, 0, cw, ch);
@@ -294,7 +272,7 @@ function disintegrateElement(el: HTMLElement): Promise<void> {
                 requestAnimationFrame(tick);
             } else {
                 canvas.remove();
-                finishResolve();
+                resolve();
             }
         };
 

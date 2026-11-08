@@ -1,0 +1,4 @@
+export const SNAP_EFFECT_DURATION_MS = 1000;
+export const SNAP_GRAIN_CSS_PX = 2.5;
+export const SNAP_GRAIN_FREQUENCY = 0.28;
+export const SNAP_MAX_CANVAS_PARTICLES = 4000;

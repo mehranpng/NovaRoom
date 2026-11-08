@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
 import { Check, ChevronDown, Copy, Globe } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -13,6 +13,8 @@ import { triggerHaptic } from '../utils/haptics';
 import { copyText } from '../utils/clipboard';
 import { cancelUpload } from '../utils/chatFileUploader';
 import { updateSearchPillsFade } from '../utils/searchPillsFade';
+import { animateSnap } from '../utils/snapEffect';
+import { animateMessageDisintegration } from '../utils/disintegrateMessage';
 
 export type ReactionEntry = { emoji: string; count: number; userIds: string[] };
 
@@ -530,6 +532,24 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     };
 
     useEffect(() => cancelLongPress, []);
+
+    useLayoutEffect(() => {
+        const el = bubbleRef.current;
+        if (!el) return;
+        if (!message.isDeleting) {
+            if (el.dataset.snapping === '1') delete el.dataset.snapping;
+            delete el.dataset.disintegrating;
+            el.style.visibility = '';
+            el.style.pointerEvents = '';
+            return;
+        }
+        if (el.dataset.snapping === '1') return;
+        if (animateSnap(el)) {
+            el.dataset.snapping = '1';
+            return;
+        }
+        void animateMessageDisintegration([el]);
+    }, [message.isDeleting]);
 
     const resetDrag = () => {
         const el = bubbleRef.current;

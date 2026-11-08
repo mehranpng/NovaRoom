@@ -23,8 +23,6 @@ import { formatDayLabel, formatLastSeen, formatMessageTime, messageDayKey, resol
 import { copyText } from '../utils/clipboard';
 import { triggerHaptic } from '../utils/haptics';
 import { updateSearchPillsFade } from '../utils/searchPillsFade';
-import { animateMessageDisintegration } from '../utils/disintegrateMessage';
-import { isVisualEffectsEnabled } from '../hooks/useDarkMode';
 import { getChatNotifyMode, setChatNotifyMode, useNotificationPrefs } from '../utils/pushNotifications';
 import { ChatMessageItem, type ReactionEntry } from './ChatMessageItem';
 import { ChatComposer, type ChatComposerSendPayload } from './ChatComposer';
@@ -2662,16 +2660,8 @@ export function ChatRoom({
         if (!confirmDeleteMsg) return;
         const targetId = confirmDeleteMsg;
         setConfirmDeleteMsg(null);
-        const el = messageElsRef.current.get(targetId);
-        const runDelete = () => {
-            onDeleteMessage(targetId);
-            cleanupMessageCache(targetId);
-        };
-        if (el && isVisualEffectsEnabled()) {
-            void animateMessageDisintegration([el]).then(runDelete);
-        } else {
-            runDelete();
-        }
+        onDeleteMessage(targetId);
+        cleanupMessageCache(targetId);
     };
 
     const toggleReasoning = (messageId: string) => {
@@ -3774,25 +3764,15 @@ export function ChatRoom({
                             setConfirmDeleteSelected(false);
                             const idsToDelete = [...deletableSelectedIds];
                             setSelectedMessageIds([]);
-                            const els = idsToDelete
-                                .map((id) => messageElsRef.current.get(id))
-                                .filter((el): el is HTMLDivElement => Boolean(el));
-                            const runDelete = () => {
-                                for (const id of idsToDelete) {
-                                    cleanupMessageCache(id);
-                                }
-                                if (onDeleteMessages) {
-                                    void onDeleteMessages(idsToDelete);
-                                } else {
-                                    for (const id of idsToDelete) {
-                                        onDeleteMessage(id);
-                                    }
-                                }
-                            };
-                            if (els.length > 0 && isVisualEffectsEnabled()) {
-                                void animateMessageDisintegration(els).then(runDelete);
+                            for (const id of idsToDelete) {
+                                cleanupMessageCache(id);
+                            }
+                            if (onDeleteMessages) {
+                                void onDeleteMessages(idsToDelete);
                             } else {
-                                runDelete();
+                                for (const id of idsToDelete) {
+                                    onDeleteMessage(id);
+                                }
                             }
                         }}
                     />

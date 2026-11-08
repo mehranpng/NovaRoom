@@ -108,6 +108,7 @@ export interface Message {
     forwarding?: boolean;
     unreadMentionUserIds?: string[];
     unreadReactionUserIds?: string[];
+    isDeleting?: boolean;
     systemType?: 'member_joined' | string;
 }
 
