@@ -859,7 +859,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                     <div className="message-reply-box__label">
                                         {replySenderPending
                                             ? <span className="skeleton-glass skeleton-glass--reply-name" aria-hidden />
-                                            : (isGroupChat ? replySenderName : 'پاسخ')}
+                                            : replySenderName}
                                     </div>
                                     <div className="message-reply-box__text">{replyPreviewText}</div>
                                 </div>

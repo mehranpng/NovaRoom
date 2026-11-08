@@ -748,7 +748,7 @@ body,
 }
 
 .popover__item--seen {
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 8px;
 }
 
@@ -764,18 +764,28 @@ body,
     display: inline-flex;
     align-items: center;
     flex-shrink: 0;
+    min-width: 42px;
 }
 
-.popover__seen-avatars .avatar:first-child {
-    margin-inline-start: 0;
-}
-
-.popover__seen-avatars .avatar + .avatar {
+.popover__seen-avatars > * + * {
     margin-inline-start: -6px;
+}
+
+.popover__seen-skeleton {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--text-primary) 10%, var(--bg-primary));
+    flex-shrink: 0;
 }
 
 .seen-by-menu {
     padding: 0;
+}
+
+.seen-by-menu__header {
+    direction: rtl;
+    text-align: right;
 }
 
 .seen-by-menu__header,
@@ -855,11 +865,6 @@ body,
     line-height: 1;
     flex-shrink: 0;
     font-family: 'AppleEmoji', 'Vazir', sans-serif;
-}
-
-.seen-by-menu__check {
-    color: var(--text-secondary);
-    flex-shrink: 0;
 }
 
 .reaction-menu-anchor {
@@ -3290,6 +3295,8 @@ body,
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    width: 16px;
+    height: 12px;
     line-height: 1;
 }
 
@@ -5629,7 +5636,7 @@ html.keyboard-open .chat-room__input-area {
     top: -22px;
     left: 0;
     right: 0;
-    z-index: 2;
+    z-index: 20;
     padding: 0;
 }
 
@@ -6833,14 +6840,12 @@ html.no-blur-effect .chat-room__jump-box {
     z-index: -1;
 }
 
-.message-item:has(> .message-row--selected) + .message-item:has(> .message-row--selected) > .message-row--selected {
-    margin-top: 0;
-    padding-top: 4px;
+.message-item:has(> .message-row--selected) + .message-item:has(> .message-row--selected) > .message-row--selected::before {
+    inset: -4px -100px 0;
 }
 
-.message-item:has(> .message-row--selected) + .message-item:has(> .message-row--selected) > .message-row--first {
-    margin-top: 0;
-    padding-top: 8px;
+.message-item:has(> .message-row--selected) + .message-item:has(> .message-row--selected) > .message-row--first::before {
+    inset: -8px -100px 0;
 }
 
 .message-row--swiping {

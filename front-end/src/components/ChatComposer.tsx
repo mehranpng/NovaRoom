@@ -97,6 +97,7 @@ export const ChatComposer = memo(function ChatComposer({
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const typingTimeoutRef = useRef<number | null>(null);
     const typingActiveRef = useRef(false);
+    const lastTypingEmitRef = useRef(0);
     const lastSubmitTimeRef = useRef(0);
 
     const clearTypingTimeout = () => {
@@ -125,8 +126,9 @@ export const ChatComposer = memo(function ChatComposer({
             stopTyping();
             return;
         }
-        if (!typingActiveRef.current) {
+        if (!typingActiveRef.current || Date.now() - lastTypingEmitRef.current > 700) {
             typingActiveRef.current = true;
+            lastTypingEmitRef.current = Date.now();
             emitTyping(true);
         }
         clearTypingTimeout();
@@ -134,7 +136,7 @@ export const ChatComposer = memo(function ChatComposer({
             typingActiveRef.current = false;
             emitTyping(false);
             typingTimeoutRef.current = null;
-        }, 1000);
+        }, 1500);
     };
 
     useEffect(() => {

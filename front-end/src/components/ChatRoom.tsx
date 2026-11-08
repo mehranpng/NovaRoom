@@ -3300,7 +3300,7 @@ export function ChatRoom({
 
             <div className="chat-room__messages-Viewport">
                 {floatingDateLabel && (
-                    <div className={`chat-room__floating-date${floatingDateVisible ? ' chat-room__floating-date--visible' : ''}`}>
+                    <div className={`chat-room__floating-date${floatingDateVisible && !loadingOlderMessages && !localLoadingOlder ? ' chat-room__floating-date--visible' : ''}`}>
                         <span>{floatingDateLabel}</span>
                     </div>
                 )}
@@ -3379,6 +3379,9 @@ export function ChatRoom({
                 const canTogglePin = pinnedMessage?.id === activeMsg.id
                     || (isOfficialChannel ? isVerifiedUser : !isGroupChat || canManageGroup);
                 const seenRows = seenByUsersByMessage[activeMsg.id] || [];
+                const seenLoaded = Array.isArray(seenByUsersByMessage[activeMsg.id]);
+                const seenByRawCount = Array.isArray((activeMsg as any).seenBy) ? (activeMsg as any).seenBy.length : 0;
+                const activeIsSeen = Boolean(activeMsg.seen || seenRows.length > 0 || seenByRawCount > 0 || Number((activeMsg as any).seenCount || 0) > 0);
                 const menuReactions = (optimisticReactions[activeMsg.id] ?? activeMsg.reactions ?? []) as unknown as ReactionEntry[];
                 const myMenuReaction = menuReactions.find((r) => (r.userIds || []).includes(currentUserId));
                 const roomWidth = roomRef.current?.getBoundingClientRect().width ?? window.innerWidth;
@@ -3407,16 +3410,17 @@ export function ChatRoom({
                                 }} type="button">
                                     <span className="popover__seen-label">
                                         <Eye size={16} />
-                                        <span>
-                                            دیده شده توسط
-                                            {seenRows.length > 0 ? ` ${toPersianDigits(seenRows.length)} نفر` : ''}
-                                        </span>
+                                        <span>بازدیدها</span>
                                     </span>
-                                    {seenRows.length > 0 && (
+                                    {(seenRows.length > 0 || (!seenLoaded && activeIsSeen)) && (
                                         <span className="popover__seen-avatars">
-                                            {seenRows.slice(0, 3).map((u) => (
-                                                <Avatar key={u.chatId} name={u.name || u.username || ''} src={u.avatar || ''} size="xxs" />
-                                            ))}
+                                            {seenRows.length > 0
+                                                ? seenRows.slice(0, 3).map((u) => (
+                                                    <Avatar key={u.chatId} name={u.name || u.username || ''} src={u.avatar || ''} size="xxs" />
+                                                ))
+                                                : [0, 1, 2].map((i) => (
+                                                    <span key={i} className="popover__seen-skeleton" aria-hidden />
+                                                ))}
                                         </span>
                                     )}
                                 </button>
@@ -3474,6 +3478,24 @@ export function ChatRoom({
                 const menuReactions = (optimisticReactions[seenByMenu.id] ?? seenMsg?.reactions ?? []) as unknown as ReactionEntry[];
                 const emojiForUser = (userId: string) =>
                     menuReactions.find((r) => (r.userIds || []).includes(userId))?.emoji || '';
+                const selfReaction = emojiForUser(currentUserId);
+                const displayRows: SeenByUser[] = selfReaction && currentUser
+                    ? [
+                        {
+                            chatId: currentUserId,
+                            name: currentUser.name || currentUser.username || '',
+                            username: currentUser.username,
+                            avatar: currentUser.avatar,
+                            verified: resolveVerified(currentUser.verified),
+                        },
+                        ...rows.filter((u) => u.chatId !== currentUserId),
+                    ]
+                    : rows;
+                const seenRank = (userId: string) => {
+                    if (!emojiForUser(userId)) return 0;
+                    return userId === currentUserId ? 2 : 1;
+                };
+                const sortedRows = [...displayRows].sort((a, b) => seenRank(b.chatId) - seenRank(a.chatId));
 
                 return (
                     <div ref={seenByMenuRef} className="popover popover--mini seen-by-menu"
@@ -3483,12 +3505,12 @@ export function ChatRoom({
                             دیده شده توسط {toPersianDigits(rows.length)} نفر
                         </div>
                         <div className="seen-by-menu__body">
-                            {rows.length === 0 ? (
+                            {displayRows.length === 0 ? (
                                 <div className="seen-by-menu__empty">
                                     هنوز کسی این پیام را ندیده است
                                 </div>
                             ) : (
-                                rows.map((u) => {
+                                sortedRows.map((u) => {
                                     const emoji = emojiForUser(u.chatId);
                                     return (
                                         <button key={u.chatId} className="seen-by-menu__row" type="button"
@@ -3501,9 +3523,7 @@ export function ChatRoom({
                                                 <span>{u.name || u.username || u.chatId}</span>
                                                 {resolveVerified(u.verified) && <VerifiedBadge size={13} />}
                                             </span>
-                                            {emoji
-                                                ? <span className="seen-by-menu__emoji">{emoji}</span>
-                                                : <Check size={15} className="seen-by-menu__check" />}
+                                            {emoji && <span className="seen-by-menu__emoji">{emoji}</span>}
                                         </button>
                                     );
                                 })
