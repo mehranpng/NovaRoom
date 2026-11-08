@@ -1,19 +1,23 @@
 import { isVisualEffectsEnabled } from '../hooks/useDarkMode';
-import { SNAP_EFFECT_DURATION_MS, SNAP_GRAIN_FREQUENCY } from './snapConfig';
+import {
+    SNAP_EFFECT_DURATION_MS,
+    SNAP_GRAIN_FREQUENCY_DESKTOP,
+    SNAP_GRAIN_FREQUENCY_MOBILE,
+    SNAP_GRAIN_ROUNDNESS,
+} from './snapConfig';
 
 const SNAP_EFFECT_CONTAINER_ID = 'snap-effect-container';
 const VISIBILITY_MARGIN = 50;
-const LARGE_GHOST_AREA = 400000;
+
+const userAgent = navigator.userAgent;
+const isFirefox = /Firefox/i.test(userAgent);
+const isSafari = /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(userAgent);
+const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent);
 
 let filterCounter = 0;
 
 export function isSnapEffectSupported(): boolean {
-    if (typeof document === 'undefined' || !isVisualEffectsEnabled()) return false;
-    const agent = navigator.userAgent;
-    if (/Android|iPhone|iPad|iPod|Mobile/i.test(agent)) return false;
-    if (/Firefox/i.test(agent)) return false;
-    if (/^((?!chrome|android|crios|fxios|edg).)*safari/i.test(agent)) return false;
-    return true;
+    return isVisualEffectsEnabled() && !isFirefox && !isSafari;
 }
 
 function getContainer(): HTMLElement {
@@ -51,7 +55,7 @@ function cloneWithStyles(source: HTMLElement, width: number, height: number): HT
         node.removeAttribute('data-disintegrating');
     });
 
-    clone.style.setProperty('position', 'relative', 'important');
+    clone.style.setProperty('position', 'static', 'important');
     clone.style.setProperty('inset', 'auto', 'important');
     clone.style.setProperty('margin', '0', 'important');
     clone.style.setProperty('transform', 'none', 'important');
@@ -68,12 +72,15 @@ function cloneWithStyles(source: HTMLElement, width: number, height: number): HT
 
 function buildSvgMarkup(filterId: string, seed: number, width: number, height: number, left: number, top: number): string {
     const duration = `${SNAP_EFFECT_DURATION_MS}ms`;
-    const isLarge = width * height > LARGE_GHOST_AREA;
-    const displacement = Math.round(Math.min(width, height) * (isLarge ? 2 : 3));
-    const secondaryOctaves = isLarge ? 1 : 2;
+    const grainFrequency = isMobile ? SNAP_GRAIN_FREQUENCY_MOBILE : SNAP_GRAIN_FREQUENCY_DESKTOP;
+    const displacement = Math.round(Math.min(width, height) * 3);
+    const noise = SNAP_GRAIN_ROUNDNESS > 0
+        ? `<feTurbulence type="fractalNoise" baseFrequency="${grainFrequency}" numOctaves="1" result="rawNoise" seed="${seed}"/>` +
+            `<feGaussianBlur in="rawNoise" stdDeviation="${SNAP_GRAIN_ROUNDNESS}" result="dustNoise"/>`
+        : `<feTurbulence type="fractalNoise" baseFrequency="${grainFrequency}" numOctaves="1" result="dustNoise" seed="${seed}"/>`;
     return `<svg class="snap-effect-ghost" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="left:${left}px;top:${top}px">` +
-        `<defs><filter id="${filterId}" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">` +
-        `<feTurbulence type="fractalNoise" baseFrequency="${SNAP_GRAIN_FREQUENCY}" numOctaves="1" result="dustNoise" seed="${seed}"/>` +
+        `<defs><filter id="${filterId}" x="-150%" y="-150%" width="400%" height="400%" color-interpolation-filters="sRGB">` +
+        noise +
         `<feComponentTransfer in="dustNoise" result="dustNoiseMask">` +
         `<feFuncA type="linear" slope="5" intercept="0">` +
         `<animate attributeName="slope" values="5; 2; 1; 0" dur="${duration}" fill="freeze"/>` +
@@ -81,7 +88,7 @@ function buildSvgMarkup(filterId: string, seed: number, width: number, height: n
         `</feComponentTransfer>` +
         `<feComposite in="SourceGraphic" in2="dustNoiseMask" operator="in" result="dustySource"/>` +
         `<feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="1" result="displacementNoise1" seed="${seed + 1}"/>` +
-        `<feTurbulence type="fractalNoise" baseFrequency="1" numOctaves="${secondaryOctaves}" result="displacementNoise2" seed="${seed + 2}"/>` +
+        `<feTurbulence type="fractalNoise" baseFrequency="1" numOctaves="2" result="displacementNoise2" seed="${seed + 2}"/>` +
         `<feMerge result="combinedNoise">` +
         `<feMergeNode in="displacementNoise1"/>` +
         `<feMergeNode in="displacementNoise2"/>` +

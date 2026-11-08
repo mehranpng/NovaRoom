@@ -1,12 +1,12 @@
-import { SNAP_EFFECT_DURATION_MS, SNAP_GRAIN_CSS_PX, SNAP_MAX_CANVAS_PARTICLES } from './snapConfig';
+import { SNAP_CANVAS_MAX_PARTICLES, SNAP_CANVAS_PARTICLE_STEP, SNAP_EFFECT_DURATION_MS } from './snapConfig';
 
 const PADDING = 36;
 const DURATION = SNAP_EFFECT_DURATION_MS;
 
 function resolveParticleStep(width: number, height: number): number {
-    const countAtBaseStep = (width * height) / (SNAP_GRAIN_CSS_PX * SNAP_GRAIN_CSS_PX);
-    if (countAtBaseStep <= SNAP_MAX_CANVAS_PARTICLES) return SNAP_GRAIN_CSS_PX;
-    return Math.sqrt((width * height) / SNAP_MAX_CANVAS_PARTICLES);
+    const countAtBaseStep = (width * height) / (SNAP_CANVAS_PARTICLE_STEP * SNAP_CANVAS_PARTICLE_STEP);
+    if (countAtBaseStep <= SNAP_CANVAS_MAX_PARTICLES) return SNAP_CANVAS_PARTICLE_STEP;
+    return Math.sqrt((width * height) / SNAP_CANVAS_MAX_PARTICLES);
 }
 
 interface Particle {
@@ -176,7 +176,7 @@ function buildParticles(snap: HTMLCanvasElement, width: number, height: number):
         for (let x = 0; x < snap.width; x += step) {
             const idx = (Math.floor(y) * snap.width + Math.floor(x)) * 4;
             const a = data[idx + 3];
-            if (a < 24) continue;
+            if (a < 16) continue;
             const normX = x / Math.max(1, snap.width);
             const angle = (Math.random() - 0.5) * Math.PI * 1.4;
             const speed = 18 + Math.random() * 44;
@@ -256,7 +256,9 @@ function disintegrateElement(el: HTMLElement): Promise<void> {
                 const t = (elapsed - p.delay * 230) / 1000;
                 if (t <= 0) {
                     ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${p.a})`;
-                    ctx.fillRect(p.x, p.y, p.size, p.size);
+                    ctx.beginPath();
+                    ctx.arc(p.x + p.size / 2, p.y + p.size / 2, p.size / 2, 0, Math.PI * 2);
+                    ctx.fill();
                     continue;
                 }
                 const progress = t / p.life;
@@ -264,8 +266,11 @@ function disintegrateElement(el: HTMLElement): Promise<void> {
                 const alpha = p.a * (1 - progress * progress);
                 const x = p.x + p.vx * t;
                 const y = p.y + p.vy * t + 26 * t * t;
+                const size = p.size * (1 - progress * 0.3);
                 ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${alpha})`;
-                ctx.fillRect(x, y, p.size * (1 - progress * 0.3), p.size * (1 - progress * 0.3));
+                ctx.beginPath();
+                ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+                ctx.fill();
             }
 
             if (elapsed < DURATION) {
