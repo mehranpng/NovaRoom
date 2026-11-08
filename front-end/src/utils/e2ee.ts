@@ -1,8 +1,16 @@
 import { gcm } from '@noble/ciphers/aes';
+import { API_BASE_URL } from '../config/api';
 
 const ENC_PREFIX = 'enc:v1:';
+const ENC_PREFIX_V2 = 'enc:v2:';
 const ENC_NONCE_SIZE = 16;
 const ENC_TAG_SIZE = 16;
+const E2EE_GCM_IV_SIZE = 12;
+const PBKDF2_ITERATIONS = 100000;
+const PRIV_STORAGE_PREFIX = 'novaroom_e2ee_priv_';
+const PUB_STORAGE_PREFIX = 'novaroom_e2ee_pub_';
+const GROUP_KEY_REFRESH_MS = 120000;
+const FILE_MAGIC_V3 = new Uint8Array([0x4e, 0x43, 0x46, 0x33]);
 const FILE_MAGIC = new Uint8Array([0x4e, 0x43, 0x46, 0x31]); 
 const FILE_MAGIC_V2 = new Uint8Array([0x4e, 0x43, 0x46, 0x32]);
 const FILE_GCM_IV_SIZE = 12;
@@ -239,6 +247,376 @@ const randomBytes = (length: number): Uint8Array => {
     return out;
 };
 
+const hasWebCrypto = () => typeof crypto !== 'undefined' && !!crypto.subtle;
+
+let activeUserChatId = '';
+let activePrivateKeyPkcs8: Uint8Array | null = null;
+let activePublicKeySpki = '';
+const peerPublicKeyCache = new Map<string, string>();
+const groupRawKeyCache = new Map<string, Uint8Array>();
+const groupKeyRefreshAt = new Map<string, number>();
+const chatAesKeyV2Cache = new Map<string, CryptoKey>();
+const chatAesKeyV2Pending = new Map<string, Promise<CryptoKey | null>>();
+const chatAesKeyV2CheckedAt = new Map<string, number>();
+
+export interface E2EEBundle {
+    publicKey: string;
+    encryptedPrivateKey: string;
+    pbkdf2Salt: string;
+    keyVersion: number;
+}
+
+const derivePasswordWrappingKey = async (password: string, saltBytes: Uint8Array): Promise<CryptoKey> => {
+    const baseKey = await crypto.subtle.importKey('raw', asBufferSource(toUtf8(password)), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: asBufferSource(saltBytes), iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+        baseKey,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt'],
+    );
+};
+
+const packWrappedPrivateKey = async (
+    password: string,
+    pkcs8: Uint8Array,
+): Promise<{ encryptedPrivateKey: string; pbkdf2Salt: string }> => {
+    const salt = randomBytes(16);
+    const iv = randomBytes(E2EE_GCM_IV_SIZE);
+    const wrappingKey = await derivePasswordWrappingKey(password, salt);
+    const encryptedPriv = new Uint8Array(
+        await crypto.subtle.encrypt({ name: 'AES-GCM', iv: asBufferSource(iv) }, wrappingKey, asBufferSource(pkcs8)),
+    );
+    const packed = new Uint8Array(iv.length + encryptedPriv.length);
+    packed.set(iv, 0);
+    packed.set(encryptedPriv, iv.length);
+    return { encryptedPrivateKey: toBase64Url(packed), pbkdf2Salt: toBase64Url(salt) };
+};
+
+export const generateUserE2EEBundle = async (
+    password: string,
+): Promise<{ bundle: E2EEBundle; privateKeyPkcs8Base64: string }> => {
+    const keyPair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+    const spki = new Uint8Array(await crypto.subtle.exportKey('spki', keyPair.publicKey));
+    const pkcs8 = new Uint8Array(await crypto.subtle.exportKey('pkcs8', keyPair.privateKey));
+    const wrapped = await packWrappedPrivateKey(password, pkcs8);
+    return {
+        bundle: {
+            publicKey: toBase64Url(spki),
+            encryptedPrivateKey: wrapped.encryptedPrivateKey,
+            pbkdf2Salt: wrapped.pbkdf2Salt,
+            keyVersion: 1,
+        },
+        privateKeyPkcs8Base64: toBase64Url(pkcs8),
+    };
+};
+
+export const rewrapPrivateKeyWithNewPassword = async (
+    newPassword: string,
+    publicKeySpkiBase64?: string,
+    privateKeyPkcs8Base64?: string,
+    userChatId?: string,
+): Promise<E2EEBundle | null> => {
+    if (!activePrivateKeyPkcs8 && userChatId) {
+        loadLocalE2EEIdentity(userChatId);
+    }
+    const privB64 = privateKeyPkcs8Base64 || (activePrivateKeyPkcs8 ? toBase64Url(activePrivateKeyPkcs8) : '');
+    const pubB64 = publicKeySpkiBase64 || activePublicKeySpki;
+    if (!privB64 || !pubB64 || !hasWebCrypto()) {
+        return null;
+    }
+    const wrapped = await packWrappedPrivateKey(newPassword, fromBase64Url(privB64));
+    return {
+        publicKey: pubB64,
+        encryptedPrivateKey: wrapped.encryptedPrivateKey,
+        pbkdf2Salt: wrapped.pbkdf2Salt,
+        keyVersion: 1,
+    };
+};
+
+export const unlockE2EEBundleWithPassword = async (
+    userChatId: string,
+    password: string,
+    bundle: { publicKey?: string | null; encryptedPrivateKey?: string | null; pbkdf2Salt?: string | null },
+): Promise<boolean> => {
+    if (!bundle?.publicKey || !bundle?.encryptedPrivateKey || !bundle?.pbkdf2Salt || !hasWebCrypto()) return false;
+    try {
+        const salt = fromBase64Url(bundle.pbkdf2Salt);
+        const packed = fromBase64Url(bundle.encryptedPrivateKey);
+        if (packed.length <= E2EE_GCM_IV_SIZE) return false;
+        const iv = packed.subarray(0, E2EE_GCM_IV_SIZE);
+        const cipher = packed.subarray(E2EE_GCM_IV_SIZE);
+        const wrappingKey = await derivePasswordWrappingKey(password, salt);
+        const pkcs8 = new Uint8Array(
+            await crypto.subtle.decrypt({ name: 'AES-GCM', iv: asBufferSource(iv) }, wrappingKey, asBufferSource(cipher)),
+        );
+        saveLocalE2EEIdentity(userChatId, bundle.publicKey, toBase64Url(pkcs8));
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+export const saveLocalE2EEIdentity = (userChatId: string, publicKeyBase64: string, privateKeyPkcs8Base64: string) => {
+    activeUserChatId = userChatId;
+    activePublicKeySpki = publicKeyBase64;
+    activePrivateKeyPkcs8 = fromBase64Url(privateKeyPkcs8Base64);
+    chatAesKeyV2Cache.clear();
+    chatAesKeyV2Pending.clear();
+    groupRawKeyCache.clear();
+    groupKeyRefreshAt.clear();
+    try {
+        localStorage.setItem(`${PRIV_STORAGE_PREFIX}${userChatId}`, privateKeyPkcs8Base64);
+        localStorage.setItem(`${PUB_STORAGE_PREFIX}${userChatId}`, publicKeyBase64);
+    } catch {
+    }
+};
+
+export const loadLocalE2EEIdentity = (userChatId: string): boolean => {
+    if (!userChatId) return false;
+    if (activeUserChatId === userChatId && activePrivateKeyPkcs8 && activePublicKeySpki) return true;
+    try {
+        const priv = localStorage.getItem(`${PRIV_STORAGE_PREFIX}${userChatId}`);
+        const pub = localStorage.getItem(`${PUB_STORAGE_PREFIX}${userChatId}`);
+        if (priv && pub && hasWebCrypto()) {
+            activeUserChatId = userChatId;
+            activePublicKeySpki = pub;
+            activePrivateKeyPkcs8 = fromBase64Url(priv);
+            chatAesKeyV2Cache.clear();
+            chatAesKeyV2Pending.clear();
+            return true;
+        }
+    } catch {
+    }
+    return false;
+};
+
+export const clearLocalE2EEIdentity = (userChatId?: string) => {
+    const targets = new Set<string>();
+    if (userChatId) targets.add(userChatId);
+    if (activeUserChatId) targets.add(activeUserChatId);
+    activeUserChatId = '';
+    activePublicKeySpki = '';
+    activePrivateKeyPkcs8 = null;
+    chatAesKeyV2Cache.clear();
+    chatAesKeyV2Pending.clear();
+    groupRawKeyCache.clear();
+    groupKeyRefreshAt.clear();
+    targets.forEach((target) => {
+        try {
+            localStorage.removeItem(`${PRIV_STORAGE_PREFIX}${target}`);
+            localStorage.removeItem(`${PUB_STORAGE_PREFIX}${target}`);
+        } catch {
+        }
+    });
+};
+
+export const registerPeerPublicKey = (userChatId: string, publicKeyBase64?: string | null) => {
+    if (userChatId && publicKeyBase64) {
+        peerPublicKeyCache.set(userChatId, publicKeyBase64);
+    }
+};
+
+const deriveEcdhSharedBytes = async (peerPublicKeySpkiB64: string): Promise<Uint8Array | null> => {
+    if (!hasWebCrypto() || !activePrivateKeyPkcs8 || !peerPublicKeySpkiB64) return null;
+    try {
+        const privKey = await crypto.subtle.importKey(
+            'pkcs8',
+            asBufferSource(activePrivateKeyPkcs8),
+            { name: 'ECDH', namedCurve: 'P-256' },
+            false,
+            ['deriveBits'],
+        );
+        const pubKey = await crypto.subtle.importKey(
+            'spki',
+            asBufferSource(fromBase64Url(peerPublicKeySpkiB64)),
+            { name: 'ECDH', namedCurve: 'P-256' },
+            false,
+            [],
+        );
+        const bits = await crypto.subtle.deriveBits({ name: 'ECDH', public: pubKey }, privKey, 256);
+        return sha256(new Uint8Array(bits));
+    } catch {
+        return null;
+    }
+};
+
+const directPeerChatId = (chatId: string): string => {
+    const parts = chatId.slice('chat_'.length).split('_user_');
+    if (parts.length !== 2) return '';
+    const id1 = parts[0].startsWith('user_') ? parts[0] : `user_${parts[0]}`;
+    const id2 = `user_${parts[1]}`;
+    return id1 === activeUserChatId ? id2 : id1;
+};
+
+const fetchPeerPublicKey = async (peerId: string, token: string): Promise<string | null> => {
+    const cached = peerPublicKeyCache.get(peerId);
+    if (cached) return cached;
+    if (!token) return null;
+    try {
+        const res = await fetch(`${API_BASE_URL}/e2ee/users/${encodeURIComponent(peerId)}/public-key`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const publicKey = data?.publicKey ? String(data.publicKey) : '';
+        if (publicKey) {
+            peerPublicKeyCache.set(peerId, publicKey);
+            return publicKey;
+        }
+    } catch {
+    }
+    return null;
+};
+
+const resolveOrInitGroupKey = async (chatId: string, token: string): Promise<Uint8Array | null> => {
+    const cached = groupRawKeyCache.get(chatId) || null;
+    const lastChecked = groupKeyRefreshAt.get(chatId) || 0;
+    if (cached && Date.now() - lastChecked < GROUP_KEY_REFRESH_MS) return cached;
+    if (!token || !hasWebCrypto() || !activePrivateKeyPkcs8 || !activePublicKeySpki) return cached;
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/e2ee/groups/${encodeURIComponent(chatId)}/keys`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return cached;
+        const data = await res.json();
+        const memberPublicKeys: Record<string, string> = data?.memberPublicKeys || {};
+        let groupKey: Uint8Array | null = cached;
+        let nextKeyVersion = Number(data?.keyVersion || 1);
+        let forceRewrapAll = false;
+
+        if (data?.myEncryptedKey) {
+            try {
+                const rawEntry = String(data.myEncryptedKey);
+                const dotIdx = rawEntry.indexOf('.');
+                const entrySenderPub = dotIdx > 0 ? rawEntry.slice(0, dotIdx) : String(data.senderPublicKey || '');
+                const entryCipherB64 = dotIdx > 0 ? rawEntry.slice(dotIdx + 1) : rawEntry;
+                const shared = entrySenderPub ? await deriveEcdhSharedBytes(entrySenderPub) : null;
+                const packed = fromBase64Url(entryCipherB64);
+                if (shared && packed.length > E2EE_GCM_IV_SIZE) {
+                    const iv = packed.subarray(0, E2EE_GCM_IV_SIZE);
+                    const cipher = packed.subarray(E2EE_GCM_IV_SIZE);
+                    const wrapKey = await crypto.subtle.importKey('raw', asBufferSource(shared), { name: 'AES-GCM' }, false, ['decrypt']);
+                    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: asBufferSource(iv) }, wrapKey, asBufferSource(cipher));
+                    groupKey = new Uint8Array(plain);
+                }
+            } catch {
+                groupKey = randomBytes(32);
+                nextKeyVersion += 1;
+                forceRewrapAll = true;
+            }
+        } else if (!data?.senderPublicKey && !groupKey) {
+            groupKey = randomBytes(32);
+            forceRewrapAll = true;
+        }
+
+        if (!groupKey) return null;
+        groupRawKeyCache.set(chatId, groupKey);
+        groupKeyRefreshAt.set(chatId, Date.now());
+
+        const missingIds: string[] = (forceRewrapAll || !data?.senderPublicKey)
+            ? Object.keys(memberPublicKeys)
+            : (Array.isArray(data?.missingMemberIds) ? data.missingMemberIds : []);
+
+        if (missingIds.length > 0) {
+            const encryptedKeys: Record<string, string> = {};
+            for (const uid of missingIds) {
+                const pub = memberPublicKeys[uid];
+                if (!pub) continue;
+                const shared = await deriveEcdhSharedBytes(pub);
+                if (!shared) continue;
+                const iv = randomBytes(E2EE_GCM_IV_SIZE);
+                const wrapKey = await crypto.subtle.importKey('raw', asBufferSource(shared), { name: 'AES-GCM' }, false, ['encrypt']);
+                const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: asBufferSource(iv) }, wrapKey, asBufferSource(groupKey)));
+                const packed = new Uint8Array(iv.length + cipher.length);
+                packed.set(iv, 0);
+                packed.set(cipher, iv.length);
+                encryptedKeys[uid] = `${activePublicKeySpki}.${toBase64Url(packed)}`;
+            }
+            if (Object.keys(encryptedKeys).length > 0) {
+                await fetch(`${API_BASE_URL}/e2ee/groups/${encodeURIComponent(chatId)}/keys`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ encryptedKeys, senderPublicKey: activePublicKeySpki, keyVersion: nextKeyVersion }),
+                }).catch(() => undefined);
+            }
+        }
+
+        return groupKey;
+    } catch {
+        return cached;
+    }
+};
+
+export const invalidateGroupE2EECache = (chatId?: string) => {
+    if (chatId) {
+        groupKeyRefreshAt.delete(chatId);
+        chatAesKeyV2CheckedAt.delete(chatId);
+        chatAesKeyV2Cache.delete(chatId);
+        chatAesKeyV2Pending.delete(chatId);
+    } else {
+        groupKeyRefreshAt.clear();
+        chatAesKeyV2CheckedAt.clear();
+        chatAesKeyV2Cache.clear();
+        chatAesKeyV2Pending.clear();
+    }
+};
+
+export const syncGroupE2EEKeys = async (chatId: string, token: string): Promise<boolean> => {
+    if (!chatId.startsWith('grp_') || !token) return false;
+    invalidateGroupE2EECache(chatId);
+    const key = await resolveChatAesKeyV2(chatId, token);
+    return Boolean(key);
+};
+
+export const resolveChatAesKeyV2 = async (chatId: string, token: string): Promise<CryptoKey | null> => {
+    if (!chatId || !hasWebCrypto() || !activePrivateKeyPkcs8) return null;
+    const cached = chatAesKeyV2Cache.get(chatId);
+    if (
+        cached
+        && (!chatId.startsWith('grp_')
+            || Date.now() - (chatAesKeyV2CheckedAt.get(chatId) || 0) < GROUP_KEY_REFRESH_MS)
+    ) return cached;
+    const running = chatAesKeyV2Pending.get(chatId);
+    if (running) return running;
+
+    const pending = (async (): Promise<CryptoKey | null> => {
+        let rawKeyBytes: Uint8Array | null = null;
+
+        if (chatId.startsWith('saved_messages_')) {
+            const idBytes = toUtf8(chatId);
+            const seed = new Uint8Array(activePrivateKeyPkcs8!.length + idBytes.length);
+            seed.set(activePrivateKeyPkcs8!, 0);
+            seed.set(idBytes, activePrivateKeyPkcs8!.length);
+            rawKeyBytes = await sha256(seed);
+        } else if (chatId === 'official-channel') {
+            rawKeyBytes = await sha256(toUtf8('novaroom-official-channel-v2'));
+        } else if (chatId.startsWith('chat_')) {
+            const peerId = directPeerChatId(chatId);
+            if (peerId) {
+                const peerPub = await fetchPeerPublicKey(peerId, token);
+                if (peerPub) rawKeyBytes = await deriveEcdhSharedBytes(peerPub);
+            }
+        } else if (chatId.startsWith('grp_')) {
+            rawKeyBytes = await resolveOrInitGroupKey(chatId, token);
+        }
+
+        if (!rawKeyBytes) return null;
+        const aesKey = await crypto.subtle.importKey('raw', asBufferSource(rawKeyBytes), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+        chatAesKeyV2Cache.set(chatId, aesKey);
+        chatAesKeyV2CheckedAt.set(chatId, Date.now());
+        return aesKey;
+    })();
+
+    chatAesKeyV2Pending.set(chatId, pending);
+    try {
+        return await pending;
+    } finally {
+        chatAesKeyV2Pending.delete(chatId);
+    }
+};
+
 export const encryptClientText = async (plain: string, token: string, scope: string, mode: 'legacy' | 'shared' = 'legacy'): Promise<string> => {
     const text = String(plain || '');
     if (!text) return '';
@@ -263,11 +641,38 @@ export const encryptClientText = async (plain: string, token: string, scope: str
 export const decryptClientText = async (cipher: string, token: string, scope: string): Promise<string> => {
     const value = String(cipher || '');
     if (!value) return '';
-    if (!value.startsWith(ENC_PREFIX)) return value;
+    if (!value.startsWith(ENC_PREFIX) && !value.startsWith(ENC_PREFIX_V2)) return value;
 
     const cacheKey = `${scope}|${value}`;
     const cachedPlain = decryptedTextCache.get(cacheKey);
     if (cachedPlain !== undefined) return cachedPlain;
+
+    if (value.startsWith(ENC_PREFIX_V2)) {
+        if (!hasWebCrypto()) return value;
+        const chatId = scope.startsWith('chat:') ? scope.slice(5) : '';
+        const key = await resolveChatAesKeyV2(chatId, token);
+        if (!key) return value;
+        try {
+            const raw = fromBase64Url(value.slice(ENC_PREFIX_V2.length));
+            if (raw.length < E2EE_GCM_IV_SIZE + ENC_TAG_SIZE) return value;
+            const iv = raw.subarray(0, E2EE_GCM_IV_SIZE);
+            const body = raw.subarray(E2EE_GCM_IV_SIZE);
+            const plain = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: asBufferSource(iv) },
+                key,
+                asBufferSource(body),
+            );
+            const decoded = textDecoder.decode(plain);
+            if (decryptedTextCache.size > 4000) {
+                const firstKey = decryptedTextCache.keys().next().value;
+                if (firstKey) decryptedTextCache.delete(firstKey);
+            }
+            decryptedTextCache.set(cacheKey, decoded);
+            return decoded;
+        } catch {
+            return value;
+        }
+    }
 
     try {
         const raw = fromBase64Url(value.slice(ENC_PREFIX.length));
@@ -337,7 +742,45 @@ export const decryptMessageClientSide = async (message: any, token: string, chat
 };
 
 export const encryptChatTextClientSide = async (text: string, token: string, chatId: string): Promise<string> => {
-    return encryptClientText(text, token, `chat:${chatId}`, 'shared');
+    const plain = String(text || '');
+    if (!plain) return '';
+    if (hasWebCrypto()) {
+        if (chatId.startsWith('grp_')) {
+            groupKeyRefreshAt.delete(chatId);
+            chatAesKeyV2CheckedAt.delete(chatId);
+        }
+        const key = await resolveChatAesKeyV2(chatId, token);
+        if (key) {
+            try {
+                const iv = randomBytes(E2EE_GCM_IV_SIZE);
+                const encrypted = new Uint8Array(
+                    await crypto.subtle.encrypt(
+                        { name: 'AES-GCM', iv: asBufferSource(iv) },
+                        key,
+                        asBufferSource(toUtf8(plain)),
+                    ),
+                );
+                const packed = new Uint8Array(iv.length + encrypted.length);
+                packed.set(iv, 0);
+                packed.set(encrypted, iv.length);
+                return `${ENC_PREFIX_V2}${toBase64Url(packed)}`;
+            } catch {
+            }
+        }
+    }
+    return encryptClientText(plain, token, `chat:${chatId}`, 'shared');
+};
+
+const MENTION_EXTRACT_RE = /(?<![A-Za-z0-9_])@([A-Za-z0-9_]*[A-Za-z][A-Za-z0-9_]*)/g;
+
+export const extractMentionedUsernames = (plainText: string): string[] => {
+    if (!plainText) return [];
+    const seen = new Set<string>();
+    for (const match of plainText.matchAll(MENTION_EXTRACT_RE)) {
+        if (match[1]) seen.add(match[1].toLowerCase());
+        if (seen.size >= 30) break;
+    }
+    return Array.from(seen);
 };
 
 export const encryptBioClientSide = async (bio: string, token: string, chatId: string): Promise<string> => {
@@ -387,6 +830,30 @@ const encryptFileBytesV1 = async (plain: Uint8Array, chatId: string): Promise<Ui
     }
 };
 
+export const encryptFileWithRandomKey = async (
+    plain: Uint8Array,
+    token: string,
+    chatId: string,
+): Promise<{ encryptedBytes: Uint8Array; encryptedFileKey: string }> => {
+    const fileKey = randomBytes(32);
+    const iv = randomBytes(FILE_GCM_IV_SIZE);
+    const useWebCrypto = hasWebCrypto();
+    const cryptoKey = useWebCrypto
+        ? await crypto.subtle.importKey('raw', asBufferSource(fileKey), { name: 'AES-GCM' }, false, ['encrypt'])
+        : null;
+    const encrypted = cryptoKey
+        ? new Uint8Array(
+            await crypto.subtle.encrypt({ name: 'AES-GCM', iv: asBufferSource(iv) }, cryptoKey, asBufferSource(plain)),
+        )
+        : gcm(fileKey, iv).encrypt(plain);
+    const full = new Uint8Array(FILE_MAGIC_V3.length + iv.length + encrypted.length);
+    full.set(FILE_MAGIC_V3, 0);
+    full.set(iv, FILE_MAGIC_V3.length);
+    full.set(encrypted, FILE_MAGIC_V3.length + iv.length);
+    const encryptedFileKey = await encryptChatTextClientSide(toBase64Url(fileKey), token, chatId);
+    return { encryptedBytes: full, encryptedFileKey };
+};
+
 export const encryptFileBytesClientSide = async (plain: Uint8Array, _token: string, chatId: string): Promise<Uint8Array> => {
     if (!plain.length) return plain;
     if (typeof crypto === 'undefined' || !crypto.subtle) {
@@ -411,9 +878,33 @@ export const encryptFileBytesClientSide = async (plain: Uint8Array, _token: stri
     }
 };
 
-export const decryptFileBytesClientSide = async (raw: Uint8Array, _token: string, chatId: string): Promise<Uint8Array> => {
+export const decryptFileBytesClientSide = async (raw: Uint8Array, token: string, chatId: string, encryptedFileKey?: string): Promise<Uint8Array> => {
     if (!raw.length) return raw;
     const scope = `chat:${chatId}`;
+    if (hasMagic(raw, FILE_MAGIC_V3)) {
+        if (!encryptedFileKey) return raw;
+        try {
+            const fileKeyB64 = await decryptClientText(encryptedFileKey, token, scope);
+            if (!fileKeyB64 || fileKeyB64.startsWith('enc:')) return raw;
+            const fileKey = fromBase64Url(fileKeyB64);
+            if (fileKey.length !== 32) return raw;
+            if (raw.length < FILE_MAGIC_V3.length + FILE_GCM_IV_SIZE + ENC_TAG_SIZE) return raw;
+            const iv = raw.subarray(FILE_MAGIC_V3.length, FILE_MAGIC_V3.length + FILE_GCM_IV_SIZE);
+            const body = raw.subarray(FILE_MAGIC_V3.length + FILE_GCM_IV_SIZE);
+            if (hasWebCrypto()) {
+                const cryptoKey = await crypto.subtle.importKey('raw', asBufferSource(fileKey), { name: 'AES-GCM' }, false, ['decrypt']);
+                const plain = await crypto.subtle.decrypt(
+                    { name: 'AES-GCM', iv: asBufferSource(iv) },
+                    cryptoKey,
+                    asBufferSource(body),
+                );
+                return new Uint8Array(plain);
+            }
+            return gcm(fileKey, iv).decrypt(body);
+        } catch {
+            return raw;
+        }
+    }
     if (hasMagic(raw, FILE_MAGIC_V2)) {
         if (raw.length < FILE_MAGIC_V2.length + FILE_GCM_IV_SIZE + ENC_TAG_SIZE) return raw;
         try {

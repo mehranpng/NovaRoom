@@ -1273,7 +1273,7 @@ export function ChatRoom({
                     });
                     if (!response.ok) throw new Error('Download failed');
                     const downloadedBytes = new Uint8Array(await response.arrayBuffer());
-                    const plainBytes = isAudio ? downloadedBytes : await decryptFileBytesClientSide(downloadedBytes, token, chatId);
+                    const plainBytes = isAudio ? downloadedBytes : await decryptFileBytesClientSide(downloadedBytes, token, chatId, m.file?.encryptedFileKey);
                     return new Blob([plainBytes as BlobPart], { type: m.file?.mimeType || 'application/octet-stream' });
                 },
             });

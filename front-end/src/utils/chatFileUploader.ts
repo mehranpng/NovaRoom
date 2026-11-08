@@ -1,6 +1,6 @@
 import type { FileMetadata, PendingAttachment } from '../types';
 import { API_BASE_URL } from '../config/api';
-import { encryptFileBytesClientSide } from './e2ee';
+import { encryptFileWithRandomKey } from './e2ee';
 import { saveBlobToCache } from './mediaCache';
 
 export type UploadPhase = 'uploading' | 'encrypting';
@@ -154,7 +154,8 @@ export async function uploadChatFile(args: {
         await yieldToMain();
         const plainBytes = isAudio ? null : new Uint8Array(await file.arrayBuffer());
         await yieldToMain();
-        const fileBytes = plainBytes ? await encryptFileBytesClientSide(plainBytes, token, chatId) : null;
+        const encryptedFile = plainBytes ? await encryptFileWithRandomKey(plainBytes, token, chatId) : null;
+        const fileBytes = encryptedFile?.encryptedBytes ?? null;
         if (signal.aborted) throw new Error('aborted');
 
         if (warmupTimer != null) {
@@ -230,6 +231,7 @@ export async function uploadChatFile(args: {
             width: attachment.width,
             height: attachment.height,
             duration: attachment.duration,
+            encryptedFileKey: encryptedFile?.encryptedFileKey,
         };
 
         report(100);

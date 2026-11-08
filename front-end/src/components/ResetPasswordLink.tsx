@@ -4,6 +4,7 @@ import { API_BASE_URL } from '../config/api';
 import { Key, ShieldCheck, Link2Off } from 'lucide-react';
 import { PasswordField } from './PasswordField';
 import { screenVariants } from '../utils/screenMotion';
+import { generateUserE2EEBundle, rewrapPrivateKeyWithNewPassword } from '../utils/e2ee';
 
 interface ResetPasswordLinkProps {
     token: string;
@@ -14,6 +15,7 @@ type LinkState = 'checking' | 'valid' | 'invalid' | 'done';
 export function ResetPasswordLink({ token }: ResetPasswordLinkProps) {
     const [linkState, setLinkState] = useState<LinkState>('checking');
     const [username, setUsername] = useState('');
+    const [targetChatId, setTargetChatId] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -33,6 +35,7 @@ export function ResetPasswordLink({ token }: ResetPasswordLinkProps) {
                 if (cancelled) return;
                 if (data?.valid) {
                     setUsername(String(data?.username || ''));
+                    setTargetChatId(String(data?.chatId || ''));
                     setLinkState('valid');
                 } else {
                     setLinkState('invalid');
@@ -67,13 +70,15 @@ export function ResetPasswordLink({ token }: ResetPasswordLinkProps) {
 
         setLoading(true);
         try {
+            const rewrapped = await rewrapPrivateKeyWithNewPassword(password, undefined, undefined, targetChatId);
+            const e2ee = rewrapped || (await generateUserE2EEBundle(password)).bundle;
             const response = await fetch(`${API_BASE_URL}/auth/password-link/consume`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'ngrok-skip-browser-warning': 'true',
                 },
-                body: JSON.stringify({ token, newPassword: password }),
+                body: JSON.stringify({ token, newPassword: password, e2ee }),
             });
 
             if (!response.ok) {

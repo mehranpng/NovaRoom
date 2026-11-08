@@ -55,6 +55,7 @@ export interface FileMetadata {
     fileSize: number;
     mimeType: string;
     uploadedAt: string;
+    encryptedFileKey?: string;
     title?: string;
     artist?: string;
     coverArtUrl?: string;

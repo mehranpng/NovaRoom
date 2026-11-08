@@ -156,7 +156,7 @@ else:
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 30
-SESSION_INACTIVITY_EXPIRE_DAYS = 10
+SESSION_INACTIVITY_EXPIRE_DAYS = 30
 MAX_ACTIVE_SESSIONS = 20
 MAX_LOGIN_EVENTS = 10
 
@@ -281,10 +281,13 @@ def is_official_channel_chat(chat_id: str) -> bool:
 TEHRAN_TZ = timezone(timedelta(hours=3, minutes=30))
 WS_IDLE_TIMEOUT_SEC = 95
 ENC_PREFIX = "enc:v1:"
+ENC_PREFIX_V2 = "enc:srv2:"
 ENC_NONCE_SIZE = 16
+ENC_GCM_IV_SIZE = 12
 ENC_TAG_SIZE = 16
 FILE_MAGIC = b"NCF1"
 FILE_MAGIC_V2 = b"NCF2"
+FILE_MAGIC_V3 = b"NCF3"
 FILE_GCM_IV_SIZE = 12
 FILE_TEXT_PREFIX = "ncf:v1:"
 LEGACY_BOOTSTRAP_TOKEN = "__bootstrap_migration__"
@@ -311,8 +314,31 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+DEFAULT_DEV_SECRET_KEY = hashlib.sha256(b"dev-secret-change-me").hexdigest()
+
+
 def _derive_enc_key(token: str, scope: str, secret: str = SECRET_KEY) -> bytes:
     material = f"{secret}|{scope}".encode("utf-8")
+    return hashlib.sha256(material).digest()
+
+
+def _derive_enc_key_legacy_shared(scope: str, secret: str = SECRET_KEY) -> bytes:
+    material = f"{secret}|shared|{scope}".encode("utf-8")
+    return hashlib.sha256(material).digest()
+
+
+def _derive_enc_key_legacy_scoped_tokenhash(
+    token: str, scope: str, secret: str = SECRET_KEY
+) -> bytes:
+    token_hint = hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()[:16]
+    material = f"{secret}|{scope}|{token_hint}".encode("utf-8")
+    return hashlib.sha256(material).digest()
+
+
+def _derive_enc_key_legacy_token_raw(
+    token: str, scope: str, secret: str = SECRET_KEY
+) -> bytes:
+    material = f"{secret}|{token}|{scope}".encode("utf-8")
     return hashlib.sha256(material).digest()
 
 
@@ -356,6 +382,11 @@ def encrypt_scoped_text(plain: str, token: str, scope: str) -> str:
     if not _is_server_managed_scope(scope):
         return text
     key = _derive_enc_key(token, scope)
+    if AESGCM is not None:
+        iv = secrets.token_bytes(ENC_GCM_IV_SIZE)
+        cipher_and_tag = AESGCM(key).encrypt(iv, text.encode("utf-8"), None)
+        payload = base64.urlsafe_b64encode(iv + cipher_and_tag).decode("ascii")
+        return f"{ENC_PREFIX_V2}{payload}"
     nonce = secrets.token_bytes(ENC_NONCE_SIZE)
     encrypted = _xor_stream(text.encode("utf-8"), key, nonce)
     tag = hmac.new(key, nonce + encrypted, hashlib.sha256).digest()[:ENC_TAG_SIZE]
@@ -373,10 +404,25 @@ def decrypt_scoped_text(cipher: Any, token: str, scope: str) -> str:
 
 
 def _decrypt_scoped_text_raw(value: str, token: str, scope: str) -> str:
+    if value.startswith(ENC_PREFIX_V2):
+        if AESGCM is None:
+            return ""
+        try:
+            raw = _base64url_decode_bytes(value[len(ENC_PREFIX_V2) :])
+            if len(raw) < ENC_GCM_IV_SIZE + ENC_TAG_SIZE:
+                return ""
+            iv = raw[:ENC_GCM_IV_SIZE]
+            cipher_and_tag = raw[ENC_GCM_IV_SIZE:]
+            key = _derive_enc_key(token, scope)
+            return AESGCM(key).decrypt(iv, cipher_and_tag, None).decode(
+                "utf-8", errors="ignore"
+            )
+        except Exception:
+            return ""
     if not value.startswith(ENC_PREFIX):
         return value
     try:
-        raw = base64.urlsafe_b64decode(value[len(ENC_PREFIX) :].encode("ascii"))
+        raw = _base64url_decode_bytes(value[len(ENC_PREFIX) :])
         if len(raw) < ENC_NONCE_SIZE + ENC_TAG_SIZE:
             return ""
         nonce = raw[:ENC_NONCE_SIZE]
@@ -384,6 +430,14 @@ def _decrypt_scoped_text_raw(value: str, token: str, scope: str) -> str:
         tag = raw[-ENC_TAG_SIZE:]
         candidate_key_builders = (
             lambda: _derive_enc_key(token, scope),
+            lambda: _derive_enc_key("", scope),
+            lambda: _derive_enc_key_legacy_shared(scope),
+            lambda: _derive_enc_key_legacy_scoped_tokenhash(token, scope),
+            lambda: _derive_enc_key_legacy_token_raw(token, scope),
+            lambda: _derive_enc_key(token, scope, DEFAULT_DEV_SECRET_KEY),
+            lambda: _derive_enc_key_legacy_shared(scope, DEFAULT_DEV_SECRET_KEY),
+            lambda: _derive_enc_key_legacy_scoped_tokenhash(token, scope, DEFAULT_DEV_SECRET_KEY),
+            lambda: _derive_enc_key_legacy_token_raw(token, scope, DEFAULT_DEV_SECRET_KEY),
         )
         mac_input = nonce + body
         for build_key in candidate_key_builders:
@@ -398,13 +452,17 @@ def _decrypt_scoped_text_raw(value: str, token: str, scope: str) -> str:
 
 
 def is_ciphertext(value: Any) -> bool:
-    return isinstance(value, str) and value.startswith(ENC_PREFIX)
+    return isinstance(value, str) and (
+        value.startswith(ENC_PREFIX)
+        or value.startswith(ENC_PREFIX_V2)
+        or value.startswith("enc:v2:")
+    )
 
 
 def decrypt_with_fallback(cipher: Any, token: str, scope: str) -> str:
     if not _is_server_managed_scope(scope):
         value = str(cipher or "")
-        if not is_ciphertext(value):
+        if not value.startswith(ENC_PREFIX) and not value.startswith(ENC_PREFIX_V2):
             return value
         plain = _decrypt_scoped_text_raw(value, token, scope)
         if plain:
@@ -468,6 +526,7 @@ async def resolve_group_unread_mention_user_ids(
     sender_id: str,
     participants: List[str],
     reply_to: Optional[Dict[str, Any]] = None,
+    mentioned_usernames_input: Optional[List[str]] = None,
 ) -> List[str]:
     if not participants:
         return []
@@ -483,9 +542,16 @@ async def resolve_group_unread_mention_user_ids(
         ):
             target_ids.add(replied_sender)
 
-    mentioned_usernames = {
-        m.lower() for m in MENTION_TOKEN_RE.findall(str(plain_text or "")) if m
-    }
+    mentioned_usernames: set = set()
+    if isinstance(mentioned_usernames_input, list):
+        for item in mentioned_usernames_input[:50]:
+            cleaned = str(item or "").strip().lstrip("@").lower()
+            if cleaned and validate_username(cleaned):
+                mentioned_usernames.add(cleaned)
+    elif plain_text and not plain_text.startswith("enc:"):
+        mentioned_usernames = {
+            m.lower() for m in MENTION_TOKEN_RE.findall(str(plain_text or "")) if m
+        }
     if mentioned_usernames:
         other_participants = [p for p in participant_set if p != sender_id]
         if other_participants:
@@ -571,10 +637,19 @@ async def _remap_forward_file_to_target_chat(
     source_chat_id: str,
     target_chat_id: str,
     uploaded_by: str,
+    encrypted_file_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     file_id = str((file_meta or {}).get("fileId") or "").strip()
     if not file_id:
         return dict(file_meta or {})
+
+    if encrypted_file_key or (file_meta or {}).get("encryptedFileKey"):
+        remapped_meta = dict(file_meta)
+        remapped_meta["uploadedBy"] = uploaded_by
+        if encrypted_file_key:
+            remapped_meta["encryptedFileKey"] = encrypted_file_key
+        return remapped_meta
+
     source_raw = await read_file_content(file_id)
     if source_raw is None:
         raise HTTPException(status_code=404, detail="Forward source file not found")
@@ -1154,11 +1229,25 @@ async def bcrypt_checkpw_async(password: str, stored_hash: str) -> bool:
     return await asyncio.to_thread(bcrypt.checkpw, pw, sh)
 
 
+class E2EEKeyBundleRequest(BaseModel):
+    publicKey: str = Field(..., min_length=20, max_length=512)
+    encryptedPrivateKey: str = Field(..., min_length=20, max_length=2048)
+    pbkdf2Salt: str = Field(..., min_length=16, max_length=128)
+    keyVersion: int = Field(default=1, ge=1, le=100)
+
+
+class GroupE2EEKeysUpdateRequest(BaseModel):
+    encryptedKeys: Dict[str, str]
+    senderPublicKey: str = Field(..., min_length=20, max_length=512)
+    keyVersion: int = Field(default=1, ge=1, le=100)
+
+
 class LoginRequest(BaseModel):
     identifier: Optional[str] = None
     email: Optional[str] = None
     password: str
     deviceName: Optional[str] = None
+    e2ee: Optional[E2EEKeyBundleRequest] = None
 
 
 class TokenResponse(BaseModel):
@@ -1210,6 +1299,7 @@ class RegisterWithLinkRequest(BaseModel):
     username: str
     password: str
     deviceName: Optional[str] = None
+    e2ee: Optional[E2EEKeyBundleRequest] = None
 
 
 class ValidateLinkRequest(BaseModel):
@@ -1219,11 +1309,13 @@ class ValidateLinkRequest(BaseModel):
 class ConsumePasswordLinkRequest(BaseModel):
     token: str
     newPassword: str
+    e2ee: Optional[E2EEKeyBundleRequest] = None
 
 
 class ChangePasswordRequest(BaseModel):
     currentPassword: str
     newPassword: str
+    e2ee: Optional[E2EEKeyBundleRequest] = None
 
 
 class DeleteAccountRequest(BaseModel):
@@ -1284,6 +1376,7 @@ class ForwardBatchItem(BaseModel):
     encryptedReasoningContent: Optional[str] = None
     encryptedReplyText: Optional[str] = None
     encryptedSearchSources: Optional[str] = None
+    encryptedFileKey: Optional[str] = None
     clientId: Optional[str] = None
 
 
@@ -1294,6 +1387,7 @@ class ForwardMessageRequest(BaseModel):
     encryptedReasoningContent: Optional[str] = None
     encryptedReplyText: Optional[str] = None
     encryptedSearchSources: Optional[str] = None
+    encryptedFileKey: Optional[str] = None
     clientId: Optional[str] = None
     items: Optional[List[ForwardBatchItem]] = None
 
@@ -1321,18 +1415,35 @@ def normalize_device_name(value: Any) -> str:
 
 
 def _normalize_session_list(user_doc: dict) -> List[dict]:
+    e2ee = (user_doc or {}).get("e2ee") or {}
+    if not e2ee.get("publicKey") or not e2ee.get("encryptedPrivateKey"):
+        return []
     login = (user_doc or {}).get("login") or {}
     sessions = login.get("sessions") or []
     if not isinstance(sessions, list):
         sessions = []
     now = utc_now()
+    max_lifetime = timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
     inactivity_cutoff = now - timedelta(days=SESSION_INACTIVITY_EXPIRE_DAYS)
     valid_sessions: List[dict] = []
     for item in sessions:
         if not isinstance(item, dict):
             continue
+        if int(item.get("sessionVersion") or 0) < 2:
+            continue
         token_hash = str(item.get("tokenHash") or "").strip()
         if not token_hash:
+            continue
+        created_raw = item.get("createdAt")
+        if isinstance(created_raw, datetime):
+            created_dt = (
+                created_raw
+                if created_raw.tzinfo
+                else created_raw.replace(tzinfo=timezone.utc)
+            )
+        else:
+            continue
+        if now - created_dt >= max_lifetime:
             continue
         expires_at = item.get("expiresAt")
         if isinstance(expires_at, datetime):
@@ -1341,8 +1452,10 @@ def _normalize_session_list(user_doc: dict) -> List[dict]:
                 if expires_at.tzinfo
                 else expires_at.replace(tzinfo=timezone.utc)
             )
-            if exp_dt <= now:
-                continue
+        else:
+            exp_dt = created_dt + max_lifetime
+        if exp_dt <= now:
+            continue
         last_used_at = item.get("lastUsedAt")
         if isinstance(last_used_at, datetime):
             last_used_dt = (
@@ -1351,23 +1464,16 @@ def _normalize_session_list(user_doc: dict) -> List[dict]:
                 else last_used_at.replace(tzinfo=timezone.utc)
             )
         else:
-            created_at = item.get("createdAt")
-            if isinstance(created_at, datetime):
-                last_used_dt = (
-                    created_at
-                    if created_at.tzinfo
-                    else created_at.replace(tzinfo=timezone.utc)
-                )
-            else:
-                last_used_dt = now
+            last_used_dt = created_dt
         if last_used_dt <= inactivity_cutoff:
             continue
         valid_sessions.append(
             {
                 "tokenHash": token_hash,
-                "createdAt": item.get("createdAt") or now,
+                "createdAt": created_dt,
                 "lastUsedAt": last_used_dt,
-                "expiresAt": expires_at,
+                "expiresAt": exp_dt,
+                "sessionVersion": 2,
                 "deviceName": normalize_device_name(item.get("deviceName")),
                 "ipAddress": normalize_ip_address(item.get("ipAddress")),
             }
@@ -1411,7 +1517,7 @@ def _normalize_login_events(user_doc: dict) -> List[dict]:
 async def attach_session_to_user(
     chat_id: str, token: str, device_name: str = "", ip_address: str = ""
 ):
-    user = await cl_users.find_one({"chatId": chat_id}, {"login": 1})
+    user = await cl_users.find_one({"chatId": chat_id}, {"login": 1, "e2ee": 1})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     payload = await jwt_decode_async(token)
@@ -1430,6 +1536,7 @@ async def attach_session_to_user(
             "createdAt": now,
             "lastUsedAt": now,
             "expiresAt": expires_at,
+            "sessionVersion": 2,
             "deviceName": normalize_device_name(device_name),
             "ipAddress": normalize_ip_address(ip_address),
         },
@@ -1511,10 +1618,6 @@ async def get_user_from_session_token(token: str) -> Optional[dict]:
             )
         return user
 
-    legacy_token = ((user.get("login") or {}).get("token") or "").strip()
-    if legacy_token and legacy_token == token:
-        await attach_session_to_user(chat_id, token)
-        return await cl_users.find_one({"chatId": chat_id})
     return None
 
 
@@ -2838,6 +2941,14 @@ async def register_with_link(req: RegisterWithLinkRequest, request: Request):
         "registrationDate": registration_date,
         "createdAt": utc_now(),
     }
+    if req.e2ee is not None:
+        user_doc["e2ee"] = {
+            "publicKey": req.e2ee.publicKey.strip(),
+            "encryptedPrivateKey": req.e2ee.encryptedPrivateKey.strip(),
+            "pbkdf2Salt": req.e2ee.pbkdf2Salt.strip(),
+            "keyVersion": req.e2ee.keyVersion,
+            "updatedAt": utc_now(),
+        }
 
     try:
         await cl_users.insert_one(user_doc)
@@ -2895,6 +3006,7 @@ async def validate_password_link(request: Request, token: str):
     return {
         "valid": bool(user),
         "username": ((user or {}).get("profile") or {}).get("username"),
+        "chatId": link.get("targetChatId"),
     }
 
 
@@ -2919,9 +3031,16 @@ async def consume_password_link(req: ConsumePasswordLinkRequest, request: Reques
         return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
     hashed_password = await asyncio.to_thread(_hash_password, new_password)
-    await cl_users.update_one(
-        {"chatId": chat_id}, {"$set": {"login.password": hashed_password}}
-    )
+    password_update: Dict[str, Any] = {"login.password": hashed_password}
+    if req.e2ee is not None:
+        password_update["e2ee"] = {
+            "publicKey": req.e2ee.publicKey.strip(),
+            "encryptedPrivateKey": req.e2ee.encryptedPrivateKey.strip(),
+            "pbkdf2Salt": req.e2ee.pbkdf2Salt.strip(),
+            "keyVersion": req.e2ee.keyVersion,
+            "updatedAt": utc_now(),
+        }
+    await cl_users.update_one({"chatId": chat_id}, {"$set": password_update})
     await clear_user_sessions(chat_id)
     return {"message": "ok"}
 
@@ -2949,9 +3068,18 @@ async def change_password(
         return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
     hashed_password = await asyncio.to_thread(_hash_password, new_password)
+    password_update: Dict[str, Any] = {"login.password": hashed_password}
+    if req.e2ee is not None:
+        password_update["e2ee"] = {
+            "publicKey": req.e2ee.publicKey.strip(),
+            "encryptedPrivateKey": req.e2ee.encryptedPrivateKey.strip(),
+            "pbkdf2Salt": req.e2ee.pbkdf2Salt.strip(),
+            "keyVersion": req.e2ee.keyVersion,
+            "updatedAt": utc_now(),
+        }
     await cl_users.update_one(
         {"chatId": current_user["chatId"]},
-        {"$set": {"login.password": hashed_password}},
+        {"$set": password_update},
     )
     await clear_user_sessions(current_user["chatId"])
     return {"message": "ok"}
@@ -3542,6 +3670,19 @@ async def login(req: LoginRequest, request: Request):
     if is_purging(user):
         raise HTTPException(status_code=403, detail="Account is being deleted")
 
+    if not ((user.get("e2ee") or {}).get("publicKey")) and req.e2ee is not None:
+        e2ee_doc = {
+            "publicKey": req.e2ee.publicKey.strip(),
+            "encryptedPrivateKey": req.e2ee.encryptedPrivateKey.strip(),
+            "pbkdf2Salt": req.e2ee.pbkdf2Salt.strip(),
+            "keyVersion": req.e2ee.keyVersion,
+            "updatedAt": utc_now(),
+        }
+        await cl_users.update_one(
+            {"chatId": user["chatId"]}, {"$set": {"e2ee": e2ee_doc}}
+        )
+        user["e2ee"] = e2ee_doc
+
     token = await create_access_token({"chatId": user["chatId"]})
 
     device_name = normalize_device_name(req.deviceName) or normalize_device_name(
@@ -3563,6 +3704,7 @@ async def login(req: LoginRequest, request: Request):
             "verified": bool(user.get("verified", False)),
             "registrationDate": user.get("registrationDate"),
             "adminLevel": get_admin_level(user),
+            "e2ee": user.get("e2ee") or None,
             **privacy_settings_payload(user.get("settings")),
         },
     }
@@ -3590,9 +3732,148 @@ async def get_profile(request: Request, current_user: dict = Depends(get_current
         "verified": bool(current_user.get("verified", False)),
         "registrationDate": current_user.get("registrationDate"),
         "adminLevel": get_admin_level(current_user),
+        "e2ee": current_user.get("e2ee") or None,
         "deletionScheduledFor": deletion_scheduled_for_ms(current_user),
         **privacy_settings_payload(user_settings),
     }
+
+
+@app.get("/e2ee/me")
+@limiter.limit("60/minute")
+async def get_my_e2ee_bundle(
+    request: Request, current_user: dict = Depends(get_current_user)
+):
+    e2ee = current_user.get("e2ee") or {}
+    return {
+        "hasKeys": bool(e2ee.get("publicKey") and e2ee.get("encryptedPrivateKey")),
+        "publicKey": e2ee.get("publicKey") or None,
+        "encryptedPrivateKey": e2ee.get("encryptedPrivateKey") or None,
+        "pbkdf2Salt": e2ee.get("pbkdf2Salt") or None,
+        "keyVersion": int(e2ee.get("keyVersion") or 1),
+    }
+
+
+@app.put("/e2ee/me")
+@limiter.limit("20/minute")
+async def upload_my_e2ee_bundle(
+    request: Request,
+    payload: E2EEKeyBundleRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    uid = current_user["chatId"]
+    e2ee_doc = {
+        "publicKey": payload.publicKey.strip(),
+        "encryptedPrivateKey": payload.encryptedPrivateKey.strip(),
+        "pbkdf2Salt": payload.pbkdf2Salt.strip(),
+        "keyVersion": int(payload.keyVersion),
+        "updatedAt": utc_now(),
+    }
+    await cl_users.update_one({"chatId": uid}, {"$set": {"e2ee": e2ee_doc}})
+    return {"ok": True, "e2ee": e2ee_doc}
+
+
+@app.get("/e2ee/users/{target_chat_id}/public-key")
+@limiter.limit("120/minute")
+async def get_user_public_key(
+    request: Request,
+    target_chat_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    target = await cl_users.find_one(
+        {"chatId": target_chat_id, **NOT_PURGING},
+        {"chatId": 1, "e2ee.publicKey": 1, "e2ee.keyVersion": 1},
+    )
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    e2ee = target.get("e2ee") or {}
+    return {
+        "chatId": target_chat_id,
+        "publicKey": e2ee.get("publicKey") or None,
+        "keyVersion": int(e2ee.get("keyVersion") or 1),
+    }
+
+
+@app.get("/e2ee/groups/{chat_id}/keys")
+@limiter.limit("120/minute")
+async def get_group_e2ee_keys(
+    request: Request,
+    chat_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    my_id = current_user["chatId"]
+    chat = await cl_chats.find_one(
+        {"_id": chat_id, "chatType": "group"},
+        {"participants": 1, "e2ee": 1},
+    )
+    if not chat or my_id not in (chat.get("participants") or []):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    participants = chat.get("participants") or []
+    users = await cl_users.find(
+        {"chatId": {"$in": participants}, **NOT_PURGING},
+        {"chatId": 1, "e2ee.publicKey": 1},
+    ).to_list(len(participants))
+    member_public_keys = {
+        str(u["chatId"]): (u.get("e2ee") or {}).get("publicKey")
+        for u in users
+        if (u.get("e2ee") or {}).get("publicKey")
+    }
+    e2ee = chat.get("e2ee") or {}
+    encrypted_keys = e2ee.get("encryptedKeys") or {}
+    return {
+        "chatId": chat_id,
+        "myEncryptedKey": encrypted_keys.get(my_id),
+        "senderPublicKey": e2ee.get("senderPublicKey"),
+        "keyVersion": int(e2ee.get("keyVersion") or 1),
+        "memberPublicKeys": member_public_keys,
+        "missingMemberIds": [
+            pid
+            for pid in participants
+            if pid in member_public_keys and pid not in encrypted_keys
+        ],
+    }
+
+
+@app.put("/e2ee/groups/{chat_id}/keys")
+@limiter.limit("60/minute")
+async def set_group_e2ee_keys(
+    request: Request,
+    chat_id: str,
+    payload: GroupE2EEKeysUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    my_id = current_user["chatId"]
+    chat = await cl_chats.find_one(
+        {"_id": chat_id, "chatType": "group"},
+        {"participants": 1, "e2ee": 1},
+    )
+    if not chat or my_id not in (chat.get("participants") or []):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    participants = set(chat.get("participants") or [])
+    existing_e2ee = chat.get("e2ee") or {}
+    existing_ver = int(existing_e2ee.get("keyVersion") or 0)
+    incoming_ver = int(payload.keyVersion or 1)
+    existing_sender = str(existing_e2ee.get("senderPublicKey") or "").strip()
+    sender_public_key = payload.senderPublicKey.strip()
+    merged_keys = (
+        {}
+        if incoming_ver > existing_ver
+        else dict(existing_e2ee.get("encryptedKeys") or {})
+    )
+    for uid, wrapped in (payload.encryptedKeys or {}).items():
+        if uid in participants and isinstance(wrapped, str) and len(wrapped) <= 1024:
+            merged_keys[uid] = wrapped.strip()
+    next_e2ee = {
+        "encryptedKeys": merged_keys,
+        "senderPublicKey": sender_public_key if incoming_ver > existing_ver else (existing_sender or sender_public_key),
+        "keyVersion": max(existing_ver, incoming_ver),
+        "updatedAt": utc_now(),
+    }
+    await cl_chats.update_one({"_id": chat_id}, {"$set": {"e2ee": next_e2ee}})
+    await broadcast(
+        list(participants),
+        {"type": "group_e2ee_updated", "chatId": chat_id},
+    )
+    return {"ok": True}
 
 
 @app.get("/profile/me/privacy")
@@ -4738,6 +5019,11 @@ async def get_chat_list(
                             other_user.get("registrationDate") if other_user else None
                         )
                     ),
+                    "publicKey": (
+                        (other_user.get("e2ee") or {}).get("publicKey")
+                        if (other_user and not is_group)
+                        else None
+                    ),
                     "isGroup": is_group,
                     "createdBy": chat.get("createdBy") if is_group else None,
                 },
@@ -5462,28 +5748,44 @@ async def _user_can_access_file(user_id: str, file_id: str) -> bool:
         {"_id": 1},
     ):
         return True
-    msg = await cl_messages.find_one(
-        {
-            "$or": [
-                {"file.fileId": file_id},
-                {"file.previewFileId": file_id},
-                {"file.coverArtFileId": file_id},
-                {"file.previewUrl": url_val},
-                {"file.thumbUrl": url_val},
-                {"file.imagePreviewUrl": url_val},
-                {"file.coverArtUrl": url_val},
-            ]
-        },
-        {"chatId": 1, "senderId": 1},
+    msgs = (
+        await cl_messages.find(
+            {
+                "$or": [
+                    {"file.fileId": file_id},
+                    {"file.previewFileId": file_id},
+                    {"file.coverArtFileId": file_id},
+                    {"file.previewUrl": url_val},
+                    {"file.thumbUrl": url_val},
+                    {"file.imagePreviewUrl": url_val},
+                    {"file.coverArtUrl": url_val},
+                ]
+            },
+            {"chatId": 1, "senderId": 1},
+        )
+        .limit(50)
+        .to_list(50)
     )
-    if not msg:
+    if not msgs:
         return True
-    chat_id = str(msg.get("chatId") or "")
-    if chat_id == get_saved_messages_id(user_id) or is_official_channel_chat(chat_id):
-        return True
-    if msg.get("senderId") == user_id:
-        return True
-    chat = await cl_chats.find_one({"_id": chat_id, "participants": user_id}, {"_id": 1})
+    saved_id = get_saved_messages_id(user_id)
+    chat_ids_to_check = set()
+    for msg in msgs:
+        chat_id = str(msg.get("chatId") or "")
+        if (
+            chat_id == saved_id
+            or is_official_channel_chat(chat_id)
+            or msg.get("senderId") == user_id
+        ):
+            return True
+        if chat_id:
+            chat_ids_to_check.add(chat_id)
+    if not chat_ids_to_check:
+        return False
+    chat = await cl_chats.find_one(
+        {"_id": {"$in": list(chat_ids_to_check)}, "participants": user_id},
+        {"_id": 1},
+    )
     return bool(chat)
 
 
@@ -6266,6 +6568,7 @@ async def forward_message(
                 encryptedReasoningContent=req.encryptedReasoningContent,
                 encryptedReplyText=req.encryptedReplyText,
                 encryptedSearchSources=req.encryptedSearchSources,
+                encryptedFileKey=req.encryptedFileKey,
                 clientId=req.clientId,
             )
         ]
@@ -6606,6 +6909,7 @@ async def forward_message(
                 entry["source_chat_for_file"],
                 target_chat_id,
                 user_id,
+                encrypted_file_key=str(item.encryptedFileKey or "").strip() or None,
             )
             forwarded_msg["file"] = remapped_file
 
@@ -6807,7 +7111,7 @@ async def push_to_users(user_ids: Iterable[str], payload_for_user) -> None:
     try:
         users = await cl_users.find(
             {"chatId": {"$in": ids}, **NOT_PURGING},
-            {"chatId": 1, "settings": 1, "login.sessions": 1},
+            {"chatId": 1, "settings": 1, "login.sessions": 1, "e2ee": 1},
         ).to_list(len(ids))
         if not users:
             return
@@ -8190,6 +8494,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             pass
                     if isinstance(raw_file.get("duration"), (int, float)) and 0 < float(raw_file["duration"]) <= 86400:
                         sanitized_file["duration"] = float(raw_file["duration"])
+                    encrypted_file_key = raw_file.get("encryptedFileKey")
+                    if isinstance(encrypted_file_key, str) and len(encrypted_file_key) <= 512:
+                        sanitized_file["encryptedFileKey"] = encrypted_file_key.strip()
                     file_data = sanitized_file
                 if not isinstance(text, str):
                     continue
@@ -8253,13 +8560,16 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                                 ),
                             }
 
-                plain_message_text = decrypt_client_chat_text(text, token, chat_scope)
+                raw_mentions = (
+                    data.get("mentions") if isinstance(data.get("mentions"), list) else None
+                )
                 unread_mention_user_ids = (
                     await resolve_group_unread_mention_user_ids(
-                        plain_message_text,
+                        "",
                         chat_id,
                         chat_participants,
                         reply_to,
+                        mentioned_usernames_input=raw_mentions,
                     )
                     if (not is_saved and not is_official and is_group_chat)
                     else []
@@ -8391,14 +8701,17 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         continue
                     is_group_chat = chat_doc.get("chatType") == "group"
                     if is_group_chat:
-                        plain_edited_text = decrypt_client_chat_text(
-                            new_text, token, f"chat:{chat_id_target}"
+                        raw_mentions = (
+                            data.get("mentions")
+                            if isinstance(data.get("mentions"), list)
+                            else None
                         )
                         newly_mentioned = await resolve_group_unread_mention_user_ids(
-                            plain_edited_text,
+                            "",
                             chat_id,
                             chat_doc.get("participants", []),
                             msg.get("replyTo"),
+                            mentioned_usernames_input=raw_mentions,
                         )
                         existing_mentions = list(
                             msg.get("unreadMentionUserIds") or []

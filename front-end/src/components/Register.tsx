@@ -9,6 +9,7 @@ import { PasswordField } from './PasswordField';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { detectDeviceName } from '../utils/device';
 import { screenVariants } from '../utils/screenMotion';
+import { generateUserE2EEBundle, saveLocalE2EEIdentity } from '../utils/e2ee';
 
 interface RegisterProps {
     onRegisterSuccess: (user: User, token: string) => void;
@@ -149,6 +150,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
         setLoading(true);
 
         try {
+            const { bundle: e2eeBundle, privateKeyPkcs8Base64 } = await generateUserE2EEBundle(password);
             const response = await fetch(`${API_BASE_URL}/auth/register`, {
                 method: 'POST',
                 headers: {
@@ -161,6 +163,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
                     username: username.trim(),
                     password,
                     deviceName: detectDeviceName(),
+                    e2ee: e2eeBundle,
                 }),
             });
 
@@ -180,6 +183,7 @@ export function Register({ onRegisterSuccess, onBackToLogin }: RegisterProps) {
             }
 
             const data = await response.json();
+            saveLocalE2EEIdentity(String(data?.user?.chatId || ''), e2eeBundle.publicKey, privateKeyPkcs8Base64);
             localStorage.setItem('token', data.token);
             onRegisterSuccess(data.user, data.token);
         } catch {

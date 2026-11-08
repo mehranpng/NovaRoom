@@ -2,7 +2,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { API_BASE_URL, API_WS_URL } from '../config/api';
 import type { FileMetadata } from '../types';
-import { decryptMessageClientSide, encryptChatTextClientSide } from '../utils/e2ee';
+import { decryptMessageClientSide, encryptChatTextClientSide, extractMentionedUsernames, syncGroupE2EEKeys } from '../utils/e2ee';
 
 interface UseWebSocketProps {
     token: string | null;
@@ -18,6 +18,7 @@ interface UseWebSocketProps {
     onMessagePinned?: (chatId: string, pinnedMessage: any) => void;
     onMessageUnpinned?: (chatId: string) => void;
     onGroupBanned?: (chatId: string) => void;
+    onGroupE2EEUpdated?: (chatId: string) => void;
     onConnectionChange?: (isConnected: boolean) => void;
     onReconnectExhausted?: () => void;
     onAINewMessage?: (message: any) => void;
@@ -32,8 +33,8 @@ interface UseWebSocketProps {
 }
 
 type OutgoingEvent =
-    | { type: 'message'; chatId: string; text: string; replyToId?: string; file?: FileMetadata; clientId?: string }
-    | { type: 'edit_message'; chatId: string; messageId: string; text: string }
+    | { type: 'message'; chatId: string; text: string; replyToId?: string; file?: FileMetadata; clientId?: string; mentions?: string[] }
+    | { type: 'edit_message'; chatId: string; messageId: string; text: string; mentions?: string[] }
     | { type: 'delete_message'; chatId: string; messageId: string }
     | { type: 'seen'; chatId: string; maxMessageId: string }
     | { type: 'get_chats'; requestId: string }
@@ -77,6 +78,7 @@ export function useWebSocket({
     onMessagePinned,
     onMessageUnpinned,
     onGroupBanned,
+    onGroupE2EEUpdated,
     onConnectionChange,
     onReconnectExhausted,
     onAINewMessage,
@@ -118,6 +120,7 @@ export function useWebSocket({
     const onMessagePinnedRef = useRef(onMessagePinned);
     const onMessageUnpinnedRef = useRef(onMessageUnpinned);
     const onGroupBannedRef = useRef(onGroupBanned);
+    const onGroupE2EEUpdatedRef = useRef(onGroupE2EEUpdated);
     const onConnectionChangeRef = useRef(onConnectionChange);
     const onReconnectExhaustedRef = useRef(onReconnectExhausted);
     const onAINewMessageRef = useRef(onAINewMessage);
@@ -141,6 +144,7 @@ export function useWebSocket({
     useEffect(() => { onMessagePinnedRef.current = onMessagePinned; }, [onMessagePinned]);
     useEffect(() => { onMessageUnpinnedRef.current = onMessageUnpinned; }, [onMessageUnpinned]);
     useEffect(() => { onGroupBannedRef.current = onGroupBanned; }, [onGroupBanned]);
+    useEffect(() => { onGroupE2EEUpdatedRef.current = onGroupE2EEUpdated; }, [onGroupE2EEUpdated]);
     useEffect(() => { onConnectionChangeRef.current = onConnectionChange; }, [onConnectionChange]);
     useEffect(() => { onReconnectExhaustedRef.current = onReconnectExhausted; }, [onReconnectExhausted]);
     useEffect(() => { onAINewMessageRef.current = onAINewMessage; }, [onAINewMessage]);
@@ -253,6 +257,14 @@ export function useWebSocket({
                     if (!resolvedChatId) return;
                     const message = await decryptMessageClientSide(data.message, token, resolvedChatId);
                     onNewMessageRef.current(resolvedChatId, message);
+                    if (String(data?.message?.systemType || '') === 'member_joined' && resolvedChatId.startsWith('grp_')) {
+                        void syncGroupE2EEKeys(resolvedChatId, token);
+                    }
+                } else if (dataType === 'group_e2ee_updated') {
+                    const resolvedChatId = String(data?.chatId || '').trim();
+                    if (!resolvedChatId) return;
+                    await syncGroupE2EEKeys(resolvedChatId, token);
+                    onGroupE2EEUpdatedRef.current?.(resolvedChatId);
                 } else if (dataType === 'message_edited') {
                     const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
                     if (!resolvedChatId) return;
@@ -458,8 +470,9 @@ export function useWebSocket({
             if (typeof text !== 'string') return false;
             if (text.length > MAX_CHAT_MESSAGE_LENGTH) return false;
             if (!chatId || (!text.trim() && !file)) return false;
+            const mentions = text.trim() ? extractMentionedUsernames(text) : undefined;
             const encryptedText = text.trim() ? await encryptChatTextClientSide(text, token || '', chatId) : '';
-            return send({ type: 'message', chatId, text: encryptedText, replyToId, file, clientId });
+            return send({ type: 'message', chatId, text: encryptedText, replyToId, file, clientId, mentions });
         },
         [send, token]
     );
@@ -469,8 +482,9 @@ export function useWebSocket({
             if (typeof text !== 'string') return false;
             if (text.length > MAX_CHAT_MESSAGE_LENGTH) return false;
             if (!chatId || !messageId || !text.trim()) return false;
+            const mentions = extractMentionedUsernames(text);
             const encryptedText = await encryptChatTextClientSide(text, token || '', chatId);
-            return send({ type: 'edit_message', chatId, messageId, text: encryptedText });
+            return send({ type: 'edit_message', chatId, messageId, text: encryptedText, mentions });
         },
         [send, token]
     );

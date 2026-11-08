@@ -9,6 +9,10 @@ import hashlib
 import hmac
 import secrets
 import asyncio
+try:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+except ImportError:
+    AESGCM = None
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
@@ -98,7 +102,9 @@ DANGEROUS_EXTENSIONS = {
     ".msi",
 }
 FILE_MAGIC = b"NRF1"
+FILE_MAGIC_V2 = b"NRF2"
 FILE_NONCE_SIZE = 16
+FILE_GCM_IV_SIZE = 12
 FILE_TAG_SIZE = 16
 
 
@@ -133,9 +139,12 @@ def _xor_stream(data: bytes, key: bytes, nonce: bytes) -> bytes:
 
 
 def encrypt_file_bytes(plain: bytes) -> bytes:
-    if plain.startswith(FILE_MAGIC):
+    if plain.startswith(FILE_MAGIC) or plain.startswith(FILE_MAGIC_V2):
         return plain
     key = _file_key()
+    if AESGCM is not None:
+        iv = secrets.token_bytes(FILE_GCM_IV_SIZE)
+        return FILE_MAGIC_V2 + iv + AESGCM(key).encrypt(iv, plain, None)
     nonce = secrets.token_bytes(FILE_NONCE_SIZE)
     cipher = _xor_stream(plain, key, nonce)
     tag = hmac.new(key, nonce + cipher, hashlib.sha256).digest()[:FILE_TAG_SIZE]
@@ -143,6 +152,17 @@ def encrypt_file_bytes(plain: bytes) -> bytes:
 
 
 def decrypt_file_bytes(raw: bytes) -> bytes:
+    if raw.startswith(FILE_MAGIC_V2):
+        if AESGCM is None:
+            return b""
+        if len(raw) < len(FILE_MAGIC_V2) + FILE_GCM_IV_SIZE + FILE_TAG_SIZE:
+            return b""
+        iv = raw[len(FILE_MAGIC_V2) : len(FILE_MAGIC_V2) + FILE_GCM_IV_SIZE]
+        cipher_and_tag = raw[len(FILE_MAGIC_V2) + FILE_GCM_IV_SIZE :]
+        try:
+            return AESGCM(_file_key()).decrypt(iv, cipher_and_tag, None)
+        except Exception:
+            return b""
     if not raw.startswith(FILE_MAGIC):
         return raw
     if len(raw) < len(FILE_MAGIC) + FILE_NONCE_SIZE + FILE_TAG_SIZE:
@@ -348,7 +368,7 @@ async def read_file_content(file_id: str) -> Optional[bytes]:
     if raw is None:
         return None
 
-    if raw.startswith(FILE_MAGIC):
+    if raw.startswith(FILE_MAGIC) or raw.startswith(FILE_MAGIC_V2):
         return await asyncio.to_thread(decrypt_file_bytes, raw)
     return raw
 

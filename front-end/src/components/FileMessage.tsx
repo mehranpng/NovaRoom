@@ -94,7 +94,7 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
 
   const decodeResponseBlob = async (response: Response): Promise<Blob> => {
     const encryptedBytes = new Uint8Array(await response.arrayBuffer());
-    const plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, chatId);
+    const plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, chatId, file.encryptedFileKey);
     return new Blob([plainBytes as BlobPart], { type: file.mimeType || response.headers.get('content-type') || 'application/octet-stream' });
   };
 

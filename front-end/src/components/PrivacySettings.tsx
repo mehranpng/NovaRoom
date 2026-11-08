@@ -10,6 +10,7 @@ import { formatDeletionCountdown } from '../utils/deletionTimer';
 import { apiFetch } from '../config/api';
 import { notify } from '../utils/notificationBus';
 import { PasswordField } from './PasswordField';
+import { generateUserE2EEBundle, rewrapPrivateKeyWithNewPassword } from '../utils/e2ee';
 import type { PrivacyVisibility, User } from '../types';
 import './admin/admin.css';
 
@@ -290,9 +291,11 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
 
         setPasswordSaving(true);
         try {
+            const rewrapped = await rewrapPrivateKeyWithNewPassword(newPassword, undefined, undefined, currentUser?.chatId || '');
+            const e2ee = rewrapped || (await generateUserE2EEBundle(newPassword)).bundle;
             await apiFetch('/auth/change-password', {
                 method: 'POST',
-                body: JSON.stringify({ currentPassword, newPassword }),
+                body: JSON.stringify({ currentPassword, newPassword, e2ee }),
             });
             notify({ type: 'success', message: 'رمز عبور تغییر کرد. دوباره وارد شوید.' });
             onLogout?.();

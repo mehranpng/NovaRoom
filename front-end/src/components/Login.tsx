@@ -6,6 +6,7 @@ import { DarkModeToggle } from './DarkModeToggle';
 import { PasswordField } from './PasswordField';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { detectDeviceName } from '../utils/device';
+import { generateUserE2EEBundle, saveLocalE2EEIdentity, unlockE2EEBundleWithPassword } from '../utils/e2ee';
 
 interface LoginProps {
     onLoginSuccess: (user: User, token: string) => void;
@@ -73,10 +74,28 @@ export function Login({ onLoginSuccess }: LoginProps) {
         setLoading(true);
 
         try {
+            const { bundle: candidateBundle, privateKeyPkcs8Base64 } = await generateUserE2EEBundle(password);
             const data = await apiFetch('/auth/login', {
                 method: 'POST',
-                body: JSON.stringify({ identifier, password, deviceName: detectDeviceName() }),
+                body: JSON.stringify({
+                    identifier,
+                    password,
+                    deviceName: detectDeviceName(),
+                    e2ee: candidateBundle,
+                }),
             });
+
+            const userChatId = String(data?.user?.chatId || '');
+            const storedBundle = data?.user?.e2ee;
+            if (storedBundle?.publicKey && storedBundle.publicKey !== candidateBundle.publicKey) {
+                const unlocked = await unlockE2EEBundleWithPassword(userChatId, password, storedBundle);
+                if (!unlocked) {
+                    setError('رمز عبور با کلیدهای رمزنگاری این حساب هم‌خوانی ندارد');
+                    return;
+                }
+            } else {
+                saveLocalE2EEIdentity(userChatId, candidateBundle.publicKey, privateKeyPkcs8Base64);
+            }
 
             localStorage.setItem('token', data.token);
             onLoginSuccess(data.user, data.token);

@@ -21,7 +21,7 @@ import { cx } from './utils/cx';
 import { NotificationCenter } from './components/NotificationCenter';
 import { PwaInstallModal } from './components/PwaInstallModal';
 import { notify } from './utils/notificationBus';
-import { decryptBioClientSide, decryptMessageClientSide, encryptChatTextClientSide } from './utils/e2ee';
+import { clearLocalE2EEIdentity, decryptBioClientSide, decryptClientText, decryptMessageClientSide, encryptChatTextClientSide, loadLocalE2EEIdentity, registerPeerPublicKey } from './utils/e2ee';
 import { clearCachedTextValues, clearChatSnapshots, getChatSnapshot, saveChatSnapshot } from './utils/mediaCache';
 import { clearChessCache } from './utils/chessCache';
 import { useDarkMode, syncThemeColor } from './hooks/useDarkMode';
@@ -363,13 +363,13 @@ export function App() {
     }, [isAuthenticated, isAuthChecking]);
 
     useEffect(() => {
-        if (!isAuthenticated) return;
+        if (!isAuthenticated || !authToken) return;
         void registerServiceWorker();
         void loadNotificationPrefs();
         if (getPermission() === 'granted') {
             void ensurePushSubscription();
         }
-    }, [isAuthenticated]);
+    }, [isAuthenticated, authToken]);
 
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -674,6 +674,14 @@ export function App() {
         try {
             const data = await apiFetch('/chats');
 
+            (data as any[]).forEach((c) => {
+                const peerId = String(c?.otherUser?.chatId || '').trim();
+                const peerPublicKey = c?.otherUser?.publicKey;
+                if (peerId && peerPublicKey && !c?.otherUser?.isGroup) {
+                    registerPeerPublicKey(peerId, String(peerPublicKey));
+                }
+            });
+
             const normalized: Chat[] = await Promise.all((data as any[]).map(async (c) => {
                 const [decryptedLastMessage, decryptedPinnedMessage, decryptedOtherBio] = await Promise.all([
                     c?.lastMessage
@@ -784,6 +792,34 @@ export function App() {
         }
     }, [isAuthenticated, authToken]);
 
+    const handleGroupE2EEUpdated = useCallback(async (chatId: string) => {
+        if (!chatId) return;
+        const snapshot = messagesRef.current[chatId] || [];
+        if (snapshot.some((m) => typeof m.text === 'string' && m.text.startsWith('enc:'))) {
+            const decryptedList = await Promise.all(snapshot.map((m) => (
+                typeof m.text === 'string' && m.text.startsWith('enc:')
+                    ? decryptMessageClientSide(m, authToken || '', chatId)
+                    : Promise.resolve(m)
+            )));
+            const byId = new Map(decryptedList.map((m) => [m.id, m]));
+            setMessages((prev) => {
+                const current = prev[chatId];
+                if (!current) return prev;
+                let changed = false;
+                const next = current.map((m) => {
+                    const decrypted = byId.get(m.id);
+                    if (decrypted && decrypted.text !== m.text) {
+                        changed = true;
+                        return decrypted;
+                    }
+                    return m;
+                });
+                return changed ? { ...prev, [chatId]: next } : prev;
+            });
+        }
+        void loadChats(false);
+    }, [authToken, loadChats]);
+
     const handleLogout = useCallback(() => {
         const finalizeLogout = () => {
             localStorage.removeItem('token');
@@ -820,6 +856,7 @@ export function App() {
             void clearChatSnapshots();
             void clearCachedTextValues();
             clearChessCache();
+            clearLocalE2EEIdentity();
             navigate('/login', { replace: true });
         };
 
@@ -1707,7 +1744,7 @@ export function App() {
     
     const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen, sendTyping, sendUploadStatus, reconnectExhausted, reconnectNow, sendAIMessage, stopAIGeneration } = useWebSocket({
         token: authToken,
-        enabled: !isChessGameRoute,
+        enabled: !isChessGameRoute && isAuthenticated,
         onNewMessage: handleNewMessage,
         onMessageEdited: handleMessageEdited,
         onMessageDeleted: handleMessageDeleted,
@@ -1719,6 +1756,7 @@ export function App() {
         onMessagePinned: handleMessagePinned,
         onMessageUnpinned: handleMessageUnpinned,
         onGroupBanned: handleGroupBanned,
+        onGroupE2EEUpdated: handleGroupE2EEUpdated,
         onConnectionChange: setWsConnected,
         onReconnectExhausted: handleWsReconnectExhausted,
         onAINewMessage: handleNewAIMessage,
@@ -1743,11 +1781,20 @@ export function App() {
         }
         apiFetch('/profile/me')
             .then(async (user) => {
+                const uid = String(user?.chatId || '');
+                if (!uid || !loadLocalE2EEIdentity(uid)) {
+                    localStorage.removeItem('token');
+                    document.cookie = 'auth_token=; path=/; max-age=0; samesite=lax';
+                    setAuthToken(null);
+                    setIsAuthenticated(false);
+                    setCurrentUser(null);
+                    return;
+                }
                 if (authToken) {
                     localStorage.setItem('token', authToken);
-                    document.cookie = `auth_token=${encodeURIComponent(authToken)}; path=/; max-age=${60 * 60 * 24 * 180}; samesite=lax`;
+                    document.cookie = `auth_token=${encodeURIComponent(authToken)}; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`;
                 }
-                const decryptedBio = await decryptBioClientSide(String(user?.bio || ''), authToken || '', String(user?.chatId || ''));
+                const decryptedBio = await decryptBioClientSide(String(user?.bio || ''), authToken || '', uid);
                 setCurrentUser({ ...user, bio: decryptedBio });
                 setIsAuthenticated(true);
             })
@@ -1755,6 +1802,7 @@ export function App() {
                 if (Number(error?.status) === 401) {
                     localStorage.removeItem('token');
                     document.cookie = 'auth_token=; path=/; max-age=0; samesite=lax';
+                    clearLocalE2EEIdentity();
                     setAuthToken(null);
                     setIsAuthenticated(false);
                     setCurrentUser(null);
@@ -1767,7 +1815,7 @@ export function App() {
 
     const handleLoginSuccess = (user: User, token: string) => {
         localStorage.setItem('token', token);
-        document.cookie = `auth_token=${encodeURIComponent(token)}; path=/; max-age=${60 * 60 * 24 * 180}; samesite=lax`;
+        document.cookie = `auth_token=${encodeURIComponent(token)}; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`;
         setAuthToken(token);
         setCurrentUser(user);
         setIsAuthenticated(true);
@@ -1776,7 +1824,7 @@ export function App() {
 
     const handleRegisterSuccess = (user: User, token: string) => {
         localStorage.setItem('token', token);
-        document.cookie = `auth_token=${encodeURIComponent(token)}; path=/; max-age=${60 * 60 * 24 * 180}; samesite=lax`;
+        document.cookie = `auth_token=${encodeURIComponent(token)}; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`;
         setAuthToken(token);
         setCurrentUser(user);
         setIsAuthenticated(true);
@@ -2852,12 +2900,21 @@ export function App() {
                     const rawReplyText = String(parentMsg?.text || sourceMessage.replyTo?.text || '');
                     encryptedReplyText = await encryptChatTextClientSide(rawReplyText, authToken || '', targetChatId);
                 }
+                let encryptedFileKey: string | undefined;
+                const sourceFileKey = sourceMessage.file?.encryptedFileKey;
+                if (sourceFileKey) {
+                    const rawFileKey = await decryptClientText(String(sourceFileKey), authToken || '', `chat:${sourceChatId}`);
+                    if (rawFileKey && !rawFileKey.startsWith('enc:')) {
+                        encryptedFileKey = await encryptChatTextClientSide(rawFileKey, authToken || '', targetChatId);
+                    }
+                }
                 return {
                     messageId: id,
                     encryptedText,
                     encryptedReasoningContent,
                     encryptedReplyText,
                     encryptedSearchSources,
+                    encryptedFileKey,
                     clientId: forwardClientId,
                 };
             }));
