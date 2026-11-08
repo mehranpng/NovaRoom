@@ -131,7 +131,6 @@ export async function uploadChatFile(args: {
     const type = file.type || '';
     const isAudio = type.startsWith('audio/');
     let reported = 0;
-    let warmupTimer: number | null = null;
     const report = (next: number) => {
         const value = Math.max(reported, Math.min(100, Math.round(next)));
         if (value === reported) return;
@@ -141,15 +140,11 @@ export async function uploadChatFile(args: {
 
     try {
         if (signal.aborted) throw new Error('aborted');
+        if (!isAudio) onPhase('encrypting', 0);
         let imagePreviewBlob: Blob | null = null;
         if (type.startsWith('image/')) {
             imagePreviewBlob = await createBlurredPreview(file);
         }
-
-        onPhase('uploading', 0);
-        warmupTimer = window.setInterval(() => {
-            report(Math.min(8, reported + 1));
-        }, 400);
 
         await yieldToMain();
         const plainBytes = isAudio ? null : new Uint8Array(await file.arrayBuffer());
@@ -158,12 +153,8 @@ export async function uploadChatFile(args: {
         const fileBytes = encryptedFile?.encryptedBytes ?? null;
         if (signal.aborted) throw new Error('aborted');
 
-        if (warmupTimer != null) {
-            window.clearInterval(warmupTimer);
-            warmupTimer = null;
-        }
-
         await yieldToMain();
+        onPhase('uploading', 0);
         const formData = new FormData();
         if (isAudio) {
             formData.append('file', file, file.name);
@@ -237,17 +228,9 @@ export async function uploadChatFile(args: {
         report(100);
         void saveBlobToCache(`chat:${chatId}:file:${result.fileId}`, file);
 
-        if (!isAudio) {
-            onPhase('encrypting', 100);
-            await new Promise((resolve) => window.setTimeout(resolve, 1200));
-            if (signal.aborted) throw new Error('aborted');
-        }
-
         return result;
     } catch (error) {
         if (signal.aborted) throw new Error('aborted');
         throw error;
-    } finally {
-        if (warmupTimer != null) window.clearInterval(warmupTimer);
     }
 }

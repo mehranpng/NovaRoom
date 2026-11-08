@@ -2559,6 +2559,7 @@ export function App() {
                 duration: attachment.duration,
                 localUrl: URL.createObjectURL(attachment.file),
             } : undefined;
+            const initialUploadPhase = attachment && !attachment.file.type.startsWith('audio/') ? 'encrypting' : 'uploading';
             const optimistic: Message = {
                 id: clientId,
                 clientId,
@@ -2571,7 +2572,7 @@ export function App() {
                 edited: false,
                 reactions: [],
                 file: optimisticFile,
-                upload: attachment ? { phase: 'uploading', progress: 0 } : undefined,
+                upload: attachment ? { phase: initialUploadPhase, progress: 0 } : undefined,
                 replyTo: replySrc ? { id: replySrc.id, senderId: replySrc.senderId, text: replySrc.text } : undefined,
             };
             setMessages((prev) => {
@@ -2595,7 +2596,7 @@ export function App() {
                     }
                     : chat
             )));
-            if (attachment) setUploadProgress(clientId, { phase: 'uploading', progress: 0 });
+            if (attachment) setUploadProgress(clientId, { phase: initialUploadPhase, progress: 0 });
             return optimisticFile?.localUrl;
         };
 
