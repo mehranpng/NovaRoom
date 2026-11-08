@@ -3111,13 +3111,15 @@ html.keyboard-open .chat-room__input-area {
     border-radius: 9999px;
     border: none;
     cursor: pointer;
+    font-family: inherit;
     transition: transform 0.15s var(--motion-ease-standard), background 0.15s ease;
 }
 
 .chat-room__send-btn--active {
     background: linear-gradient(145deg, var(--accent-primary), var(--accent-hover));
+    border: 1px solid var(--glass-border);
     color: #ffffff;
-    box-shadow: none;
+    box-shadow: var(--glass-shadow), var(--glass-specular);
 }
 
 .chat-room__send-btn--active:hover {
@@ -3136,7 +3138,7 @@ html.keyboard-open .chat-room__input-area {
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--glass-border);
-    box-shadow: none;
+    box-shadow: var(--glass-shadow), var(--glass-specular);
     color: var(--text-tertiary);
     cursor: default;
 }

@@ -7141,7 +7141,6 @@ async def push_to_users(user_ids: Iterable[str], payload_for_user) -> None:
             if not is_chess and not settings["enabled"]:
                 continue
             payload = dict(payload)
-            payload["silent"] = not settings["sound"]
             valid_hashes = {
                 session.get("tokenHash") for session in _normalize_session_list(user)
             }
