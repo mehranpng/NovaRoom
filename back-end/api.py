@@ -459,6 +459,32 @@ def is_ciphertext(value: Any) -> bool:
     )
 
 
+def _ciphertext_payload_length(value: str) -> int:
+    payload = value
+    for prefix in (ENC_PREFIX, ENC_PREFIX_V2, "enc:v2:"):
+        if value.startswith(prefix):
+            payload = value[len(prefix):]
+            break
+    try:
+        padded = payload + "=" * (-len(payload) % 4)
+        return len(base64.urlsafe_b64decode(padded.encode("ascii")))
+    except Exception:
+        return -1
+
+
+def message_text_within_limit(value: Any, max_plain_chars: int) -> bool:
+    if not isinstance(value, str):
+        return False
+    if not is_ciphertext(value):
+        return len(value) <= max_plain_chars
+    max_bytes = max_plain_chars * 4
+    max_cipher_chars = ((max_bytes + 64 + 2) // 3) * 4 + 16
+    if len(value) > max_cipher_chars:
+        return False
+    decoded_length = _ciphertext_payload_length(value)
+    return 0 <= decoded_length <= max_bytes + 64
+
+
 def decrypt_with_fallback(cipher: Any, token: str, scope: str) -> str:
     if not _is_server_managed_scope(scope):
         value = str(cipher or "")
@@ -6775,6 +6801,14 @@ async def forward_message(
                 else []
             )
 
+        provided_encrypted_text = (
+            item.encryptedText.strip() if isinstance(item.encryptedText, str) else ""
+        )
+        if provided_encrypted_text and not message_text_within_limit(
+            provided_encrypted_text, MAX_CHAT_MESSAGE_LENGTH
+        ):
+            continue
+
         plain_for_reply = message_text or (
             str((file_data or {}).get("fileName") or "") if file_data else ""
         )
@@ -8176,7 +8210,7 @@ async def handle_ai_message(
         if event_queue is not None:
             await event_queue.put(None)
         return
-    if len(text) > MAX_AI_MESSAGE_LENGTH:
+    if not message_text_within_limit(text, MAX_AI_MESSAGE_LENGTH):
         if event_queue is not None:
             await event_queue.put(None)
         return
@@ -8499,7 +8533,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     file_data = sanitized_file
                 if not isinstance(text, str):
                     continue
-                if len(text) > MAX_CHAT_MESSAGE_LENGTH:
+                if not message_text_within_limit(text, MAX_CHAT_MESSAGE_LENGTH):
                     continue
 
                 if not chat_id_target or (not text.strip() and not file_data):
@@ -8672,7 +8706,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     or not new_text.strip()
                 ):
                     continue
-                if len(new_text) > MAX_CHAT_MESSAGE_LENGTH:
+                if not message_text_within_limit(new_text, MAX_CHAT_MESSAGE_LENGTH):
                     continue
 
                 oid = await try_object_id(message_id)

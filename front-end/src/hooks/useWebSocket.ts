@@ -53,6 +53,7 @@ const WS_RECONNECT_DELAY_MS = 1500;
 const WS_PONG_TIMEOUT_MS = 45000;
 const WS_MAX_RECONNECT_ATTEMPTS = 8;
 const MAX_CHAT_MESSAGE_LENGTH = 6000;
+const MAX_AI_MESSAGE_LENGTH = 3000;
 const eventTypeAliases: Record<string, string> = {
     newMessage: 'new_message',
     messageEdited: 'message_edited',
@@ -569,7 +570,7 @@ export function useWebSocket({
             useWebSearch = false,
             attachment: { tempFileId: string; fileName: string; fileSize: number; mimeType: string; isImage: boolean } | null = null,
         ) => {
-            if (typeof text !== 'string' || (!text.trim() && !attachment) || text.length > 3000) return false;
+            if (typeof text !== 'string' || (!text.trim() && !attachment) || text.length > MAX_AI_MESSAGE_LENGTH) return false;
             if (!aiChatId || !token) return false;
             aiAbortControllerRef.current?.abort();
             const controller = new AbortController();
