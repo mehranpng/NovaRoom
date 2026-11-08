@@ -10,7 +10,7 @@ import { autoDownloadCookieKeys, isAutoDownloadEnabled } from '../utils/autoDown
 import { isLocalBlobUrl, localBlobUrls } from '../utils/chatFileUploader';
 import { useUploadProgress } from '../utils/uploadProgressStore';
 
-interface FileMessageProps { file: FileMetadata; token: string; chatId: string; uploading?: boolean; uploadId?: string; hideCancel?: boolean; onCancelUpload?: () => void; onMediaLoad?: () => void; onMediaError?: () => void; onImageClick?: (imageUrl: string, file: FileMetadata) => void; onVideoClick?: (videoUrl: string, file: FileMetadata) => void; }
+interface FileMessageProps { file: FileMetadata; token: string; chatId: string; uploading?: boolean; uploadId?: string; hideCancel?: boolean; overlayMeta?: React.ReactNode; flushBottom?: boolean; onCancelUpload?: () => void; onMediaLoad?: () => void; onMediaError?: () => void; onImageClick?: (imageUrl: string, file: FileMetadata) => void; onVideoClick?: (videoUrl: string, file: FileMetadata) => void; }
 type DownloadState = 'idle' | 'downloading' | 'decrypting' | 'done' | 'error';
 type DownloadSubscriber = (state: DownloadState, progress: number) => void;
 type DownloadTask = {
@@ -66,7 +66,7 @@ const observeVisibility = (el: Element, cb: (visible: boolean) => void) => {
   };
 };
 
-export function FileMessage({ file, token, chatId, uploading = false, uploadId = '', hideCancel = false, onCancelUpload, onMediaLoad, onMediaError, onImageClick, onVideoClick }: FileMessageProps) {
+export function FileMessage({ file, token, chatId, uploading = false, uploadId = '', hideCancel = false, overlayMeta, flushBottom = false, onCancelUpload, onMediaLoad, onMediaError, onImageClick, onVideoClick }: FileMessageProps) {
   const upload = useUploadProgress(uploading ? uploadId : '');
   const [mediaUrl, setMediaUrl] = useState<string | null>(file.localUrl ?? null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -401,7 +401,7 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
 
   return <div className="file-message" ref={rootRef}>
     {(isImage || isVideo) && (
-      <div className="file-image-preview" style={containerStyle} onClick={(e) => {
+      <div className={flushBottom ? 'file-image-preview file-image-preview--flush-bottom' : 'file-image-preview'} style={containerStyle} onClick={(e) => {
         e.stopPropagation();
         if (uploading) return;
         if (!mediaUrl && (downloadState === 'decrypting' || downloadState === 'downloading')) {
@@ -421,6 +421,7 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
             </div>
           </>)}
         {uploading && <div className="manual-download-wrap manual-download-wrap--center">{uploadActionButton()}</div>}
+        {overlayMeta}
       </div>
     )}
 

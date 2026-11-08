@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Copy, Eye, MoreVertical, Pencil, Smile, Trash2, X, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload, Download, Pin, AtSign, Heart, Bell, BellOff, BellMinus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, Eye, MoreVertical, Pencil, Trash2, X, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload, Download, Pin, AtSign, Heart, Bell, BellOff, BellMinus } from 'lucide-react';
 import { AnimatePresence, motion } from "framer-motion";
 import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata, PendingAttachment, PendingForwardDraft, PinnedMessage, GroupPreview } from '../types';
 import { Avatar } from './Avatar';
@@ -23,6 +23,8 @@ import { formatDayLabel, formatLastSeen, formatMessageTime, messageDayKey, resol
 import { copyText } from '../utils/clipboard';
 import { triggerHaptic } from '../utils/haptics';
 import { updateSearchPillsFade } from '../utils/searchPillsFade';
+import { animateMessageDisintegration } from '../utils/disintegrateMessage';
+import { isVisualEffectsEnabled } from '../hooks/useDarkMode';
 import { getChatNotifyMode, setChatNotifyMode, useNotificationPrefs } from '../utils/pushNotifications';
 import { ChatMessageItem, type ReactionEntry } from './ChatMessageItem';
 import { ChatComposer, type ChatComposerSendPayload } from './ChatComposer';
@@ -357,6 +359,9 @@ export function ChatRoom({
     const [replyTo, setReplyTo] = useState<MessageReplyType | null>(null);
     const [messagesScrolled, setMessagesScrolled] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [floatingDateLabel, setFloatingDateLabel] = useState<string | null>(null);
+    const [floatingDateVisible, setFloatingDateVisible] = useState(false);
+    const floatingDateTimerRef = useRef<number | null>(null);
 
     const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number; isFileDownloaded?: boolean }>(null);
     const [reactionMenu, setReactionMenu] = useState<null | { id: string; top: number; left: number }>(null);
@@ -461,6 +466,23 @@ export function ChatRoom({
     }, [forceContactInfoOpen, chatId, isOfficialChannel]);
 
     const userHasScrolledRef = useRef(false);
+
+    useEffect(() => {
+        return () => {
+            if (floatingDateTimerRef.current) {
+                window.clearTimeout(floatingDateTimerRef.current);
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        setFloatingDateLabel(null);
+        setFloatingDateVisible(false);
+        if (floatingDateTimerRef.current) {
+            window.clearTimeout(floatingDateTimerRef.current);
+            floatingDateTimerRef.current = null;
+        }
+    }, [chatId]);
 
     
     const [unreadAnchorId, setUnreadAnchorId] = useState<string | null>(initialFirstUnreadId);
@@ -2169,6 +2191,38 @@ export function ChatRoom({
 
         saveScroll(chatId);
 
+        const dateSeparators = container.querySelectorAll<HTMLElement>('.chat-room__date-separator[data-date-label]');
+        if (dateSeparators.length > 0) {
+            const floatingTop = pinnedMessage ? 120 : 72;
+            const containerRect = container.getBoundingClientRect();
+            let currentLabel: string | null = dateSeparators[0].getAttribute('data-date-label');
+            dateSeparators.forEach((separator) => {
+                const rect = separator.getBoundingClientRect();
+                const offsetTop = rect.top - containerRect.top;
+                if (offsetTop <= floatingTop) {
+                    currentLabel = separator.getAttribute('data-date-label') || currentLabel;
+                }
+                if (offsetTop >= -8 && offsetTop <= floatingTop + 32) {
+                    separator.classList.add('chat-room__date-separator--hidden');
+                } else {
+                    separator.classList.remove('chat-room__date-separator--hidden');
+                }
+            });
+            if (currentLabel) {
+                setFloatingDateLabel(currentLabel);
+                setFloatingDateVisible(true);
+                if (floatingDateTimerRef.current) {
+                    window.clearTimeout(floatingDateTimerRef.current);
+                }
+                floatingDateTimerRef.current = window.setTimeout(() => {
+                    setFloatingDateVisible(false);
+                    container.querySelectorAll<HTMLElement>('.chat-room__date-separator--hidden').forEach((separator) => {
+                        separator.classList.remove('chat-room__date-separator--hidden');
+                    });
+                }, 1100);
+            }
+        }
+
         if (
             distanceToBottom > 12
             && distanceToBottom <= 96
@@ -2223,9 +2277,10 @@ export function ChatRoom({
             const next = idx < messages.length - 1 ? messages[idx + 1] : null;
             const meta = readMeta(m);
             const isMine = m.senderId === currentUserId;
-            const prevSameSender = Boolean(prev) && prev!.senderId === m.senderId;
-            const nextSameSender = Boolean(next) && next!.senderId === m.senderId;
             const dayBreak = !prev || readMeta(prev).dayKey !== meta.dayKey;
+            const nextDayBreak = !next || readMeta(next).dayKey !== meta.dayKey;
+            const prevSameSender = Boolean(prev) && !dayBreak && !prev!.systemType && !m.systemType && prev!.senderId === m.senderId;
+            const nextSameSender = Boolean(next) && !nextDayBreak && !next!.systemType && !m.systemType && next!.senderId === m.senderId;
             const dayLabel = dayBreak ? formatDayLabel(m.timestamp) : '';
             return {
                 m,
@@ -2257,11 +2312,11 @@ export function ChatRoom({
     const typingStatusLabel = useMemo(() => {
         if (isContactBlocked || isOfficialChannel) return '';
         if (otherTypingUserIds.length === 0) return '';
-        if (!isGroupChat) return 'درحال تایپ...';
+        if (!isGroupChat) return 'درحال تایپ';
         if (otherTypingUserIds.length === 1) {
             const uid = otherTypingUserIds[0];
             const name = groupMembers[uid]?.name || 'یک کاربر';
-            return `${name} درحال تایپ...`;
+            return `${name} درحال تایپ`;
         }
         return `${toPersianDigits(otherTypingUserIds.length)} کاربر درحال تایپ هستند`;
     }, [otherTypingUserIds, isGroupChat, groupMembers, isContactBlocked]);
@@ -2269,11 +2324,11 @@ export function ChatRoom({
     const uploadingStatusLabel = useMemo(() => {
         if (isContactBlocked || isOfficialChannel) return '';
         if (otherUploadingUserIds.length === 0) return '';
-        if (!isGroupChat) return 'درحال آپلود فایل...';
+        if (!isGroupChat) return 'درحال آپلود فایل';
         if (otherUploadingUserIds.length === 1) {
             const uid = otherUploadingUserIds[0];
             const name = groupMembers[uid]?.name || 'یک کاربر';
-            return `${name} درحال آپلود فایل...`;
+            return `${name} درحال آپلود فایل`;
         }
         return `${toPersianDigits(otherUploadingUserIds.length)} کاربر درحال آپلود فایل هستند`;
     }, [otherUploadingUserIds, isGroupChat, groupMembers, isContactBlocked]);
@@ -2596,10 +2651,18 @@ export function ChatRoom({
     };
 
     const confirmDeleteMessage = () => {
-        if (confirmDeleteMsg) {
-            onDeleteMessage(confirmDeleteMsg);
-            cleanupMessageCache(confirmDeleteMsg);
-            setConfirmDeleteMsg(null);
+        if (!confirmDeleteMsg) return;
+        const targetId = confirmDeleteMsg;
+        setConfirmDeleteMsg(null);
+        const el = messageElsRef.current.get(targetId);
+        const runDelete = () => {
+            onDeleteMessage(targetId);
+            cleanupMessageCache(targetId);
+        };
+        if (el && isVisualEffectsEnabled()) {
+            void animateMessageDisintegration([el]).then(runDelete);
+        } else {
+            runDelete();
         }
     };
 
@@ -3037,7 +3100,14 @@ export function ChatRoom({
                                     {isOfficialChannel ? (
                                         <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(chatStats?.totalMembers ?? 0)} عضو</span>
                                     ) : headerActivityLabel ? (
-                                        <span className="status-online-text">{headerActivityLabel}</span>
+                                        <span className="status-online-text chat-header-typing" dir="rtl">
+                                            <span>{headerActivityLabel}</span>
+                                            <span className="chat-header-typing__dots" aria-hidden="true">
+                                                <span className="chat-header-typing__dot" />
+                                                <span className="chat-header-typing__dot" />
+                                                <span className="chat-header-typing__dot" />
+                                            </span>
+                                        </span>
                                     ) : (isGroupChat ? (
                                         <span style={{ direction: 'rtl', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                             <span className="status-online-text">{toPersianDigits(Math.max(1, chatStats?.onlineMembers ?? 1))} آنلاین</span>
@@ -3228,43 +3298,50 @@ export function ChatRoom({
                 </div>
             )}
 
-            <div
-                className="chat-room__messages"
-                ref={messagesContainerRef}
-                onScroll={onMessagesScroll}
-                onPlayCapture={(e) => {
-                    const targetVideo = e.target instanceof HTMLVideoElement ? e.target : null;
-                    if (!targetVideo) return;
-                    const container = messagesContainerRef.current;
-                    if (!container) return;
-                    container.querySelectorAll('video').forEach((videoEl) => {
-                        if (videoEl !== targetVideo && !videoEl.paused) videoEl.pause();
-                    });
-                }}
-                style={{
-                    overflowX: 'hidden',
-                    overflowY: replySwipeLocked ? 'hidden' : 'auto',
-                    paddingBottom: composerHeight + 26,
-                }}
-            >
-                <div className="chat-room__messages-inner">
-                    <div ref={topSentinelRef} />
-                    {!loading && (
-                        <div className="messages-list-visible-wrap" style={{ display: 'contents', visibility: chatContentReady ? 'visible' : 'hidden' }}>
-                            {(loadingOlderMessages || localLoadingOlder) && (
-                                <div className="chat-range-loader-wrap chat-range-loader-wrap--top">
-                                    <span className="chat-range-loader chat-range-loader--active" />
-                                </div>
-                            )}
-                            {renderedMessageItems}
-                            {(loadingNewerMessages || localLoadingNewer) && (
-                                <div className="chat-range-loader-wrap chat-range-loader-wrap--bottom">
-                                    <span className="chat-range-loader chat-range-loader--active" />
-                                </div>
-                            )}
-                        </div>
-                    )}
-                    <div ref={messagesEndRef} />
+            <div className="chat-room__messages-Viewport">
+                {floatingDateLabel && (
+                    <div className={`chat-room__floating-date${floatingDateVisible ? ' chat-room__floating-date--visible' : ''}`}>
+                        <span>{floatingDateLabel}</span>
+                    </div>
+                )}
+                <div
+                    className="chat-room__messages"
+                    ref={messagesContainerRef}
+                    onScroll={onMessagesScroll}
+                    onPlayCapture={(e) => {
+                        const targetVideo = e.target instanceof HTMLVideoElement ? e.target : null;
+                        if (!targetVideo) return;
+                        const container = messagesContainerRef.current;
+                        if (!container) return;
+                        container.querySelectorAll('video').forEach((videoEl) => {
+                            if (videoEl !== targetVideo && !videoEl.paused) videoEl.pause();
+                        });
+                    }}
+                    style={{
+                        overflowX: 'hidden',
+                        overflowY: replySwipeLocked ? 'hidden' : 'auto',
+                        paddingBottom: composerHeight + 26,
+                    }}
+                >
+                    <div className="chat-room__messages-inner">
+                        <div ref={topSentinelRef} />
+                        {!loading && (
+                            <div className="messages-list-visible-wrap" style={{ display: 'contents', visibility: chatContentReady ? 'visible' : 'hidden' }}>
+                                {(loadingOlderMessages || localLoadingOlder) && (
+                                    <div className="chat-range-loader-wrap chat-range-loader-wrap--top">
+                                        <span className="chat-range-loader chat-range-loader--active" />
+                                    </div>
+                                )}
+                                {renderedMessageItems}
+                                {(loadingNewerMessages || localLoadingNewer) && (
+                                    <div className="chat-range-loader-wrap chat-range-loader-wrap--bottom">
+                                        <span className="chat-range-loader chat-range-loader--active" />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        <div ref={messagesEndRef} />
+                    </div>
                 </div>
             </div>
 
@@ -3301,98 +3378,135 @@ export function ChatRoom({
                 const showDownloadAction = Boolean(activeMsg.file?.fileId && msgMenu.isFileDownloaded);
                 const canTogglePin = pinnedMessage?.id === activeMsg.id
                     || (isOfficialChannel ? isVerifiedUser : !isGroupChat || canManageGroup);
+                const seenRows = seenByUsersByMessage[activeMsg.id] || [];
+                const menuReactions = (optimisticReactions[activeMsg.id] ?? activeMsg.reactions ?? []) as unknown as ReactionEntry[];
+                const myMenuReaction = menuReactions.find((r) => (r.userIds || []).includes(currentUserId));
+                const roomWidth = roomRef.current?.getBoundingClientRect().width ?? window.innerWidth;
+                const pickerOverflow = Math.max(0, msgMenu.left + 274 - (roomWidth - 8));
 
                 return (
-                    <div ref={msgMenuRef} className="popover popover--mini"
-                        style={{ top: msgMenu.top, left: msgMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
+                    <div ref={msgMenuRef} className="msg-menu-anchor"
+                        style={{ top: msgMenu.top, left: msgMenu.left }}
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => e.stopPropagation()}>
-                        {showSeenByAction && (
-                            <button className="popover__item" onClick={() => {
-                                setSeenByMenu({ id: activeMsg.id, top: msgMenu.top, left: msgMenu.left });
-                                setMsgMenu(null);
-                            }} type="button">
-                                <Eye size={16} />دیده شده توسط
-                            </button>
-                        )}
-                        <button className="popover__item" onClick={() => { const el = messageElsRef.current.get(activeMsg.id); if (el) openReactionMenu(activeMsg.id, el, { top: msgMenu.top, left: msgMenu.left }); }} type="button">
-                            <Smile size={16} />واکنش
-                        </button>
-                        {canReplyInMessageMenu && (
-                            <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><CornerUpRight size={16} />پاسخ</button>
-                        )}
-                        {canTogglePin && (
+                        <div className="msg-menu-picker" style={{ left: -pickerOverflow }}>
+                            <ReactionPicker
+                                messageId={activeMsg.id}
+                                currentReaction={myMenuReaction?.emoji}
+                                onReact={(id, emoji) => { void handleReact(id, emoji); }}
+                                onDeleteReaction={(id) => { void handleDeleteReaction(id); }}
+                                onClose={() => setMsgMenu(null)}
+                            />
+                        </div>
+                        <div className="popover popover--mini msg-menu__panel">
+                            {showSeenByAction && (
+                                <button className="popover__item popover__item--seen" onClick={() => {
+                                    loadSeenBy(activeMsg.id);
+                                    setSeenByMenu({ id: activeMsg.id, top: msgMenu.top, left: msgMenu.left });
+                                    setMsgMenu(null);
+                                }} type="button">
+                                    <span className="popover__seen-label">
+                                        <Eye size={16} />
+                                        <span>
+                                            دیده شده توسط
+                                            {seenRows.length > 0 ? ` ${toPersianDigits(seenRows.length)} نفر` : ''}
+                                        </span>
+                                    </span>
+                                    {seenRows.length > 0 && (
+                                        <span className="popover__seen-avatars">
+                                            {seenRows.slice(0, 3).map((u) => (
+                                                <Avatar key={u.chatId} name={u.name || u.username || ''} src={u.avatar || ''} size="xxs" />
+                                            ))}
+                                        </span>
+                                    )}
+                                </button>
+                            )}
+                            {canReplyInMessageMenu && (
+                                <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><CornerUpRight size={16} />پاسخ</button>
+                            )}
+                            {canTogglePin && (
+                                <button
+                                    className="popover__item"
+                                    onClick={() => {
+                                        const targetId = activeMsg.id;
+                                        setMsgMenu(null);
+                                        setConfirmPin({
+                                            action: pinnedMessage?.id === targetId ? 'unpin' : 'pin',
+                                            messageId: targetId,
+                                        });
+                                    }}
+                                    type="button"
+                                >
+                                    <Pin size={16} />
+                                    {pinnedMessage?.id === activeMsg.id ? 'برداشتن سنجاق' : 'سنجاق کردن پیام'}
+                                </button>
+                            )}
+                            <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><CornerUpLeft size={16} />فوروارد</button>
                             <button
                                 className="popover__item"
                                 onClick={() => {
-                                    const targetId = activeMsg.id;
                                     setMsgMenu(null);
-                                    setConfirmPin({
-                                        action: pinnedMessage?.id === targetId ? 'unpin' : 'pin',
-                                        messageId: targetId,
-                                    });
+                                    setSelectedMessageIds([activeMsg.id]);
                                 }}
                                 type="button"
                             >
-                                <Pin size={16} />
-                                {pinnedMessage?.id === activeMsg.id ? 'برداشتن سنجاق' : 'سنجاق کردن پیام'}
+                                <Check size={16} />
+                                انتخاب
                             </button>
-                        )}
-                        <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><CornerUpLeft size={16} />فوروارد</button>
-                        <button
-                            className="popover__item"
-                            onClick={() => {
-                                setMsgMenu(null);
-                                setSelectedMessageIds([activeMsg.id]);
-                            }}
-                            type="button"
-                        >
-                            <Check size={16} />
-                            انتخاب
-                        </button>
-                        {activeMsg.senderId === currentUserId && !activeMsg.forwardedFrom && !isChessMsg && (
-                            <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
-                        )}
-                        {showCopyAction && (<button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><Copy size={16} />کپی</button>)}
-                        {showDownloadAction && (<button className="popover__item" onClick={() => doDownloadMessageFile(activeMsg)} type="button"><Download size={16} />دانلود</button>)}
-                        {canDeleteActiveMsg && (
-                            <button className="popover__item popover__item--danger" onClick={() => doDeleteMessage(activeMsg.id)} type="button">
-                                <Trash2 size={16} />حذف
-                            </button>
-                        )}
+                            {activeMsg.senderId === currentUserId && !activeMsg.forwardedFrom && !isChessMsg && (
+                                <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
+                            )}
+                            {showCopyAction && (<button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><Copy size={16} />کپی</button>)}
+                            {showDownloadAction && (<button className="popover__item" onClick={() => doDownloadMessageFile(activeMsg)} type="button"><Download size={16} />دانلود</button>)}
+                            {canDeleteActiveMsg && (
+                                <button className="popover__item popover__item--danger" onClick={() => doDeleteMessage(activeMsg.id)} type="button">
+                                    <Trash2 size={16} />حذف
+                                </button>
+                            )}
+                        </div>
                     </div>
                 );
             })()}
 
             {seenByMenu && (() => {
+                const seenMsg = messagesById.get(seenByMenu.id);
                 const rows = seenByUsersByMessage[seenByMenu.id] || [];
+                const menuReactions = (optimisticReactions[seenByMenu.id] ?? seenMsg?.reactions ?? []) as unknown as ReactionEntry[];
+                const emojiForUser = (userId: string) =>
+                    menuReactions.find((r) => (r.userIds || []).includes(userId))?.emoji || '';
 
                 return (
-                    <div ref={seenByMenuRef} className="popover popover--mini"
+                    <div ref={seenByMenuRef} className="popover popover--mini seen-by-menu"
                         style={{ top: seenByMenu.top, left: seenByMenu.left, right: 'auto', position: 'absolute', zIndex: 52 }}
                         onClick={(e) => e.stopPropagation()}>
-                        <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)' }}>
-                            دیده شده توسط ({toPersianDigits(rows.length)})
+                        <div className="seen-by-menu__header">
+                            دیده شده توسط {toPersianDigits(rows.length)} نفر
                         </div>
-                        <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                        <div className="seen-by-menu__body">
                             {rows.length === 0 ? (
-                                <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>
+                                <div className="seen-by-menu__empty">
                                     هنوز کسی این پیام را ندیده است
                                 </div>
                             ) : (
-                                rows.map((u) => (
-                                    <button key={u.chatId} className="popover__item" type="button"
-                                        onClick={() => {
-                                            setSeenByMenu(null);
-                                            openMember(u.chatId);
-                                        }}>
-                                        <Avatar name={u.name || u.username || ''} src={u.avatar || ''} size="sm" />
-                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                            <span>{u.name || u.username || u.chatId}</span>
-                                            {resolveVerified(u.verified) && <VerifiedBadge size={13} />}
-                                        </span>
-                                    </button>
-                                ))
+                                rows.map((u) => {
+                                    const emoji = emojiForUser(u.chatId);
+                                    return (
+                                        <button key={u.chatId} className="seen-by-menu__row" type="button"
+                                            onClick={() => {
+                                                setSeenByMenu(null);
+                                                openMember(u.chatId);
+                                            }}>
+                                            <Avatar name={u.name || u.username || ''} src={u.avatar || ''} size="xs" />
+                                            <span className="seen-by-menu__name">
+                                                <span>{u.name || u.username || u.chatId}</span>
+                                                {resolveVerified(u.verified) && <VerifiedBadge size={13} />}
+                                            </span>
+                                            {emoji
+                                                ? <span className="seen-by-menu__emoji">{emoji}</span>
+                                                : <Check size={15} className="seen-by-menu__check" />}
+                                        </button>
+                                    );
+                                })
                             )}
                         </div>
                     </div>
@@ -3445,8 +3559,8 @@ export function ChatRoom({
                 }
 
                 return (
-                    <div ref={reactionMenuRef}
-                        style={{ top: reactionMenu.top, left: reactionMenu.left, right: 'auto', position: 'absolute', zIndex: 50 }}
+                    <div ref={reactionMenuRef} className="reaction-menu-anchor"
+                        style={{ top: reactionMenu.top, left: reactionMenu.left }}
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => e.stopPropagation()}>
                         <ReactionPicker
@@ -3458,34 +3572,29 @@ export function ChatRoom({
                         />
 
                         {isGroupChat && !isOfficialChannel && reactionUsersList.length > 0 && (
-                            <div style={{ marginTop: 6, background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 12, overflow: 'hidden', minWidth: 220, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
-                                <div style={{ padding: '7px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)', fontFamily: 'Vazir, sans-serif' }}>
+                            <div className="popover popover--mini reaction-menu__list">
+                                <div className="reaction-menu__header">
                                     واکنش‌ها
                                     ({toPersianDigits(reactionUsersList.length)})
                                 </div>
-                                <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                                <div className="reaction-menu__body">
                                     {reactionUsersList.map((ru, i) => (
-                                        <div key={i}
+                                        <button key={i}
+                                            className="reaction-menu__row"
+                                            type="button"
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 setReactionMenu(null);
                                                 openMember(ru.userId);
                                             }}
-                                            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderTop: i > 0 ? '1px solid var(--border-primary)' : 'none', cursor: 'pointer', transition: 'background 0.12s' }}
-                                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary, rgba(0,0,0,0.04))')}
-                                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                                         >
-                                            <div style={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
-                                                <Avatar name={ru.name} size="xs" src={ru.avatar} />
-                                            </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
-                                                <span style={{ fontSize: 13, color: 'var(--text-primary)', fontFamily: 'Vazir, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                    {ru.name}
-                                                </span>
+                                            <Avatar name={ru.name} size="xs" src={ru.avatar} />
+                                            <span className="reaction-menu__name">
+                                                <span>{ru.name}</span>
                                                 {ru.verified && <VerifiedBadge size={13} />}
-                                            </div>
-                                            <span style={{ fontSize: 18, flexShrink: 0, fontFamily: "'AppleEmoji', 'Vazir', sans-serif" }}>{ru.emoji}</span>
-                                        </div>
+                                            </span>
+                                            <span className="reaction-menu__emoji">{ru.emoji}</span>
+                                        </button>
                                     ))}
                                 </div>
                             </div>
@@ -3635,15 +3744,25 @@ export function ChatRoom({
                             setConfirmDeleteSelected(false);
                             const idsToDelete = [...deletableSelectedIds];
                             setSelectedMessageIds([]);
-                            for (const id of idsToDelete) {
-                                cleanupMessageCache(id);
-                            }
-                            if (onDeleteMessages) {
-                                void onDeleteMessages(idsToDelete);
-                            } else {
+                            const els = idsToDelete
+                                .map((id) => messageElsRef.current.get(id))
+                                .filter((el): el is HTMLDivElement => Boolean(el));
+                            const runDelete = () => {
                                 for (const id of idsToDelete) {
-                                    onDeleteMessage(id);
+                                    cleanupMessageCache(id);
                                 }
+                                if (onDeleteMessages) {
+                                    void onDeleteMessages(idsToDelete);
+                                } else {
+                                    for (const id of idsToDelete) {
+                                        onDeleteMessage(id);
+                                    }
+                                }
+                            };
+                            if (els.length > 0 && isVisualEffectsEnabled()) {
+                                void animateMessageDisintegration(els).then(runDelete);
+                            } else {
+                                runDelete();
                             }
                         }}
                     />

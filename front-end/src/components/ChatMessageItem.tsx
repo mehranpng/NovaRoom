@@ -8,6 +8,7 @@ import { Avatar } from './Avatar';
 import { FileMessage } from './FileMessage';
 import { ChessInviteCard } from './chess/ChessInviteCard';
 import { isLtrText, toPersianDigits } from '../utils/format';
+import { isImageFile } from '../utils/fileUtils';
 import { triggerHaptic } from '../utils/haptics';
 import { copyText } from '../utils/clipboard';
 import { cancelUpload } from '../utils/chatFileUploader';
@@ -355,6 +356,93 @@ function chatMessageItemPropsEqual(prev: ChatMessageItemProps, next: ChatMessage
     return keys.every((key) => key === 'message' || Object.is(prev[key], next[key]));
 }
 
+function MessageDeliveryIcon({ status }: { status: 'sending' | 'sent' | 'seen' }) {
+    if (status === 'sending') {
+        return (
+            <span className="message-status-icon message-status-icon--sending" aria-label="در حال ارسال">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                    <circle cx="6" cy="6" r="4.75" stroke="currentColor" strokeWidth="1.25" opacity="0.9" />
+                    <line x1="6" y1="6" x2="6" y2="3.3" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" className="message-status-clock-hand" />
+                    <line x1="6" y1="6" x2="8" y2="6" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+                </svg>
+            </span>
+        );
+    }
+    if (status === 'sent') {
+        return (
+            <span className="message-status-icon message-status-icon--sent" aria-label="sent">
+                <svg width="13" height="11" viewBox="0 0 16 12" fill="none" aria-hidden="true">
+                    <path d="M13.6 2.2L6.2 9.6L2.4 5.8" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+            </span>
+        );
+    }
+    return (
+        <span className="message-status-icon message-status-icon--seen" aria-label="seen">
+            <svg width="16" height="11" viewBox="0 0 19 12" fill="none" aria-hidden="true">
+                <path d="M11.8 2.2L4.9 9.4L1.5 6.0" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M17.3 2.2L10.4 9.4L8.2 7.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+        </span>
+    );
+}
+
+function MessageMeta({
+    isMine,
+    formattedTime,
+    edited,
+    aiModelName,
+    isOfficialChannel,
+    messageSeenCount,
+    deliveryStatus,
+    isSeenForUi,
+    overlay = false,
+}: {
+    isMine: boolean;
+    formattedTime: string;
+    edited?: boolean;
+    aiModelName?: string;
+    isOfficialChannel: boolean;
+    messageSeenCount: number;
+    deliveryStatus?: Message['deliveryStatus'];
+    isSeenForUi: boolean;
+    overlay?: boolean;
+}) {
+    const baseClass = isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs';
+    const className = overlay ? `${baseClass} message-meta--media-overlay` : baseClass;
+
+    return (
+        <div className={className} dir="ltr">
+            {edited && <span className="message-edited-label" dir="rtl">ویرایش شده</span>}
+            {aiModelName && <span className="message-ai-model-label">{aiModelName}</span>}
+            {isOfficialChannel && (
+                <span className="message-channel-views" dir="ltr">
+                    <svg className="message-channel-views__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path
+                            d="M12 5C6.36 5 2 12 2 12C2 12 6.36 19 12 19C17.64 19 22 12 22 12C22 12 17.64 5 12 5Z"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        />
+                        <circle cx="12" cy="12" r="3" fill="currentColor" />
+                    </svg>
+                    <span className="message-channel-views__count">{toPersianDigits(messageSeenCount)}</span>
+                </span>
+            )}
+            <span className="message-time">{formattedTime}</span>
+            {isMine && (isOfficialChannel
+                ? deliveryStatus === 'sending' && <MessageDeliveryIcon status="sending" />
+                : (
+                    <MessageDeliveryIcon
+                        status={deliveryStatus === 'sending' ? 'sending' : isSeenForUi ? 'seen' : 'sent'}
+                    />
+                )
+            )}
+        </div>
+    );
+}
+
 export const ChatMessageItem = memo(function ChatMessageItem({
     message,
     displayText,
@@ -491,12 +579,28 @@ export const ChatMessageItem = memo(function ChatMessageItem({
 
     const searchSources = message.searchSources || [];
     const showSearchBlock = Boolean(message.searchEnabled && (searchSources.length > 0 || message.searchStatus === 'searching'));
+    const mimeType = message.file?.mimeType || '';
+    const isVisualMedia = Boolean(message.file && (isImageFile(mimeType) || mimeType.startsWith('video/')));
+    const hasTextCaption = Boolean((displayText || '').trim()) && !message.chessInvite;
+    const hasReactions = sortedReactions.length > 0;
+    const hasTopHeader = Boolean(
+        (isGroupChat && !isMine && !isBigEmojiOnly && (shape === 'msg-shape--single' || shape === 'msg-shape--first'))
+        || message.forwardedFrom
+        || message.replyTo
+        || showSearchBlock
+    );
+    const hasAuxiliaryContent = Boolean(
+        (message.reasoningEnabled && message.reasoningContent)
+        || message.chessInvite
+        || (message.searchEnabled && searchSources.length > 0)
+    );
+    const isMediaWithoutBottomContent = isVisualMedia && !hasTextCaption && !hasReactions && !hasAuxiliaryContent;
 
     if (message.systemType) {
         return (
             <div className="message-item">
                 {dayBreak && (
-                    <div className="chat-room__date-separator">
+                    <div className="chat-room__date-separator" data-date-label={dayLabel}>
                         <div className="chat-room__date-label">{dayLabel}</div>
                     </div>
                 )}
@@ -518,7 +622,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     return (
         <div className="message-item">
             {dayBreak && (
-                <div className="chat-room__date-separator">
+                <div className="chat-room__date-separator" data-date-label={dayLabel}>
                     <div className="chat-room__date-label">{dayLabel}</div>
                 </div>
             )}
@@ -532,7 +636,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
             )}
 
             <div
-                className={`${isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`} ${isHighlighted ? 'message-row--flash' : ''} ${isSelected || isMenuActive ? 'message-row--selected' : ''} ${isSelectionModeActive ? 'message-row--selecting' : ''} ${isSwiping ? 'message-row--swiping' : ''}`}
+                className={`${isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`} ${shape === 'msg-shape--single' || shape === 'msg-shape--first' ? 'message-row--first' : ''} ${isHighlighted ? 'message-row--flash' : ''} ${isSelected || isMenuActive ? 'message-row--selected' : ''} ${isSelectionModeActive ? 'message-row--selecting' : ''} ${isSwiping ? 'message-row--swiping' : ''}`}
                 onClickCapture={(e) => {
                     if (isUploading) return;
                     if (consumeSuppressedClick()) {
@@ -682,8 +786,8 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     ref={setBubbleRef}
                     data-message-id={message.id}
                     className={isMine
-                        ? `message-bubble message-bubble--mine ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isSelected ? 'message-bubble--selected' : ''} ${isUploading ? 'message-bubble--uploading' : ''}`
-                        : `message-bubble message-bubble--theirs ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isSelected ? 'message-bubble--selected' : ''} ${isUploading ? 'message-bubble--uploading' : ''}`}
+                        ? `message-bubble message-bubble--mine ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isSelected ? 'message-bubble--selected' : ''} ${isUploading ? 'message-bubble--uploading' : ''} ${isVisualMedia ? 'message-bubble--visual-media' : ''} ${isMediaWithoutBottomContent ? 'message-bubble--media-only' : ''}`
+                        : `message-bubble message-bubble--theirs ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isSelected ? 'message-bubble--selected' : ''} ${isUploading ? 'message-bubble--uploading' : ''} ${isVisualMedia ? 'message-bubble--visual-media' : ''} ${isMediaWithoutBottomContent ? 'message-bubble--media-only' : ''}`}
                     onClick={(e) => {
                         if (isUploading) return;
                         e.stopPropagation();
@@ -712,91 +816,95 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                         boxShadow: 'inset 0 0 0 2px rgba(0,0,0,0)',
                     }}
                 >
-                    {isGroupChat && !isMine && !isBigEmojiOnly && (shape === 'msg-shape--single' || shape === 'msg-shape--first') && (
-                        <div className="message-sender-name" onClick={(e) => {
-                            if (isSelectionModeActive) return;
-                            e.stopPropagation();
-                            actions.openMember(message.senderId);
-                        }}
-                            style={{ color: senderColor }}>
-                            {senderPending
-                                ? <span className="skeleton-glass skeleton-glass--name" aria-hidden />
-                                : senderName}
-                        </div>
-                    )}
-
-                    {message.forwardedFrom && (
-                        <button
-                            type="button"
-                            className="message-forwarded-label"
-                            onClick={(e) => {
-                                if (isSelectionModeActive) return;
-                                e.stopPropagation();
-                                actions.openForwardSource(message);
-                            }}
-                        >
-                            فوروارد شده از: {message.forwardedFrom.name || message.forwardedFrom.username || 'ناشناس'}
-                        </button>
-                    )}
-
-                    {message.replyTo && (
-                        <div onClick={(e) => {
-                            if (isUploading) return;
-                            if (isSelectionModeActive) return;
-                            e.stopPropagation();
-                            actions.scrollToMessage(message.replyTo!.id);
-                        }}
-                            role="button" tabIndex={0}
-                            onKeyDown={(e) => { if (e.key === 'Enter' && !isSelectionModeActive && !isUploading) actions.scrollToMessage(message.replyTo!.id); }}
-                            className="message-reply-box"
-                            style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
-                            <div className="message-reply-box__label">
-                                {replySenderPending
-                                    ? <span className="skeleton-glass skeleton-glass--reply-name" aria-hidden />
-                                    : (isGroupChat ? replySenderName : 'پاسخ')}
-                            </div>
-                            <div className="message-reply-box__text">{replyPreviewText}</div>
-                        </div>
-                    )}
-
-                    {showSearchBlock && (
-                        <div className="ai-search-block" onClick={(e) => e.stopPropagation()}>
-                            <button
-                                type="button"
-                                className="ai-search-block__header"
-                                onClick={(e) => {
+                    {hasTopHeader && (
+                        <div className={isVisualMedia ? 'message-bubble__header-content' : undefined}>
+                            {isGroupChat && !isMine && !isBigEmojiOnly && (shape === 'msg-shape--single' || shape === 'msg-shape--first') && (
+                                <div className="message-sender-name" onClick={(e) => {
+                                    if (isSelectionModeActive) return;
                                     e.stopPropagation();
-                                    if (searchSources.length > 0) setSearchOpen((v) => !v);
+                                    actions.openMember(message.senderId);
                                 }}
-                            >
-                                <span className="ai-search-block__header-main">
-                                    <Globe size={15} />
-                                    <span className={message.searchStatus === 'searching' ? 'thinking-indicator__text' : 'ai-search-block__title'}>
-                                        {message.searchStatus === 'searching'
-                                            ? 'در حال جستجو در وب...'
-                                            : `جستجو در وب · ${toPersianDigits(searchSources.length)} منبع`}
-                                    </span>
-                                </span>
-                                {searchSources.length > 0 && (
-                                    <ChevronDown size={15} className={searchOpen ? 'ai-reasoning-chevron ai-reasoning-chevron--open' : 'ai-reasoning-chevron'} />
-                                )}
-                            </button>
-                            {searchOpen && searchSources.length > 0 && (
-                                <div className="ai-search-block__body">
-                                    {searchSources.map((source) => (
-                                        <a
-                                            key={`${source.index}-${source.url}`}
-                                            className="ai-search-source-card"
-                                            href={source.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            onClick={(e) => e.stopPropagation()}
-                                        >
-                                            <span className="ai-search-source-card__title">{source.title || sourceDomain(source)}</span>
-                                            <span className="ai-search-source-card__domain">{sourceDomain(source)}</span>
-                                            {source.snippet && <span className="ai-search-source-card__snippet">{source.snippet}</span>}
-                                        </a>
-                                    ))}
+                                    style={{ color: senderColor }}>
+                                    {senderPending
+                                        ? <span className="skeleton-glass skeleton-glass--name" aria-hidden />
+                                        : senderName}
+                                </div>
+                            )}
+        
+                            {message.forwardedFrom && (
+                                <button
+                                    type="button"
+                                    className="message-forwarded-label"
+                                    onClick={(e) => {
+                                        if (isSelectionModeActive) return;
+                                        e.stopPropagation();
+                                        actions.openForwardSource(message);
+                                    }}
+                                >
+                                    فوروارد شده از: {message.forwardedFrom.name || message.forwardedFrom.username || 'ناشناس'}
+                                </button>
+                            )}
+        
+                            {message.replyTo && (
+                                <div onClick={(e) => {
+                                    if (isUploading) return;
+                                    if (isSelectionModeActive) return;
+                                    e.stopPropagation();
+                                    actions.scrollToMessage(message.replyTo!.id);
+                                }}
+                                    role="button" tabIndex={0}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' && !isSelectionModeActive && !isUploading) actions.scrollToMessage(message.replyTo!.id); }}
+                                    className="message-reply-box"
+                                    style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
+                                    <div className="message-reply-box__label">
+                                        {replySenderPending
+                                            ? <span className="skeleton-glass skeleton-glass--reply-name" aria-hidden />
+                                            : (isGroupChat ? replySenderName : 'پاسخ')}
+                                    </div>
+                                    <div className="message-reply-box__text">{replyPreviewText}</div>
+                                </div>
+                            )}
+        
+                            {showSearchBlock && (
+                                <div className="ai-search-block" onClick={(e) => e.stopPropagation()}>
+                                    <button
+                                        type="button"
+                                        className="ai-search-block__header"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (searchSources.length > 0) setSearchOpen((v) => !v);
+                                        }}
+                                    >
+                                        <span className="ai-search-block__header-main">
+                                            <Globe size={15} />
+                                            <span className={message.searchStatus === 'searching' ? 'thinking-indicator__text' : 'ai-search-block__title'}>
+                                                {message.searchStatus === 'searching'
+                                                    ? 'در حال جستجو در وب...'
+                                                    : `جستجو در وب · ${toPersianDigits(searchSources.length)} منبع`}
+                                            </span>
+                                        </span>
+                                        {searchSources.length > 0 && (
+                                            <ChevronDown size={15} className={searchOpen ? 'ai-reasoning-chevron ai-reasoning-chevron--open' : 'ai-reasoning-chevron'} />
+                                        )}
+                                    </button>
+                                    {searchOpen && searchSources.length > 0 && (
+                                        <div className="ai-search-block__body">
+                                            {searchSources.map((source) => (
+                                                <a
+                                                    key={`${source.index}-${source.url}`}
+                                                    className="ai-search-source-card"
+                                                    href={source.url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    <span className="ai-search-source-card__title">{source.title || sourceDomain(source)}</span>
+                                                    <span className="ai-search-source-card__domain">{sourceDomain(source)}</span>
+                                                    {source.snippet && <span className="ai-search-source-card__snippet">{source.snippet}</span>}
+                                                </a>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -829,151 +937,159 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                 }
                                 actions.openVideo(videoUrl, file);
                             }}
+                            overlayMeta={isMediaWithoutBottomContent ? (
+                                <MessageMeta
+                                    isMine={isMine}
+                                    formattedTime={formattedTime}
+                                    edited={message.edited}
+                                    aiModelName={message.aiModelName}
+                                    isOfficialChannel={isOfficialChannel}
+                                    messageSeenCount={messageSeenCount}
+                                    deliveryStatus={message.deliveryStatus}
+                                    isSeenForUi={isSeenForUi}
+                                    overlay
+                                />
+                            ) : null}
+                            flushBottom={!isMediaWithoutBottomContent}
                         />
                     )}
-                    {message.reasoningEnabled && message.reasoningContent && (
-                        <div className="ai-reasoning-message-stack" style={{ width: '100%' }}>
-                            <button
-                                type="button"
-                                className="ai-reasoning-header"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    actions.toggleReasoning(message.id);
-                                }}
-                            >
-                                <span className="ai-reasoning-header-main">
-                                    <span className="ai-reasoning-static-title">روند استدلال</span>
-                                    <span className='ai-reasoning-timer'>
-                                        {`${toPersianDigits(Math.floor(Number(message.reasoningDurationSec || 0) / 60))}:${toPersianDigits(String(Number(message.reasoningDurationSec || 0) % 60).padStart(2, '0'))}`}
-                                    </span>
-                                </span>
-                                <ChevronDown size={15} className={reasoningOpen ? 'ai-reasoning-chevron ai-reasoning-chevron--open' : 'ai-reasoning-chevron'} />
-                            </button>
-                            {reasoningOpen && (
-                                <div className="ai-reasoning-body">
-                                    <div className="ai-reasoning-content">{message.reasoningContent}</div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                    {message.chessInvite && (
-                        <ChessInviteCard invite={message.chessInvite} isMine={isMine} />
-                    )}
-                    {message.text && !message.chessInvite && !(message.reasoningEnabled && message.reasoningContent) && (
-                        <MemoMessageTextContent
-                            rawText={displayText}
-                            isBigEmojiOnly={isBigEmojiOnly}
-                            emojiOnlyClass={emojiOnlyClass}
-                            onMentionClick={handleMentionClick}
-                            onGroupInviteClick={handleGroupInviteClick}
-                        />
-                    )}
-                    {message.text && !message.chessInvite && message.reasoningEnabled && message.reasoningContent && (
-                        <div className="ai-reasoning-answer" style={{ marginTop: 0 }}>
-                            <MemoMessageTextContent
-                                rawText={displayText}
-                                isBigEmojiOnly={isBigEmojiOnly}
-                                emojiOnlyClass={emojiOnlyClass}
-                                onMentionClick={handleMentionClick}
-                                onGroupInviteClick={handleGroupInviteClick}
-                            />
-                        </div>
-                    )}
-
-                    {message.searchEnabled && message.searchStatus === 'completed' && searchSources.length > 0 && (
-                        <div
-                            className="ai-search-pills"
-                            ref={(el) => { if (el) updateSearchPillsFade(el); }}
-                            onScroll={(e) => updateSearchPillsFade(e.currentTarget)}
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            {searchSources.map((source) => (
-                                <a
-                                    key={`${source.index}-${source.url}`}
-                                    className="ai-search-pill"
-                                    href={source.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={(e) => e.stopPropagation()}
-                                    title={source.title}
-                                >
-                                    <Globe size={12} />
-                                    <span>{sourceDomain(source)}</span>
-                                </a>
-                            ))}
-                        </div>
-                    )}
-
-                    {sortedReactions.length > 0 && (
-                        <div className="message-reactions">
-                            {sortedReactions.map((reaction, idx) => {
-                                const userIds = reaction.userIds || [];
-                                const isMyReaction = userIds.includes(currentUserId);
-                                const soleReactor = !isOfficialChannel && reaction.count === 1 && userIds.length === 1
-                                    ? reactionMembers?.[userIds[0]]
-                                    : null;
-                                return (
-                                    <button key={idx}
-                                        className={isMyReaction ? 'message-reaction message-reaction--active' : 'message-reaction'}
+                    {!isMediaWithoutBottomContent && (
+                        <div className={isVisualMedia ? 'message-bubble__bottom-content' : undefined}>
+                            {message.reasoningEnabled && message.reasoningContent && (
+                                <div className="ai-reasoning-message-stack" style={{ width: '100%' }}>
+                                    <button
+                                        type="button"
+                                        className="ai-reasoning-header"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            if (isSelectionModeActive) {
-                                                actions.toggleSelect(message.id);
-                                                return;
-                                            }
-                                            if (isMyReaction) actions.deleteReaction(message.id);
-                                            else actions.react(message.id, reaction.emoji);
+                                            actions.toggleReasoning(message.id);
                                         }}
-                                        onMouseEnter={(e) => {
-                                            if (!window.matchMedia?.('(pointer:fine)').matches) return;
-                                            e.stopPropagation();
-                                            actions.openReactionMenu(message.id, e.currentTarget);
-                                        }}
-                                        type="button"
                                     >
-                                        <span className="message-reaction__emoji">{reaction.emoji}</span>
-                                        {soleReactor && (
-                                            <Avatar name={soleReactor.name || ''} size="xxs" src={soleReactor.avatar || ''} />
-                                        )}
-                                        {reaction.count > 1 && (
-                                            <span className="message-reaction__count" style={{ fontFamily: 'Vazir, sans-serif' }}>
-                                                {toPersianDigits(reaction.count)}
+                                        <span className="ai-reasoning-header-main">
+                                            <span className="ai-reasoning-static-title">روند استدلال</span>
+                                            <span className='ai-reasoning-timer'>
+                                                {`${toPersianDigits(Math.floor(Number(message.reasoningDurationSec || 0) / 60))}:${toPersianDigits(String(Number(message.reasoningDurationSec || 0) % 60).padStart(2, '0'))}`}
                                             </span>
-                                        )}
+                                        </span>
+                                        <ChevronDown size={15} className={reasoningOpen ? 'ai-reasoning-chevron ai-reasoning-chevron--open' : 'ai-reasoning-chevron'} />
                                     </button>
-                                );
-                            })}
+                                    {reasoningOpen && (
+                                        <div className="ai-reasoning-body">
+                                            <div className="ai-reasoning-content">{message.reasoningContent}</div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            {message.chessInvite && (
+                                <ChessInviteCard invite={message.chessInvite} isMine={isMine} />
+                            )}
+                            {message.text && !message.chessInvite && !(message.reasoningEnabled && message.reasoningContent) && (
+                                <MemoMessageTextContent
+                                    rawText={displayText}
+                                    isBigEmojiOnly={isBigEmojiOnly}
+                                    emojiOnlyClass={emojiOnlyClass}
+                                    onMentionClick={handleMentionClick}
+                                    onGroupInviteClick={handleGroupInviteClick}
+                                />
+                            )}
+                            {message.text && !message.chessInvite && message.reasoningEnabled && message.reasoningContent && (
+                                <div className="ai-reasoning-answer" style={{ marginTop: 0 }}>
+                                    <MemoMessageTextContent
+                                        rawText={displayText}
+                                        isBigEmojiOnly={isBigEmojiOnly}
+                                        emojiOnlyClass={emojiOnlyClass}
+                                        onMentionClick={handleMentionClick}
+                                        onGroupInviteClick={handleGroupInviteClick}
+                                    />
+                                </div>
+                            )}
+        
+                            {message.searchEnabled && message.searchStatus === 'completed' && searchSources.length > 0 && (
+                                <div
+                                    className="ai-search-pills"
+                                    ref={(el) => { if (el) updateSearchPillsFade(el); }}
+                                    onScroll={(e) => updateSearchPillsFade(e.currentTarget)}
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    {searchSources.map((source) => (
+                                        <a
+                                            key={`${source.index}-${source.url}`}
+                                            className="ai-search-pill"
+                                            href={source.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={(e) => e.stopPropagation()}
+                                            title={source.title}
+                                        >
+                                            <Globe size={12} />
+                                            <span>{sourceDomain(source)}</span>
+                                        </a>
+                                    ))}
+                                </div>
+                            )}
+        
+                            <div className="message-footer-row">
+                                {sortedReactions.length > 0 && (
+                                    <div className="message-reactions">
+                                        {sortedReactions.map((reaction, idx) => {
+                                            const userIds = reaction.userIds || [];
+                                            const isMyReaction = userIds.includes(currentUserId);
+                                            const reactors = !isOfficialChannel && reaction.count <= 3
+                                                ? userIds.slice(0, 3)
+                                                    .map((uid) => reactionMembers?.[uid])
+                                                    .filter((member): member is { name?: string; avatar?: string } => Boolean(member))
+                                                : [];
+                                            const showCount = isOfficialChannel || reaction.count > 3 || reactors.length === 0;
+                                            return (
+                                                <button key={idx}
+                                                    className={isMyReaction ? 'message-reaction message-reaction--active' : 'message-reaction'}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (isSelectionModeActive) {
+                                                            actions.toggleSelect(message.id);
+                                                            return;
+                                                        }
+                                                        if (isMyReaction) actions.deleteReaction(message.id);
+                                                        else actions.react(message.id, reaction.emoji);
+                                                    }}
+                                                    onMouseEnter={(e) => {
+                                                        if (!window.matchMedia?.('(pointer:fine)').matches) return;
+                                                        e.stopPropagation();
+                                                        actions.openReactionMenu(message.id, e.currentTarget);
+                                                    }}
+                                                    type="button"
+                                                >
+                                                    <span className="message-reaction__emoji">{reaction.emoji}</span>
+                                                    {reactors.length > 0 && (
+                                                        <span className="message-reaction__avatars">
+                                                            {reactors.map((member, i) => (
+                                                                <Avatar key={i} name={member.name || ''} size="xxs" src={member.avatar || ''} />
+                                                            ))}
+                                                        </span>
+                                                    )}
+                                                    {showCount && (
+                                                        <span className="message-reaction__count">
+                                                            {toPersianDigits(reaction.count)}
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                                <MessageMeta
+                                    isMine={isMine}
+                                    formattedTime={formattedTime}
+                                    edited={message.edited}
+                                    aiModelName={message.aiModelName}
+                                    isOfficialChannel={isOfficialChannel}
+                                    messageSeenCount={messageSeenCount}
+                                    deliveryStatus={message.deliveryStatus}
+                                    isSeenForUi={isSeenForUi}
+                                />
+                            </div>
                         </div>
                     )}
-
-                    <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
-                        <span className="message-time">{formattedTime}</span>
-                        {message.edited && <span className="message-edited-label">ویرایش شده</span>}
-                        {message.aiModelName && <span className="message-ai-model-label">{message.aiModelName}</span>}
-                        {isOfficialChannel && (
-                            <span className="message-edited-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                                <span>{toPersianDigits(messageSeenCount)}</span>
-                                <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden>
-                                    <path
-                                        fillRule="evenodd"
-                                        clipRule="evenodd"
-                                        d="M12 5.5C5.3 5.5 1.5 12 1.5 12s3.8 6.5 10.5 6.5S22.5 12 22.5 12 18.7 5.5 12 5.5Zm0 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"
-                                        fill="currentColor"
-                                    />
-                                </svg>
-                            </span>
-                        )}
-                        {isMine && (
-                            message.deliveryStatus === 'sending'
-                                ? <span className="message-pending-indicator" aria-label="در حال ارسال">◷</span>
-                                : (
-                                    <span className={isSeenForUi ? 'message-seen message-seen--double' : 'message-seen message-seen--single'} aria-label={isSeenForUi ? 'seen' : 'sent'}>
-                                        <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--first" />
-                                        {isSeenForUi && <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--second" />}
-                                    </span>
-                                )
-                        )}
-                    </div>
                 </div>
             </div>
         </div>

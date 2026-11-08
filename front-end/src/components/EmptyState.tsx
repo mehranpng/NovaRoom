@@ -5,7 +5,7 @@ import { useDarkMode } from '../hooks/useDarkMode';
 import DecryptedText from './DecryptedText';
 
 export function EmptyState() {
-    const { isDarkMode, themePalette, themeTone, accentIntensity, blurEffect } = useDarkMode();
+    const { isDarkMode, themePalette, themeTone, accentIntensity, visualEffects } = useDarkMode();
     const [colors, setColors] = useState({ base: '#9ca3af', active: '#2563eb' });
     const [isFooterHovered, setIsFooterHovered] = useState(false);
 
@@ -25,7 +25,7 @@ export function EmptyState() {
     return (
         <div className="empty-state">
             <div className="empty-state__background">
-                {blurEffect && (
+                {visualEffects && (
                     <DotGrid
                         dotSize={3}
                         gap={20}

@@ -26,6 +26,7 @@ const LEGACY_DARK_MODE_KEY = 'darkMode';
 const INTENSITY_STORAGE_KEY = 'themeAccentIntensityV2';
 const ULTRA_DARK_STORAGE_KEY = 'themeUltraDarkV2';
 const BLUR_EFFECT_STORAGE_KEY = 'themeBlurEffect';
+const VISUAL_EFFECTS_STORAGE_KEY = 'themeVisualEffects';
 
 
 
@@ -215,6 +216,11 @@ function getInitialBlurEffect(): boolean {
   return localStorage.getItem(BLUR_EFFECT_STORAGE_KEY) !== 'false';
 }
 
+function getInitialVisualEffects(): boolean {
+  if (typeof window === 'undefined') return true;
+  return localStorage.getItem(VISUAL_EFFECTS_STORAGE_KEY) !== 'false';
+}
+
 function getInitialChatWallpaper(): ChatWallpaperPattern {
   if (typeof window === 'undefined') return 'none';
   const stored = localStorage.getItem(WALLPAPER_STORAGE_KEY);
@@ -276,6 +282,11 @@ const createCustomSurfaceVars = (isDarkMode: boolean): Record<string, string> =>
   };
 };
 
+export function isVisualEffectsEnabled(): boolean {
+  if (typeof document === 'undefined') return false;
+  return !document.documentElement.classList.contains('no-visual-effects');
+}
+
 export function syncThemeColor(surface?: string) {
   const root = document.documentElement;
   const computed = getComputedStyle(root);
@@ -330,6 +341,7 @@ export function useDarkMode() {
   const [accentIntensity, setAccentIntensity] = useState<AccentIntensity>(getInitialIntensity);
   const [ultraDarkMode, setUltraDarkMode] = useState<boolean>(getInitialUltraDark);
   const [blurEffect, setBlurEffect] = useState<boolean>(getInitialBlurEffect);
+  const [visualEffects, setVisualEffects] = useState<boolean>(getInitialVisualEffects);
   const [chatWallpaper, setChatWallpaper] = useState<ChatWallpaperPattern>(getInitialChatWallpaper);
   const [chatWallpaperIntensity, setChatWallpaperIntensity] = useState<number>(getInitialChatWallpaperIntensity);
   const [chatWallpaperScale, setChatWallpaperScale] = useState<number>(getInitialChatWallpaperScale);
@@ -364,6 +376,8 @@ export function useDarkMode() {
     localStorage.setItem(ULTRA_DARK_STORAGE_KEY, ultraDarkMode ? 'true' : 'false');
     localStorage.setItem(BLUR_EFFECT_STORAGE_KEY, blurEffect ? 'true' : 'false');
     root.classList.toggle('no-blur-effect', !blurEffect);
+    localStorage.setItem(VISUAL_EFFECTS_STORAGE_KEY, visualEffects ? 'true' : 'false');
+    root.classList.toggle('no-visual-effects', !visualEffects);
 
     const baseVars = isDarkMode ? neutralThemeVars.dark : neutralThemeVars.light;
     Object.entries(baseVars).forEach(([key, value]) => root.style.setProperty(key, value));
@@ -410,7 +424,7 @@ export function useDarkMode() {
 
     syncThemeColor();
     (root.style as any).colorScheme = isDarkMode ? 'dark' : 'light';
-  }, [isDarkMode, themeMode, themeTone, themePalette, accentIntensity, ultraDarkMode, blurEffect, chatWallpaper, chatWallpaperIntensity, chatWallpaperScale]);
+  }, [isDarkMode, themeMode, themeTone, themePalette, accentIntensity, ultraDarkMode, blurEffect, visualEffects, chatWallpaper, chatWallpaperIntensity, chatWallpaperScale]);
 
   return {
     themeMode,
@@ -427,6 +441,8 @@ export function useDarkMode() {
     setUltraDarkMode,
     blurEffect,
     setBlurEffect,
+    visualEffects,
+    setVisualEffects,
     chatWallpaper,
     setChatWallpaper,
     chatWallpaperIntensity,

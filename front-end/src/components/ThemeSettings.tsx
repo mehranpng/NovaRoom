@@ -48,6 +48,8 @@ export function ThemeSettings() {
         setUltraDarkMode,
         blurEffect,
         setBlurEffect,
+        visualEffects,
+        setVisualEffects,
         chatWallpaper,
         setChatWallpaper,
         chatWallpaperIntensity,
@@ -212,7 +214,7 @@ export function ThemeSettings() {
                         </button>
                     </div>
                     <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', direction: 'rtl' }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>افکت تاری (Blur)</span>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>افکت Blur</span>
                         <button
                             type="button"
                             onClick={() => {
@@ -236,6 +238,33 @@ export function ThemeSettings() {
                             }}
                         >
                             <span style={{ position: 'absolute', top: 2, right: blurEffect ? 2 : 22, width: 22, height: 22, borderRadius: '50%', background: isDarkMode ? '#fff' : (blurEffect ? '#fff' : '#d3d3d3'), transition: 'all .2s ease' }} />
+                        </button>
+                    </div>
+                    <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', direction: 'rtl' }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>افکت‌ها</span>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                                    navigator.vibrate(10);
+                                }
+                                setVisualEffects((prev) => !prev);
+                            }}
+                            aria-label="toggle visual effects"
+                            style={{
+                                width: 48,
+                                height: 28,
+                                borderRadius: 999,
+                                cursor: 'pointer',
+                                border: isDarkMode
+                                    ? (visualEffects ? '1px solid color-mix(in srgb, var(--accent-primary) 70%, var(--border-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 35%, var(--border-primary))')
+                                    : (visualEffects ? '1px solid color-mix(in srgb, var(--text-primary) 28%, var(--accent-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 24%, var(--border-primary))'),
+                                background: visualEffects ? 'var(--accent-primary)' : (isDarkMode ? 'var(--bg-tertiary)' : 'color-mix(in srgb, var(--text-primary) 30%, var(--bg-primary))'),
+                                position: 'relative',
+                                transition: 'all .2s ease',
+                            }}
+                        >
+                            <span style={{ position: 'absolute', top: 2, right: visualEffects ? 2 : 22, width: 22, height: 22, borderRadius: '50%', background: isDarkMode ? '#fff' : (visualEffects ? '#fff' : '#d3d3d3'), transition: 'all .2s ease' }} />
                         </button>
                     </div>
                 </div>
@@ -400,13 +429,15 @@ export function ThemeSettings() {
                                 <div className="message-row message-row--theirs">
                                     <div className="message-bubble message-bubble--theirs msg-shape--single">
                                         <div className="message-text">قطعاً طاها</div>
-                                        <div className="message-reactions">
-                                            <span className="message-reaction">
-                                                <span className="message-reaction__emoji">🤣</span>
-                                            </span>
-                                        </div>
-                                        <div className="message-meta message-meta--theirs">
-                                            <span className="message-time">۱۲:۳۱</span>
+                                        <div className="message-footer-row">
+                                            <div className="message-reactions">
+                                                <span className="message-reaction">
+                                                    <span className="message-reaction__emoji">🤣</span>
+                                                </span>
+                                            </div>
+                                            <div className="message-meta message-meta--theirs">
+                                                <span className="message-time">۱۲:۳۱</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

@@ -24,7 +24,8 @@ import { notify } from './utils/notificationBus';
 import { clearLocalE2EEIdentity, decryptBioClientSide, decryptClientText, decryptMessageClientSide, encryptChatTextClientSide, loadLocalE2EEIdentity, registerPeerPublicKey } from './utils/e2ee';
 import { clearCachedTextValues, clearChatSnapshots, getChatSnapshot, saveChatSnapshot } from './utils/mediaCache';
 import { clearChessCache } from './utils/chessCache';
-import { useDarkMode, syncThemeColor } from './hooks/useDarkMode';
+import { useDarkMode, syncThemeColor, isVisualEffectsEnabled } from './hooks/useDarkMode';
+import { animateMessageDisintegration } from './utils/disintegrateMessage';
 import { BottomNavbar } from './components/BottomNavbar';
 import { ChessScreen } from './components/chess/ChessScreen';
 import { ChessJoinPage } from './components/chess/ChessJoinPage';
@@ -1161,15 +1162,19 @@ export function App() {
     }, [currentUser?.chatId]);
 
     const handleMessageDeleted = useCallback((chatId: string, messageId: string, lastMessage?: any, messageIds?: string[]) => {
-        const idsSet = new Set(messageIds && messageIds.length > 0 ? messageIds : [messageId]);
-        setMessages(prev => {
-            const arr = prev[chatId];
-            if (!arr) return prev;
-            return {
-                ...prev,
-                [chatId]: arr.filter(m => !idsSet.has(m.id))
-            };
-        });
+        const idsSet = new Set(messageIds && messageIds.length > 0 ? messageIds : (messageId ? [messageId] : []));
+        if (idsSet.size === 0) return;
+
+        const removeMessagesFromState = () => {
+            setMessages(prev => {
+                const arr = prev[chatId];
+                if (!arr) return prev;
+                return {
+                    ...prev,
+                    [chatId]: arr.filter(m => !idsSet.has(m.id))
+                };
+            });
+        };
 
         setChats(prev => prev.map(c => {
             if (c.id !== chatId) return c;
@@ -1185,6 +1190,21 @@ export function App() {
                 unreadReactionIds: nextReactionIds,
             };
         }));
+
+        if (activeChatIdRef.current === chatId && viewRef.current === 'chatRoom' && isVisualEffectsEnabled()) {
+            const targetEls = Array.from(idsSet)
+                .map((id) => document.querySelector<HTMLElement>(`.chat-room .message-bubble[data-message-id="${CSS.escape(id)}"]`))
+                .filter((el): el is HTMLElement => Boolean(el && el.isConnected && el.dataset.disintegrating !== '1'));
+
+            if (targetEls.length > 0) {
+                void animateMessageDisintegration(targetEls).then(() => {
+                    removeMessagesFromState();
+                });
+                return;
+            }
+        }
+
+        removeMessagesFromState();
     }, []);
 
     const handleMessagePinned = useCallback(async (chatId: string, pinnedMessage: any) => {
