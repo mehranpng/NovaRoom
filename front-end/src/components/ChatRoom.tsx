@@ -393,6 +393,8 @@ export function ChatRoom({
     const messageElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
     const unreadSeparatorRef = useRef<HTMLDivElement | null>(null);
     const [highlightId, setHighlightId] = useState<string | null>(null);
+    const [arrivedMessageIds, setArrivedMessageIds] = useState<string[]>([]);
+    const arrivedAnimationTimerRef = useRef<number | null>(null);
     const highlightTimeoutRef = useRef<number | null>(null);
     const highlightRafRef = useRef<number | null>(null);
     const missingJumpAttemptRef = useRef<{ id: string; at: number } | null>(null);
@@ -1665,6 +1667,7 @@ export function ChatRoom({
     useEffect(() => {
         return () => {
             if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
+            if (arrivedAnimationTimerRef.current) window.clearTimeout(arrivedAnimationTimerRef.current);
             if (highlightRafRef.current) cancelAnimationFrame(highlightRafRef.current);
             if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
         };
@@ -1943,8 +1946,13 @@ export function ChatRoom({
                 prevLastMessageIdRef.current = nextLastId;
                 return;
             }
-            const lastAddedMsg = messages[messages.length - 1];
-            const isMyOwnNewMessage = lastAddedMsg?.senderId === currentUserId;
+            const addedMessages = messages.slice(-added);
+            const isMyOwnNewMessage = addedMessages[addedMessages.length - 1]?.senderId === currentUserId;
+            if (added <= 5 && addedMessages.length > 0) {
+                setArrivedMessageIds(addedMessages.map((m) => m.id));
+                if (arrivedAnimationTimerRef.current) window.clearTimeout(arrivedAnimationTimerRef.current);
+                arrivedAnimationTimerRef.current = window.setTimeout(() => setArrivedMessageIds([]), 400);
+            }
             if ((nearBottom || isMyOwnNewMessage) && (!autoJumpedToUnreadRef.current || userScrolledAfterAutoJumpRef.current || isMyOwnNewMessage)) {
                 const openedRecently = Date.now() - openedAtRef.current < 1600;
                 const shouldAnimate = !openedRecently && added <= 2;
@@ -2797,6 +2805,7 @@ export function ChatRoom({
                 reactionMembers={reactionMembers}
                 isHighlighted={highlightId === m.id}
                 isSelected={selectedMessageIds.includes(m.id)}
+                isNewMessage={arrivedMessageIds.includes(m.id)}
                 showUnreadSeparator={showUnreadSeparator}
                 isMenuActive={msgMenu?.id === m.id}
                 isSeenForUi={isSeenForUi}
@@ -2809,6 +2818,7 @@ export function ChatRoom({
     }), [
         items,
         highlightId,
+        arrivedMessageIds,
         unreadAnchorForUi,
         currentUserId,
         msgMenu?.id,

@@ -63,6 +63,7 @@ export type ChatMessageItemProps = {
     reactionMembers?: Record<string, { name?: string; avatar?: string }>;
     isHighlighted: boolean;
     isSelected: boolean;
+    isNewMessage: boolean;
     showUnreadSeparator: boolean;
     isMenuActive: boolean;
     isSeenForUi: boolean;
@@ -470,6 +471,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     reactionMembers,
     isHighlighted,
     isSelected,
+    isNewMessage,
     showUnreadSeparator,
     isMenuActive,
     isSeenForUi,
@@ -636,7 +638,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
             )}
 
             <div
-                className={`${isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`} ${shape === 'msg-shape--single' || shape === 'msg-shape--first' ? 'message-row--first' : ''} ${isHighlighted ? 'message-row--flash' : ''} ${isSelected || isMenuActive ? 'message-row--selected' : ''} ${isSelectionModeActive ? 'message-row--selecting' : ''} ${isSwiping ? 'message-row--swiping' : ''}`}
+                className={`${isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`} ${shape === 'msg-shape--single' || shape === 'msg-shape--first' ? 'message-row--first' : ''} ${isHighlighted ? 'message-row--flash' : ''} ${isSelected || isMenuActive ? 'message-row--selected' : ''} ${isSelectionModeActive ? 'message-row--selecting' : ''} ${isSwiping ? 'message-row--swiping' : ''} ${isNewMessage ? 'message-row--arrive' : ''}`}
                 onClickCapture={(e) => {
                     if (isUploading) return;
                     if (consumeSuppressedClick()) {
