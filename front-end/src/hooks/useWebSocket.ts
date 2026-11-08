@@ -51,7 +51,6 @@ type OutgoingEvent =
 
 const WS_RECONNECT_DELAY_MS = 1500;
 const WS_PONG_TIMEOUT_MS = 45000;
-const WS_MAX_RECONNECT_ATTEMPTS = 8;
 const MAX_CHAT_MESSAGE_LENGTH = 6000;
 const MAX_AI_MESSAGE_LENGTH = 3000;
 const eventTypeAliases: Record<string, string> = {
@@ -108,6 +107,7 @@ export function useWebSocket({
     const requestCounterRef = useRef(0);
     const hiddenDisconnectRef = useRef(false);
     const offlineTimerRef = useRef<number | null>(null);
+    const restoreOnlineRef = useRef<(() => void) | null>(null);
 
     const aiAbortControllerRef = useRef<AbortController | null>(null);
     const onNewMessageRef = useRef(onNewMessage);
@@ -186,12 +186,6 @@ export function useWebSocket({
         if (!enabledRef.current) return;
         if (!token) return;
         if (reconnectTimerRef.current != null) return;
-        if (reconnectAttemptsRef.current >= WS_MAX_RECONNECT_ATTEMPTS) {
-            setReconnectExhausted(true);
-            setConnectionState('disconnected');
-            onReconnectExhaustedRef.current?.();
-            return;
-        }
 
         reconnectTimerRef.current = window.setTimeout(() => {
             reconnectTimerRef.current = null;
@@ -758,6 +752,13 @@ export function useWebSocket({
                     }
                 }
             }
+            if (
+                document.visibilityState === 'visible'
+                && socketRef.current?.readyState !== WebSocket.OPEN
+                && socketRef.current?.readyState !== WebSocket.CONNECTING
+            ) {
+                restoreOnlineRef.current?.();
+            }
         }, 25000);
 
         return () => window.clearInterval(interval);
@@ -779,10 +780,12 @@ export function useWebSocket({
             }
         };
 
-        const forceOffline = () => {
+        const forceOffline = (notifyServer = false) => {
             clearOfflineTimer();
             hiddenDisconnectRef.current = true;
-            notifyPresenceOffline();
+            if (notifyServer) {
+                notifyPresenceOffline();
+            }
             shouldReconnectRef.current = false;
             clearReconnectTimer();
             const ws = socketRef.current;
@@ -805,6 +808,8 @@ export function useWebSocket({
             connect();
         };
 
+        restoreOnlineRef.current = restoreOnline;
+
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
                 restoreOnline();
@@ -813,15 +818,7 @@ export function useWebSocket({
             clearOfflineTimer();
             offlineTimerRef.current = window.setTimeout(() => {
                 forceOffline();
-            }, 350);
-        };
-
-        const handleWindowBlur = () => {
-            clearOfflineTimer();
-            offlineTimerRef.current = window.setTimeout(() => {
-                if (document.visibilityState === 'visible') return;
-                forceOffline();
-            }, 350);
+            }, 15000);
         };
 
         const handleWindowFocus = () => {
@@ -829,11 +826,11 @@ export function useWebSocket({
         };
 
         const handlePageHide = () => {
-            forceOffline();
+            forceOffline(true);
         };
 
         const handleBeforeUnload = () => {
-            forceOffline();
+            forceOffline(true);
         };
 
         const handlePageShow = () => {
@@ -841,7 +838,6 @@ export function useWebSocket({
         };
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
-        window.addEventListener('blur', handleWindowBlur);
         window.addEventListener('focus', handleWindowFocus);
         window.addEventListener('pagehide', handlePageHide);
         window.addEventListener('beforeunload', handleBeforeUnload);
@@ -849,9 +845,9 @@ export function useWebSocket({
         window.addEventListener('online', handleWindowFocus);
 
         return () => {
+            restoreOnlineRef.current = null;
             clearOfflineTimer();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
-            window.removeEventListener('blur', handleWindowBlur);
             window.removeEventListener('focus', handleWindowFocus);
             window.removeEventListener('pagehide', handlePageHide);
             window.removeEventListener('beforeunload', handleBeforeUnload);

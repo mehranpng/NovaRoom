@@ -3612,6 +3612,10 @@ html.keyboard-open .chat-room__input-area {
     flex-shrink: 0;
 }
 
+.contact-info__status--no-dot::before {
+    display: none;
+}
+
 .contact-info__status--online {
     color: var(--status-online-color);
     border-color: color-mix(in srgb, var(--status-online-color) 30%, var(--glass-border));

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Ban, ChevronLeft, Copy, Search, Settings, Users } from 'lucide-react';
+import { Ban, Check, ChevronLeft, Copy, Search, Settings, Users } from 'lucide-react';
 import type { User } from '../types';
 import { Avatar, extractFileIdFromAvatar, getAvatarDisplayUrl } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -57,6 +57,7 @@ export function GroupMembersView({
     onBanMember,
 }: GroupMembersViewProps) {
     const [memberSearch, setMemberSearch] = useState('');
+    const [inviteCopied, setInviteCopied] = useState(false);
     const [openedGroupAvatar, setOpenedGroupAvatar] = useState<{ url: string; fileId: string; fileName: string } | null>(null);
     const [menuState, setMenuState] = useState<{ member: GroupMember; x: number; y: number } | null>(null);
     const [pendingRemoveMember, setPendingRemoveMember] = useState<GroupMember | null>(null);
@@ -173,8 +174,8 @@ export function GroupMembersView({
                         <Avatar name={contact.name} size="xl" src={contact.avatar} />
                     </button>
                     <div className="contact-info__name" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{contact.name}</div>
-                    <div className="contact-info__status" style={{ direction: 'rtl' }}>
-                        <span className="status-online-text">{toPersianDigits(Math.max(onlineCount, Number(chatStats?.onlineMembers || 0)))} آنلاین</span>
+                    <div className="contact-info__status contact-info__status--no-dot" style={{ direction: 'rtl' }}>
+                        <span className="status-online-text">{toPersianDigits(Math.max(1, onlineCount, Number(chatStats?.onlineMembers || 0)))} آنلاین</span>
                         <span style={{ color: 'var(--text-muted)' }}> • </span>
                         <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(membersList.length)} عضو</span>
                     </div>
@@ -188,8 +189,21 @@ export function GroupMembersView({
                                 <Users size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
                                 {inviteLink}
                             </div>
-                            <button type="button" className="icon-btn" style={{ flexShrink: 0 }} onClick={() => void copyText(inviteLink).catch(() => { })}>
-                                <Copy size={18} />
+                            <button
+                                type="button"
+                                className="icon-btn"
+                                style={{ flexShrink: 0, color: inviteCopied ? '#22c55e' : undefined }}
+                                aria-label="کپی لینک دعوت"
+                                onClick={() => {
+                                    void copyText(inviteLink)
+                                        .then(() => {
+                                            setInviteCopied(true);
+                                            window.setTimeout(() => setInviteCopied(false), 1500);
+                                        })
+                                        .catch(() => { });
+                                }}
+                            >
+                                {inviteCopied ? <Check size={18} /> : <Copy size={18} />}
                             </button>
                         </div>
                     </div>

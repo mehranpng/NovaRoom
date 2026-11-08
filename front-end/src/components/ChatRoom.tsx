@@ -35,6 +35,36 @@ const MAX_SELECTED_MESSAGES = 30;
 // shortcut: group member cache skips payloads over 200KB; move it to IndexedDB when huge groups show up.
 const groupMemberCacheKey = (chatId: string) => `novaroom:group-members:v1:${chatId}`;
 
+type ChatStatsData = { totalMembers: number; onlineMembers: number; membershipClosed?: boolean };
+
+const chatStatsCacheKey = (chatId: string) => `novaroom:chat-stats:v1:${chatId}`;
+
+function readCachedChatStats(chatId: string): ChatStatsData | null {
+    if (!chatId) return null;
+    try {
+        const raw = localStorage.getItem(chatStatsCacheKey(chatId));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || typeof parsed.totalMembers !== 'number') return null;
+        return {
+            totalMembers: Math.max(0, Number(parsed.totalMembers) || 0),
+            onlineMembers: Math.max(0, Number(parsed.onlineMembers) || 0),
+            membershipClosed: Boolean(parsed.membershipClosed),
+        };
+    } catch {
+        return null;
+    }
+}
+
+function writeCachedChatStats(chatId: string, stats: ChatStatsData) {
+    if (!chatId) return;
+    try {
+        localStorage.setItem(chatStatsCacheKey(chatId), JSON.stringify(stats));
+    } catch {
+        return;
+    }
+}
+
 function readCachedGroupMembers(chatId: string): Record<string, GroupMember> {
     if (!chatId) return {};
     try {
@@ -373,7 +403,9 @@ export function ChatRoom({
     const [isJumpingToLatest, setIsJumpingToLatest] = useState(false);
     const [localLoadingOlder, setLocalLoadingOlder] = useState(false);
     const [localLoadingNewer, setLocalLoadingNewer] = useState(false);
-    const [chatStats, setChatStats] = useState<{ totalMembers: number; onlineMembers: number; membershipClosed?: boolean } | null>(null);
+    const [chatStats, setChatStats] = useState<ChatStatsData | null>(() => (
+        isGroupChat ? readCachedChatStats(chatId) : null
+    ));
     const [invitePreviewGroup, setInvitePreviewGroup] = useState<GroupPreview | null>(null);
     const [joiningPreviewGroup, setJoiningPreviewGroup] = useState(false);
     const [invitePreviewError, setInvitePreviewError] = useState('');
@@ -865,21 +897,32 @@ export function ChatRoom({
             return;
         }
         let cancelled = false;
+        const cachedStats = readCachedChatStats(chatId);
+        setChatStats((prev) => {
+            if (!cachedStats) return null;
+            if (prev && prev.totalMembers === cachedStats.totalMembers && prev.onlineMembers === cachedStats.onlineMembers && Boolean(prev.membershipClosed) === Boolean(cachedStats.membershipClosed)) {
+                return prev;
+            }
+            return cachedStats;
+        });
         const loadStats = async () => {
             try {
                 const stats = await apiFetch(`/chats/${encodeURIComponent(chatId)}/stats`);
                 if (!cancelled) {
                     const totalMembers = Number(stats?.totalMembers || 0);
-                    const onlineMembers = Number(stats?.onlineMembers || 0);
+                    const rawOnlineMembers = Number(stats?.onlineMembers || 0);
+                    const onlineMembers = isOfficialChannel ? rawOnlineMembers : Math.max(1, rawOnlineMembers);
                     const membershipClosed = Boolean(stats?.membershipClosed);
+                    const nextStats = { totalMembers, onlineMembers, membershipClosed };
+                    writeCachedChatStats(chatId, nextStats);
                     setChatStats((prev) => (
                         prev && prev.totalMembers === totalMembers && prev.onlineMembers === onlineMembers && Boolean(prev.membershipClosed) === membershipClosed
                             ? prev
-                            : { totalMembers, onlineMembers, membershipClosed }
+                            : nextStats
                     ));
                 }
             } catch {
-                if (!cancelled) setChatStats((prev) => (prev === null ? prev : null));
+                if (!cancelled) setChatStats((prev) => prev);
             }
         };
         loadStats();
@@ -2997,7 +3040,7 @@ export function ChatRoom({
                                         <span className="status-online-text">{headerActivityLabel}</span>
                                     ) : (isGroupChat ? (
                                         <span style={{ direction: 'rtl', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                            <span className="status-online-text">{toPersianDigits(chatStats?.onlineMembers ?? 0)} آنلاین</span>
+                                            <span className="status-online-text">{toPersianDigits(Math.max(1, chatStats?.onlineMembers ?? 1))} آنلاین</span>
                                             <span style={{ color: 'var(--text-muted)' }}>•</span>
                                             <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(chatStats?.totalMembers ?? currentChat?.participantIds?.length ?? 0)} عضو</span>
                                         </span>

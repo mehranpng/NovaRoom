@@ -1,4 +1,4 @@
-import { Search, Plus, LogOut, Bookmark, Trash2, RefreshCw, Pin, PinOff, MessageSquarePlus, X, AtSign, Heart, Bell, BellOff, BellMinus, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { Search, Plus, LogOut, Bookmark, Trash2, Pin, PinOff, MessageSquarePlus, X, AtSign, Heart, Bell, BellOff, BellMinus, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Chat, User } from '../types';
@@ -367,7 +367,6 @@ export const ChatList = memo(function ChatList({
     currentUser,
     activeChatId,
     wsConnected,
-    wsReconnectExhausted,
     isUpdating = false,
     interactiveOnlineUsers,
     onSelectChat,
@@ -375,7 +374,6 @@ export const ChatList = memo(function ChatList({
     onLogout,
     onOpenAIChat: _onOpenAIChat,
     onOpenSavedMessages,
-    onReconnectNow,
     onDragHoverChat,
     loading = false,
 }: ChatListProps) {
@@ -847,19 +845,8 @@ export const ChatList = memo(function ChatList({
                         <div className="chat-list__title-wrap">
                             <span className="chat-list__brand-logo" aria-hidden="true" />
                             <h1 className="chat-list__title">
-                                {isUpdating ? 'Updating...' : (wsConnected ? 'NovaRoom' : (wsReconnectExhausted ? 'Disconnected' : 'Connecting...'))}
+                                {isUpdating ? 'Updating...' : (wsConnected ? 'NovaRoom' : 'Connecting...')}
                             </h1>
-                            {!wsConnected && wsReconnectExhausted && (
-                                <button
-                                    type="button"
-                                    className="chat-list__reconnect-btn"
-                                    onClick={() => {
-                                        onReconnectNow();
-                                    }}
-                                >
-                                    <RefreshCw size={16} />
-                                </button>
-                            )}
                         </div>
                     </div>
 

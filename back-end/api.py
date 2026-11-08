@@ -4358,6 +4358,8 @@ async def preview_group_by_invite(
     online_count = await cl_users.count_documents(
         {"chatId": {"$in": participants}, "online": True}
     )
+    if already_member:
+        online_count = max(1, online_count)
     return {
         "chatId": chat["_id"],
         "name": chat.get("groupName", "گروه"),
@@ -5192,9 +5194,18 @@ async def get_chat_stats(
         raise HTTPException(status_code=403, detail="Forbidden")
 
     total_members = len(participants)
-    online_members = await cl_users.count_documents(
-        {"chatId": {"$in": participants}, "online": True}
+    if my_id in active_connections and not current_user.get("online"):
+        await cl_users.update_one({"chatId": my_id}, {"$set": {"online": True}})
+    online_user_ids = set(
+        await cl_users.distinct(
+            "chatId", {"chatId": {"$in": participants}, "online": True}
+        )
     )
+    online_user_ids.update(
+        p for p in participants if p in active_connections
+    )
+    online_user_ids.add(my_id)
+    online_members = max(1, len(online_user_ids))
 
     return {
         "chatId": chat_id,

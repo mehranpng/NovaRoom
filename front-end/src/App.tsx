@@ -3286,26 +3286,23 @@ export function App() {
         navigate('/ai/c/new');
     }, [temporaryAIChat, activeAIChatId, aiResponding, cleanupTemporaryAIChat, navigate]);
 
-    const handleCreateTemporaryAIChat = useCallback(async () => {
-        try {
-            const created = await apiFetch('/ai/chats', { method: 'POST', body: JSON.stringify({ temporary: true }) });
-            setAIMessagesByChat((prev) => ({ ...prev, [created.id]: [] }));
-            setActiveAIChatId(created.id);
-            setTemporaryAIChat(true);
-            navigate('/ai/c/temporary', { replace: true });
-        } catch (error) {
-            console.error('Failed to create temporary AI chat', error);
-            notify({ message: 'ساخت گفتگوی موقت انجام نشد.', type: 'error' });
+    const handleCreateTemporaryAIChat = useCallback(() => {
+        if (temporaryAIChat && activeAIChatId && !aiResponding) {
+            void cleanupTemporaryAIChat(activeAIChatId);
         }
-    }, []);
+        setActiveAIChatId(null);
+        setTemporaryAIChat(true);
+        navigate('/ai/c/temporary', { replace: true });
+    }, [temporaryAIChat, activeAIChatId, aiResponding, cleanupTemporaryAIChat, navigate]);
 
 
     useEffect(() => {
         if (!isAuthenticated || !showAIChat) return;
         if (location.pathname !== '/ai/c/temporary') return;
         if (temporaryAIChat) return;
-        void handleCreateTemporaryAIChat();
-    }, [isAuthenticated, showAIChat, location.pathname, temporaryAIChat, handleCreateTemporaryAIChat]);
+        setActiveAIChatId(null);
+        setTemporaryAIChat(true);
+    }, [isAuthenticated, showAIChat, location.pathname, temporaryAIChat]);
 
     const handleSelectAIChat = useCallback((chatId: string) => {
         if (temporaryAIChat && activeAIChatId && chatId !== activeAIChatId && !aiResponding) {
@@ -3440,8 +3437,10 @@ export function App() {
             let targetChatId = activeAIChatId;
             if (!targetChatId) {
                 try {
-                    const created = await apiFetch('/ai/chats', { method: 'POST' });
-                    setAIChats((prev) => [created, ...prev]);
+                    const created = await apiFetch('/ai/chats', { method: 'POST', body: JSON.stringify({ temporary: temporaryAIChat }) });
+                    if (!temporaryAIChat) {
+                        setAIChats((prev) => [created, ...prev]);
+                    }
                     setAIMessagesByChat((prev) => ({ ...prev, [created.id]: [] }));
                     setActiveAIChatId(created.id);
                     targetChatId = created.id;
@@ -3520,7 +3519,7 @@ export function App() {
         } finally {
             aiSendInFlightRef.current = false;
         }
-    }, [currentUser, activeAIChatId, aiMessagesByChat, sendAIMessage, aiResponding, aiRespondingChatId, aiChats, aiUsageStatus, location.pathname, navigate]);
+    }, [currentUser, activeAIChatId, aiMessagesByChat, sendAIMessage, aiResponding, aiRespondingChatId, aiChats, aiUsageStatus, location.pathname, navigate, temporaryAIChat]);
 
     const handleStopAIResponse = useCallback(() => {
         const success = stopAIGeneration();
