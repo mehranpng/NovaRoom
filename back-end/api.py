@@ -238,7 +238,8 @@ AI_DAILY_SEARCH_LIMIT = 3
 AI_DISABLED_DEFAULT_MESSAGE = "به دلایل فنی Nova AI موقتا غیرفعال هست"
 AI_DISABLED_MESSAGE_MAX_LENGTH = 100
 MAX_AI_USER_MEMORIES = 10
-AI_MAX_FILE_SIZE = 10 * 1024 * 1024
+AI_MAX_IMAGE_FILE_SIZE = 5 * 1024 * 1024
+AI_MAX_TEXT_FILE_SIZE = 1 * 1024 * 1024
 AI_TEMP_FILE_TTL_SEC = 15 * 60
 AI_TEMP_DIR = UPLOAD_DIR / "ai_temp"
 AI_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
@@ -5441,7 +5442,7 @@ async def _read_upload_bounded(upload: UploadFile, max_bytes: int) -> bytes:
         if total > max_bytes:
             raise HTTPException(
                 status_code=413,
-                detail=f"File size exceeds maximum allowed size of {max_bytes / (1024*1024)}MB",
+                detail=f"حجم فایل نباید بیشتر از {max_bytes // (1024 * 1024)} مگابایت باشد.",
             )
         chunks.append(chunk)
     return b"".join(chunks)
@@ -9218,13 +9219,14 @@ async def upload_ai_file(
     extension = Path(original_name).suffix.lower()
     if extension not in AI_ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail="فرمت فایل پشتیبانی نمی‌شود.")
-    data = await _read_upload_bounded(file, AI_MAX_FILE_SIZE)
+    is_image = extension in AI_IMAGE_EXTENSIONS
+    max_bytes = AI_MAX_IMAGE_FILE_SIZE if is_image else AI_MAX_TEXT_FILE_SIZE
+    data = await _read_upload_bounded(file, max_bytes)
     if not data:
         raise HTTPException(status_code=400, detail="فایل خالی است.")
 
     unique_name = f"{uuid.uuid4().hex}{extension}"
     file_path = await save_ai_temp_file(data, unique_name)
-    is_image = extension in AI_IMAGE_EXTENSIONS
     mime_type = (
         file.content_type
         or ("image/" + extension.lstrip(".").replace("jpg", "jpeg") if is_image else "application/octet-stream")

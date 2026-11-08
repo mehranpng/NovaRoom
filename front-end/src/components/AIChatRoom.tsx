@@ -52,6 +52,9 @@ interface AIChatRoomProps {
 
 const IRAN_OFFSET_MS = 210 * 60 * 1000; 
 const MAX_SELECTED_MESSAGES = 30;
+const AI_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+const AI_MAX_IMAGE_FILE_SIZE = 5 * 1024 * 1024;
+const AI_MAX_TEXT_FILE_SIZE = 1 * 1024 * 1024;
 
 function normalizeTs(ts: unknown): number {
     if (ts == null) return Date.now();
@@ -851,6 +854,16 @@ export function AIChatRoom({
     const handleAttachmentPick = async (file: File | null) => {
         if (!file) return;
         setComposerMenuOpen(false);
+        const isImagePick = AI_IMAGE_EXTENSIONS.includes((file.name.split('.').pop() || '').toLowerCase());
+        const maxBytes = isImagePick ? AI_MAX_IMAGE_FILE_SIZE : AI_MAX_TEXT_FILE_SIZE;
+        if (file.size > maxBytes) {
+            notify({
+                message: `حداکثر حجم ${isImagePick ? 'تصاویر' : 'فایل'} ${toPersianDigits(maxBytes / (1024 * 1024))} مگابایت است.`,
+                type: 'error',
+            });
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
         clearStagedAttachment(true);
         setAttachmentUploading(true);
         try {
