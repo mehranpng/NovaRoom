@@ -1066,6 +1066,27 @@ export function ChatRoom({
         
     }, [chatId]);
 
+    useEffect(() => {
+        const container = messagesContainerRef.current;
+        if (!container) return;
+        let lastPadding = parseFloat(getComputedStyle(container).paddingTop) || 0;
+        const observer = new MutationObserver(() => {
+            const nextPadding = parseFloat(getComputedStyle(container).paddingTop) || 0;
+            if (nextPadding === lastPadding) return;
+            const delta = nextPadding - lastPadding;
+            lastPadding = nextPadding;
+            if (!delta) return;
+            const wasAtBottom = computeNearBottom();
+            markProgrammaticScroll();
+            container.scrollTop = wasAtBottom
+                ? Math.max(0, container.scrollHeight - container.clientHeight)
+                : Math.max(0, container.scrollTop + delta);
+            isAtBottomRef.current = computeNearBottom();
+        });
+        observer.observe(document.body, { attributes: true, attributeFilter: ['data-music-player'] });
+        return () => observer.disconnect();
+    }, [showContactInfo, forwardSourceUser, viewingMemberId, showMembersList]);
+
 
     const startHighlight = (messageId: string) => {
         setHighlightId(messageId);

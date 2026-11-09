@@ -1203,6 +1203,7 @@ export function AIChatRoom({
             animate="visible"
             exit="exit"
         >
+            <div className={cx('header-fade', 'header-fade--screen', messagesScrolled && 'header-fade--visible')} aria-hidden="true" />
             {isSelectionModeActive ? (
                 <div className="chat-room__header chat-room__header--selection">
                     <div className="chat-room__selection-left">
