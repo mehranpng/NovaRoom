@@ -6797,10 +6797,21 @@ html.no-blur-effect .chat-room__jump-box {
     transition: all 0.15s ease;
     align-self: center;
     user-select: none;
+    position: relative;
+}
+
+.message-select-indicator::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
 }
 
 .message-select-indicator:hover {
     border-color: var(--accent-primary);
+}
+
+.message-select-indicator:active {
+    transform: scale(0.92);
 }
 
 .message-select-indicator--selected {
@@ -6808,6 +6819,59 @@ html.no-blur-effect .chat-room__jump-box {
     border-color: var(--accent-primary);
     color: #ffffff;
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary) 30%, transparent);
+}
+
+.message-select-indicator--selected:active {
+    background-color: var(--accent-hover, var(--accent-primary));
+}
+
+.message-row--theirs .message-select-indicator {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    margin: 0;
+    z-index: 2;
+    animation: select-indicator-theirs-in var(--motion-fast) var(--motion-ease-standard) forwards;
+}
+
+.message-row--theirs .message-select-indicator:active {
+    transform: translateY(-50%) scale(0.92);
+}
+
+@keyframes select-indicator-theirs-in {
+    0% {
+        opacity: 0;
+        transform: translateY(-50%) scale(0.4);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(-50%) scale(1);
+    }
+}
+
+.message-row--mine .message-select-indicator {
+    animation: select-indicator-mine-in var(--motion-fast) var(--motion-ease-standard) forwards;
+}
+
+@keyframes select-indicator-mine-in {
+    0% {
+        opacity: 0;
+        transform: scale(0.4);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.message-avatar-wrap {
+    transition: transform var(--motion-fast) var(--motion-ease-standard);
+}
+
+.message-row--selecting.message-row--theirs .message-bubble,
+.message-row--selecting.message-row--theirs .message-avatar-wrap {
+    transform: translateX(36px);
 }
 
 .message-row--selected {
@@ -9669,25 +9733,4 @@ html.no-blur-effect .chat-list__header,
 
 .animate-spin {
     animation: spin 0.8s linear infinite;
-}
-
-.snap-effect-ghost {
-    position: absolute;
-    transform-origin: bottom;
-    overflow: visible !important;
-    animation: snap-effect-scale 1s ease-in forwards !important;
-}
-
-.snap-effect-element {
-    overflow: visible;
-}
-
-.message-bubble[data-snapping="1"] {
-    visibility: hidden;
-    pointer-events: none;
-}
-
-@keyframes snap-effect-scale {
-    0% { transform: scale(1); }
-    100% { transform: scale(1.2); }
 }

@@ -1174,6 +1174,8 @@ export function App() {
             return { ...prev, [chatId]: arr.map((m) => (idsSet.has(m.id) ? { ...m, isDeleting: true } : m)) };
         });
 
+        const isNoEffects = typeof document !== 'undefined' && document.documentElement.classList.contains('no-visual-effects');
+        const duration = isNoEffects ? 300 : SNAP_EFFECT_DURATION_MS;
         freshIds.forEach((id) => {
             const key = `${chatId}:${id}`;
             const timer = window.setTimeout(() => {
@@ -1183,7 +1185,7 @@ export function App() {
                     if (!arr) return prev;
                     return { ...prev, [chatId]: arr.filter((m) => m.id !== id) };
                 });
-            }, SNAP_EFFECT_DURATION_MS);
+            }, duration);
             deletingTimersRef.current.set(key, timer);
         });
     }, []);

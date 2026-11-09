@@ -13,7 +13,6 @@ import { triggerHaptic } from '../utils/haptics';
 import { copyText } from '../utils/clipboard';
 import { cancelUpload } from '../utils/chatFileUploader';
 import { updateSearchPillsFade } from '../utils/searchPillsFade';
-import { animateSnap } from '../utils/snapEffect';
 import { animateMessageDisintegration } from '../utils/disintegrateMessage';
 
 export type ReactionEntry = { emoji: string; count: number; userIds: string[] };
@@ -536,20 +535,49 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     useLayoutEffect(() => {
         const el = bubbleRef.current;
         if (!el) return;
+        const item = el.closest<HTMLElement>('.message-item');
         if (!message.isDeleting) {
-            if (el.dataset.snapping === '1') delete el.dataset.snapping;
             delete el.dataset.disintegrating;
             el.style.visibility = '';
             el.style.pointerEvents = '';
+            el.style.transformOrigin = '';
+            item?.getAnimations().forEach((animation) => animation.cancel());
+            el.getAnimations().forEach((animation) => animation.cancel());
+            if (item) item.style.overflow = '';
             return;
         }
-        if (el.dataset.snapping === '1') return;
-        if (animateSnap(el)) {
-            el.dataset.snapping = '1';
+        const isNoEffects = document.documentElement.classList.contains('no-visual-effects');
+        if (isNoEffects) {
+            const xShift = isMine ? '50%' : '-50%';
+            el.style.transformOrigin = isMine ? 'bottom right' : 'bottom left';
+            el.style.pointerEvents = 'none';
+            el.animate(
+                [
+                    { transform: 'scale(1) translateX(0)', opacity: 1 },
+                    { transform: `scale(0.3) translateX(${xShift})`, opacity: 0 },
+                ],
+                { duration: 250, easing: 'cubic-bezier(0.32, 0.72, 0, 1)', fill: 'forwards' }
+            );
+            if (item) {
+                item.style.overflow = 'hidden';
+                item.animate(
+                    [
+                        { height: `${item.getBoundingClientRect().height}px`, opacity: 1 },
+                        { height: '0px', opacity: 0 },
+                    ],
+                    { duration: 280, easing: 'cubic-bezier(0.32, 0.72, 0, 1)', fill: 'forwards' }
+                );
+            }
             return;
         }
         void animateMessageDisintegration([el]);
-    }, [message.isDeleting]);
+        if (!item) return;
+        item.style.overflow = 'hidden';
+        item.animate(
+            [{ height: `${item.getBoundingClientRect().height}px` }, { height: '0px' }],
+            { duration: 350, easing: 'cubic-bezier(0.32, 0.72, 0, 1)', fill: 'forwards' }
+        );
+    }, [message.isDeleting, isMine]);
 
     const resetDrag = () => {
         const el = bubbleRef.current;
@@ -557,6 +585,9 @@ export const ChatMessageItem = memo(function ChatMessageItem({
             el.style.transition = 'transform 140ms ease-out, box-shadow 220ms ease';
             el.style.transform = '';
             el.style.touchAction = '';
+            window.setTimeout(() => {
+                if (el) el.style.transition = '';
+            }, 140);
         }
         setIsSwiping(false);
         actions.swipeLock(false);
@@ -792,7 +823,9 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                 )}
 
                 {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--last') && (
-                    <div style={{ position: 'absolute', left: 0, bottom: 0, cursor: 'pointer', zIndex: 1 }}
+                    <div
+                        className="message-avatar-wrap"
+                        style={{ position: 'absolute', left: 0, bottom: 0, cursor: 'pointer', zIndex: 1 }}
                         onClick={(e) => {
                             if (isSelectionModeActive) return;
                             e.stopPropagation();
@@ -832,8 +865,6 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     onKeyDown={(e) => { if (e.key === 'Enter' && !isUploading) actions.openMenu(message.id, e.currentTarget); }}
                     style={{
                         cursor: isUploading ? 'default' : 'pointer',
-                        transform: 'translateX(0px)',
-                        transition: 'transform 140ms ease-out, box-shadow 220ms ease',
                         touchAction: 'auto',
                         boxShadow: 'inset 0 0 0 2px rgba(0,0,0,0)',
                     }}

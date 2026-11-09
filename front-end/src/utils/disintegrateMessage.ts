@@ -1,13 +1,7 @@
-import { SNAP_CANVAS_MAX_PARTICLES, SNAP_CANVAS_PARTICLE_STEP, SNAP_EFFECT_DURATION_MS } from './snapConfig';
+import { SNAP_CANVAS_PARTICLE_STEP, SNAP_EFFECT_DURATION_MS } from './snapConfig';
 
 const PADDING = 36;
 const DURATION = SNAP_EFFECT_DURATION_MS;
-
-function resolveParticleStep(width: number, height: number): number {
-    const countAtBaseStep = (width * height) / (SNAP_CANVAS_PARTICLE_STEP * SNAP_CANVAS_PARTICLE_STEP);
-    if (countAtBaseStep <= SNAP_CANVAS_MAX_PARTICLES) return SNAP_CANVAS_PARTICLE_STEP;
-    return Math.sqrt((width * height) / SNAP_CANVAS_MAX_PARTICLES);
-}
 
 interface Particle {
     x: number;
@@ -18,6 +12,7 @@ interface Particle {
     g: number;
     b: number;
     a: number;
+    color: string;
     size: number;
     delay: number;
     life: number;
@@ -101,7 +96,8 @@ function drawTextNodes(ctx: CanvasRenderingContext2D, root: HTMLElement, baseRec
                         range.setStart(current, start);
                         range.setEnd(current, end);
                         const rect = range.getBoundingClientRect();
-                        if (rect.width > 0 && rect.height > 0) {
+                        if (rect.top > window.innerHeight) return;
+                        if (rect.width > 0 && rect.height > 0 && rect.bottom >= 0) {
                             const drawX = rect.left - baseRect.left;
                             const drawY = rect.top - baseRect.top;
                             ctx.fillText(token, drawX, drawY);
@@ -116,12 +112,15 @@ function drawTextNodes(ctx: CanvasRenderingContext2D, root: HTMLElement, baseRec
     }
 }
 
-function renderSnapshot(source: HTMLElement, width: number, height: number): HTMLCanvasElement {
+type Area = { x0: number; y0: number; x1: number; y1: number };
+
+function renderSnapshot(source: HTMLElement, width: number, height: number, area: Area): HTMLCanvasElement {
     const snap = document.createElement('canvas');
-    snap.width = Math.max(1, Math.floor(width));
-    snap.height = Math.max(1, Math.floor(height));
+    snap.width = Math.max(1, area.x1 - area.x0);
+    snap.height = Math.max(1, area.y1 - area.y0);
     const ctx = snap.getContext('2d');
     if (!ctx) return snap;
+    ctx.translate(-area.x0, -area.y0);
 
     const baseRect = source.getBoundingClientRect();
     fillBackground(ctx, source, width, height);
@@ -159,7 +158,7 @@ function renderSnapshot(source: HTMLElement, width: number, height: number): HTM
     return snap;
 }
 
-function buildParticles(snap: HTMLCanvasElement, width: number, height: number): Particle[] {
+function buildParticles(snap: HTMLCanvasElement): Particle[] {
     const ctx = snap.getContext('2d');
     if (!ctx) return [];
     let data: Uint8ClampedArray;
@@ -170,7 +169,7 @@ function buildParticles(snap: HTMLCanvasElement, width: number, height: number):
     }
 
     const particles: Particle[] = [];
-    const step = resolveParticleStep(width, height);
+    const step = SNAP_CANVAS_PARTICLE_STEP;
 
     for (let y = 0; y < snap.height; y += step) {
         for (let x = 0; x < snap.width; x += step) {
@@ -178,20 +177,21 @@ function buildParticles(snap: HTMLCanvasElement, width: number, height: number):
             const a = data[idx + 3];
             if (a < 16) continue;
             const normX = x / Math.max(1, snap.width);
-            const angle = (Math.random() - 0.5) * Math.PI * 1.4;
-            const speed = 18 + Math.random() * 44;
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 10 + Math.random() * 70;
             particles.push({
                 x: x + PADDING,
                 y: y + PADDING,
-                vx: Math.cos(angle) * speed + 14,
-                vy: Math.sin(angle) * speed - (12 + Math.random() * 24),
+                vx: Math.cos(angle) * speed + 10,
+                vy: Math.sin(angle) * speed - Math.random() * 30,
                 r: data[idx],
                 g: data[idx + 1],
                 b: data[idx + 2],
                 a: a / 255,
+                color: `rgb(${data[idx]},${data[idx + 1]},${data[idx + 2]})`,
                 size: step * (0.9 + Math.random() * 0.45),
-                delay: Math.min(1, Math.max(0, normX * 0.75 + (Math.random() - 0.5) * 0.22)),
-                life: 0.45 + Math.random() * 0.25,
+                delay: Math.min(1, Math.max(0, normX * 0.35 + Math.random() * 0.65)),
+                life: 0.35 + Math.random() * 0.45,
             });
         }
     }
@@ -212,8 +212,14 @@ function disintegrateElement(el: HTMLElement): Promise<void> {
 
         el.dataset.disintegrating = '1';
 
-        const snap = renderSnapshot(el, rect.width, rect.height);
-        const particles = buildParticles(snap, rect.width, rect.height);
+        const area = {
+            x0: Math.max(0, Math.floor(-rect.left)),
+            y0: Math.max(0, Math.floor(-rect.top)),
+            x1: Math.min(Math.floor(rect.width), Math.ceil(window.innerWidth - rect.left)),
+            y1: Math.min(Math.floor(rect.height), Math.ceil(window.innerHeight - rect.top)),
+        };
+        const snap = renderSnapshot(el, rect.width, rect.height, area);
+        const particles = buildParticles(snap);
         if (particles.length === 0) {
             resolve();
             return;
@@ -221,13 +227,13 @@ function disintegrateElement(el: HTMLElement): Promise<void> {
 
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const canvas = document.createElement('canvas');
-        const cw = rect.width + PADDING * 2;
-        const ch = rect.height + PADDING * 2;
+        const cw = snap.width + PADDING * 2;
+        const ch = snap.height + PADDING * 2;
         canvas.width = Math.floor(cw * dpr);
         canvas.height = Math.floor(ch * dpr);
         canvas.style.position = 'fixed';
-        canvas.style.left = `${rect.left - PADDING}px`;
-        canvas.style.top = `${rect.top - PADDING}px`;
+        canvas.style.left = `${rect.left + area.x0 - PADDING}px`;
+        canvas.style.top = `${rect.top + area.y0 - PADDING}px`;
         canvas.style.width = `${cw}px`;
         canvas.style.height = `${ch}px`;
         canvas.style.pointerEvents = 'none';
@@ -254,24 +260,19 @@ function disintegrateElement(el: HTMLElement): Promise<void> {
             for (let i = 0; i < particles.length; i++) {
                 const p = particles[i];
                 const t = (elapsed - p.delay * 230) / 1000;
+                ctx.fillStyle = p.color;
                 if (t <= 0) {
-                    ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${p.a})`;
-                    ctx.beginPath();
-                    ctx.arc(p.x + p.size / 2, p.y + p.size / 2, p.size / 2, 0, Math.PI * 2);
-                    ctx.fill();
+                    ctx.globalAlpha = p.a;
+                    ctx.fillRect(p.x, p.y, p.size, p.size);
                     continue;
                 }
                 const progress = t / p.life;
                 if (progress >= 1) continue;
-                const alpha = p.a * (1 - progress * progress);
-                const x = p.x + p.vx * t;
-                const y = p.y + p.vy * t + 26 * t * t;
+                ctx.globalAlpha = p.a * (1 - progress * progress);
                 const size = p.size * (1 - progress * 0.3);
-                ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${alpha})`;
-                ctx.beginPath();
-                ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
-                ctx.fill();
+                ctx.fillRect(p.x + p.vx * t, p.y + p.vy * t + 26 * t * t, size, size);
             }
+            ctx.globalAlpha = 1;
 
             if (elapsed < DURATION) {
                 requestAnimationFrame(tick);
