@@ -21,6 +21,12 @@ function isInsideNoGesture(target: EventTarget | null): boolean {
     return target instanceof Element && Boolean(target.closest('[data-no-message-gesture]'));
 }
 
+const isInsideSelectableText = (target: EventTarget | null) =>
+    target instanceof Element && Boolean(target.closest('.message-text--selectable'));
+
+const isInsideMessageText = (target: EventTarget | null) =>
+    target instanceof Element && Boolean(target.closest('.message-text:not(.message-text--emoji-only)'));
+
 type ChatMessageActions = {
     openMenu: (messageId: string, targetEl: HTMLElement, clientX?: number, clientY?: number) => void;
     openReactionMenu: (messageId: string, targetEl: HTMLElement) => void;
@@ -66,6 +72,7 @@ export type ChatMessageItemProps = {
     reactionMembers?: Record<string, { name?: string; avatar?: string }>;
     isHighlighted: boolean;
     isSelected: boolean;
+    isTextSelectable: boolean;
     isNewMessage: boolean;
     showUnreadSeparator: boolean;
     isMenuActive: boolean;
@@ -307,12 +314,14 @@ const MemoMessageTextContent = memo(function MemoMessageTextContent({
     rawText,
     isBigEmojiOnly,
     emojiOnlyClass,
+    isTextSelectable,
     onMentionClick,
     onGroupInviteClick,
 }: {
     rawText: string;
     isBigEmojiOnly: boolean;
     emojiOnlyClass: string;
+    isTextSelectable: boolean;
     onMentionClick?: (username: string) => void;
     onGroupInviteClick?: (inviteCode: string) => void;
 }) {
@@ -330,13 +339,13 @@ const MemoMessageTextContent = memo(function MemoMessageTextContent({
 
     if (isMarkdown) {
         return (
-            <div className={isLtr ? 'message-text message-text--markdown message-text--ltr' : 'message-text message-text--markdown'}>
+            <div className={`message-text message-text--markdown${isLtr ? ' message-text--ltr' : ''}${isTextSelectable ? ' message-text--selectable' : ''}`}>
                 <MemoMarkdown text={normalized} components={components} />
             </div>
         );
     }
     return (
-        <div className={isBigEmojiOnly ? `message-text message-text--emoji-only ${emojiOnlyClass}` : isLtr ? 'message-text message-text--ltr' : 'message-text'}>
+        <div className={isBigEmojiOnly ? `message-text message-text--emoji-only ${emojiOnlyClass}` : `message-text${isLtr ? ' message-text--ltr' : ''}${isTextSelectable ? ' message-text--selectable' : ''}`}>
             {linkedNodes}
         </div>
     );
@@ -472,6 +481,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     reactionMembers,
     isHighlighted,
     isSelected,
+    isTextSelectable,
     isNewMessage,
     showUnreadSeparator,
     isMenuActive,
@@ -682,6 +692,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                 className={`${isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`} ${shape === 'msg-shape--single' || shape === 'msg-shape--first' ? 'message-row--first' : ''} ${isHighlighted ? 'message-row--flash' : ''} ${isSelected || isMenuActive ? 'message-row--selected' : ''} ${isSelectionModeActive ? 'message-row--selecting' : ''} ${isSwiping ? 'message-row--swiping' : ''} ${isNewMessage ? 'message-row--arrive' : ''}`}
                 onClickCapture={(e) => {
                     if (isInsideNoGesture(e.target)) return;
+                    if (isTextSelectable && isInsideSelectableText(e.target)) return;
                     if (isUploading) return;
                     if (consumeSuppressedClick()) {
                         e.preventDefault();
@@ -713,6 +724,8 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                 }}
                 onPointerDown={(e) => {
                     if (isInsideNoGesture(e.target)) return;
+                    if (e.pointerType === 'mouse' && isInsideMessageText(e.target)) return;
+                    if (isTextSelectable && isInsideSelectableText(e.target)) return;
                     if (e.pointerType === 'mouse' && e.button === 0) startLongPress(e.clientX, e.clientY, e.target);
                     if (!swipeEnabled) return;
                     if (e.pointerType !== 'mouse' || e.button !== 0) return;
@@ -760,6 +773,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                 }}
                 onTouchStart={(e) => {
                     if (isInsideNoGesture(e.target)) return;
+                    if (isTextSelectable && isInsideSelectableText(e.target)) return;
                     const t = e.touches[0];
                     startLongPress(t.clientX, t.clientY, e.target);
                     if (!swipeEnabled) return;
@@ -845,6 +859,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                         : `message-bubble message-bubble--theirs ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isSelected ? 'message-bubble--selected' : ''} ${isUploading ? 'message-bubble--uploading' : ''} ${isVisualMedia ? 'message-bubble--visual-media' : ''} ${isMediaWithoutBottomContent ? 'message-bubble--media-only' : ''}`}
                     onClick={(e) => {
                         if (isInsideNoGesture(e.target)) return;
+                        if (isTextSelectable && isInsideSelectableText(e.target)) return;
                         if (isUploading) return;
                         e.stopPropagation();
                         if (consumeSuppressedClick()) return;
@@ -859,6 +874,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     }}
                     onContextMenu={(e) => {
                         if (isInsideNoGesture(e.target)) return;
+                        if (isTextSelectable && isInsideSelectableText(e.target)) return;
                         e.preventDefault();
                         if (isSelectionModeActive || isUploading) return;
                         actions.openMenu(message.id, e.currentTarget, e.clientX, e.clientY);
@@ -1043,6 +1059,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                     rawText={displayText}
                                     isBigEmojiOnly={isBigEmojiOnly}
                                     emojiOnlyClass={emojiOnlyClass}
+                                    isTextSelectable={isTextSelectable}
                                     onMentionClick={handleMentionClick}
                                     onGroupInviteClick={handleGroupInviteClick}
                                 />
@@ -1053,6 +1070,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                         rawText={displayText}
                                         isBigEmojiOnly={isBigEmojiOnly}
                                         emojiOnlyClass={emojiOnlyClass}
+                                        isTextSelectable={isTextSelectable}
                                         onMentionClick={handleMentionClick}
                                         onGroupInviteClick={handleGroupInviteClick}
                                     />

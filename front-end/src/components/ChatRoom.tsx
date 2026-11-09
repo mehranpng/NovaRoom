@@ -29,6 +29,7 @@ import {
 } from '../utils/chatDrafts';
 import { formatDayLabel, formatLastSeen, formatMessageTime, messageDayKey, resolveVerified, toPersianDigits } from '../utils/format';
 import { copyText } from '../utils/clipboard';
+import { useCustomTextSelection } from '../utils/customTextSelection';
 import { triggerHaptic } from '../utils/haptics';
 import { updateSearchPillsFade } from '../utils/searchPillsFade';
 import { getChatNotifyMode, setChatNotifyMode, useNotificationPrefs } from '../utils/pushNotifications';
@@ -1584,7 +1585,14 @@ export function ChatRoom({
 
     const isSelectionModeActive = selectedMessageIds.length > 0;
 
+    const customSelection = useCustomTextSelection({
+        enabled: selectedMessageIds.length > 0,
+        containerRef: roomRef,
+    });
+    const clearTextSelection = customSelection.clear;
+
     const toggleMessageSelection = useCallback((messageId: string) => {
+        clearTextSelection();
         if (!selectedMessageIds.includes(messageId) && selectedMessageIds.length >= MAX_SELECTED_MESSAGES) {
             triggerHaptic();
             setSelectionShake((value) => value + 1);
@@ -1650,7 +1658,12 @@ export function ChatRoom({
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [selectedMessageIds.length]);
 
+    useEffect(() => {
+        if (selectedMessageIds.length === 0) clearTextSelection();
+    }, [selectedMessageIds]);
+
     const openForwardModal = (messageId: string) => {
+        clearTextSelection();
         setForwardingMessageId(messageId);
         setForwardingMessageIds([]);
         setForwardModalOpen(true);
@@ -2663,6 +2676,8 @@ export function ChatRoom({
         const room = roomRef.current;
         if (!room) return;
 
+        if (window.matchMedia?.('(pointer: fine)').matches && customSelection.ui) return;
+
         if (chatMenuOpen) {
             setChatMenuOpen(false);
             return;
@@ -2742,12 +2757,14 @@ export function ChatRoom({
     };
 
     const beginReply = (m: Message, withHaptic = false) => {
+        clearTextSelection();
         setReplyTo({ id: m.id, senderId: m.senderId, text: m.text });
         setEditingId(null); setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null); setReactionListMenu(null);
         if (withHaptic) triggerHaptic();
     };
 
     const beginEdit = (m: Message) => {
+        clearTextSelection();
         setEditingId(m.id); setReplyTo(null);
         setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null); setReactionListMenu(null);
     };
@@ -2901,6 +2918,7 @@ export function ChatRoom({
                     reactionMembers={reactionMembers}
                     isHighlighted={highlightId === m.id}
                     isSelected={selectedMessageIds.includes(m.id)}
+                    isTextSelectable={selectedMessageIds.includes(m.id)}
                     isNewMessage={arrivedMessageIds.includes(m.id)}
                     showUnreadSeparator={showUnreadSeparator}
                     isMenuActive={msgMenu?.id === m.id}
@@ -3588,6 +3606,7 @@ export function ChatRoom({
                             <button
                                 className="popover__item"
                                 onClick={() => {
+                                    clearTextSelection();
                                     setMsgMenu(null);
                                     setSelectedMessageIds([activeMsg.id]);
                                 }}
@@ -3930,6 +3949,49 @@ export function ChatRoom({
                 }}
                 onConfirmJoin={handleConfirmJoinFromChat}
             />
+
+            {customSelection.ui && (
+                <>
+                    <div
+                        className={`cs-handle cs-handle--dir-${customSelection.ui.startDir}${customSelection.ui.isMine ? ' cs-handle--mine' : ''}`}
+                        style={{
+                            left: customSelection.ui.start.x,
+                            top: customSelection.ui.start.y,
+                        }}
+                        {...customSelection.handleProps('start')}
+                    />
+                    <div
+                        className={`cs-handle cs-handle--dir-${customSelection.ui.endDir}${customSelection.ui.isMine ? ' cs-handle--mine' : ''}`}
+                        style={{
+                            left: customSelection.ui.end.x,
+                            top: customSelection.ui.end.y,
+                        }}
+                        {...customSelection.handleProps('end')}
+                    />
+                    <div
+                        className="selection-bar"
+                        style={{ top: customSelection.ui.bar.top, left: customSelection.ui.bar.left }}
+                        onPointerDown={(e) => e.preventDefault()}
+                    >
+                        <button
+                            type="button"
+                            className="selection-bar__btn"
+                            onClick={async () => {
+                                const copied = await customSelection.copySelection();
+                                if (!copied) return;
+                                setCopyToast('متن کپی شد');
+                                window.setTimeout(() => setCopyToast(null), 2000);
+                            }}
+                        >
+                            <TelegramIcon name="copy" size={16} />
+                            کپی
+                        </button>
+                        <button type="button" className="selection-bar__btn" onClick={customSelection.selectAll}>
+                            انتخاب همه
+                        </button>
+                    </div>
+                </>
+            )}
 
             {copyToast && (
                 <div className="chat-room__toast">

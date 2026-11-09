@@ -22,6 +22,137 @@ textarea {
     user-select: text !important;
 }
 
+.message-text--selectable {
+    cursor: text;
+}
+
+@media (pointer: fine) {
+    .message-text:not(.message-text--emoji-only),
+    .message-text:not(.message-text--emoji-only) * {
+        cursor: text;
+    }
+
+    .message-text:not(.message-text--emoji-only) a,
+    .message-text:not(.message-text--emoji-only) button,
+    .message-text:not(.message-text--emoji-only) .md-code-copy-btn {
+        cursor: pointer;
+    }
+}
+
+::highlight(nova-selection) {
+    background-color: color-mix(in srgb, var(--accent-primary) 34%, transparent);
+    color: inherit;
+}
+
+::highlight(nova-selection-mine) {
+    background-color: rgba(255, 255, 255, 0.34);
+    color: #ffffff;
+}
+
+.cs-handle {
+    --handle-color: var(--accent-primary);
+    position: absolute;
+    z-index: 56;
+    width: 44px;
+    height: 44px;
+    margin-left: -22px;
+    cursor: grab;
+    touch-action: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+}
+
+@media (pointer: fine) {
+    .cs-handle {
+        display: none;
+    }
+}
+.cs-handle--mine {
+    --handle-color: #ffffff;
+}
+
+.cs-handle:active {
+    cursor: grabbing;
+}
+
+.cs-handle::before {
+    display: none !important;
+    content: none !important;
+}
+
+.cs-handle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    width: 22px;
+    height: 22px;
+    box-sizing: border-box;
+    background: var(--handle-color) !important;
+    border: none !important;
+    box-shadow: 0 2px 7px rgba(0, 0, 0, 0.32);
+    transition: transform 0.14s ease, left 0.14s ease, border-radius 0.14s ease;
+    pointer-events: none;
+}
+
+.cs-handle--dir-left {
+    margin-left: -33px;
+}
+
+.cs-handle--dir-left::after {
+    left: 11px;
+    border-radius: 50% 3px 50% 50%;
+}
+
+.cs-handle--dir-right {
+    margin-left: -11px;
+}
+
+.cs-handle--dir-right::after {
+    left: 11px;
+    border-radius: 3px 50% 50% 50%;
+}
+
+.cs-handle:active::after {
+    transform: scale(1.16);
+}
+
+.selection-bar {
+    position: absolute;
+    z-index: 55;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 4px;
+    white-space: nowrap;
+    padding: 4px;
+    border-radius: 9999px;
+    background: var(--glass-surface-elevated);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--shadow-md);
+}
+
+.selection-bar__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border: none;
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform var(--motion-fast) var(--motion-ease-standard), background var(--motion-fast) var(--motion-ease-standard);
+}
+
+.selection-bar__btn:active {
+    transform: scale(0.97);
+    background: var(--accent-soft);
+}
+
 html,
 body,
 #root {

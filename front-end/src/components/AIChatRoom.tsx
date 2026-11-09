@@ -17,6 +17,7 @@ import { isElementScrolled } from '../utils/scrollFade';
 import { updateSearchPillsFade } from '../utils/searchPillsFade';
 import { triggerHaptic } from '../utils/haptics';
 import { copyText } from '../utils/clipboard';
+import { useCustomTextSelection } from '../utils/customTextSelection';
 import { apiFetch } from '../config/api';
 
 interface AIChatRoomProps {
@@ -289,6 +290,11 @@ export function AIChatRoom({
     const messagesContainerRef = useRef<HTMLDivElement | null>(null);
     const aiDrawerListRef = useRef<HTMLDivElement | null>(null);
     const roomRef = useRef<HTMLDivElement | null>(null);
+    const customSelection = useCustomTextSelection({
+        enabled: selectedMessageIds.length > 0,
+        containerRef: roomRef,
+    });
+    const clearTextSelection = customSelection.clear;
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const sendSoundRef = useRef<HTMLAudioElement | null>(null);
     const receiveSoundRef = useRef<HTMLAudioElement | null>(null);
@@ -1013,7 +1019,16 @@ export function AIChatRoom({
 
     const isSelectionModeActive = selectedMessageIds.length > 0;
 
+    useEffect(() => {
+        if (selectedMessageIds.length === 0) clearTextSelection();
+    }, [selectedMessageIds]);
+
+    useEffect(() => {
+        clearTextSelection();
+    }, [activeAIChatId]);
+
     const toggleMessageSelection = (messageId: string) => {
+        clearTextSelection();
         if (!selectedMessageIds.includes(messageId) && selectedMessageIds.length >= MAX_SELECTED_MESSAGES) {
             triggerHaptic();
             setSelectionShake((value) => value + 1);
@@ -1028,6 +1043,7 @@ export function AIChatRoom({
 
     const handleCopySelected = async () => {
         if (selectedMessageIds.length === 0) return;
+        clearTextSelection();
         const selectedMsgs = messages
             .filter((m) => selectedMessageIds.includes(m.id))
             .sort((a, b) => normalizeTs(a.timestamp) - normalizeTs(b.timestamp));
@@ -1050,6 +1066,7 @@ export function AIChatRoom({
 
     const handleOpenForwardSelected = () => {
         if (selectedMessageIds.length === 0) return;
+        clearTextSelection();
         setForwardingMessageIds([...selectedMessageIds]);
         setForwardModalOpen(true);
     };
@@ -1368,6 +1385,7 @@ export function AIChatRoom({
                                         isSelectionModeActive && 'message-row--selecting'
                                     )}
                                     onClickCapture={(e) => {
+                                        if (isSelected && (e.target as HTMLElement).closest('.message-text--selectable')) return;
                                         if (suppressClickRef.current) {
                                             suppressClickRef.current = false;
                                             e.preventDefault();
@@ -1397,6 +1415,7 @@ export function AIChatRoom({
                                         openMessageMenu(message.id, e.currentTarget as HTMLElement, ne.clientX, ne.clientY);
                                     }}
                                     onPointerDown={(e) => {
+                                        if (e.pointerType === 'mouse' && (e.target as HTMLElement).closest?.('.message-text')) return;
                                         if (e.pointerType === 'mouse' && e.button === 0) startMessageLongPress(message.id, e.clientX, e.clientY);
                                     }}
                                     onPointerMove={(e) => {
@@ -1475,7 +1494,7 @@ export function AIChatRoom({
                                                             exit={{ height: 0, opacity: 1 }}
                                                             transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
                                                         >
-                                                            <div className="ai-reasoning-content">
+                                                            <div className={cx('ai-reasoning-content', 'message-text', isSelected && 'message-text--selectable')}>
                                                                 <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
                                                                     {normalizeMessageTextForRender(message.reasoningContent || '...')}
                                                                 </ReactMarkdown>
@@ -1484,7 +1503,7 @@ export function AIChatRoom({
                                                     )}
                                                 </AnimatePresence>
                                                 <div className="ai-reasoning-answer">
-                                                    <div className={cx('message-text', 'message-text--markdown', isLtrText(message.text ?? '') && 'message-text--ltr')}>
+                                                    <div className={cx('message-text', 'message-text--markdown', isLtrText(message.text ?? '') && 'message-text--ltr', isSelected && 'message-text--selectable')}>
                                                         <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
                                                             {normalizeMessageTextForRender(message.text ?? '')}
                                                         </ReactMarkdown>
@@ -1541,7 +1560,7 @@ export function AIChatRoom({
                                                 </div>
                                             )}
                                             {Boolean(message.text) && (
-                                                <div className={cx('message-text', 'message-text--markdown', isLtrText(message.text ?? '') && 'message-text--ltr')}>
+                                                <div className={cx('message-text', 'message-text--markdown', isLtrText(message.text ?? '') && 'message-text--ltr', isSelected && 'message-text--selectable')}>
                                                     <ReactMarkdown
                                                         remarkPlugins={[remarkGfm, remarkBreaks]}
 
@@ -2015,6 +2034,49 @@ export function AIChatRoom({
                         انتخاب
                     </button>
                 </div>
+            )}
+
+            {customSelection.ui && (
+                <>
+                    <div
+                        className={`cs-handle cs-handle--dir-${customSelection.ui.startDir}${customSelection.ui.isMine ? ' cs-handle--mine' : ''}`}
+                        style={{
+                            left: customSelection.ui.start.x,
+                            top: customSelection.ui.start.y,
+                        }}
+                        {...customSelection.handleProps('start')}
+                    />
+                    <div
+                        className={`cs-handle cs-handle--dir-${customSelection.ui.endDir}${customSelection.ui.isMine ? ' cs-handle--mine' : ''}`}
+                        style={{
+                            left: customSelection.ui.end.x,
+                            top: customSelection.ui.end.y,
+                        }}
+                        {...customSelection.handleProps('end')}
+                    />
+                    <div
+                        className="selection-bar"
+                        style={{ top: customSelection.ui.bar.top, left: customSelection.ui.bar.left }}
+                        onPointerDown={(e) => e.preventDefault()}
+                    >
+                        <button
+                            type="button"
+                            className="selection-bar__btn"
+                            onClick={async () => {
+                                const copied = await customSelection.copySelection();
+                                if (!copied) return;
+                                setCopyToast('متن کپی شد');
+                                window.setTimeout(() => setCopyToast(null), 2000);
+                            }}
+                        >
+                            <TelegramIcon name="copy" size={16} />
+                            کپی
+                        </button>
+                        <button type="button" className="selection-bar__btn" onClick={customSelection.selectAll}>
+                            انتخاب همه
+                        </button>
+                    </div>
+                </>
             )}
 
             {copyToast && (
