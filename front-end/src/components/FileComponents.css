@@ -75,7 +75,7 @@
 }
 
 .file-upload-picker-item:hover {
-    background: var(--hover-bg);
+    background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 
 .file-upload-picker-item__label {

@@ -24,7 +24,7 @@ import { notify } from './utils/notificationBus';
 import { clearLocalE2EEIdentity, decryptBioClientSide, decryptClientText, decryptMessageClientSide, encryptChatTextClientSide, loadLocalE2EEIdentity, registerPeerPublicKey } from './utils/e2ee';
 import { clearCachedTextValues, clearChatSnapshots, getChatSnapshot, saveChatSnapshot } from './utils/mediaCache';
 import { clearChessCache } from './utils/chessCache';
-import { useDarkMode, syncThemeColor, isVisualEffectsEnabled } from './hooks/useDarkMode';
+import { useDarkMode, syncThemeColor } from './hooks/useDarkMode';
 import { SNAP_EFFECT_DURATION_MS } from './utils/snapConfig';
 import { BottomNavbar } from './components/BottomNavbar';
 import { ChessScreen } from './components/chess/ChessScreen';
@@ -1255,7 +1255,7 @@ export function App() {
             && viewRef.current === 'chatRoom'
             && Array.from(idsSet).some((id) => document.querySelector(`.chat-room .message-bubble[data-message-id="${CSS.escape(id)}"]`));
 
-        if (hasVisibleBubble && isVisualEffectsEnabled()) {
+        if (hasVisibleBubble) {
             markMessagesDeleting(chatId, Array.from(idsSet));
             return;
         }
@@ -2810,7 +2810,7 @@ export function App() {
         }
 
         const chatIdAtDelete = activeChatId;
-        if (isVisualEffectsEnabled()) markMessagesDeleting(chatIdAtDelete, [messageId]);
+        markMessagesDeleting(chatIdAtDelete, [messageId]);
         const sent = deleteViaWS(chatIdAtDelete, messageId);
         if (!sent) cancelMessagesDeleting(chatIdAtDelete, [messageId]);
     }, [activeChatId, deleteViaWS, markMessagesDeleting, cancelMessagesDeleting]);
@@ -2841,7 +2841,7 @@ export function App() {
         if (persistedIds.length === 0) return;
 
         const chatIdAtDelete = activeChatId;
-        if (isVisualEffectsEnabled()) markMessagesDeleting(chatIdAtDelete, persistedIds);
+        markMessagesDeleting(chatIdAtDelete, persistedIds);
 
         try {
             await apiFetch(`/chats/${encodeURIComponent(chatIdAtDelete)}/messages/batch-delete`, {

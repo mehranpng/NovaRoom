@@ -779,6 +779,14 @@ body,
     flex-shrink: 0;
 }
 
+.popover__seen-emojis {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+    font-size: 14px;
+}
+
 .seen-by-menu {
     padding: 0;
 }
@@ -1794,6 +1802,10 @@ body,
     background-repeat: no-repeat;
     animation: screen-soft-in var(--motion-slow) var(--motion-ease-standard);
     position: relative;
+}
+
+.chat-room--fade-safe {
+    animation: none;
 }
 
 .chat-room::before {
@@ -3469,7 +3481,6 @@ html.keyboard-open .chat-room__input-area {
     align-items: flex-end;
     justify-content: center;
     gap: 8px;
-    animation: screen-soft-in var(--motion-base) var(--motion-ease-standard);
 }
 
 .chat-room__text-input {
@@ -6630,12 +6641,21 @@ body[data-music-player='active'] .chat-room__pinned-bar {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.42);
+    background: transparent;
     cursor: pointer;
+}
+
+.chat-room__jump-dim {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.42);
+    pointer-events: none;
     animation: overlay-soft-in var(--motion-fast) var(--motion-ease-standard);
 }
 
 .chat-room__jump-box {
+    position: relative;
+    z-index: 1;
     width: 112px;
     height: 112px;
     display: flex;
@@ -6648,19 +6668,14 @@ body[data-music-player='active'] .chat-room__pinned-bar {
     border: 1px solid var(--glass-border);
     box-shadow: var(--glass-shadow), var(--glass-specular);
     cursor: default;
-    animation: jump-box-in 0.18s var(--motion-ease-standard);
 }
 
-@keyframes jump-box-in {
-    from {
-        opacity: 0;
-        transform: scale(0.94);
-    }
-
-    to {
-        opacity: 1;
-        transform: scale(1);
-    }
+.chat-room__enter-fade {
+    position: absolute;
+    inset: 0;
+    z-index: 200;
+    pointer-events: none;
+    background: var(--chat-room-bg, var(--bg-secondary));
 }
 
 html.no-blur-effect .chat-room__jump-box {
@@ -6695,7 +6710,6 @@ html.no-blur-effect .chat-room__jump-box {
     min-height: 48px;
     box-sizing: border-box;
     pointer-events: none;
-    animation: screen-soft-in 0.15s ease-out;
 }
 
 .chat-room__header--selection > * {

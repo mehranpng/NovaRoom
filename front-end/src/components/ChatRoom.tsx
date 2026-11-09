@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Copy, Eye, MoreVertical, Pencil, Trash2, X, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload, Download, Pin, AtSign, Heart, Bell, BellOff, BellMinus } from 'lucide-react';
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
 import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata, PendingAttachment, PendingForwardDraft, PinnedMessage, GroupPreview } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -26,11 +26,18 @@ import { updateSearchPillsFade } from '../utils/searchPillsFade';
 import { getChatNotifyMode, setChatNotifyMode, useNotificationPrefs } from '../utils/pushNotifications';
 import { ChatMessageItem, type ReactionEntry } from './ChatMessageItem';
 import { ChatComposer, type ChatComposerSendPayload } from './ChatComposer';
+import { fileUploadPicker } from './FileUpload';
 import { GroupMembersView, type GroupMember } from './GroupMembersView';
 import './FileComponents.css';
 
 const EMPTY_REACTIONS: ReactionEntry[] = [];
 const MAX_SELECTED_MESSAGES = 30;
+
+const chatRoomScreenVariants: Variants = {
+    ...screenVariants,
+    hidden: { opacity: 1 },
+    visible: { opacity: 1 },
+};
 
 // shortcut: group member cache skips payloads over 200KB; move it to IndexedDB when huge groups show up.
 const groupMemberCacheKey = (chatId: string) => `novaroom:group-members:v1:${chatId}`;
@@ -364,6 +371,7 @@ export function ChatRoom({
     const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number; isFileDownloaded?: boolean }>(null);
     const [reactionMenu, setReactionMenu] = useState<null | { id: string; top: number; left: number }>(null);
     const [seenByMenu, setSeenByMenu] = useState<null | { id: string; top: number; left: number }>(null);
+    const [reactionListMenu, setReactionListMenu] = useState<null | { id: string; top: number; left: number }>(null);
     const [seenByUsersByMessage, setSeenByUsersByMessage] = useState<Record<string, SeenByUser[]>>({});
     const [seenByLoadingMessageId, setSeenByLoadingMessageId] = useState<string | null>(null);
     const [reasoningPanelByMessage, setReasoningPanelByMessage] = useState<Record<string, boolean>>({});
@@ -378,6 +386,7 @@ export function ChatRoom({
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
     const reactionMenuRef = useRef<HTMLDivElement | null>(null);
     const seenByMenuRef = useRef<HTMLDivElement | null>(null);
+    const reactionListMenuRef = useRef<HTMLDivElement | null>(null);
     const confirmDeleteChatRef = useRef<HTMLDivElement | null>(null);
     const confirmPinRef = useRef<HTMLDivElement | null>(null);
     const confirmDeleteMsgRef = useRef<HTMLDivElement | null>(null);
@@ -1599,6 +1608,24 @@ export function ChatRoom({
         setExternalFileUploadHandler(() => handler);
     }, []);
 
+    const resetUploadPickerIfOpen = () => {
+        if (!externalFileUploadHandler) return;
+        fileUploadPicker.open = false;
+    };
+
+    const handleExternalFileUploadClickCapture = (e: React.MouseEvent<HTMLDivElement>) => {
+        const isUploadButton = Boolean((e.target as HTMLElement).closest('.file-upload-button'));
+        if (e.type === 'pointerdown') {
+            if (!fileUploadPicker.open || isUploadButton) return;
+            e.stopPropagation();
+            fileUploadPicker.open = false;
+            return;
+        }
+        if (!isUploadButton && !fileUploadPicker.open) {
+            e.stopPropagation();
+        }
+    };
+
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
             const target = e.target as Node;
@@ -1606,6 +1633,7 @@ export function ChatRoom({
             if (msgMenuRef.current?.contains(target)) return;
             if (reactionMenuRef.current?.contains(target)) return;
             if (seenByMenuRef.current?.contains(target)) return;
+            if (reactionListMenuRef.current?.contains(target)) return;
             if (confirmDeleteChatRef.current) {
                 const modal = confirmDeleteChatRef.current.querySelector('.chat-room-confirm-modal');
                 if (modal && !modal.contains(target)) { setConfirmDeleteChat(false); return; }
@@ -1625,7 +1653,7 @@ export function ChatRoom({
             setChatMenuOpen(false);
             setMsgMenu(null);
             setReactionMenu(null);
-            setSeenByMenu(null);
+            setSeenByMenu(null); setReactionListMenu(null);
         };
         document.addEventListener('click', onDocClick);
         return () => document.removeEventListener('click', onDocClick);
@@ -1652,7 +1680,7 @@ export function ChatRoom({
             setChatMenuOpen(false);
             setMsgMenu(null);
             setReactionMenu(null);
-            setSeenByMenu(null);
+            setSeenByMenu(null); setReactionListMenu(null);
         };
         document.addEventListener('click', dismiss, true);
         return () => document.removeEventListener('click', dismiss, true);
@@ -2157,10 +2185,10 @@ export function ChatRoom({
         const scrollingDown = currentTop > lastTop + 1;
         lastScrollTopRef.current = currentTop;
 
-        if (msgMenu || reactionMenu || seenByMenu) {
+        if (msgMenu || reactionMenu || seenByMenu || reactionListMenu) {
             setMsgMenu(null);
             setReactionMenu(null);
-            setSeenByMenu(null);
+            setSeenByMenu(null); setReactionListMenu(null);
         }
 
         const nearBottom = computeNearBottom();
@@ -2567,10 +2595,10 @@ export function ChatRoom({
             return;
         }
 
-        if (msgMenu || reactionMenu || seenByMenu) {
+        if (msgMenu || reactionMenu || seenByMenu || reactionListMenu) {
             setMsgMenu(null);
             setReactionMenu(null);
-            setSeenByMenu(null);
+            setSeenByMenu(null); setReactionListMenu(null);
             return;
         }
 
@@ -2593,7 +2621,7 @@ export function ChatRoom({
 
         setMsgMenu({ id: messageId, top: relY + 8, left: relX - 12, isFileDownloaded });
         setReactionMenu(null);
-        setSeenByMenu(null);
+        setSeenByMenu(null); setReactionListMenu(null);
 
         if (isGroupChat && message?.senderId === currentUserId) {
             loadSeenBy(messageId);
@@ -2617,7 +2645,8 @@ export function ChatRoom({
         setMsgMenu((menu) => clamp(menu, msgMenuRef.current));
         setReactionMenu((menu) => clamp(menu, reactionMenuRef.current));
         setSeenByMenu((menu) => clamp(menu, seenByMenuRef.current));
-    }, [msgMenu?.id, msgMenu?.top, msgMenu?.left, msgMenu?.isFileDownloaded, reactionMenu?.id, reactionMenu?.top, reactionMenu?.left, seenByMenu?.id, seenByMenu?.top, seenByMenu?.left]);
+        setReactionListMenu((menu) => clamp(menu, reactionListMenuRef.current));
+    }, [msgMenu?.id, msgMenu?.top, msgMenu?.left, msgMenu?.isFileDownloaded, reactionMenu?.id, reactionMenu?.top, reactionMenu?.left, seenByMenu?.id, seenByMenu?.top, seenByMenu?.left, reactionListMenu?.id, reactionListMenu?.top, reactionListMenu?.left]);
 
     const openReactionMenu = (messageId: string, targetEl: HTMLElement, anchor?: { top: number; left: number }) => {
         const room = roomRef.current;
@@ -2632,22 +2661,22 @@ export function ChatRoom({
         const finalLeft = Math.max(12, Math.min(anchorLeft, roomRect.width - pickerWidth - 16));
         setReactionMenu({ id: messageId, top, left: finalLeft });
         setMsgMenu(null);
-        setSeenByMenu(null);
+        setSeenByMenu(null); setReactionListMenu(null);
     };
 
     const beginReply = (m: Message, withHaptic = false) => {
         setReplyTo({ id: m.id, senderId: m.senderId, text: m.text });
-        setEditingId(null); setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
+        setEditingId(null); setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null); setReactionListMenu(null);
         if (withHaptic) triggerHaptic();
     };
 
     const beginEdit = (m: Message) => {
         setEditingId(m.id); setReplyTo(null);
-        setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
+        setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null); setReactionListMenu(null);
     };
 
     const doDeleteMessage = (messageId: string) => {
-        setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null);
+        setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null); setReactionListMenu(null);
         setConfirmDeleteMsg(messageId);
     };
 
@@ -2971,8 +3000,8 @@ export function ChatRoom({
 
     return (
         <motion.div
-            className="chat-room" style={{ position: 'relative' }} ref={roomRef}
-            variants={screenVariants}
+            className="chat-room chat-room--fade-safe" style={{ position: 'relative' }} ref={roomRef}
+            variants={chatRoomScreenVariants}
             initial="hidden"
             animate="visible"
             exit="exit"
@@ -3010,8 +3039,14 @@ export function ChatRoom({
                 }
             }}
         >
+            <motion.div
+                className="chat-room__enter-fade"
+                initial={{ opacity: 1 }}
+                animate={{ opacity: 0 }}
+                transition={{ duration: 0.24, ease: 'easeOut' }}
+            />
             {isSelectionModeActive ? (
-                <div className="chat-room__header chat-room__header--selection">
+                <div className="chat-room__header chat-room__header--selection" onPointerDownCapture={resetUploadPickerIfOpen}>
                     <div className="chat-room__selection-left">
                         <button
                             className="icon-btn chat-room__selection-close-btn"
@@ -3063,7 +3098,7 @@ export function ChatRoom({
                     </div>
                 </div>
             ) : (
-                <div className="chat-room__header">
+                <div className="chat-room__header" onPointerDownCapture={resetUploadPickerIfOpen}>
                     <button className={cx('chat-room__back-btn', 'back-icon-btn', messagesScrolled && 'chat-room__back-btn--scrolled')} onClick={() => { maybeSaveScroll(chatId); onBack(); }} aria-label="Back" type="button"><ChevronLeft size={22} /></button>
                     <button className="icon-btn chat-room__close-btn" onClick={() => { maybeSaveScroll(chatId); onCloseChat(); }} aria-label="Back to empty" type="button"><ChevronLeft size={22} /></button>
 
@@ -3298,7 +3333,7 @@ export function ChatRoom({
                 </div>
             )}
 
-            <div className="chat-room__messages-Viewport">
+            <div className="chat-room__messages-Viewport" onPointerDownCapture={resetUploadPickerIfOpen}>
                 {floatingDateLabel && (
                     <div className={`chat-room__floating-date${floatingDateVisible && !loadingOlderMessages && !localLoadingOlder ? ' chat-room__floating-date--visible' : ''}`}>
                         <span>{floatingDateLabel}</span>
@@ -3359,6 +3394,7 @@ export function ChatRoom({
                         cancelMentionResolve();
                     }}
                 >
+                    <div className="chat-room__jump-dim" aria-hidden="true" />
                     <div className="chat-room__jump-box" onClick={(e) => e.stopPropagation()}>
                         <span className="chat-range-loader chat-range-loader--active chat-room__jump-spinner" />
                     </div>
@@ -3423,6 +3459,22 @@ export function ChatRoom({
                                                 ))}
                                         </span>
                                     )}
+                                </button>
+                            )}
+                            {isGroupChat && !isOfficialChannel && !activeMsgIsMine && menuReactions.length > 0 && (
+                                <button className="popover__item popover__item--seen" onClick={() => {
+                                    setReactionListMenu({ id: activeMsg.id, top: msgMenu.top, left: msgMenu.left });
+                                    setMsgMenu(null);
+                                }} type="button">
+                                    <span className="popover__seen-label">
+                                        <Heart size={16} />
+                                        <span>واکنش‌ها</span>
+                                    </span>
+                                    <span className="popover__seen-emojis">
+                                        {menuReactions.slice(0, 3).map((r, index) => (
+                                            <span key={`${r.emoji}-${index}`}>{r.emoji}</span>
+                                        ))}
+                                    </span>
                                 </button>
                             )}
                             {canReplyInMessageMenu && (
@@ -3515,7 +3567,7 @@ export function ChatRoom({
                                     return (
                                         <button key={u.chatId} className="seen-by-menu__row" type="button"
                                             onClick={() => {
-                                                setSeenByMenu(null);
+                                                setSeenByMenu(null); setReactionListMenu(null);
                                                 openMember(u.chatId);
                                             }}>
                                             <Avatar name={u.name || u.username || ''} src={u.avatar || ''} size="xs" />
@@ -3527,6 +3579,51 @@ export function ChatRoom({
                                         </button>
                                     );
                                 })
+                            )}
+                        </div>
+                    </div>
+                );
+            })()}
+
+            {reactionListMenu && (() => {
+                const listMsg = messagesById.get(reactionListMenu.id);
+                const listReactions = (optimisticReactions[reactionListMenu.id] ?? listMsg?.reactions ?? []) as unknown as ReactionEntry[];
+                const reactorRows = listReactions.flatMap((reaction) => (reaction.userIds || []).map((userId) => {
+                    const member = groupMembers[userId];
+                    return {
+                        userId,
+                        emoji: reaction.emoji,
+                        name: member?.name || userId,
+                        avatar: member?.avatar || '',
+                        verified: resolveVerified(member?.verified),
+                    };
+                }));
+
+                return (
+                    <div ref={reactionListMenuRef} className="popover popover--mini seen-by-menu"
+                        style={{ top: reactionListMenu.top, left: reactionListMenu.left, right: 'auto', position: 'absolute', zIndex: 52 }}
+                        onClick={(e) => e.stopPropagation()}>
+                        <div className="seen-by-menu__header">
+                            واکنش‌ها · {toPersianDigits(reactorRows.length)} نفر
+                        </div>
+                        <div className="seen-by-menu__body">
+                            {reactorRows.length === 0 ? (
+                                <div className="seen-by-menu__empty">هنوز واکنشی ثبت نشده است</div>
+                            ) : (
+                                reactorRows.map((row) => (
+                                    <button key={`${row.userId}-${row.emoji}`} className="seen-by-menu__row" type="button"
+                                        onClick={() => {
+                                            setReactionListMenu(null);
+                                            openMember(row.userId);
+                                        }}>
+                                        <Avatar name={row.name} src={row.avatar} size="xs" />
+                                        <span className="seen-by-menu__name">
+                                            <span>{row.name}</span>
+                                            {row.verified && <VerifiedBadge size={13} />}
+                                        </span>
+                                        <span className="seen-by-menu__emoji">{row.emoji}</span>
+                                    </button>
+                                ))
                             )}
                         </div>
                     </div>
@@ -3692,7 +3789,7 @@ export function ChatRoom({
                 </AnimatePresence>
             </div>
 
-            <div className="chat-room__composer-host" ref={composerHostRef}>
+            <div className="chat-room__composer-host" ref={composerHostRef} onPointerDownCapture={handleExternalFileUploadClickCapture} onClickCapture={handleExternalFileUploadClickCapture}>
                 <ChatComposer
                     key={`${chatId}:${editingId ?? 'compose'}`}
                     chatId={chatId}

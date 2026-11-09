@@ -12,8 +12,24 @@ interface FileUploadProps {
     onRegisterUploadFile?: (handler: ((file: File) => void) | null) => void;
 }
 
+export const fileUploadPicker = { open: false };
+
 export function FileUpload({ onFileSelected, fileAttached = false, onRegisterUploadFile }: FileUploadProps) {
-    const [pickerMenuOpen, setPickerMenuOpen] = useState(false);
+    const [pickerMenuOpen, setPickerMenuOpenState] = useState(false);
+
+    const setPickerMenuOpen = (value: boolean | ((prev: boolean) => boolean)) => {
+        if (typeof value === 'function') {
+            const next = value(pickerMenuOpen);
+            fileUploadPicker.open = next;
+            setPickerMenuOpenState(next);
+            return;
+        }
+        fileUploadPicker.open = value;
+        setPickerMenuOpenState(value);
+    };
+
+    useEffect(() => () => { fileUploadPicker.open = false; }, []);
+
     const [pendingImageForEditor, setPendingImageForEditor] = useState<File | null>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
@@ -22,6 +38,7 @@ export function FileUpload({ onFileSelected, fileAttached = false, onRegisterUpl
     const menuRef = useRef<HTMLDivElement>(null);
     const pickerSessionRef = useRef(false);
     const pickerCloseTimerRef = useRef<number | null>(null);
+    const suppressOutsideClickUntilRef = useRef(0);
 
     const editorSessionRef = useRef<{
         originalFile: File;
@@ -121,23 +138,35 @@ export function FileUpload({ onFileSelected, fileAttached = false, onRegisterUpl
     }, []);
 
     useEffect(() => {
+        const swallowOutsideClick = (e: MouseEvent) => {
+            if (performance.now() > suppressOutsideClickUntilRef.current) return;
+            suppressOutsideClickUntilRef.current = 0;
+            e.preventDefault();
+            e.stopPropagation();
+        };
+
+        document.addEventListener('click', swallowOutsideClick, true);
+        return () => document.removeEventListener('click', swallowOutsideClick, true);
+    }, []);
+
+    useEffect(() => {
         if (!pickerMenuOpen) return;
 
-        const closeMenu = (e: MouseEvent) => {
-            if (!menuRef.current?.contains(e.target as Node)) {
-                setPickerMenuOpen(false);
-            }
+        const closeMenu = (e: PointerEvent) => {
+            if (menuRef.current?.contains(e.target as Node)) return;
+            setPickerMenuOpen(false);
+            suppressOutsideClickUntilRef.current = performance.now() + 400;
         };
 
         const onEscape = (e: KeyboardEvent) => {
             if (e.key === 'Escape') setPickerMenuOpen(false);
         };
 
-        document.addEventListener('mousedown', closeMenu);
+        document.addEventListener('pointerdown', closeMenu, true);
         document.addEventListener('keydown', onEscape);
 
         return () => {
-            document.removeEventListener('mousedown', closeMenu);
+            document.removeEventListener('pointerdown', closeMenu, true);
             document.removeEventListener('keydown', onEscape);
         };
     }, [pickerMenuOpen]);
@@ -229,9 +258,8 @@ export function FileUpload({ onFileSelected, fileAttached = false, onRegisterUpl
                         ref={menuRef}
                         className="file-upload-picker-menu"
                         initial={{ opacity: 0, y: 10, scale: 0.96 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 8, scale: 0.97 }}
-                        transition={{ duration: 0.12, ease: 'easeOut' }}
+                        animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: 0.18, ease: [0.22, 1, 0.36, 1] } }}
+                        exit={{ opacity: 0, y: 6, scale: 0.97, transition: { duration: 0.24, ease: [0.4, 0, 0.2, 1] } }}
                     >
                         <motion.label htmlFor="file-upload-image" className="file-upload-picker-item" 
                             onClick={() => { setPickerSession(true); setPickerMenuOpen(false); }}
