@@ -49,6 +49,33 @@ textarea {
     color: #ffffff;
 }
 
+@property --quote-jump-alpha {
+    syntax: '<number>';
+    inherits: true;
+    initial-value: 0;
+}
+
+@keyframes nova-quote-flash {
+    0% { --quote-jump-alpha: 0; }
+    15% { --quote-jump-alpha: 1; }
+    72% { --quote-jump-alpha: 1; }
+    100% { --quote-jump-alpha: 0; }
+}
+
+html.quote-jump-animating {
+    animation: nova-quote-flash 2s ease-in-out forwards;
+}
+
+::highlight(nova-quote-jump) {
+    background-color: color-mix(in srgb, var(--accent-primary) calc(var(--quote-jump-alpha) * 42%), transparent);
+    color: inherit;
+}
+
+::highlight(nova-quote-jump-mine) {
+    background-color: rgba(255, 255, 255, calc(var(--quote-jump-alpha) * 0.48));
+    color: #ffffff;
+}
+
 .cs-handle {
     --handle-color: var(--accent-primary);
     position: absolute;
@@ -123,6 +150,7 @@ textarea {
     display: flex;
     gap: 4px;
     white-space: nowrap;
+    max-width: calc(100% - 16px);
     padding: 4px;
     border-radius: 9999px;
     background: var(--glass-surface-elevated);
@@ -2879,6 +2907,35 @@ html.no-blur-effect .chat-room__date-label {
 
 .message-reply-box:active {
     transform: scale(0.985);
+}
+
+.message-reply-box--quote {
+    padding-inline-end: 24px !important;
+}
+
+.message-reply-box__quote-badge {
+    position: absolute;
+    top: 5px;
+    inset-inline-end: 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-primary);
+    opacity: 0.85;
+    pointer-events: none;
+}
+
+.message-bubble--mine .message-reply-box__quote-badge {
+    color: var(--message-reply-text);
+}
+
+.message-reply-box--quote .message-reply-box__text {
+    white-space: pre-wrap;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    line-height: 1.38;
+    word-break: break-word;
 }
 
 .message-bubble--mine .message-reply-box {

@@ -14,6 +14,8 @@ const MAX_CHAT_MESSAGE_LENGTH = 6000;
 export type ChatComposerSendPayload = {
     text: string;
     replyToId?: string;
+    replyQuoteText?: string;
+    replyIsQuote?: boolean;
     editMessageId?: string;
     attachment?: PendingAttachment;
 };
@@ -256,6 +258,8 @@ export const ChatComposer = memo(function ChatComposer({
         const accepted = onSend({
             text: rawText || '',
             replyToId: replyTo?.id,
+            replyQuoteText: replyTo?.isQuote ? replyTo.text.trim() : undefined,
+            replyIsQuote: replyTo?.isQuote ? true : undefined,
             editMessageId: editingId ?? undefined,
             attachment: displayedAttachment ?? undefined,
         });
@@ -310,7 +314,13 @@ export const ChatComposer = memo(function ChatComposer({
             {(replyTo || editingId) && (
                 <div className="chat-room__reply-edit-box">
                     <div style={{ minWidth: 0, flex: 1, textAlign: 'right' }}>
-                        <div className="chat-room__reply-edit-box__title">{editingId ? 'در حال ویرایش' : 'در حال پاسخ'}</div>
+                        <div className="chat-room__reply-edit-box__title">
+                            {editingId
+                                ? 'در حال ویرایش'
+                                : replyTo?.isQuote
+                                    ? 'در حال پاسخ به نقل‌قول'
+                                    : 'در حال پاسخ'}
+                        </div>
                         {!editingId && replyTo && <div className="chat-room__reply-edit-box__text">{replyPreviewText}</div>}
                     </div>
                     <button

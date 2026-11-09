@@ -76,7 +76,8 @@ export function setChatDraft(
         prev &&
         prev.text === nextText &&
         (prev.replyTo?.id ?? null) === (nextReplyTo?.id ?? null) &&
-        (prev.replyTo?.text ?? '') === (nextReplyTo?.text ?? '')
+        (prev.replyTo?.text ?? '') === (nextReplyTo?.text ?? '') &&
+        Boolean(prev.replyTo?.isQuote) === Boolean(nextReplyTo?.isQuote)
     ) {
         return;
     }

@@ -14,6 +14,7 @@ import { copyText } from '../utils/clipboard';
 import { cancelUpload } from '../utils/chatFileUploader';
 import { updateSearchPillsFade } from '../utils/searchPillsFade';
 import { animateMessageDisintegration } from '../utils/disintegrateMessage';
+import TelegramIcon from './TelegramIcon';
 
 export type ReactionEntry = { emoji: string; count: number; userIds: string[] };
 
@@ -34,7 +35,7 @@ type ChatMessageActions = {
     deleteReaction: (messageId: string) => void;
     reply: (message: Message) => void;
     toggleSelect: (messageId: string) => void;
-    scrollToMessage: (messageId: string) => void;
+    scrollToMessage: (messageId: string, quoteText?: string) => void;
     openForwardSource: (message: Message) => void;
     openMember: (memberId: string) => void;
     toggleReasoning: (messageId: string) => void;
@@ -921,12 +922,17 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                     if (isUploading) return;
                                     if (isSelectionModeActive) return;
                                     e.stopPropagation();
-                                    actions.scrollToMessage(message.replyTo!.id);
+                                    actions.scrollToMessage(message.replyTo!.id, message.replyTo!.isQuote ? message.replyTo!.text : undefined);
                                 }}
                                     role="button" tabIndex={0}
-                                    onKeyDown={(e) => { if (e.key === 'Enter' && !isSelectionModeActive && !isUploading) actions.scrollToMessage(message.replyTo!.id); }}
-                                    className="message-reply-box"
-                                    style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer' }}>
+                                    onKeyDown={(e) => { if (e.key === 'Enter' && !isSelectionModeActive && !isUploading) actions.scrollToMessage(message.replyTo!.id, message.replyTo!.isQuote ? message.replyTo!.text : undefined); }}
+                                    className={message.replyTo.isQuote ? 'message-reply-box message-reply-box--quote' : 'message-reply-box'}
+                                    style={{ marginBottom: 6, padding: '6px 10px', borderRadius: 12, cursor: 'pointer', position: 'relative' }}>
+                                    {message.replyTo.isQuote && (
+                                        <span className="message-reply-box__quote-badge" aria-hidden="true">
+                                            <TelegramIcon name="quote" size={13} />
+                                        </span>
+                                    )}
                                     <div className="message-reply-box__label">
                                         {replySenderPending
                                             ? <span className="skeleton-glass skeleton-glass--reply-name" aria-hidden />

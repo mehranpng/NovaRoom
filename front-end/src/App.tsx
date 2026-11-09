@@ -97,6 +97,7 @@ const isSameMessageRecord = (prev: Message, next: Message): boolean => {
         prev.file?.coverArtUrl === next.file?.coverArtUrl &&
         prev.replyTo?.id === next.replyTo?.id &&
         prev.replyTo?.text === next.replyTo?.text &&
+        Boolean(prev.replyTo?.isQuote) === Boolean(next.replyTo?.isQuote) &&
         prev.forwardedFrom?.originalSenderId === next.forwardedFrom?.originalSenderId &&
         areReactionsEqual(prev.reactions, next.reactions)
     );
@@ -2629,7 +2630,7 @@ export function App() {
         });
     }, [sendSeen]);
 
-    const handleSendMessage = useCallback(async (payload: { text: string; replyToId?: string; editMessageId?: string; attachment?: PendingAttachment }) => {
+    const handleSendMessage = useCallback(async (payload: { text: string; replyToId?: string; replyQuoteText?: string; replyIsQuote?: boolean; editMessageId?: string; attachment?: PendingAttachment }) => {
         if (!currentUser) return;
         const text = payload.text;
         const attachment = payload.attachment;
@@ -2663,7 +2664,12 @@ export function App() {
                 reactions: [],
                 file: optimisticFile,
                 upload: attachment ? { phase: initialUploadPhase, progress: 0 } : undefined,
-                replyTo: replySrc ? { id: replySrc.id, senderId: replySrc.senderId, text: replySrc.text } : undefined,
+                replyTo: replySrc ? {
+                    id: replySrc.id,
+                    senderId: replySrc.senderId,
+                    text: payload.replyIsQuote && payload.replyQuoteText?.trim() ? payload.replyQuoteText.trim() : replySrc.text,
+                    ...(payload.replyIsQuote ? { isQuote: true } : {}),
+                } : undefined,
             };
             setMessages((prev) => {
                 const nextState = {
@@ -2707,7 +2713,7 @@ export function App() {
                         },
                     });
                     registerLocalBlobUrl(file.fileId, localUrl);
-                    const success = await sendViaWS(targetChatId, text, payload.replyToId, file, clientId);
+                    const success = await sendViaWS(targetChatId, text, payload.replyToId, file, clientId, payload.replyQuoteText, payload.replyIsQuote);
                     if (!success) console.warn('WebSocket not connected, message was not sent');
                     clearUploadProgress(clientId);
                     window.setTimeout(() => {
@@ -2734,7 +2740,7 @@ export function App() {
             const clientId = makeClientId();
             const localUrl = pushOptimisticMessage(targetChatId, clientId);
             if (!attachment || !localUrl) {
-                const success = await sendViaWS(targetChatId, text, payload.replyToId, undefined, clientId);
+                const success = await sendViaWS(targetChatId, text, payload.replyToId, undefined, clientId, payload.replyQuoteText, payload.replyIsQuote);
                 if (!success) console.warn('WebSocket not connected, message was not sent');
                 return;
             }
@@ -2936,6 +2942,7 @@ export function App() {
                     id: mappedReplyClientId,
                     senderId: currentUser?.chatId || '',
                     text: String(repliedSourceMsg?.text || sourceMessage.replyTo?.text || ''),
+                    ...(sourceMessage.replyTo?.isQuote ? { isQuote: true } : {}),
                 }
                 : undefined;
 
@@ -2988,7 +2995,11 @@ export function App() {
                     : undefined;
                 const origReplyId = sourceMessage.replyTo?.id;
                 let encryptedReplyText: string | undefined;
-                if (origReplyId && oldIdToSourceMsg.has(origReplyId)) {
+                let replyIsQuote = false;
+                if (origReplyId && sourceMessage.replyTo?.isQuote && sourceMessage.replyTo.text) {
+                    replyIsQuote = true;
+                    encryptedReplyText = await encryptChatTextClientSide(sourceMessage.replyTo.text, authToken || '', targetChatId);
+                } else if (origReplyId && oldIdToSourceMsg.has(origReplyId)) {
                     const parentMsg = oldIdToSourceMsg.get(origReplyId);
                     const rawReplyText = String(parentMsg?.text || sourceMessage.replyTo?.text || '');
                     encryptedReplyText = await encryptChatTextClientSide(rawReplyText, authToken || '', targetChatId);
@@ -3006,6 +3017,7 @@ export function App() {
                     encryptedText,
                     encryptedReasoningContent,
                     encryptedReplyText,
+                    replyIsQuote: replyIsQuote || undefined,
                     encryptedSearchSources,
                     encryptedFileKey,
                     clientId: forwardClientId,

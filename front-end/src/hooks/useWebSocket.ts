@@ -33,7 +33,7 @@ interface UseWebSocketProps {
 }
 
 type OutgoingEvent =
-    | { type: 'message'; chatId: string; text: string; replyToId?: string; file?: FileMetadata; clientId?: string; mentions?: string[] }
+    | { type: 'message'; chatId: string; text: string; replyToId?: string; replyQuoteText?: string; replyIsQuote?: boolean; file?: FileMetadata; clientId?: string; mentions?: string[] }
     | { type: 'edit_message'; chatId: string; messageId: string; text: string; mentions?: string[] }
     | { type: 'delete_message'; chatId: string; messageId: string }
     | { type: 'seen'; chatId: string; maxMessageId: string }
@@ -461,13 +461,24 @@ export function useWebSocket({
     );
 
     const sendMessage = useCallback(
-        async (chatId: string, text: string, replyToId?: string, file?: FileMetadata, clientId?: string) => {
+        async (chatId: string, text: string, replyToId?: string, file?: FileMetadata, clientId?: string, replyQuoteText?: string, replyIsQuote?: boolean) => {
             if (typeof text !== 'string') return false;
             if (text.length > MAX_CHAT_MESSAGE_LENGTH) return false;
             if (!chatId || (!text.trim() && !file)) return false;
             const mentions = text.trim() ? extractMentionedUsernames(text) : undefined;
             const encryptedText = text.trim() ? await encryptChatTextClientSide(text, token || '', chatId) : '';
-            return send({ type: 'message', chatId, text: encryptedText, replyToId, file, clientId, mentions });
+            const quoteText = replyIsQuote ? (replyQuoteText || '').trim() : '';
+            const encryptedQuoteText = quoteText ? await encryptChatTextClientSide(quoteText, token || '', chatId) : undefined;
+            return send({
+                type: 'message',
+                chatId,
+                text: encryptedText,
+                replyToId,
+                ...(encryptedQuoteText ? { replyQuoteText: encryptedQuoteText, replyIsQuote: true } : {}),
+                file,
+                clientId,
+                mentions,
+            });
         },
         [send, token]
     );

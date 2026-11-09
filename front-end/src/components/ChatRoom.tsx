@@ -110,7 +110,7 @@ interface ChatRoomProps {
     messages: Message[];
     currentUserId: string;
     currentUser?: User | null;
-    onSendMessage: (payload: { text: string; replyToId?: string; editMessageId?: string; attachment?: PendingAttachment }) => void;
+    onSendMessage: (payload: { text: string; replyToId?: string; replyQuoteText?: string; replyIsQuote?: boolean; editMessageId?: string; attachment?: PendingAttachment }) => void;
     onDeleteMessage: (messageId: string) => void;
     onDeleteMessages?: (messageIds: string[]) => void | Promise<void>;
     onBack: () => void;
@@ -422,6 +422,8 @@ export function ChatRoom({
     const [arrivedMessageIds, setArrivedMessageIds] = useState<string[]>([]);
     const arrivedAnimationTimerRef = useRef<number | null>(null);
     const highlightTimeoutRef = useRef<number | null>(null);
+    const quoteHighlightTimeoutRef = useRef<number | null>(null);
+    const pendingJumpQuoteRef = useRef<{ messageId: string; quoteText: string } | null>(null);
     const highlightRafRef = useRef<number | null>(null);
     const missingJumpAttemptRef = useRef<{ id: string; at: number } | null>(null);
     const [resolvingMention, setResolvingMention] = useState(false);
@@ -906,6 +908,7 @@ export function ChatRoom({
         if (!reply) return '';
         const repliedMessage = messagesById.get(reply.id);
         const fallbackText = (reply.text || '').trim();
+        if (reply.isQuote && fallbackText) return fallbackText;
         if (repliedMessage?.chessInvite) {
             return repliedMessage.chessInvite.shared ? '♟️ بازی شطرنج' : '♟️ دعوت به بازی شطرنج';
         }
@@ -1146,19 +1149,77 @@ export function ChatRoom({
     }, [showContactInfo, forwardSourceUser, viewingMemberId, showMembersList]);
 
 
+    const findQuoteDomRange = (messageEl: HTMLElement, quoteText?: string): Range | null => {
+        const needle = (quoteText || '').trim();
+        if (!needle) return null;
+        const textRoot = messageEl.querySelector<HTMLElement>('.message-text');
+        if (!textRoot) return null;
+        const walker = document.createTreeWalker(textRoot, NodeFilter.SHOW_TEXT);
+        const segments: { node: Text; start: number; end: number }[] = [];
+        let full = '';
+        let current = walker.nextNode();
+        while (current) {
+            const textNode = current as Text;
+            const val = textNode.nodeValue || '';
+            if (val.length > 0) {
+                segments.push({ node: textNode, start: full.length, end: full.length + val.length });
+                full += val;
+            }
+            current = walker.nextNode();
+        }
+        let matchIndex = full.indexOf(needle);
+        let matchLength = needle.length;
+        if (matchIndex === -1) {
+            const pattern = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+            const m = new RegExp(pattern).exec(full);
+            if (m) {
+                matchIndex = m.index;
+                matchLength = m[0].length;
+            }
+        }
+        if (matchIndex === -1) return null;
+        const matchEnd = matchIndex + matchLength;
+        const startSeg = segments.find((s) => matchIndex >= s.start && matchIndex < s.end);
+        const endSeg = segments.find((s) => matchEnd > s.start && matchEnd <= s.end);
+        if (!startSeg || !endSeg) return null;
+        const range = document.createRange();
+        range.setStart(startSeg.node, matchIndex - startSeg.start);
+        range.setEnd(endSeg.node, matchEnd - endSeg.start);
+        return range;
+    };
+
+    const startQuoteRangeHighlight = (range: Range | null, isMine: boolean) => {
+        if (typeof CSS === 'undefined' || !('highlights' in CSS) || typeof Highlight === 'undefined') return;
+        const rootEl = document.documentElement;
+        CSS.highlights.delete('nova-quote-jump');
+        CSS.highlights.delete('nova-quote-jump-mine');
+        rootEl.classList.remove('quote-jump-animating');
+        if (quoteHighlightTimeoutRef.current) window.clearTimeout(quoteHighlightTimeoutRef.current);
+        if (!range) return;
+        void rootEl.offsetWidth;
+        CSS.highlights.set(isMine ? 'nova-quote-jump-mine' : 'nova-quote-jump', new Highlight(range));
+        rootEl.classList.add('quote-jump-animating');
+        quoteHighlightTimeoutRef.current = window.setTimeout(() => {
+            CSS.highlights.delete('nova-quote-jump');
+            CSS.highlights.delete('nova-quote-jump-mine');
+            rootEl.classList.remove('quote-jump-animating');
+        }, 2000);
+    };
+
     const startHighlight = (messageId: string) => {
         setHighlightId(messageId);
         if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
         highlightTimeoutRef.current = window.setTimeout(() => setHighlightId(null), 1500);
     };
 
-    const scrollToMessage = (messageId: string, retry = 1) => {
+    const scrollToMessage = (messageId: string, retry = 1, quoteText?: string) => {
         const el = messageElsRef.current.get(messageId);
         const container = messagesContainerRef.current;
         if (!el || !container) {
             const lastAttempt = missingJumpAttemptRef.current;
             if (!messagesById.has(messageId) && (!lastAttempt || lastAttempt.id !== messageId || performance.now() - lastAttempt.at > 2000)) {
                 missingJumpAttemptRef.current = { id: messageId, at: performance.now() };
+                if (quoteText) pendingJumpQuoteRef.current = { messageId, quoteText };
                 void onJumpToMessage?.(chatId, messageId);
             }
             return;
@@ -1166,15 +1227,26 @@ export function ChatRoom({
         if (highlightRafRef.current) cancelAnimationFrame(highlightRafRef.current);
         const topBarOffset = pinnedMessage ? 122 : 68;
         const cr = container.getBoundingClientRect();
-        const tr = el.getBoundingClientRect();
+        const quoteRange = findQuoteDomRange(el, quoteText);
+        const quoteRect = quoteRange?.getBoundingClientRect();
+        const hasQuoteRect = Boolean(quoteRect && (quoteRect.width > 0 || quoteRect.height > 0));
+        const isMine = messagesById.get(messageId)?.senderId === currentUserId
+            || Boolean(el.querySelector('.message-bubble--mine'));
+        const tr = hasQuoteRect ? quoteRect! : el.getBoundingClientRect();
         const isFullyVisible = tr.top >= cr.top + topBarOffset && tr.bottom <= cr.bottom - 70;
         if (isFullyVisible) {
-            startHighlight(messageId);
+            if (quoteRange) startQuoteRangeHighlight(quoteRange, isMine);
+            else startHighlight(messageId);
             return;
         }
 
         markProgrammaticScroll();
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (hasQuoteRect) {
+            const targetTop = container.scrollTop + (tr.top - cr.top) - (cr.height / 2) + (tr.height / 2);
+            container.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
+        } else {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
         let lastTop = container.scrollTop;
         let sameCount = 0;
         const startedAt = performance.now();
@@ -1190,14 +1262,15 @@ export function ChatRoom({
                 lastTop = cont.scrollTop;
             }
             if (sameCount >= 4 || now - startedAt > 650) {
-                const targetRect = target.getBoundingClientRect();
+                const targetRect = hasQuoteRect ? quoteRange!.getBoundingClientRect() : target.getBoundingClientRect();
                 const contRect = cont.getBoundingClientRect();
                 const inView = targetRect.top >= contRect.top + topBarOffset - 20 && targetRect.bottom <= contRect.bottom - 50;
                 if (!inView && retry > 0) {
-                    scrollToMessage(messageId, retry - 1);
+                    scrollToMessage(messageId, retry - 1, quoteText);
                     return;
                 }
-                startHighlight(messageId);
+                if (quoteRange) startQuoteRangeHighlight(quoteRange, isMine);
+                else startHighlight(messageId);
                 highlightRafRef.current = null;
                 return;
             }
@@ -1209,8 +1282,12 @@ export function ChatRoom({
     useEffect(() => {
         if (!targetScrollMessage?.messageId) return;
         if (targetScrollMessage.chatId !== chatId) return;
+        const pendingQuote = pendingJumpQuoteRef.current?.messageId === targetScrollMessage.messageId
+            ? pendingJumpQuoteRef.current.quoteText
+            : undefined;
+        pendingJumpQuoteRef.current = null;
         const timer = window.setTimeout(() => {
-            scrollToMessage(targetScrollMessage.messageId);
+            scrollToMessage(targetScrollMessage.messageId, 1, pendingQuote);
             onJumpToMessageSettled?.();
         }, 120);
         return () => window.clearTimeout(timer);
@@ -2608,6 +2685,8 @@ export function ChatRoom({
             onSendMessage({
                 text: payload.text,
                 replyToId: payload.replyToId,
+                replyQuoteText: payload.replyQuoteText,
+                replyIsQuote: payload.replyIsQuote,
                 editMessageId: payload.editMessageId,
                 attachment: payload.attachment,
             });
@@ -2763,6 +2842,20 @@ export function ChatRoom({
         if (withHaptic) triggerHaptic();
     };
 
+    const beginQuoteReply = (messageId: string, quotedText: string, withHaptic = false) => {
+        const m = messagesById.get(messageId);
+        const cleanQuote = quotedText.trim();
+        if (!m || !cleanQuote) return;
+        clearTextSelection();
+        setSelectedMessageIds([]);
+        setReplyTo({ id: m.id, senderId: m.senderId, text: cleanQuote, isQuote: true });
+        setEditingId(null); setMsgMenu(null); setReactionMenu(null); setSeenByMenu(null); setReactionListMenu(null);
+        if (withHaptic) triggerHaptic();
+        requestAnimationFrame(() => {
+            composerHostRef.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus();
+        });
+    };
+
     const beginEdit = (m: Message) => {
         clearTextSelection();
         setEditingId(m.id); setReplyTo(null);
@@ -2843,7 +2936,7 @@ export function ChatRoom({
         },
         reply: (message: Message) => messageHandlerStateRef.current.beginReply(message, false),
         toggleSelect: (messageId: string) => messageHandlerStateRef.current.toggleMessageSelection(messageId),
-        scrollToMessage: (messageId: string) => messageHandlerStateRef.current.scrollToMessage(messageId),
+        scrollToMessage: (messageId: string, quoteText?: string) => messageHandlerStateRef.current.scrollToMessage(messageId, 1, quoteText),
         openForwardSource: (message: Message) => messageHandlerStateRef.current.openForwardSource(message),
         openMember: (memberId: string) => messageHandlerStateRef.current.openMember(memberId),
         toggleReasoning: (messageId: string) => messageHandlerStateRef.current.toggleReasoning(messageId),
@@ -3582,9 +3675,17 @@ export function ChatRoom({
                                     </span>
                                 </button>
                             )}
-                            {canReplyInMessageMenu && (
-                                <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><TelegramIcon name="reply" size={16} />پاسخ</button>
-                            )}
+                            {canReplyInMessageMenu && (() => {
+                                const activeQuote = customSelection.ui?.messageId === activeMsg.id
+                                    ? customSelection.getQuoteSelection()
+                                    : null;
+                                return (
+                                    <button className="popover__item" onClick={() => {
+                                        if (activeQuote) beginQuoteReply(activeQuote.messageId, activeQuote.text);
+                                        else beginReply(activeMsg);
+                                    }} type="button"><TelegramIcon name={activeQuote ? 'quote' : 'reply'} size={16} />{activeQuote ? 'نقل‌قول و پاسخ' : 'پاسخ'}</button>
+                                );
+                            })()}
                             {canTogglePin && (
                                 <button
                                     className="popover__item"
@@ -3973,6 +4074,20 @@ export function ChatRoom({
                         style={{ top: customSelection.ui.bar.top, left: customSelection.ui.bar.left }}
                         onPointerDown={(e) => e.preventDefault()}
                     >
+                        {customSelection.ui.messageId && canSwipeToReply && !isContactBlocked && (
+                            <button
+                                type="button"
+                                className="selection-bar__btn"
+                                onClick={() => {
+                                    const quote = customSelection.getQuoteSelection();
+                                    if (!quote) return;
+                                    beginQuoteReply(quote.messageId, quote.text, true);
+                                }}
+                            >
+                                <TelegramIcon name="quote" size={16} />
+                                نقل‌قول
+                            </button>
+                        )}
                         <button
                             type="button"
                             className="selection-bar__btn"

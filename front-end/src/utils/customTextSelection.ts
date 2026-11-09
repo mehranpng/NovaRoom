@@ -20,6 +20,7 @@ export type CustomSelectionUi = {
     isMine: boolean;
     startDir: 'left' | 'right';
     endDir: 'left' | 'right';
+    messageId: string | null;
 };
 
 type Options = {
@@ -211,10 +212,12 @@ export function useCustomTextSelection({ enabled, containerRef }: Options) {
                 height: Math.max(18, Math.min(28, endRect.height || 20)),
             };
             const rawLeft = (startPoint.x + endPoint.x) / 2;
-            const left = Math.min(cr.width - 90, Math.max(90, rawLeft));
+            const halfBar = ((container.querySelector<HTMLElement>('.selection-bar')?.offsetWidth || 260) / 2) + 12;
+            const left = Math.min(Math.max(halfBar, cr.width - halfBar), Math.max(halfBar, rawLeft));
             const aboveTop = Math.min(startPoint.y - startPoint.height, endPoint.y - endPoint.height) - 56;
             const top = aboveTop < 72 ? Math.max(endPoint.y, startPoint.y) + 36 : aboveTop;
             const isMine = Boolean(root?.closest('.message-bubble--mine'));
+            const messageId = root?.closest<HTMLElement>('[data-message-id]')?.dataset.messageId || null;
             const rootRect = root?.getBoundingClientRect();
             const defaultStartDir: 'left' | 'right' = isRtl ? 'right' : 'left';
             const defaultEndDir: 'left' | 'right' = isRtl ? 'left' : 'right';
@@ -226,7 +229,7 @@ export function useCustomTextSelection({ enabled, containerRef }: Options) {
                 : false;
             const startDir = startNearEdge ? (defaultStartDir === 'right' ? 'left' : 'right') : defaultStartDir;
             const endDir = endNearEdge ? (defaultEndDir === 'right' ? 'left' : 'right') : defaultEndDir;
-            setUi({ start: startPoint, end: endPoint, bar: { top, left }, isRtl, isMine, startDir, endDir });
+            setUi({ start: startPoint, end: endPoint, bar: { top, left }, isRtl, isMine, startDir, endDir, messageId });
         });
     }, [containerRef]);
 
@@ -257,6 +260,13 @@ export function useCustomTextSelection({ enabled, containerRef }: Options) {
         clear();
         return true;
     }, [getText, clear]);
+
+    const getQuoteSelection = useCallback((): { messageId: string; text: string } | null => {
+        const text = (rangeRef.current?.toString() || '').trim();
+        const messageId = rootRef.current?.closest<HTMLElement>('[data-message-id]')?.dataset.messageId || null;
+        if (!text || !messageId) return null;
+        return { messageId, text };
+    }, []);
 
     const selectAll = useCallback(() => {
         const root = rootRef.current;
@@ -459,5 +469,5 @@ export function useCustomTextSelection({ enabled, containerRef }: Options) {
         },
     }), [apply, trackSpeed]);
 
-    return { ui, hasActiveSelection: Boolean(ui), clear, copySelection, selectAll, handleProps };
+    return { ui, hasActiveSelection: Boolean(ui), clear, copySelection, getQuoteSelection, selectAll, handleProps };
 }

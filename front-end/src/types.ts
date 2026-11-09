@@ -24,6 +24,7 @@ export interface MessageReply {
     id: string;
     senderId: string;
     text: string;
+    isQuote?: boolean;
 }
 
 export interface PinnedMessage {

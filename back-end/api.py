@@ -1409,6 +1409,7 @@ class ForwardBatchItem(BaseModel):
     encryptedText: Optional[str] = None
     encryptedReasoningContent: Optional[str] = None
     encryptedReplyText: Optional[str] = None
+    replyIsQuote: Optional[bool] = None
     encryptedSearchSources: Optional[str] = None
     encryptedFileKey: Optional[str] = None
     clientId: Optional[str] = None
@@ -1420,6 +1421,7 @@ class ForwardMessageRequest(BaseModel):
     encryptedText: Optional[str] = None
     encryptedReasoningContent: Optional[str] = None
     encryptedReplyText: Optional[str] = None
+    replyIsQuote: Optional[bool] = None
     encryptedSearchSources: Optional[str] = None
     encryptedFileKey: Optional[str] = None
     clientId: Optional[str] = None
@@ -6612,6 +6614,7 @@ async def forward_message(
                 encryptedText=req.encryptedText,
                 encryptedReasoningContent=req.encryptedReasoningContent,
                 encryptedReplyText=req.encryptedReplyText,
+                replyIsQuote=req.replyIsQuote,
                 encryptedSearchSources=req.encryptedSearchSources,
                 encryptedFileKey=req.encryptedFileKey,
                 clientId=req.clientId,
@@ -6920,6 +6923,8 @@ async def forward_message(
                 "senderId": user_id,
                 "text": provided_enc_reply,
             }
+            if item.replyIsQuote or orig_reply.get("isQuote"):
+                reply_to_doc["isQuote"] = True
 
         forwarded_msg = {
             "_id": entry["new_oid"],
@@ -8500,6 +8505,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 chat_id_target = data.get("chatId")
                 text = data.get("text", "")
                 reply_to_id = data.get("replyToId")
+                reply_quote_text = data.get("replyQuoteText")
+                reply_is_quote = bool(data.get("replyIsQuote"))
                 client_id = data.get("clientId")
                 raw_file = data.get("file")
                 file_data = None
@@ -8561,6 +8568,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     continue
                 if not message_text_within_limit(text, MAX_CHAT_MESSAGE_LENGTH):
                     continue
+                if isinstance(reply_quote_text, str) and not message_text_within_limit(reply_quote_text, MAX_CHAT_MESSAGE_LENGTH):
+                    continue
 
                 if not chat_id_target or (not text.strip() and not file_data):
                     continue
@@ -8611,13 +8620,18 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                             {"_id": oid, "chatId": chat_id_target}
                         )
                         if base:
+                            quote_plain = ""
+                            if reply_is_quote and isinstance(reply_quote_text, str) and reply_quote_text.strip():
+                                quote_plain = reply_quote_text.strip()
                             reply_to = {
                                 "id": str(base["_id"]),
                                 "senderId": base.get("senderId"),
-                                "text": decrypt_with_fallback(
+                                "text": quote_plain or decrypt_with_fallback(
                                     base.get("text", ""), token, chat_scope
                                 ),
                             }
+                            if quote_plain:
+                                reply_to["isQuote"] = True
 
                 raw_mentions = (
                     data.get("mentions") if isinstance(data.get("mentions"), list) else None
@@ -8642,7 +8656,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     "textEncrypted": True,
                     "timestamp": utc_now(),
                     "seenBy": [chat_id],
-                    "replyTo": reply_to,
+                    "replyTo": dict(reply_to) if reply_to else None,
                     "reactions": [],
                     "unreadMentionUserIds": unread_mention_user_ids,
                     "unreadReactionUserIds": [],
