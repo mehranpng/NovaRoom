@@ -22,4 +22,5 @@ deploy/output/
 uploads/
 pyrightconfig.json
 telegram-tt/
+.agents/
 
