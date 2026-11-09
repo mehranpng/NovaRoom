@@ -3,6 +3,7 @@ import { Bell, BellOff, Pencil, X } from 'lucide-react';
 import { SendIcon } from './SendIcon';
 import type { MessageReply, PendingAttachment, PendingForwardDraft } from '../types';
 import { pendingUploadedFileByChat } from '../utils/pendingUploads';
+import { getChatDraft, setChatDraft } from '../utils/chatDrafts';
 import { FileUpload } from './FileUpload';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -90,7 +91,7 @@ export const ChatComposer = memo(function ChatComposer({
     notificationsMuted = false,
     onToggleNotifications,
 }: ChatComposerProps) {
-    const [text, setText] = useState(() => (editingId ? editDraft : ''));
+    const [text, setText] = useState(() => (editingId ? editDraft : (getChatDraft(chatId)?.text ?? '')));
     const [caretPos, setCaretPos] = useState(0);
     const [activeMentionIndex, setActiveMentionIndex] = useState(-1);
     const [attachment, setAttachment] = useState<PendingAttachment | null>(() => pendingUploadedFileByChat[chatId] ?? null);
@@ -157,6 +158,11 @@ export const ChatComposer = memo(function ChatComposer({
         });
         return () => cancelAnimationFrame(raf);
     }, [editingId]);
+
+    useEffect(() => {
+        if (editingId) return;
+        setChatDraft(chatId, { text });
+    }, [chatId, editingId, text]);
 
     useEffect(() => {
         if (!replyTo) return;
@@ -257,6 +263,9 @@ export const ChatComposer = memo(function ChatComposer({
 
         stopTyping();
         pendingUploadedFileByChat[chatId] = null;
+        if (!editingId) {
+            setChatDraft(chatId, { text: '', replyTo: null });
+        }
         setText('');
         setCaretPos(0);
         setAttachment(null);

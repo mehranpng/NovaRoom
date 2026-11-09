@@ -1771,6 +1771,15 @@ body,
     color: var(--text-tertiary);
 }
 
+.chat-list__item-draft-prefix {
+    color: #ef4444;
+    font-weight: 600;
+}
+
+.chat-list__item-draft-text {
+    color: var(--text-secondary);
+}
+
 .chat-list__unread-badge {
     margin-left: 8px;
     display: flex;

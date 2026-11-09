@@ -1064,7 +1064,8 @@
 
 .video-media-viewer__timeline {
     width: 100%;
-    accent-color: #2f80ed;
+    accent-color: var(--accent-primary);
+    cursor: pointer;
 }
 .progress-spinner {
     cursor: pointer;

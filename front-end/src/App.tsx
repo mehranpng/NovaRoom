@@ -24,6 +24,12 @@ import { notify } from './utils/notificationBus';
 import { clearLocalE2EEIdentity, decryptBioClientSide, decryptClientText, decryptMessageClientSide, encryptChatTextClientSide, loadLocalE2EEIdentity, registerPeerPublicKey } from './utils/e2ee';
 import { clearCachedTextValues, clearChatSnapshots, getChatSnapshot, saveChatSnapshot } from './utils/mediaCache';
 import { clearChessCache } from './utils/chessCache';
+import {
+    clearAllChatDrafts,
+    clearChatDraft,
+    clearChatScrollMemory,
+    getChatScrollMemory,
+} from './utils/chatDrafts';
 import { useDarkMode, syncThemeColor } from './hooks/useDarkMode';
 import { SNAP_EFFECT_DURATION_MS } from './utils/snapConfig';
 import { BottomNavbar } from './components/BottomNavbar';
@@ -862,6 +868,8 @@ export function App() {
             setUploadingUserIdsByChat({});
             void clearChatSnapshots();
             void clearCachedTextValues();
+            clearAllChatDrafts();
+            clearChatScrollMemory();
             clearChessCache();
             clearLocalE2EEIdentity();
             navigate('/login', { replace: true });
@@ -2223,10 +2231,14 @@ export function App() {
         const unseenInMemoryCount = myId
             ? cachedMessages.filter((m) => m.senderId !== myId && !m.seen).length
             : 0;
-        const hasNewerRange = jumpedRange
+        const savedScroll = getChatScrollMemory(chatId);
+        const preserveScrolledHistory = Boolean(savedScroll && savedScroll.userInteracted && !savedScroll.atBottom && cachedMessages.length > 0);
+        const hasNewerRange = !preserveScrolledHistory && (
+            jumpedRange
             || Boolean(messageRangeStateRef.current[chatId]?.hasNewer)
             || Boolean(lastKnownMessageId && cachedLastMessageId && lastKnownMessageId !== cachedLastMessageId)
-            || (openingUnread > 0 && cachedMessages.length > 0 && unseenInMemoryCount === 0);
+            || (openingUnread > 0 && cachedMessages.length > 0 && unseenInMemoryCount === 0)
+        );
 
         const initialFirstUnreadFromMemory = (!hasNewerRange && openingUnread > 0 && myId)
             ? (cachedMessages.find((m) => m.senderId !== myId && !m.seen)?.id || null)
@@ -2290,7 +2302,9 @@ export function App() {
         try {
             if (hasImmediateMessages) {
                 setMessagesLoadedOnce(prev => (prev[chatId] ? prev : { ...prev, [chatId]: true }));
-                void fetchPagedMessages(chatId, { direction: 'latest', mode: 'replace', initialOpen: true });
+                if (!preserveScrolledHistory) {
+                    void fetchPagedMessages(chatId, { direction: 'latest', mode: 'replace', initialOpen: true });
+                }
                 return;
             }
 
@@ -3224,20 +3238,30 @@ export function App() {
         const nextRecent = [...recentChatIdsRef.current.filter((id) => id !== chatId), chatId];
         const evictedIds = nextRecent.length > 10 ? nextRecent.slice(0, nextRecent.length - 10) : [];
         recentChatIdsRef.current = nextRecent.slice(-10);
-        const willTrim = (messagesRef.current[chatId]?.length ?? 0) > MESSAGE_PAGE_SIZE;
+        const savedScroll = getChatScrollMemory(chatId);
+        const preserveScroll = Boolean(
+            savedScroll
+            && savedScroll.userInteracted
+            && !savedScroll.atBottom
+            && messagesRef.current[chatId]?.length > 0
+        );
+        const willTrim = !preserveScroll && (messagesRef.current[chatId]?.length ?? 0) > MESSAGE_PAGE_SIZE;
 
         setMessages((prev) => {
             let changed = false;
             const next = { ...prev };
             const currentList = next[chatId];
-            if (currentList && currentList.length > MESSAGE_PAGE_SIZE) {
-                next[chatId] = currentList.slice(-MESSAGE_PAGE_SIZE);
-                changed = true;
-            }
-            for (const evictId of evictedIds) {
-                if (evictId in next) {
-                    delete next[evictId];
+            if (!preserveScroll) {
+                if (currentList && currentList.length > MESSAGE_PAGE_SIZE) {
+                    next[chatId] = currentList.slice(-MESSAGE_PAGE_SIZE);
                     changed = true;
+                }
+                for (const evictId of evictedIds) {
+                    if (evictId in next) {
+                        delete next[evictId];
+                        clearChatScrollMemory(evictId);
+                        changed = true;
+                    }
                 }
             }
             return changed ? next : prev;
@@ -3303,6 +3327,8 @@ export function App() {
             const { [chatId]: _, ...rest } = prev;
             return rest;
         });
+        clearChatDraft(chatId);
+        clearChatScrollMemory(chatId);
         delete newGroupTimestamps.current[chatId];
         setActiveChatId(null);
         setPendingUser(null);

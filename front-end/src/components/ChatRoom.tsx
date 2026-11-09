@@ -20,6 +20,13 @@ import { decryptFileBytesClientSide } from '../utils/e2ee';
 import { screenVariants } from '../utils/screenMotion';
 import { deleteCachedBlob, getCachedBlob, getOrCacheBlob } from '../utils/mediaCache';
 import { pendingUploadedFileByChat } from '../utils/pendingUploads';
+import {
+    clearChatDraft,
+    getChatDraft,
+    getChatScrollMemory,
+    setChatDraft,
+    setChatScrollMemory,
+} from '../utils/chatDrafts';
 import { formatDayLabel, formatLastSeen, formatMessageTime, messageDayKey, resolveVerified, toPersianDigits } from '../utils/format';
 import { copyText } from '../utils/clipboard';
 import { triggerHaptic } from '../utils/haptics';
@@ -363,9 +370,20 @@ export function ChatRoom({
     const [forwardSourceUser, setForwardSourceUser] = useState<User | null>(null);
     const forwardingInFlightRef = useRef(false);
 
-    const [replyTo, setReplyTo] = useState<MessageReplyType | null>(null);
+    const [replyTo, setReplyTo] = useState<MessageReplyType | null>(() => getChatDraft(chatId)?.replyTo ?? null);
     const [messagesScrolled, setMessagesScrolled] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const prevDraftChatIdRef = useRef(chatId);
+    useEffect(() => {
+        if (prevDraftChatIdRef.current !== chatId) {
+            prevDraftChatIdRef.current = chatId;
+            setReplyTo(getChatDraft(chatId)?.replyTo ?? null);
+            return;
+        }
+        if (!editingId) {
+            setChatDraft(chatId, { replyTo });
+        }
+    }, [chatId, replyTo, editingId]);
     const idleDateTimerRef = useRef<number | null>(null);
 
     const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number; isFileDownloaded?: boolean }>(null);
@@ -433,7 +451,7 @@ export function ChatRoom({
     const [externalFileUploadHandler, setExternalFileUploadHandler] = useState<((file: File) => void) | null>(null);
     const [dragUploadActive, setDragUploadActive] = useState(false);
     const [chatContentReady, setChatContentReady] = useState(true);
-    const isAtBottomRef = useRef(true);
+    const isAtBottomRef = useRef(getChatScrollMemory(chatId)?.atBottom ?? true);
 
     const prevLenRef = useRef(0);
     const prevFirstMessageIdRef = useRef<string | null>(null);
@@ -454,7 +472,6 @@ export function ChatRoom({
 
     
     
-    const scrollMemoryRef = useRef<Record<string, { top: number; atBottom: boolean; userInteracted: boolean }>>({});
     const forceInfoRouteActiveRef = useRef(false);
 
     useEffect(() => {
@@ -474,7 +491,7 @@ export function ChatRoom({
         }
     }, [forceContactInfoOpen, chatId, isOfficialChannel]);
 
-    const userHasScrolledRef = useRef(false);
+    const userHasScrolledRef = useRef(Boolean(getChatScrollMemory(chatId)?.userInteracted));
 
     useEffect(() => {
         return () => {
@@ -592,10 +609,8 @@ export function ChatRoom({
         }
 
         if (restoringFromInfoRef.current && restoreTopAfterInfoRef.current !== null) {
-            const container = messagesContainerRef.current;
-            if (container) {
-                markProgrammaticScroll();
-                container.scrollTop = restoreTopAfterInfoRef.current;
+            if (shouldPreserveExactScroll()) {
+                restoreScroll(chatId);
             }
             return;
         }
@@ -689,35 +704,84 @@ export function ChatRoom({
         pinToBottomSync();
     }, [composerHeight]);
 
+    const captureScrollAnchor = (container: HTMLDivElement): { anchorMessageId: string | null; anchorOffset: number } => {
+        const containerRect = container.getBoundingClientRect();
+        const stickyTop = pinnedMessage ? 122 : 68;
+        const targetLine = containerRect.top + stickyTop;
+        const messageNodes = container.querySelectorAll<HTMLElement>('[data-message-id]');
+        let chosenEl: HTMLElement | null = null;
+
+        for (let i = 0; i < messageNodes.length; i += 1) {
+            const el = messageNodes[i];
+            const rect = el.getBoundingClientRect();
+            if (rect.bottom > targetLine) {
+                chosenEl = el;
+                break;
+            }
+        }
+
+        if (!chosenEl && messageNodes.length > 0) {
+            chosenEl = messageNodes[messageNodes.length - 1];
+        }
+
+        const anchorMessageId = chosenEl?.dataset.messageId || null;
+        const anchorOffset = chosenEl ? chosenEl.getBoundingClientRect().top - containerRect.top : 0;
+        return { anchorMessageId, anchorOffset };
+    };
+
     const saveScroll = (id: string) => {
         const container = messagesContainerRef.current;
-        if (!container) return;
-        scrollMemoryRef.current[id] = {
+        if (!container || !id || id === 'pending') return;
+        const nearBottom = computeNearBottom();
+        const { anchorMessageId, anchorOffset } = captureScrollAnchor(container);
+        setChatScrollMemory(id, {
             top: container.scrollTop,
-            atBottom: computeNearBottom(),
-            userInteracted: Boolean(userHasScrolledRef.current),
-        };
+            atBottom: nearBottom,
+            userInteracted: Boolean(userHasScrolledRef.current) || !nearBottom,
+            anchorMessageId,
+            anchorOffset,
+        });
     };
 
     const maybeSaveScroll = (id: string) => {
-        
-        
         if (autoJumpedToUnreadRef.current && !userScrolledAfterAutoJumpRef.current) return;
         saveScroll(id);
     };
 
     const restoreScroll = (id: string): boolean => {
         const container = messagesContainerRef.current;
-        const mem = scrollMemoryRef.current[id];
+        const mem = getChatScrollMemory(id);
         if (!container || !mem) return false;
         isAtBottomRef.current = Boolean(mem.atBottom);
         if (mem.atBottom) {
             pinToBottomSync();
-        } else {
-            markProgrammaticScroll();
-            container.scrollTop = mem.top;
-            notifyReaderState(false);
+            return true;
         }
+        userHasScrolledRef.current = true;
+        userReadingOlderRef.current = true;
+        markProgrammaticScroll();
+        if (mem.anchorMessageId) {
+            const anchorEl = messageElsRef.current.get(mem.anchorMessageId)
+                || container.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(mem.anchorMessageId)}"]`);
+            if (anchorEl) {
+                const containerRect = container.getBoundingClientRect();
+                const anchorRect = anchorEl.getBoundingClientRect();
+                const delta = (anchorRect.top - containerRect.top) - mem.anchorOffset;
+                container.scrollTop = Math.max(0, container.scrollTop + delta);
+                lastScrollTopRef.current = container.scrollTop;
+                setMessagesScrolled(isElementScrolled(container));
+                const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+                setShowScrollBtn(distanceToBottom > 180);
+                notifyReaderState(false);
+                return true;
+            }
+        }
+        container.scrollTop = Math.max(0, mem.top);
+        lastScrollTopRef.current = container.scrollTop;
+        setMessagesScrolled(isElementScrolled(container));
+        const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+        setShowScrollBtn(distanceToBottom > 180);
+        notifyReaderState(false);
         return true;
     };
 
@@ -771,9 +835,13 @@ export function ChatRoom({
     };
 
     const applyInitialScroll = () => {
-        const mem = scrollMemoryRef.current[chatId];
+        const mem = getChatScrollMemory(chatId);
 
-        
+        if (mem && mem.userInteracted && !mem.atBottom) {
+            restoreScroll(chatId);
+            return;
+        }
+
         const unreadAnchor = resolveUnreadAnchor();
         if (unreadAnchor) {
             lockedUnreadAnchorRef.current = unreadAnchor;
@@ -782,31 +850,20 @@ export function ChatRoom({
             }
             autoJumpedToUnreadRef.current = true;
             userScrolledAfterAutoJumpRef.current = false;
-
             scrollToUnreadAnchor(unreadAnchor);
-
             return;
         }
 
-        
-        
-        if (mem && mem.userInteracted && !mem.atBottom) {
-            restoreScroll(chatId);
-            return;
-        }
-
-        
         if (mem && mem.atBottom) {
             restoreScroll(chatId);
             return;
         }
 
-        
         pinToBottomSync();
     };
 
     const shouldPreserveExactScroll = () => {
-        const mem = scrollMemoryRef.current[chatId];
+        const mem = getChatScrollMemory(chatId);
         return Boolean(mem && mem.userInteracted && !mem.atBottom);
     };
 
@@ -1707,7 +1764,7 @@ export function ChatRoom({
     }, [chatId]);
 
     useEffect(() => {
-        const mem = scrollMemoryRef.current[chatId];
+        const mem = getChatScrollMemory(chatId);
         const preserveExactScroll = Boolean(mem?.userInteracted && !mem?.atBottom);
         if (preserveExactScroll) {
             initialMediaFollowupDoneRef.current = true;
@@ -1769,7 +1826,7 @@ export function ChatRoom({
         const raf = requestAnimationFrame(() => {
             const container = messagesContainerRef.current;
             if (!container) return;
-            const mem = scrollMemoryRef.current[chatId];
+            const mem = getChatScrollMemory(chatId);
             if (userHasScrolledRef.current || (mem && mem.userInteracted && !mem.atBottom)) return;
             pinToBottomSync();
         });
@@ -1780,7 +1837,7 @@ export function ChatRoom({
     useEffect(() => {
         if (!restoringFromInfoRef.current) return;
         if (showContactInfo || forwardSourceUser || viewingMemberId || showMembersList) return;
-        const mem = scrollMemoryRef.current[chatId];
+        const mem = getChatScrollMemory(chatId);
         if (!mem) return;
         const shouldRestoreExact = Boolean(mem.userInteracted && !mem.atBottom);
         restoreTopAfterInfoRef.current = shouldRestoreExact ? mem.top : null;
@@ -1792,9 +1849,8 @@ export function ChatRoom({
         const settle = () => {
             const container = messagesContainerRef.current;
             if (!container) return;
-            if (restoreTopAfterInfoRef.current !== null) {
-                markProgrammaticScroll();
-                container.scrollTop = restoreTopAfterInfoRef.current;
+            if (restoringFromInfoRef.current) {
+                restoreScroll(chatId);
             } else if (!shouldPreserveExactScroll()) {
                 scrollToBottom(false);
             }
@@ -1857,6 +1913,40 @@ export function ChatRoom({
             }
         }
     }, [chatId, loading, messages.length, displayUnreadCount, unreadAnchorId]);
+
+    const activeTouchOrWheelRef = useRef(false);
+    useEffect(() => {
+        activeTouchOrWheelRef.current = false;
+        const container = messagesContainerRef.current;
+        if (!container) return;
+        const markUserActive = () => {
+            activeTouchOrWheelRef.current = true;
+        };
+        container.addEventListener('wheel', markUserActive, { passive: true });
+        container.addEventListener('touchmove', markUserActive, { passive: true });
+        container.addEventListener('pointerdown', markUserActive, { passive: true });
+        return () => {
+            container.removeEventListener('wheel', markUserActive);
+            container.removeEventListener('touchmove', markUserActive);
+            container.removeEventListener('pointerdown', markUserActive);
+        };
+    }, [chatId]);
+
+    useEffect(() => {
+        const container = messagesContainerRef.current;
+        const inner = container?.querySelector('.chat-room__messages-inner');
+        if (!container || !(inner instanceof HTMLElement)) return;
+        const observer = new ResizeObserver(() => {
+            if (!initialScrollDoneRef.current) return;
+            if (activeTouchOrWheelRef.current) return;
+            if (pendingRangeLoadTypeRef.current || loadingOlderMessages || localLoadingOlder) return;
+            if (shouldPreserveExactScroll()) {
+                restoreScroll(chatId);
+            }
+        });
+        observer.observe(inner);
+        return () => observer.disconnect();
+    }, [chatId, loadingOlderMessages, localLoadingOlder]);
 
     useLayoutEffect(() => {
         if (!chatContentReady) return;
@@ -2511,6 +2601,9 @@ export function ChatRoom({
         }
         if (pendingForwardDraft && !editingId) {
             void handleForwardDraft();
+        }
+        if (!editingId) {
+            clearChatDraft(chatId);
         }
         lockedUnreadAnchorRef.current = null;
         setUnreadAnchorId(null);

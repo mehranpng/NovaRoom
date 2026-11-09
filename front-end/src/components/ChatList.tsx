@@ -12,6 +12,7 @@ import { ChatListSkeleton } from './ChatListSkeleton';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { API_BASE_URL } from '../config/api';
 import { getChatNotifyMode, setChatNotifyMode, useNotificationPrefs } from '../utils/pushNotifications';
+import { useChatDrafts } from '../utils/chatDrafts';
 import { dismissPwaBanner, triggerPwaInstall, usePwaInstall } from '../utils/pwaInstall';
 
 interface ChatListProps {
@@ -362,6 +363,7 @@ export const ChatList = memo(function ChatList({
     const [searchOpen, setSearchOpen] = useState(false);
     const searchInputRef = useRef<HTMLInputElement | null>(null);
     const notifyPrefs = useNotificationPrefs();
+    const chatDrafts = useChatDrafts();
     useDarkMode();
 
     const isMobile = useIsMobile(768);
@@ -918,6 +920,7 @@ export const ChatList = memo(function ChatList({
                         const notifyMode = getChatNotifyMode(notifyPrefs, chat.id);
 
                         if (isSaved) {
+                            const draftText = (chatDrafts[chat.id]?.text || '').replace(/\s+/g, ' ').trim();
                             return (
                                 <button
                                     key={chat.id}
@@ -999,7 +1002,14 @@ export const ChatList = memo(function ChatList({
                                         </div>
                                         <div className="chat-list__item-preview">
                                             <p className="chat-list__item-text">
-                                                {getLastMessagePreview(chat.lastMessage, 'پیام‌های ذخیره شده شما')}
+                                                {draftText ? (
+                                                    <>
+                                                        <span className="chat-list__item-draft-prefix">پیش‌نویس: </span>
+                                                        <span className="chat-list__item-draft-text">{draftText}</span>
+                                                    </>
+                                                ) : (
+                                                    getLastMessagePreview(chat.lastMessage, 'پیام‌های ذخیره شده شما')
+                                                )}
                                             </p>
                                             {chat.unreadCount > 0 && (
                                                 <span className="chat-list__unread-badge">{toPersianDigits(chat.unreadCount)}</span>
@@ -1011,6 +1021,7 @@ export const ChatList = memo(function ChatList({
                         }
 
                         const isMine = chat.lastMessage?.senderId === currentUser.chatId;
+                        const draftText = (chatDrafts[chat.id]?.text || '').replace(/\s+/g, ' ').trim();
                         const contact = getContact(chat);
                         const blockedRelation = Boolean((chat.otherUser as any)?.blockedByMe || (chat.otherUser as any)?.blockedByOther);
                         const unreadCount = Math.max(0, Number(chat.unreadCount || 0));
@@ -1129,19 +1140,28 @@ export const ChatList = memo(function ChatList({
                                         </div>
                                     </div>
 
-                                    <div className="chat-list__item-preview">
-                                        <p className="chat-list__item-text">
-                                            {group && groupStats ? (
-                                                <span style={{ direction: 'rtl', display: 'inline-flex', alignItems: 'center', gap: 4, marginInlineEnd: 6 }}>
-                                                    <span style={{ color: 'var(--accent-soft-text)' }}>{toPersianDigits(groupStats.onlineMembers)} آنلاین</span>
-                                                    <span style={{ color: 'var(--text-muted)' }}>•</span>
-                                                    <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(groupStats.totalMembers)} عضو</span>
-                                                    <span style={{ color: 'var(--text-muted)' }}>|</span>
-                                                </span>
-                                            ) : null}
-                                            {isMine && <span className="chat-list__item-text-prefix">شما: </span>}
-                                            {getLastMessagePreview(chat.lastMessage, 'هنوز پیامی ارسال نشده')}
-                                        </p>
+                                <div className="chat-list__item-preview">
+                                    <p className="chat-list__item-text">
+                                        {draftText ? (
+                                            <>
+                                                <span className="chat-list__item-draft-prefix">پیش‌نویس: </span>
+                                                <span className="chat-list__item-draft-text">{draftText}</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                {group && groupStats ? (
+                                                    <span style={{ direction: 'rtl', display: 'inline-flex', alignItems: 'center', gap: 4, marginInlineEnd: 6 }}>
+                                                        <span style={{ color: 'var(--accent-soft-text)' }}>{toPersianDigits(groupStats.onlineMembers)} آنلاین</span>
+                                                        <span style={{ color: 'var(--text-muted)' }}>•</span>
+                                                        <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(groupStats.totalMembers)} عضو</span>
+                                                        <span style={{ color: 'var(--text-muted)' }}>|</span>
+                                                    </span>
+                                                ) : null}
+                                                {isMine && <span className="chat-list__item-text-prefix">شما: </span>}
+                                                {getLastMessagePreview(chat.lastMessage, 'هنوز پیامی ارسال نشده')}
+                                            </>
+                                        )}
+                                    </p>
                                         {(unreadReactionCount > 0 || unreadMentionCount > 0 || unreadCount > 0) && (
                                             <div className="chat-list__badges">
                                                 {unreadReactionCount > 0 && (
