@@ -3569,6 +3569,12 @@ html.keyboard-open .chat-room__input-area {
     cursor: default;
 }
 
+.chat-room__send-btn--disabled:active {
+    transform: scale(0.97);
+    background: var(--glass-surface-elevated);
+    transition-duration: 0.06s;
+}
+
 .chat-room__scroll-btn-spinner {
     width: 18px;
     height: 18px;
@@ -9393,7 +9399,7 @@ html.no-blur-effect .chat-list__header,
 
 .chat-room__floating-btn:active {
     transform: scale(0.97);
-    background: var(--hover-bg);
+    background: var(--glass-surface-elevated);
 }
 
 .chat-room__floating-btn--reaction {

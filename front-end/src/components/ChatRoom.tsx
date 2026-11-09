@@ -2649,6 +2649,10 @@ export function ChatRoom({
     }, [msgMenu?.id, msgMenu?.top, msgMenu?.left, msgMenu?.isFileDownloaded, reactionMenu?.id, reactionMenu?.top, reactionMenu?.left, seenByMenu?.id, seenByMenu?.top, seenByMenu?.left, reactionListMenu?.id, reactionListMenu?.top, reactionListMenu?.left]);
 
     const openReactionMenu = (messageId: string, targetEl: HTMLElement, anchor?: { top: number; left: number }) => {
+        if (!anchor && window.matchMedia?.('(pointer: fine)').matches) {
+            setReactionMenu(null);
+            return;
+        }
         const room = roomRef.current;
         if (!room) return;
         const roomRect = room.getBoundingClientRect();

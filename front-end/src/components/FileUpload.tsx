@@ -28,6 +28,33 @@ export function FileUpload({ onFileSelected, fileAttached = false, onRegisterUpl
         setPickerMenuOpenState(value);
     };
 
+    const closePicker = () => {
+        fileUploadPicker.open = false;
+        setPickerMenuOpenState(false);
+    };
+
+    useEffect(() => {
+        if (!pickerMenuOpen) return;
+
+        const closeOnOutsidePress = (e: PointerEvent) => {
+            const target = e.target as HTMLElement;
+            if (menuRef.current?.contains(target)) return;
+            if (target.closest('.file-upload-button')) return;
+            closePicker();
+        };
+
+        const onEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') closePicker();
+        };
+
+        document.addEventListener('pointerdown', closeOnOutsidePress, true);
+        document.addEventListener('keydown', onEscape);
+        return () => {
+            document.removeEventListener('pointerdown', closeOnOutsidePress, true);
+            document.removeEventListener('keydown', onEscape);
+        };
+    }, [pickerMenuOpen]);
+
     useEffect(() => () => { fileUploadPicker.open = false; }, []);
 
     const [pendingImageForEditor, setPendingImageForEditor] = useState<File | null>(null);
@@ -38,8 +65,6 @@ export function FileUpload({ onFileSelected, fileAttached = false, onRegisterUpl
     const menuRef = useRef<HTMLDivElement>(null);
     const pickerSessionRef = useRef(false);
     const pickerCloseTimerRef = useRef<number | null>(null);
-    const suppressOutsideClickUntilRef = useRef(0);
-
     const editorSessionRef = useRef<{
         originalFile: File;
         strokes: any[];
@@ -138,40 +163,6 @@ export function FileUpload({ onFileSelected, fileAttached = false, onRegisterUpl
     }, []);
 
     useEffect(() => {
-        const swallowOutsideClick = (e: MouseEvent) => {
-            if (performance.now() > suppressOutsideClickUntilRef.current) return;
-            suppressOutsideClickUntilRef.current = 0;
-            e.preventDefault();
-            e.stopPropagation();
-        };
-
-        document.addEventListener('click', swallowOutsideClick, true);
-        return () => document.removeEventListener('click', swallowOutsideClick, true);
-    }, []);
-
-    useEffect(() => {
-        if (!pickerMenuOpen) return;
-
-        const closeMenu = (e: PointerEvent) => {
-            if (menuRef.current?.contains(e.target as Node)) return;
-            setPickerMenuOpen(false);
-            suppressOutsideClickUntilRef.current = performance.now() + 400;
-        };
-
-        const onEscape = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') setPickerMenuOpen(false);
-        };
-
-        document.addEventListener('pointerdown', closeMenu, true);
-        document.addEventListener('keydown', onEscape);
-
-        return () => {
-            document.removeEventListener('pointerdown', closeMenu, true);
-            document.removeEventListener('keydown', onEscape);
-        };
-    }, [pickerMenuOpen]);
-
-    useEffect(() => {
         const onFocus = () => {
             if (!pickerSessionRef.current) return;
             clearPickerCloseTimer();
@@ -252,14 +243,14 @@ export function FileUpload({ onFileSelected, fileAttached = false, onRegisterUpl
                 <Paperclip size={20} />
             </button>
 
-            <AnimatePresence>
+            <AnimatePresence initial={false}>
                 {pickerMenuOpen && (
                     <motion.div
                         ref={menuRef}
                         className="file-upload-picker-menu"
-                        initial={{ opacity: 0, y: 10, scale: 0.96 }}
-                        animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: 0.18, ease: [0.22, 1, 0.36, 1] } }}
-                        exit={{ opacity: 0, y: 6, scale: 0.97, transition: { duration: 0.24, ease: [0.4, 0, 0.2, 1] } }}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0, transition: { duration: 0.18, ease: [0.22, 1, 0.36, 1] } }}
+                        exit={{ opacity: 0, y: 8, transition: { duration: 0.24, ease: [0.4, 0, 0.2, 1] } }}
                     >
                         <motion.label htmlFor="file-upload-image" className="file-upload-picker-item" 
                             onClick={() => { setPickerSession(true); setPickerMenuOpen(false); }}

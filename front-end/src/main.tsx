@@ -21,6 +21,10 @@ if (typeof window !== "undefined") {
     document.addEventListener("gesturechange", preventPinchZoom, { passive: false });
     document.addEventListener("gestureend", preventPinchZoom, { passive: false });
     document.addEventListener("touchmove", preventPinchZoom, { passive: false });
+    document.addEventListener("contextmenu", (e) => {
+        const target = e.target as HTMLElement | null;
+        if (target?.closest?.("img, video, canvas")) e.preventDefault();
+    });
 }
 
 createRoot(document.getElementById("root")!).render(
