@@ -106,7 +106,9 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
   const isUploading = uploading === true;
   const uploadPct = upload ? Math.max(0, Math.min(100, upload.progress)) : 0;
   const isTransferring = isUploading || downloadState === 'downloading' || downloadState === 'decrypting';
-  const transferProgress = isUploading ? uploadPct / 100 : downloadProgress / 100;
+  const rawTransferProgress = isUploading ? uploadPct / 100 : downloadProgress / 100;
+  const isTransferParked = isUploading && uploadPct >= 100;
+  const transferProgress = isTransferParked ? 0.25 : rawTransferProgress;
   const isDone = !isUploading && (downloadState === 'done' || mediaUrl != null);
   const isIdle = !isUploading && !isDone && !isTransferring;
   const isEncrypting = upload?.phase === 'encrypting' || downloadState === 'decrypting';
@@ -405,7 +407,7 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
     <div className="transfer-spinner" onPointerDown={isUploading && hideCancel ? undefined : (e) => e.stopPropagation()} onTouchStart={isUploading && hideCancel ? undefined : (e) => e.stopPropagation()}>
       <ProgressSpinner
         size={size}
-        progress={isEncrypting ? 0.25 : transferProgress}
+        progress={isEncrypting || isTransferParked ? 0.25 : transferProgress}
         noCross={isUploading ? hideCancel : downloadState !== 'downloading'}
         ariaLabel={isUploading ? 'لغو آپلود' : downloadState === 'downloading' ? 'لغو دانلود' : 'در حال انتقال'}
         onClick={(e) => {
