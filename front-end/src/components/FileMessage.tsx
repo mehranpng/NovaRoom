@@ -1,6 +1,5 @@
 import type { FileMetadata } from '../types';
-import { formatFileSize, getFileIcon, isImageFile } from '../utils/fileUtils';
-import { Play, Pause, Download, X, LockOpen } from 'lucide-react';
+import { formatFileSize, isImageFile } from '../utils/fileUtils';
 import { API_BASE_URL } from '../config/api';
 import { useEffect, useRef, useState } from 'react';
 import { useMusicPlayer } from '../contexts/MusicPlayerContext';
@@ -9,6 +8,13 @@ import { getCachedBlob, getOrCacheBlob, deleteCachedBlob } from '../utils/mediaC
 import { autoDownloadCookieKeys, isAutoDownloadEnabled } from '../utils/autoDownloadPrefs';
 import { isLocalBlobUrl, localBlobUrls } from '../utils/chatFileUploader';
 import { useUploadProgress } from '../utils/uploadProgressStore';
+import { getFileExtension, getColorFromExtension } from '../utils/documentInfo';
+import { useShowTransition } from '../hooks/useShowTransition';
+import { useAudioMetadata } from '../hooks/useAudioMetadata';
+import { ProgressSpinner } from './ProgressSpinner';
+import { MediaBadge } from './MediaBadge';
+import { AnimatedFileSize } from './AnimatedFileSize';
+import { DownloadIcon, PlayIcon, PauseIcon } from './icons/TelegramIcons';
 
 interface FileMessageProps { file: FileMetadata; token: string; chatId: string; uploading?: boolean; uploadId?: string; hideCancel?: boolean; overlayMeta?: React.ReactNode; flushBottom?: boolean; onCancelUpload?: () => void; onMediaLoad?: () => void; onMediaError?: () => void; onImageClick?: (imageUrl: string, file: FileMetadata) => void; onVideoClick?: (videoUrl: string, file: FileMetadata) => void; }
 type DownloadState = 'idle' | 'downloading' | 'decrypting' | 'done' | 'error';
@@ -22,6 +28,8 @@ type DownloadTask = {
   abortController?: AbortController | null;
 };
 const fileDownloadTasks = new Map<string, DownloadTask>();
+
+const stripFileExtension = (name: string): string => name.replace(/\.[^/.]+$/, '');
 
 const MAX_CONCURRENT_DOWNLOADS = 2;
 let activeDownloadCount = 0;
@@ -78,9 +86,13 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
   const [resolvedAudioDuration, setResolvedAudioDuration] = useState(0);
   const [nearViewport, setNearViewport] = useState(false);
   const [mediaLoaded, setMediaLoaded] = useState(false);
+  const [isSeeking, setIsSeeking] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const seekTrackRef = useRef<HTMLDivElement | null>(null);
+  const isSeekingRef = useRef(false);
   const musicPlayer = useMusicPlayer();
   const isImage = isImageFile(file.mimeType); const isAudio = (file.mimeType || '').startsWith('audio/'); const isVideo = (file.mimeType || '').startsWith('video/');
+  const audioMeta = useAudioMetadata(isAudio ? mediaUrl : null, !file.audioCover);
   const cacheKey = `chat:${chatId}:file:${file.fileId}`;
   const previewDirectUrl = String((file as any).previewUrl || (file as any).thumbUrl || (file as any).imagePreviewUrl || '').trim();
     const formatDuration = (seconds: number): string => {
@@ -91,6 +103,36 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
   };
   const mediaDuration = Number((file as any).duration || (file as any)?.meta?.duration || (file as any)?.metadata?.duration || 0);
   const audioTotalDuration = resolvedAudioDuration > 0 ? resolvedAudioDuration : mediaDuration;
+  const isUploading = uploading === true;
+  const uploadPct = upload ? Math.max(0, Math.min(100, upload.progress)) : 0;
+  const isTransferring = isUploading || downloadState === 'downloading' || downloadState === 'decrypting';
+  const transferProgress = isUploading ? uploadPct / 100 : downloadProgress / 100;
+  const isDone = !isUploading && (downloadState === 'done' || mediaUrl != null);
+  const isIdle = !isUploading && !isDone && !isTransferring;
+  const isEncrypting = upload?.phase === 'encrypting' || downloadState === 'decrypting';
+  const spinnerTransition = useShowTransition(isTransferring);
+  const fileExtension = getFileExtension(file.fileName, file.mimeType);
+  const fileColor = getColorFromExtension(fileExtension);
+  const audioTitle = audioMeta?.title || file.title || stripFileExtension(file.fileName);
+  const audioArtist = audioMeta?.artist || file.artist || '';
+  const audioCover = file.audioCover || audioMeta?.coverUrl || '';
+  const isActiveTrack = musicPlayer.track?.fileId === file.fileId;
+  const isPlayingThis = isActiveTrack && musicPlayer.isPlaying;
+  const trackDuration = isActiveTrack && musicPlayer.duration > 0 ? musicPlayer.duration : audioTotalDuration;
+  const seekPercent = isActiveTrack && musicPlayer.duration > 0 ? Math.min(100, (musicPlayer.currentTime / musicPlayer.duration) * 100) : 0;
+  const audioSubtitle = audioArtist
+    ? `${formatDuration(trackDuration)} • ${audioArtist}`
+    : audioMeta === undefined
+      ? (trackDuration > 0 ? `${formatDuration(trackDuration)} • ${formatFileSize(file.fileSize, 1)}` : formatFileSize(file.fileSize, 1))
+      : formatDuration(trackDuration);
+
+  const seekFromClientX = (clientX: number) => {
+    const track = seekTrackRef.current;
+    if (!track || musicPlayer.duration <= 0) return;
+    const rect = track.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    musicPlayer.seek(ratio * musicPlayer.duration);
+  };
 
   const decodeResponseBlob = async (response: Response): Promise<Blob> => {
     const encryptedBytes = new Uint8Array(await response.arrayBuffer());
@@ -258,8 +300,6 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
     };
   }, [isImage, isVideo, previewDirectUrl, token, chatId, file.fileId, nearViewport]);
 
-  const actionIcon = downloadState === 'downloading' ? <X size={16} /> : downloadState === 'decrypting' ? <LockOpen size={16} /> : <Download size={16} />;
-
   useEffect(() => {
     const oldMediaUrl = mediaUrl;
     const oldPreviewUrl = previewUrl;
@@ -361,28 +401,24 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
   
   const maxWidth = 280;
   const maxHeight = 440;
-  const uploadProgress = upload ? Math.max(4, Math.min(100, upload.progress)) : 0;
-  const uploadActionButton = (margin?: number) => uploading ? (
-    <button
-      type="button"
-      className="manual-download-btn"
-      style={{ margin }}
-      disabled={hideCancel}
-      onPointerDown={hideCancel ? undefined : (e) => { e.stopPropagation(); }}
-      onTouchStart={hideCancel ? undefined : (e) => { e.stopPropagation(); }}
-      onClick={hideCancel ? undefined : (e) => { e.stopPropagation(); onCancelUpload?.(); }}
-      aria-label={hideCancel ? 'در حال بازنشر' : 'لغو آپلود'}
-    >
-      <svg className="upload-ring" viewBox="0 0 36 36" aria-hidden>
-        <circle
-          className={`upload-ring__bar ${upload?.phase === 'encrypting' ? 'upload-ring__bar--spin' : ''}`}
-          cx="18" cy="18" r="16"
-          strokeDasharray={upload?.phase === 'encrypting' ? undefined : `${uploadProgress * 1.0053} 100.53`}
-        />
-      </svg>
-      {!hideCancel && <X size={16} />}
-    </button>
-  ) : null;
+  const renderSpinner = (size: 's' | 'm' | 'l') => (
+    <div className="transfer-spinner" onPointerDown={isUploading && hideCancel ? undefined : (e) => e.stopPropagation()} onTouchStart={isUploading && hideCancel ? undefined : (e) => e.stopPropagation()}>
+      <ProgressSpinner
+        size={size}
+        progress={isEncrypting ? 0.25 : transferProgress}
+        noCross={isUploading ? hideCancel : downloadState !== 'downloading'}
+        ariaLabel={isUploading ? 'لغو آپلود' : downloadState === 'downloading' ? 'لغو دانلود' : 'در حال انتقال'}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (isUploading) {
+            if (!hideCancel) onCancelUpload?.();
+            return;
+          }
+          if (downloadState === 'downloading') cancelDownload();
+        }}
+      />
+    </div>
+  );
   const containerStyle: React.CSSProperties = {
     background: 'transparent',
     aspectRatio: String(effectiveAspectRatio),
@@ -399,42 +435,137 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
     containerStyle.height = `${Math.round(maxWidth / effectiveAspectRatio)}px`;
   }
 
-  return <div className="file-message" ref={rootRef}>
+  return <div className={`file-message${isAudio ? ' file-message--audio' : ''}`} ref={rootRef}>
     {(isImage || isVideo) && (
       <div className={flushBottom ? 'file-image-preview file-image-preview--flush-bottom' : 'file-image-preview'} style={containerStyle} onClick={(e) => {
         e.stopPropagation();
-        if (uploading) return;
-        if (!mediaUrl && (downloadState === 'decrypting' || downloadState === 'downloading')) {
-          return;
-        }
+        if (isUploading) return;
+        if (!mediaUrl && isTransferring) return;
         if (!mediaUrl) void startDownload();
       }}>
         {!mediaLoaded && <div className="media-skeleton skeleton-glass" aria-hidden />}
-        {mediaUrl ? (isImage ? <img src={mediaUrl} alt={file.fileName} style={{ objectFit: shouldContain ? 'contain' : 'cover' }} onLoad={handleMediaRendered} onError={handleMediaFailed} onClick={uploading ? undefined : () => onImageClick?.(mediaUrl, file)} /> : <button type="button" className="file-video-thumb" disabled={uploading} onClick={uploading ? undefined : () => onVideoClick?.(mediaUrl, file)}><video src={mediaUrl} preload="metadata" muted playsInline onLoadedData={handleMediaRendered} onError={handleMediaFailed} style={{ width: '100%', height: '100%', objectFit: shouldContain ? 'contain' : 'cover', background: 'transparent' }} /><span className="file-video-duration">{formatDuration(mediaDuration)}</span>{!uploading && <span className="file-video-play-badge"><Play size={20} fill="currentColor" /></span>}</button>) :
-          (<>
-            {previewUrl ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)', objectFit: shouldContain ? 'contain' : 'cover' }} onLoad={handleMediaRendered} onError={handleMediaFailed} /> : <div className="media-skeleton skeleton-glass" aria-hidden />}
-            {isVideo && !uploading && <button type="button" className="file-video-center-play" onClick={(e) => { e.stopPropagation(); startDownload(); }}><Play size={20} fill="currentColor" /></button>}
-            {isVideo && <span className="file-video-duration file-video-duration--top">{formatDuration(mediaDuration || 0)}</span>}
-            <div className={`manual-download-wrap ${isImage ? 'manual-download-wrap--center' : ''} ${isVideo ? 'manual-download-wrap--video' : ''}`}>
-              <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%` }} onClick={(e) => { e.stopPropagation(); if (downloadState === 'decrypting') return; if (downloadState === 'downloading') cancelDownload(); else startDownload(); }}>{actionIcon}</button>
-              <div className="manual-download-size manual-download-size-box">{isVideo ? (downloadState === 'decrypting' ? 'رمزگشایی' : formatFileSize(file.fileSize)) : (downloadState === 'decrypting' ? 'رمزگشایی' : formatFileSize(file.fileSize))}</div>
-            </div>
-          </>)}
-        {uploading && <div className="manual-download-wrap manual-download-wrap--center">{uploadActionButton()}</div>}
+        {mediaUrl ? (
+          isImage ? (
+            <img src={mediaUrl} alt={file.fileName} style={{ objectFit: shouldContain ? 'contain' : 'cover' }} onLoad={handleMediaRendered} onError={handleMediaFailed} onClick={isUploading ? undefined : () => onImageClick?.(mediaUrl, file)} />
+          ) : (
+            <button type="button" className="file-video-thumb" disabled={isUploading} onClick={isUploading ? undefined : () => onVideoClick?.(mediaUrl, file)}>
+              <video src={mediaUrl} preload="metadata" muted playsInline onLoadedData={handleMediaRendered} onError={handleMediaFailed} style={{ width: '100%', height: '100%', objectFit: shouldContain ? 'contain' : 'cover', background: 'transparent' }} />
+            </button>
+          )
+        ) : (
+          previewUrl
+            ? <img src={previewUrl} alt="preview" style={{ filter: 'blur(4px)', objectFit: shouldContain ? 'contain' : 'cover' }} onLoad={handleMediaRendered} onError={handleMediaFailed} />
+            : <div className="media-skeleton skeleton-glass" aria-hidden />
+        )}
+        {spinnerTransition.shouldRender && (
+          <div className={`media-loading ${spinnerTransition.className}`}>{renderSpinner('l')}</div>
+        )}
+        {isIdle && (
+          <button type="button" className="media-control-btn" onClick={(e) => { e.stopPropagation(); void startDownload(); }} aria-label="دانلود">
+            <DownloadIcon size={24} />
+          </button>
+        )}
+        {isVideo && isDone && mediaUrl && (
+          <button type="button" className="media-control-btn" onClick={(e) => { e.stopPropagation(); onVideoClick?.(mediaUrl, file); }} aria-label="پخش ویدئو">
+            <PlayIcon size={28} />
+          </button>
+        )}
+        {isTransferring ? (
+          <MediaBadge>{isEncrypting ? '...' : `${Math.round(transferProgress * 100)}%`}</MediaBadge>
+        ) : isVideo ? (
+          <MediaBadge>{formatDuration(mediaDuration)}</MediaBadge>
+        ) : null}
         {overlayMeta}
       </div>
     )}
 
-    {isAudio && <div className="file-audio-card">
-      {uploading ? uploadActionButton() : (<button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%` }} onClick={(e) => {
-        e.stopPropagation();
-        if (!mediaUrl) {
-          if (downloadState === 'downloading') cancelDownload(); else startDownload();
-          return;
-        }
-        musicPlayer.playTrack({ fileId: file.fileId, fileName: file.fileName, audioUrl: mediaUrl, mimeType: file.mimeType });
-      }}>{mediaUrl ? (musicPlayer.isPlaying && musicPlayer.track?.fileId === file.fileId ? <Pause size={16} /> : <Play size={16} />) : actionIcon}</button>)}
-      <div className="file-audio-meta"><div className="file-audio-title">{file.fileName}</div><div className="file-audio-artist">{mediaUrl ? formatDuration(audioTotalDuration) : `${formatFileSize(file.fileSize)} • ${formatDuration(audioTotalDuration)}`}</div></div>
+    {isAudio && <div className="audio-row">
+      <button
+        type="button"
+        className="audio-toggle"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (isTransferring) return;
+          if (!mediaUrl) {
+            void startDownload();
+            return;
+          }
+          musicPlayer.playTrack({
+            fileId: file.fileId,
+            fileName: file.fileName,
+            audioUrl: mediaUrl,
+            mimeType: file.mimeType,
+            title: audioTitle,
+            artist: audioArtist || undefined,
+            coverArtUrl: audioCover || undefined,
+          });
+        }}
+        aria-label={mediaUrl ? (isPlayingThis ? 'توقف' : 'پخش') : 'دانلود'}
+      >
+        <span className="audio-cover">
+          {audioCover ? <img src={audioCover} alt="" /> : null}
+        </span>
+        <span className={`audio-toggle-icon${isTransferring ? ' is-hidden' : ''}`}>
+          {isPlayingThis ? <PauseIcon size={22} /> : <PlayIcon size={22} />}
+        </span>
+        {spinnerTransition.shouldRender && (
+          <span className={`audio-progress ${spinnerTransition.className}`}>{renderSpinner('s')}</span>
+        )}
+        {!mediaUrl && !isTransferring && (
+          <span className="audio-download-badge"><DownloadIcon size={11} /></span>
+        )}
+      </button>
+      <div className="audio-content">
+        <div className="audio-title" title={audioTitle}>{audioTitle}</div>
+        {isActiveTrack && trackDuration > 0 ? (
+          <div className={`audio-seek${isSeeking ? ' is-seeking' : ''}`} dir="ltr">
+            <span className="audio-seek__time">{formatDuration(musicPlayer.currentTime)}</span>
+            <div
+              className="audio-seek__hit"
+              data-no-message-gesture
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                e.currentTarget.setPointerCapture(e.pointerId);
+                isSeekingRef.current = true;
+                setIsSeeking(true);
+                seekFromClientX(e.clientX);
+              }}
+              onPointerMove={(e) => {
+                e.stopPropagation();
+                if (isSeekingRef.current) seekFromClientX(e.clientX);
+              }}
+              onPointerUp={(e) => {
+                e.stopPropagation();
+                isSeekingRef.current = false;
+                setIsSeeking(false);
+                if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+              }}
+              onPointerCancel={(e) => {
+                e.stopPropagation();
+                isSeekingRef.current = false;
+                setIsSeeking(false);
+              }}
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+            >
+              <div ref={seekTrackRef} className="audio-seek__track">
+                <span className="audio-seek__fill" style={{ width: `${seekPercent}%` }} />
+                <span className="audio-seek__thumb" style={{ left: `${seekPercent}%` }} />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="audio-subtitle">
+            {isTransferring ? <AnimatedFileSize size={file.fileSize} progress={transferProgress} /> : audioSubtitle}
+          </div>
+        )}
+      </div>
       {mediaUrl && (
         <audio
           src={mediaUrl}
@@ -449,25 +580,23 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
     </div>}
 
     {!isImage && !isVideo && !isAudio && <div className="file-attachment">
-      <div className="file-icon" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40 }}>
-        <div className="file-icon-box file-icon-box--generic">
-          {uploading ? uploadActionButton(0) : (downloadState === 'downloading' || downloadState === 'decrypting' || downloadState === 'idle' || downloadState === 'error') ? (
-            <button type="button" className={`manual-download-btn ${downloadState === 'downloading' ? 'is-downloading' : ''} ${downloadState === 'decrypting' ? 'is-decrypting' : ''}`} style={{ ['--download-progress' as any]: `${downloadProgress}%`, margin: 0 }} onClick={(e) => {
-              e.stopPropagation();
-              if (downloadState === 'downloading') cancelDownload();
-              else if (downloadState === 'idle' || downloadState === 'error') startDownload();
-            }}>
-              {actionIcon}
-            </button>
-          ) : (
-            getFileIcon(file.mimeType)
-          )}
+      <div className={`file-icon-container${!isDone && !isUploading ? ' is-interactive' : ''}`} onClick={(e) => {
+        e.stopPropagation();
+        if (isUploading) return;
+        if (isIdle || downloadState === 'error') void startDownload();
+      }}>
+        <div className={`file-icon ${fileColor}`}>
+          {fileExtension.length <= 4 && <span className="file-ext">{fileExtension}</span>}
         </div>
+        {spinnerTransition.shouldRender && (
+          <div className={`file-progress ${fileColor} ${spinnerTransition.className}`}>{renderSpinner('s')}</div>
+        )}
+        {!isDone && <DownloadIcon className={`action-icon${isTransferring ? ' hidden' : ''}`} size={20} />}
       </div>
       <div className="file-info">
-        <div className="file-name">{file.fileName}</div>
-        <div className="file-size">
-          {formatFileSize(file.fileSize)}
+        <div className="file-title" title={file.fileName}>{file.fileName}</div>
+        <div className="file-subtitle">
+          <AnimatedFileSize size={file.fileSize} progress={isTransferring ? transferProgress : undefined} />
         </div>
       </div>
     </div>}

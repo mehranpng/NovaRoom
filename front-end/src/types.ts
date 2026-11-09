@@ -58,6 +58,7 @@ export interface FileMetadata {
     encryptedFileKey?: string;
     title?: string;
     artist?: string;
+    audioCover?: string;
     coverArtUrl?: string;
     coverArtFileId?: string;
     previewUrl?: string;

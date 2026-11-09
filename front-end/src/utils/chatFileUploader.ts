@@ -2,6 +2,7 @@ import type { FileMetadata, PendingAttachment } from '../types';
 import { API_BASE_URL } from '../config/api';
 import { encryptFileWithRandomKey } from './e2ee';
 import { saveBlobToCache } from './mediaCache';
+import { createCoverDataUrl, readAudioTags } from './audioMetadata';
 
 export type UploadPhase = 'uploading' | 'encrypting';
 
@@ -140,6 +141,16 @@ export async function uploadChatFile(args: {
 
     try {
         if (signal.aborted) throw new Error('aborted');
+        const audioExtra: { title?: string; artist?: string; audioCover?: string } = {};
+        if (isAudio) {
+            const tags = readAudioTags(await file.slice(0, 1024 * 1024).arrayBuffer());
+            if (tags?.title) audioExtra.title = tags.title.slice(0, 200);
+            if (tags?.artist) audioExtra.artist = tags.artist.slice(0, 200);
+            if (tags?.cover) {
+                const cover = await createCoverDataUrl(tags.cover);
+                if (cover) audioExtra.audioCover = cover;
+            }
+        }
         if (!isAudio) onPhase('encrypting', 0);
         let imagePreviewBlob: Blob | null = null;
         if (type.startsWith('image/')) {
@@ -223,6 +234,7 @@ export async function uploadChatFile(args: {
             height: attachment.height,
             duration: attachment.duration,
             encryptedFileKey: encryptedFile?.encryptedFileKey,
+            ...audioExtra,
         };
 
         report(100);

@@ -1,12 +1,15 @@
 
 
 
-export function formatFileSize(bytes: number): string {
+export function formatFileSize(bytes: number, fractionDigits?: number): string {
   if (bytes === 0) return '0 Bytes';
   
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
+  if (fractionDigits !== undefined) {
+    return (bytes / Math.pow(k, i)).toFixed(fractionDigits) + ' ' + sizes[i];
+  }
   
   return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
 }

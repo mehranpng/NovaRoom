@@ -17,6 +17,10 @@ import { animateMessageDisintegration } from '../utils/disintegrateMessage';
 
 export type ReactionEntry = { emoji: string; count: number; userIds: string[] };
 
+function isInsideNoGesture(target: EventTarget | null): boolean {
+    return target instanceof Element && Boolean(target.closest('[data-no-message-gesture]'));
+}
+
 type ChatMessageActions = {
     openMenu: (messageId: string, targetEl: HTMLElement, clientX?: number, clientY?: number) => void;
     openReactionMenu: (messageId: string, targetEl: HTMLElement) => void;
@@ -503,7 +507,8 @@ export const ChatMessageItem = memo(function ChatMessageItem({
         longPressTimerRef.current = null;
     };
 
-    const startLongPress = (x: number, y: number) => {
+    const startLongPress = (x: number, y: number, target: EventTarget | null) => {
+        if (isInsideNoGesture(target)) return;
         cancelLongPress();
         suppressClickRef.current = false;
         if (isUploading) return;
@@ -691,6 +696,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
             <div
                 className={`${isMine ? 'message-row message-row--mine' : `message-row message-row--theirs${isGroupChat ? ' message-row--group' : ''}`} ${shape === 'msg-shape--single' || shape === 'msg-shape--first' ? 'message-row--first' : ''} ${isHighlighted ? 'message-row--flash' : ''} ${isSelected || isMenuActive ? 'message-row--selected' : ''} ${isSelectionModeActive ? 'message-row--selecting' : ''} ${isSwiping ? 'message-row--swiping' : ''} ${isNewMessage ? 'message-row--arrive' : ''}`}
                 onClickCapture={(e) => {
+                    if (isInsideNoGesture(e.target)) return;
                     if (isUploading) return;
                     if (consumeSuppressedClick()) {
                         e.preventDefault();
@@ -706,6 +712,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     }
                 }}
                 onClick={(e) => {
+                    if (isInsideNoGesture(e.target)) return;
                     if (isUploading) return;
                     if (consumeSuppressedClick()) return;
                     if (Date.now() < swipeRef.current.blockClickUntil) return;
@@ -720,12 +727,14 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     actions.openMenu(message.id, bubbleRef.current || (e.currentTarget as HTMLElement), e.clientX, e.clientY);
                 }}
                 onPointerDown={(e) => {
-                    if (e.pointerType === 'mouse' && e.button === 0) startLongPress(e.clientX, e.clientY);
+                    if (isInsideNoGesture(e.target)) return;
+                    if (e.pointerType === 'mouse' && e.button === 0) startLongPress(e.clientX, e.clientY, e.target);
                     if (!swipeEnabled) return;
                     if (e.pointerType !== 'mouse' || e.button !== 0) return;
                     swipeRef.current = { ...swipeRef.current, startX: e.clientX, startY: e.clientY, active: true, captured: false, pointerId: e.pointerId };
                 }}
                 onPointerMove={(e) => {
+                    if (isInsideNoGesture(e.target)) return;
                     if (e.pointerType === 'mouse') trackLongPressMove(e.clientX, e.clientY);
                     if (!swipeEnabled) return;
                     if (e.pointerType !== 'mouse' || !swipeRef.current.active) return;
@@ -742,6 +751,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     applyDragOffset(dx);
                 }}
                 onPointerUp={(e) => {
+                    if (isInsideNoGesture(e.target)) return;
                     cancelLongPress();
                     if (!swipeEnabled) return;
                     if (e.pointerType !== 'mouse' || !swipeRef.current.active) return;
@@ -756,6 +766,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
                 }}
                 onPointerCancel={(e) => {
+                    if (isInsideNoGesture(e.target)) return;
                     cancelLongPress();
                     if (!swipeEnabled) return;
                     if (e.pointerType !== 'mouse') return;
@@ -763,12 +774,14 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     swipeRef.current = { ...swipeRef.current, active: false, captured: false, pointerId: null };
                 }}
                 onTouchStart={(e) => {
+                    if (isInsideNoGesture(e.target)) return;
                     const t = e.touches[0];
-                    startLongPress(t.clientX, t.clientY);
+                    startLongPress(t.clientX, t.clientY, e.target);
                     if (!swipeEnabled) return;
                     swipeRef.current = { ...swipeRef.current, startX: t.clientX, startY: t.clientY, active: true, captured: false };
                 }}
                 onTouchMove={(e) => {
+                    if (isInsideNoGesture(e.target)) return;
                     const moveTouch = e.touches[0];
                     trackLongPressMove(moveTouch.clientX, moveTouch.clientY);
                     if (!swipeEnabled) return;
@@ -785,6 +798,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     applyDragOffset(dx);
                 }}
                 onTouchEnd={(e) => {
+                    if (isInsideNoGesture(e.target)) return;
                     cancelLongPress();
                     if (!swipeEnabled) return;
                     if (!swipeRef.current.active) return;
@@ -799,7 +813,8 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     resetDrag();
                     swipeRef.current = { ...swipeRef.current, active: false, captured: false };
                 }}
-                onTouchCancel={() => {
+                onTouchCancel={(e) => {
+                    if (isInsideNoGesture(e.target)) return;
                     cancelLongPress();
                     if (!swipeEnabled) return;
                     resetDrag();
@@ -844,6 +859,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                         ? `message-bubble message-bubble--mine ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isSelected ? 'message-bubble--selected' : ''} ${isUploading ? 'message-bubble--uploading' : ''} ${isVisualMedia ? 'message-bubble--visual-media' : ''} ${isMediaWithoutBottomContent ? 'message-bubble--media-only' : ''}`
                         : `message-bubble message-bubble--theirs ${shape} ${isBigEmojiOnly ? 'message-bubble--emoji-only' : ''} ${isSelected ? 'message-bubble--selected' : ''} ${isUploading ? 'message-bubble--uploading' : ''} ${isVisualMedia ? 'message-bubble--visual-media' : ''} ${isMediaWithoutBottomContent ? 'message-bubble--media-only' : ''}`}
                     onClick={(e) => {
+                        if (isInsideNoGesture(e.target)) return;
                         if (isUploading) return;
                         e.stopPropagation();
                         if (consumeSuppressedClick()) return;
@@ -857,6 +873,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                         actions.openMenu(message.id, e.currentTarget, hasPointer ? ne.clientX : undefined, hasPointer ? ne.clientY : undefined);
                     }}
                     onContextMenu={(e) => {
+                        if (isInsideNoGesture(e.target)) return;
                         e.preventDefault();
                         if (isSelectionModeActive || isUploading) return;
                         actions.openMenu(message.id, e.currentTarget, e.clientX, e.clientY);

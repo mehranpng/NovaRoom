@@ -6435,8 +6435,30 @@ html.keyboard-open .chat-room__input-area {
     }
 }
 
-body[data-music-player='active'] .app {
+.mini-music-player {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1500;
+}
+
+@media (min-width: 1024px) {
+    .mini-music-player {
+        left: var(--desktop-sidebar-width, 380px);
+    }
+}
+
+body[data-music-player='active'] .app:not(:has(.chat-room)) {
     padding-top: 66px;
+}
+
+body[data-music-player='active'] .chat-room__header {
+    top: 76px;
+}
+
+body[data-music-player='active'] .chat-room__pinned-bar {
+    top: 130px;
 }
 
 @media (prefers-reduced-motion: reduce) {

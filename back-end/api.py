@@ -781,6 +781,14 @@ async def _remap_forward_file_to_target_chat(
         if key in file_meta:
             remapped_meta[key] = file_meta.get(key)
 
+    audio_cover = file_meta.get("audioCover")
+    if (
+        isinstance(audio_cover, str)
+        and audio_cover.startswith("data:image/")
+        and len(audio_cover) <= 262144
+    ):
+        remapped_meta["audioCover"] = audio_cover
+
     return remapped_meta
 
 
@@ -8529,6 +8537,13 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     for k in ("title", "artist"):
                         if isinstance(raw_file.get(k), str):
                             sanitized_file[k] = raw_file[k][:200]
+                    audio_cover = raw_file.get("audioCover")
+                    if (
+                        isinstance(audio_cover, str)
+                        and audio_cover.startswith("data:image/")
+                        and len(audio_cover) <= 262144
+                    ):
+                        sanitized_file["audioCover"] = audio_cover
                     for key in ("width", "height"):
                         try:
                             value = int(raw_file.get(key))

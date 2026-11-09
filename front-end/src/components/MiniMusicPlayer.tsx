@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useLayoutEffect } from 'react';
 import { useMusicPlayer } from '../contexts/MusicPlayerContext';
 import { Pause, Play, X, SkipBack, SkipForward } from 'lucide-react';
 
@@ -13,7 +13,7 @@ export const MiniMusicPlayer: React.FC = () => {
   const { track, isPlaying, currentTime, duration, togglePlay, seek, stop } = useMusicPlayer();
   const progressRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (track) {
       document.body.setAttribute('data-music-player', 'active');
     } else {
@@ -39,12 +39,7 @@ export const MiniMusicPlayer: React.FC = () => {
   const handleSkipForward = () => seek(Math.min(duration, currentTime + 10));
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      zIndex: 1500,
+    <div className="mini-music-player" style={{
       background: 'var(--bg-secondary)',
       borderBottom: '1px solid var(--border-primary)',
       borderRadius: 0,

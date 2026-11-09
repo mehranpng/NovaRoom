@@ -440,6 +440,12 @@ export function App() {
     }, [desktopSidebarWidth]);
 
     useEffect(() => {
+        const root = document.documentElement;
+        if (desktopSidebarWidth == null) root.style.removeProperty('--desktop-sidebar-width');
+        else root.style.setProperty('--desktop-sidebar-width', `${desktopSidebarWidth}px`);
+    }, [desktopSidebarWidth]);
+
+    useEffect(() => {
         if (!isResizingDesktopLayout) return;
         const onMove = (event: MouseEvent) => {
             if (window.innerWidth < DESKTOP_BREAKPOINT) return;
