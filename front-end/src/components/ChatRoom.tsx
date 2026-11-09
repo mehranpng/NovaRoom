@@ -339,6 +339,7 @@ export function ChatRoom({
     const canManageGroup = Boolean(isGroupChat && !isOfficialChannel && (
         currentUser?.adminLevel || String(contact.createdBy || '') === currentUserId
     ));
+    const canDeleteOthersMessages = canManageGroup || Boolean(isOfficialChannel && isAdminUser);
     const canSendInOfficialChannel = !isOfficialChannel || isAdminUser;
     const canSwipeToReply = !(isOfficialChannel && !isAdminUser);
     const blockedByOther = Boolean((contact as any)?.blockedByOther);
@@ -1555,9 +1556,9 @@ export function ChatRoom({
         return selectedMessageIds.filter((id: string) => {
             const msg = messagesById.get(id);
             if (!msg) return false;
-            return msg.senderId === currentUserId || canManageGroup;
+            return msg.senderId === currentUserId || canDeleteOthersMessages;
         });
-    }, [selectedMessageIds, messages, currentUserId, canManageGroup]);
+    }, [selectedMessageIds, messages, currentUserId, canDeleteOthersMessages]);
 
     const canDeleteAnySelected = selectedMessageIds.length > 0 && deletableSelectedIds.length === selectedMessageIds.length;
 
@@ -3377,7 +3378,7 @@ export function ChatRoom({
                 const activeMsg = messagesById.get(msgMenu.id);
                 if (!activeMsg) return null;
                 const activeMsgIsMine = activeMsg.senderId === currentUserId;
-                const canDeleteActiveMsg = activeMsgIsMine || canManageGroup;
+                const canDeleteActiveMsg = activeMsgIsMine || canDeleteOthersMessages;
                 const showSeenByAction = isGroupChat && activeMsgIsMine && !isOfficialChannel;
                 const canReplyInMessageMenu = !(isOfficialChannel && !isAdminUser);
                 const hasCaption = Boolean((activeMsg.text || '').trim());
