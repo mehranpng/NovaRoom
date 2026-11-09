@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Search, ChevronRight, Bookmark } from 'lucide-react';
+import { Search, ChevronRight } from 'lucide-react';
 import { AnimatePresence, motion, useDragControls } from 'framer-motion';
 import type { Chat } from '../types';
 import { Avatar } from './Avatar';
+import TelegramIcon from './TelegramIcon';
 import { VerifiedBadge } from './VerifiedBadge';
 
 interface ForwardModalProps {
@@ -135,7 +136,7 @@ export function ForwardModal({ isOpen, chats, currentUserId, currentUserIsAdmin 
                                     <div className="forward-sheet__item-info">
                                         <div className="forward-sheet__item-name">{savedMessagesChat.name}</div>
                                     </div>
-                                    <Bookmark size={17} className="forward-sheet__item-icon" />
+                                    <TelegramIcon name="saved-messages" size={20} className="forward-sheet__item-icon" />
                                 </button>
                             )}
 

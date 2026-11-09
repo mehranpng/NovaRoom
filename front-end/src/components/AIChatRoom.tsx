@@ -1,6 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { ChevronLeft, Copy, Check, Brain, PanelRight, PencilLine, Trash2, History, CornerUpLeft, ChevronDown, Pin, PinOff, MessageSquareDashed, X, Plus, Paperclip, Globe, Loader2 } from 'lucide-react';
+import { ChevronLeft, Copy, Check, Brain, PanelRight, PencilLine, Trash2, History, CornerUpLeft, ChevronDown, Pin, MessageSquareDashed, X, Plus, Paperclip, Globe, Loader2 } from 'lucide-react';
 import { SendIcon } from './SendIcon';
+import TelegramIcon from './TelegramIcon';
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -50,7 +51,6 @@ interface AIChatRoomProps {
     currentUserIsAdmin?: boolean;
 }
 
-const IRAN_OFFSET_MS = 210 * 60 * 1000; 
 const MAX_SELECTED_MESSAGES = 30;
 const AI_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
 const AI_MAX_IMAGE_FILE_SIZE = 5 * 1024 * 1024;
@@ -67,16 +67,6 @@ function normalizeTs(ts: unknown): number {
     }
     if (ts instanceof Date) return ts.getTime();
     return Date.now();
-}
-
-function iranShiftedDate(ts: unknown): Date {
-    return new Date(normalizeTs(ts) + IRAN_OFFSET_MS);
-}
-
-function formatMessageTime(ts: unknown) {
-    const d = iranShiftedDate(ts);
-    const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
-    return toPersianDigits(time);
 }
 
 function toPersianDigits(value: string | number): string {
@@ -290,6 +280,7 @@ export function AIChatRoom({
     const modelDropdownRef = useRef<HTMLDivElement | null>(null);
 
     const msgMenuRef = useRef<HTMLDivElement | null>(null);
+    const suppressMenuOpenUntilRef = useRef(0);
     const inputAreaRef = useRef<HTMLDivElement | null>(null);
     const [composerHeight, setComposerHeight] = useState(0);
     const aiChatActionMenuRef = useRef<HTMLDivElement | null>(null);
@@ -500,7 +491,11 @@ export function AIChatRoom({
     
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
-            if (msgMenuRef.current && msgMenuRef.current.contains(e.target as Node)) return;
+            const menuEl = msgMenuRef.current;
+            if (menuEl && menuEl.contains(e.target as Node)) return;
+            if (menuEl && (e.target as HTMLElement).closest('.message-row')) {
+                suppressMenuOpenUntilRef.current = performance.now() + 350;
+            }
             setMsgMenu(null);
         };
         document.addEventListener('mousedown', onDocClick);
@@ -1368,7 +1363,7 @@ export function AIChatRoom({
                                 <div
                                     className={cx(
                                         isMine ? 'message-row message-row--mine' : 'message-row message-row--theirs',
-                                        isSelected && 'message-row--selected',
+                                        (isSelected || msgMenu?.id === message.id) && 'message-row--selected',
                                         isSelectionModeActive && 'message-row--selecting'
                                     )}
                                     onClickCapture={(e) => {
@@ -1387,13 +1382,18 @@ export function AIChatRoom({
                                         }
                                     }}
                                     onClick={(e) => {
-                                        if (!isSelectionModeActive) return;
+                                        if (isSelectionModeActive) return;
                                         if (suppressClickRef.current) {
                                             suppressClickRef.current = false;
                                             return;
                                         }
-                                        e.stopPropagation();
-                                        toggleMessageSelection(message.id);
+                                        if (performance.now() < suppressMenuOpenUntilRef.current) {
+                                            suppressMenuOpenUntilRef.current = 0;
+                                            return;
+                                        }
+                                        if ((e.target as HTMLElement).closest('a, button')) return;
+                                        const ne = e.nativeEvent as MouseEvent;
+                                        openMessageMenu(message.id, e.currentTarget as HTMLElement, ne.clientX, ne.clientY);
                                     }}
                                     onPointerDown={(e) => {
                                         if (e.pointerType === 'mouse' && e.button === 0) startMessageLongPress(message.id, e.clientX, e.clientY);
@@ -1431,18 +1431,6 @@ export function AIChatRoom({
                                     {isReasoningMessage ? (
                                         <div
                                             className={`message-bubble message-bubble--theirs msg-shape--single ai-reasoning-wrap ${isSelected ? 'message-bubble--selected' : ''}`}
-                                            onClick={(e) => {
-                                                if (suppressClickRef.current) {
-                                                    suppressClickRef.current = false;
-                                                    return;
-                                                }
-                                                if (isSelectionModeActive) {
-                                                    toggleMessageSelection(message.id);
-                                                    return;
-                                                }
-                                                const ne = e.nativeEvent as MouseEvent;
-                                                openMessageMenu(message.id, e.currentTarget, ne.clientX, ne.clientY);
-                                            }}
                                             role="button"
                                             tabIndex={0}
                                             onKeyDown={(e) => {
@@ -1503,10 +1491,11 @@ export function AIChatRoom({
                                                     {renderSourcePills(message)}
                                                 </div>
                                             </div>
-                                            <div className="message-meta message-meta--theirs">
-                                                {message.aiModelName && <span className="message-ai-model-label">{message.aiModelName}</span>}
-                                                <span className="message-time">{formatMessageTime(message.timestamp)}</span>
-                                            </div>
+                                            {message.aiModelName && (
+                                                <div className="message-meta message-meta--theirs">
+                                                    <span className="message-ai-model-label">{message.aiModelName}</span>
+                                                </div>
+                                            )}
                                         </div>
                                     ) : (
                                         <div
@@ -1515,18 +1504,6 @@ export function AIChatRoom({
                                                     ? `message-bubble message-bubble--mine msg-shape--single ${isSelected ? 'message-bubble--selected' : ''}`
                                                     : `message-bubble message-bubble--theirs msg-shape--single ${isSelected ? 'message-bubble--selected' : ''}`
                                             }
-                                            onClick={(e) => {
-                                                if (suppressClickRef.current) {
-                                                    suppressClickRef.current = false;
-                                                    return;
-                                                }
-                                                if (isSelectionModeActive) {
-                                                    toggleMessageSelection(message.id);
-                                                    return;
-                                                }
-                                                const ne = e.nativeEvent as MouseEvent;
-                                                openMessageMenu(message.id, e.currentTarget, ne.clientX, ne.clientY);
-                                            }}
                                             role="button"
                                             tabIndex={0}
                                             onKeyDown={(e) => {
@@ -1576,7 +1553,6 @@ export function AIChatRoom({
                                             {!isMine && renderSourcePills(message)}
                                             <div className={isMine ? 'message-meta message-meta--mine' : 'message-meta message-meta--theirs'}>
                                                 {message.aiModelName && <span className="message-ai-model-label">{message.aiModelName}</span>}
-                                                <span className="message-time">{formatMessageTime(message.timestamp)}</span>
                                                 {isMine && (
                                                     <span className="message-seen message-seen--double" aria-label="sent">
                                                         <Check size={12} strokeWidth={2.5} className="message-seen__check message-seen__check--first" />
@@ -1873,7 +1849,7 @@ export function AIChatRoom({
                         type="button"
                         onClick={() => togglePinAIChat(aiChatActionMenu.chatId)}
                     >
-                        {pinnedAIChatIds.includes(aiChatActionMenu.chatId) ? <PinOff size={15} /> : <Pin size={15} />}
+                        {pinnedAIChatIds.includes(aiChatActionMenu.chatId) ? <TelegramIcon name="unpin" size={15} /> : <TelegramIcon name="pin" size={15} />}
                         {pinnedAIChatIds.includes(aiChatActionMenu.chatId) ? 'برداشتن سنجاق' : 'سنجاق'}
                     </button>
                     <button
@@ -1886,7 +1862,7 @@ export function AIChatRoom({
                             setAIChatActionMenu(null);
                         }}
                     >
-                        <PencilLine size={15} />
+                        <TelegramIcon name="edit" size={15} />
                         تغییر نام
                     </button>
                     <button
@@ -1898,7 +1874,7 @@ export function AIChatRoom({
                             setAIChatActionMenu(null);
                         }}
                     >
-                        <Trash2 size={15} />
+                        <TelegramIcon name="delete" size={15} />
                         حذف
                     </button>
                 </div>
@@ -2019,11 +1995,11 @@ export function AIChatRoom({
                     onClick={(e) => e.stopPropagation()}
                 >
                     <button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button">
-                        <Copy size={16} />
+                        <TelegramIcon name="copy" size={16} />
                         کپی
                     </button>
                     <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button">
-                        <CornerUpLeft size={16} />
+                        <TelegramIcon name="forward" size={16} />
                         فوروارد
                     </button>
                     <button
@@ -2034,7 +2010,7 @@ export function AIChatRoom({
                         }}
                         type="button"
                     >
-                        <Check size={16} />
+                        <TelegramIcon name="select" size={16} />
                         انتخاب
                     </button>
                 </div>

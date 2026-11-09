@@ -1,5 +1,5 @@
-import { Bookmark } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import TelegramIcon from './TelegramIcon';
 import { cx } from '../utils/cx';
 import { API_BASE_URL } from '../config/api';
 import { decryptAvatarBytesClientSide, decryptFileBytesClientSide } from '../utils/e2ee';
@@ -33,7 +33,6 @@ function getInitials(name: string): string {
 
 const sizeMap = { xxs: 18, xs: 28, sm: 40, md: 48, 'md-lg': 50, lg: 64, xl: 80 };
 const plainSizeMap = { xxs: 24, xs: 40, sm: 40, md: 58, 'md-lg': 60, lg: 70, xl: 96 };
-const iconSizeMap = { xxs: 10, xs: 14, sm: 20, md: 24, 'md-lg': 25, lg: 32, xl: 40 };
 
 
 const avatarCache = new Map<string, string>();
@@ -205,7 +204,7 @@ export function Avatar({ name, size = 'md', online, savedMessages = false, src =
           className="avatar__circle avatar__circle--saved"
           style={{ width: `${px}px`, height: `${px}px` }}
         >
-          <Bookmark size={iconSizeMap[size]} color="white" fill="white" />
+          <TelegramIcon name="saved-messages-filled" size={Math.round(px * 0.5)} />
         </div>
       </div>
     );

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Copy, Eye, MoreVertical, Pencil, Trash2, X, LogOut, Check, CornerUpLeft, CornerUpRight, ChevronDown, Upload, Download, Pin, AtSign, Heart, Bell, BellOff, BellMinus } from 'lucide-react';
+import TelegramIcon from './TelegramIcon';
+import { ChevronLeft, ChevronDown } from 'lucide-react';
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata, PendingAttachment, PendingForwardDraft, PinnedMessage, GroupPreview } from '../types';
 import { Avatar } from './Avatar';
@@ -364,9 +365,7 @@ export function ChatRoom({
     const [replyTo, setReplyTo] = useState<MessageReplyType | null>(null);
     const [messagesScrolled, setMessagesScrolled] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
-    const [floatingDateLabel, setFloatingDateLabel] = useState<string | null>(null);
-    const [floatingDateVisible, setFloatingDateVisible] = useState(false);
-    const floatingDateTimerRef = useRef<number | null>(null);
+    const idleDateTimerRef = useRef<number | null>(null);
 
     const [msgMenu, setMsgMenu] = useState<null | { id: string; top: number; left: number; isFileDownloaded?: boolean }>(null);
     const [reactionMenu, setReactionMenu] = useState<null | { id: string; top: number; left: number }>(null);
@@ -478,20 +477,11 @@ export function ChatRoom({
 
     useEffect(() => {
         return () => {
-            if (floatingDateTimerRef.current) {
-                window.clearTimeout(floatingDateTimerRef.current);
+            if (idleDateTimerRef.current) {
+                window.clearTimeout(idleDateTimerRef.current);
             }
         };
     }, []);
-
-    useEffect(() => {
-        setFloatingDateLabel(null);
-        setFloatingDateVisible(false);
-        if (floatingDateTimerRef.current) {
-            window.clearTimeout(floatingDateTimerRef.current);
-            floatingDateTimerRef.current = null;
-        }
-    }, [chatId]);
 
     
     const [unreadAnchorId, setUnreadAnchorId] = useState<string | null>(initialFirstUnreadId);
@@ -1613,19 +1603,6 @@ export function ChatRoom({
         fileUploadPicker.open = false;
     };
 
-    const handleExternalFileUploadClickCapture = (e: React.MouseEvent<HTMLDivElement>) => {
-        const isUploadButton = Boolean((e.target as HTMLElement).closest('.file-upload-button'));
-        if (e.type === 'pointerdown') {
-            if (!fileUploadPicker.open || isUploadButton) return;
-            e.stopPropagation();
-            fileUploadPicker.open = false;
-            return;
-        }
-        if (!isUploadButton && !fileUploadPicker.open) {
-            e.stopPropagation();
-        }
-    };
-
     useEffect(() => {
         const onDocClick = (e: MouseEvent) => {
             const target = e.target as Node;
@@ -2179,6 +2156,18 @@ export function ChatRoom({
     const handleMessagesScroll = () => {
         const container = messagesContainerRef.current;
         if (!container) return;
+        container.querySelectorAll('.chat-room__date-separator--idle').forEach((el) => el.classList.remove('chat-room__date-separator--idle'));
+        if (idleDateTimerRef.current) window.clearTimeout(idleDateTimerRef.current);
+        idleDateTimerRef.current = window.setTimeout(() => {
+            const host = messagesContainerRef.current;
+            if (!host) return;
+            const hostTop = host.getBoundingClientRect().top;
+            const stickyTop = parseFloat(getComputedStyle(host.closest('.chat-room') as Element).getPropertyValue('--date-sticky-top')) || 72;
+            const stuck = Array.from(host.querySelectorAll<HTMLElement>('[data-date-separator]')).filter(
+                (el) => el.getBoundingClientRect().top - hostTop <= stickyTop + 1 && el.parentElement!.getBoundingClientRect().top - hostTop < stickyTop
+            );
+            stuck[stuck.length - 1]?.classList.add('chat-room__date-separator--idle');
+        }, 1000);
         const currentTop = container.scrollTop;
         setMessagesScrolled(isElementScrolled(container));
         const lastTop = lastScrollTopRef.current;
@@ -2224,38 +2213,6 @@ export function ChatRoom({
         }
 
         saveScroll(chatId);
-
-        const dateSeparators = container.querySelectorAll<HTMLElement>('.chat-room__date-separator[data-date-label]');
-        if (dateSeparators.length > 0) {
-            const floatingTop = pinnedMessage ? 120 : 72;
-            const containerRect = container.getBoundingClientRect();
-            let currentLabel: string | null = dateSeparators[0].getAttribute('data-date-label');
-            dateSeparators.forEach((separator) => {
-                const rect = separator.getBoundingClientRect();
-                const offsetTop = rect.top - containerRect.top;
-                if (offsetTop <= floatingTop) {
-                    currentLabel = separator.getAttribute('data-date-label') || currentLabel;
-                }
-                if (offsetTop >= -8 && offsetTop <= floatingTop + 32) {
-                    separator.classList.add('chat-room__date-separator--hidden');
-                } else {
-                    separator.classList.remove('chat-room__date-separator--hidden');
-                }
-            });
-            if (currentLabel) {
-                setFloatingDateLabel(currentLabel);
-                setFloatingDateVisible(true);
-                if (floatingDateTimerRef.current) {
-                    window.clearTimeout(floatingDateTimerRef.current);
-                }
-                floatingDateTimerRef.current = window.setTimeout(() => {
-                    setFloatingDateVisible(false);
-                    container.querySelectorAll<HTMLElement>('.chat-room__date-separator--hidden').forEach((separator) => {
-                        separator.classList.remove('chat-room__date-separator--hidden');
-                    });
-                }, 1100);
-            }
-        }
 
         if (
             distanceToBottom > 12
@@ -2320,6 +2277,7 @@ export function ChatRoom({
                 m,
                 isMine,
                 dayBreak,
+                dayKey: meta.dayKey,
                 dayLabel,
                 formattedTime: meta.time,
                 shape: bubbleShape(prevSameSender, nextSameSender),
@@ -2784,61 +2742,76 @@ export function ChatRoom({
         return members;
     }, [isGroupChat, groupMembers, currentUser, contact]);
 
-    const renderedMessageItems = useMemo(() => items.map(({ m, isMine, dayBreak, dayLabel, formattedTime, shape, isBigEmojiOnly, emojiOnlyClass }) => {
-        const showUnreadSeparator = Boolean(unreadAnchorForUi && unreadAnchorForUi === m.id && m.senderId !== currentUserId);
-        const seenByCountForMessage = seenByUsersByMessage[m.id]?.length ?? 0;
-        const isSeenForUi = Boolean(
-            m.seen || (isGroupChat && isMine && seenByCountForMessage > 0) || (isOfficialChannel && isMine)
-        );
-        const messageSeenByRaw = Array.isArray((m as any).seenBy) ? (m as any).seenBy.length : 0;
-        const messageSeenCountRaw = Number((m as any).seenCount || 0);
-        const messageSeenCount = Math.max(1, seenByCountForMessage, messageSeenByRaw, messageSeenCountRaw);
-        const sender = groupMembers[m.senderId];
-        const senderPending = isGroupChat && !isMine && !sender && !membersResolved;
-        const replySenderId = m.replyTo ? String(messagesById.get(m.replyTo.id)?.senderId || m.replyTo.senderId || '') : '';
-        const replySenderPending = isGroupChat && !membersResolved && Boolean(replySenderId) && !groupMembers[replySenderId];
-        const reactionsForMessage = (optimisticReactions[m.id] ?? m.reactions ?? EMPTY_REACTIONS) as unknown as ReactionEntry[];
+    const renderedMessageItems = useMemo(() => {
+        const groups: { key: number; label: string; items: ReactNode[] }[] = [];
+        items.forEach(({ m, isMine, dayBreak, dayKey, dayLabel, formattedTime, shape, isBigEmojiOnly, emojiOnlyClass }) => {
+            const showUnreadSeparator = Boolean(unreadAnchorForUi && unreadAnchorForUi === m.id && m.senderId !== currentUserId);
+            const seenByCountForMessage = seenByUsersByMessage[m.id]?.length ?? 0;
+            const isSeenForUi = Boolean(
+                m.seen || (isGroupChat && isMine && seenByCountForMessage > 0) || (isOfficialChannel && isMine)
+            );
+            const messageSeenByRaw = Array.isArray((m as any).seenBy) ? (m as any).seenBy.length : 0;
+            const messageSeenCountRaw = Number((m as any).seenCount || 0);
+            const messageSeenCount = Math.max(1, seenByCountForMessage, messageSeenByRaw, messageSeenCountRaw);
+            const sender = groupMembers[m.senderId];
+            const senderPending = isGroupChat && !isMine && !sender && !membersResolved;
+            const replySenderId = m.replyTo ? String(messagesById.get(m.replyTo.id)?.senderId || m.replyTo.senderId || '') : '';
+            const replySenderPending = isGroupChat && !membersResolved && Boolean(replySenderId) && !groupMembers[replySenderId];
+            const reactionsForMessage = (optimisticReactions[m.id] ?? m.reactions ?? EMPTY_REACTIONS) as unknown as ReactionEntry[];
 
-        return (
-            <ChatMessageItem
-                key={m.id}
-                message={m}
-                displayText={m.text}
-                isMine={isMine}
-                isGroupChat={isGroupChat}
-                isOfficialChannel={isOfficialChannel}
-                isSelectionModeActive={isSelectionModeActive}
-                canSwipeToReply={canSwipeToReply}
-                currentUserId={currentUserId}
-                token={token}
-                chatId={chatId}
-                dayBreak={dayBreak}
-                dayLabel={dayLabel}
-                formattedTime={formattedTime}
-                shape={shape}
-                isBigEmojiOnly={isBigEmojiOnly}
-                emojiOnlyClass={emojiOnlyClass}
-                senderName={sender?.name || m.senderId || 'ناشناس'}
-                senderAvatar={sender?.avatar || ''}
-                senderPending={senderPending}
-                replySenderName={m.replyTo ? getReplySenderName(m.replyTo) : ''}
-                replySenderPending={replySenderPending}
-                replyPreviewText={m.replyTo ? getReplyPreviewText(m.replyTo) : ''}
-                reactions={reactionsForMessage}
-                reactionMembers={reactionMembers}
-                isHighlighted={highlightId === m.id}
-                isSelected={selectedMessageIds.includes(m.id)}
-                isNewMessage={arrivedMessageIds.includes(m.id)}
-                showUnreadSeparator={showUnreadSeparator}
-                isMenuActive={msgMenu?.id === m.id}
-                isSeenForUi={isSeenForUi}
-                messageSeenCount={messageSeenCount}
-                reasoningOpen={Boolean(reasoningPanelByMessage[m.id])}
-                unreadSeparatorRef={unreadSeparatorRef}
-                actions={messageActions}
-            />
-        );
-    }), [
+            const item = (
+                <ChatMessageItem
+                    key={m.id}
+                    message={m}
+                    displayText={m.text}
+                    isMine={isMine}
+                    isGroupChat={isGroupChat}
+                    isOfficialChannel={isOfficialChannel}
+                    isSelectionModeActive={isSelectionModeActive}
+                    canSwipeToReply={canSwipeToReply}
+                    currentUserId={currentUserId}
+                    token={token}
+                    chatId={chatId}
+                    formattedTime={formattedTime}
+                    shape={shape}
+                    isBigEmojiOnly={isBigEmojiOnly}
+                    emojiOnlyClass={emojiOnlyClass}
+                    senderName={sender?.name || m.senderId || 'ناشناس'}
+                    senderAvatar={sender?.avatar || ''}
+                    senderPending={senderPending}
+                    replySenderName={m.replyTo ? getReplySenderName(m.replyTo) : ''}
+                    replySenderPending={replySenderPending}
+                    replyPreviewText={m.replyTo ? getReplyPreviewText(m.replyTo) : ''}
+                    reactions={reactionsForMessage}
+                    reactionMembers={reactionMembers}
+                    isHighlighted={highlightId === m.id}
+                    isSelected={selectedMessageIds.includes(m.id)}
+                    isNewMessage={arrivedMessageIds.includes(m.id)}
+                    showUnreadSeparator={showUnreadSeparator}
+                    isMenuActive={msgMenu?.id === m.id}
+                    isSeenForUi={isSeenForUi}
+                    messageSeenCount={messageSeenCount}
+                    reasoningOpen={Boolean(reasoningPanelByMessage[m.id])}
+                    unreadSeparatorRef={unreadSeparatorRef}
+                    actions={messageActions}
+                />
+            );
+
+            if (dayBreak) {
+                groups.push({ key: dayKey, label: dayLabel, items: [item] });
+            } else if (groups.length > 0) {
+                groups[groups.length - 1].items.push(item);
+            }
+        });
+        return groups.map((group) => (
+            <div className="chat-room__date-group" key={group.key}>
+                <div className="chat-room__date-separator" data-date-separator>
+                    <span className="chat-room__date-label">{group.label}</span>
+                </div>
+                {group.items}
+            </div>
+        ));
+    }, [
         items,
         highlightId,
         arrivedMessageIds,
@@ -3059,7 +3032,7 @@ export function ChatRoom({
                             title="لغو انتخاب"
                             type="button"
                         >
-                            <X size={20} />
+                            <TelegramIcon name="close" size={20} />
                         </button>
                         <span
                             key={selectionShake}
@@ -3077,7 +3050,7 @@ export function ChatRoom({
                             title="کپی متن پیام‌ها"
                             aria-label="Copy selected messages"
                         >
-                            <Copy size={19} />
+                            <TelegramIcon name="copy" size={19} />
                         </button>
                         <button
                             type="button"
@@ -3086,7 +3059,7 @@ export function ChatRoom({
                             title="فوروارد پیام‌های انتخاب‌شده"
                             aria-label="Forward selected messages"
                         >
-                            <CornerUpLeft size={19} />
+                            <TelegramIcon name="forward" size={19} />
                         </button>
                         {canDeleteAnySelected && (
                             <button
@@ -3096,7 +3069,7 @@ export function ChatRoom({
                                 title="حذف پیام‌های انتخاب‌شده"
                                 aria-label="Delete selected messages"
                             >
-                                <Trash2 size={19} />
+                                <TelegramIcon name="delete" size={19} />
                             </button>
                         )}
                     </div>
@@ -3167,7 +3140,7 @@ export function ChatRoom({
                                 aria-label="More"
                                 type="button"
                             >
-                                <MoreVertical size={20} />
+                                <TelegramIcon name="more" size={20} />
                             </button>
 
                             {chatMenuOpen && (
@@ -3184,9 +3157,9 @@ export function ChatRoom({
                                             onClick={() => setChatMenuSubmenu('notifications')}
                                             type="button"
                                         >
-                                            <Bell size={16} />
+                                            <TelegramIcon name="unmute" size={16} />
                                             اعلان‌ها
-                                            <ChevronRight size={16} style={{ marginInlineStart: 'auto', opacity: 0.5 }} />
+                                            <TelegramIcon name="next" size={16} style={{ marginInlineStart: 'auto', opacity: 0.5 }} />
                                         </button>
                                     ) : chatMenuSubmenu === 'notifications' ? (
                                         <>
@@ -3197,7 +3170,7 @@ export function ChatRoom({
                                                 style={{ direction: 'rtl', justifyContent: 'flex-end', gap: 6, padding: '4px 10px 8px', fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}
                                             >
                                                 <span>اعلان‌ها</span>
-                                                <ChevronLeft size={16} />
+                                                <TelegramIcon name="previous" size={16} />
                                             </button>
                                             <button
                                                 className="popover__item"
@@ -3207,9 +3180,9 @@ export function ChatRoom({
                                                 }}
                                                 type="button"
                                             >
-                                                <Bell size={16} />
+                                                <TelegramIcon name="unmute" size={16} />
                                                 همه پیام‌ها
-                                                {notifyMode === 'all' && <Check size={16} style={{ marginInlineStart: 'auto' }} />}
+                                                {notifyMode === 'all' && <TelegramIcon name="check" size={16} style={{ marginInlineStart: 'auto' }} />}
                                             </button>
                                             <button
                                                 className="popover__item"
@@ -3219,9 +3192,9 @@ export function ChatRoom({
                                                 }}
                                                 type="button"
                                             >
-                                                <BellMinus size={16} />
+                                                <TelegramIcon name="mention" size={16} />
                                                 فقط منشن و پاسخ
-                                                {notifyMode === 'mentions' && <Check size={16} style={{ marginInlineStart: 'auto' }} />}
+                                                {notifyMode === 'mentions' && <TelegramIcon name="check" size={16} style={{ marginInlineStart: 'auto' }} />}
                                             </button>
                                             <button
                                                 className="popover__item"
@@ -3231,9 +3204,9 @@ export function ChatRoom({
                                                 }}
                                                 type="button"
                                             >
-                                                <BellOff size={16} />
+                                                <TelegramIcon name="mute" size={16} />
                                                 بی‌صدا
-                                                {notifyMode === 'muted' && <Check size={16} style={{ marginInlineStart: 'auto' }} />}
+                                                {notifyMode === 'muted' && <TelegramIcon name="check" size={16} style={{ marginInlineStart: 'auto' }} />}
                                             </button>
                                         </>
                                     ) : (
@@ -3245,7 +3218,7 @@ export function ChatRoom({
                                             }}
                                             type="button"
                                         >
-                                            {notifyMode === 'muted' ? <Bell size={16} /> : <BellOff size={16} />}
+                                            {notifyMode === 'muted' ? <TelegramIcon name="unmute" size={16} /> : <TelegramIcon name="mute" size={16} />}
                                             {notifyMode === 'muted' ? 'باصدا کردن' : 'بی‌صدا کردن'}
                                         </button>
                                     )}
@@ -3260,7 +3233,7 @@ export function ChatRoom({
                                                         onClick={openLeaveGroupConfirm}
                                                         type="button"
                                                     >
-                                                        <LogOut size={16} />
+                                                        <TelegramIcon name="logout" size={16} />
                                                         خروج از گروه
                                                     </button>
                                                     {canManageGroup && (
@@ -3269,7 +3242,7 @@ export function ChatRoom({
                                                             onClick={openDeleteChatConfirm}
                                                             type="button"
                                                         >
-                                                            <Trash2 size={16} />
+                                                            <TelegramIcon name="delete" size={16} />
                                                             حذف گروه
                                                         </button>
                                                     )}
@@ -3280,7 +3253,7 @@ export function ChatRoom({
                                                     onClick={openDeleteChatConfirm}
                                                     type="button"
                                                 >
-                                                    <Trash2 size={16} />
+                                                    <TelegramIcon name="delete" size={16} />
                                                     حذف گفتگو
                                                 </button>
                                             )}
@@ -3307,7 +3280,7 @@ export function ChatRoom({
                     tabIndex={0}
                 >
                     <div className="chat-room__pinned-bar__indicator" />
-                    <Pin size={16} className="chat-room__pinned-bar__icon" />
+                    <TelegramIcon name="pin" size={16} className="chat-room__pinned-bar__icon" />
                     <div className="chat-room__pinned-bar__content">
                         <div className="chat-room__pinned-bar__title">
                             پیام سنجاق شده{pinnedMessage.senderName ? ` • ${pinnedMessage.senderName}` : ''}
@@ -3332,17 +3305,12 @@ export function ChatRoom({
                             setConfirmPin({ action: 'unpin' });
                         }}
                     >
-                        <X size={16} />
+                        <TelegramIcon name="close" size={16} />
                     </button>
                 </div>
             )}
 
             <div className="chat-room__messages-Viewport" onPointerDownCapture={resetUploadPickerIfOpen}>
-                {floatingDateLabel && (
-                    <div className={`chat-room__floating-date${floatingDateVisible && !loadingOlderMessages && !localLoadingOlder ? ' chat-room__floating-date--visible' : ''}`}>
-                        <span>{floatingDateLabel}</span>
-                    </div>
-                )}
                 <div
                     className="chat-room__messages"
                     ref={messagesContainerRef}
@@ -3449,7 +3417,7 @@ export function ChatRoom({
                                     setMsgMenu(null);
                                 }} type="button">
                                     <span className="popover__seen-label">
-                                        <Eye size={16} />
+                                        <TelegramIcon name="eye-outline" size={16} />
                                         <span>بازدیدها</span>
                                     </span>
                                     {(seenRows.length > 0 || (!seenLoaded && activeIsSeen)) && (
@@ -3471,7 +3439,7 @@ export function ChatRoom({
                                     setMsgMenu(null);
                                 }} type="button">
                                     <span className="popover__seen-label">
-                                        <Heart size={16} />
+                                        <TelegramIcon name="heart-outline" size={16} />
                                         <span>واکنش‌ها</span>
                                     </span>
                                     <span className="popover__seen-emojis">
@@ -3482,7 +3450,7 @@ export function ChatRoom({
                                 </button>
                             )}
                             {canReplyInMessageMenu && (
-                                <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><CornerUpRight size={16} />پاسخ</button>
+                                <button className="popover__item" onClick={() => beginReply(activeMsg)} type="button"><TelegramIcon name="reply" size={16} />پاسخ</button>
                             )}
                             {canTogglePin && (
                                 <button
@@ -3497,11 +3465,11 @@ export function ChatRoom({
                                     }}
                                     type="button"
                                 >
-                                    <Pin size={16} />
+                                    {pinnedMessage?.id === activeMsg.id ? <TelegramIcon name="unpin" size={16} /> : <TelegramIcon name="pin" size={16} />}
                                     {pinnedMessage?.id === activeMsg.id ? 'برداشتن سنجاق' : 'سنجاق کردن پیام'}
                                 </button>
                             )}
-                            <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><CornerUpLeft size={16} />فوروارد</button>
+                            <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><TelegramIcon name="forward" size={16} />فوروارد</button>
                             <button
                                 className="popover__item"
                                 onClick={() => {
@@ -3510,17 +3478,17 @@ export function ChatRoom({
                                 }}
                                 type="button"
                             >
-                                <Check size={16} />
+                                <TelegramIcon name="select" size={16} />
                                 انتخاب
                             </button>
                             {activeMsg.senderId === currentUserId && !activeMsg.forwardedFrom && !isChessMsg && (
-                                <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><Pencil size={16} />ویرایش</button>
+                                <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><TelegramIcon name="edit" size={16} />ویرایش</button>
                             )}
-                            {showCopyAction && (<button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><Copy size={16} />کپی</button>)}
-                            {showDownloadAction && (<button className="popover__item" onClick={() => doDownloadMessageFile(activeMsg)} type="button"><Download size={16} />دانلود</button>)}
+                            {showCopyAction && (<button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><TelegramIcon name="copy" size={16} />کپی</button>)}
+                            {showDownloadAction && (<button className="popover__item" onClick={() => doDownloadMessageFile(activeMsg)} type="button"><TelegramIcon name="download" size={16} />دانلود</button>)}
                             {canDeleteActiveMsg && (
                                 <button className="popover__item popover__item--danger" onClick={() => doDeleteMessage(activeMsg.id)} type="button">
-                                    <Trash2 size={16} />حذف
+                                    <TelegramIcon name="delete" size={16} />حذف
                                 </button>
                             )}
                         </div>
@@ -3741,7 +3709,7 @@ export function ChatRoom({
                             exit={{ opacity: 0, y: 8 }}
                             transition={{ duration: 0.14, ease: 'easeOut' }}
                         >
-                            <Heart size={19} fill="currentColor" strokeWidth={2} />
+                            <TelegramIcon name="heart-outline" size={19} />
                             <span className="chat-room__scroll-badge">
                                 {toPersianDigits(visibleUnreadReactionIds.length)}
                             </span>
@@ -3760,7 +3728,7 @@ export function ChatRoom({
                             exit={{ opacity: 0, y: 8 }}
                             transition={{ duration: 0.14, ease: 'easeOut' }}
                         >
-                            <AtSign size={19} strokeWidth={2.3} />
+                            <TelegramIcon name="mention" size={19} />
                             <span className="chat-room__scroll-badge">
                                 {toPersianDigits(visibleUnreadMentionIds.length)}
                             </span>
@@ -3793,7 +3761,7 @@ export function ChatRoom({
                 </AnimatePresence>
             </div>
 
-            <div className="chat-room__composer-host" ref={composerHostRef} onPointerDownCapture={handleExternalFileUploadClickCapture} onClickCapture={handleExternalFileUploadClickCapture}>
+            <div className="chat-room__composer-host" ref={composerHostRef}>
                 <ChatComposer
                     key={`${chatId}:${editingId ?? 'compose'}`}
                     chatId={chatId}
@@ -3883,7 +3851,7 @@ export function ChatRoom({
             {dragUploadActive && (
                 <div className="chat-room__drag-upload-overlay">
                     <div className="chat-room__drag-upload-overlay-content">
-                        <Upload size={30} />
+                        <TelegramIcon name="cloud-download" size={30} />
                         <span>فایل را برای آپلود رها کنید</span>
                     </div>
                 </div>

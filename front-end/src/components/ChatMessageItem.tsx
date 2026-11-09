@@ -52,8 +52,6 @@ export type ChatMessageItemProps = {
     currentUserId: string;
     token: string;
     chatId: string;
-    dayBreak: boolean;
-    dayLabel: string;
     formattedTime: string;
     shape: string;
     isBigEmojiOnly: boolean;
@@ -460,8 +458,6 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     currentUserId,
     token,
     chatId,
-    dayBreak,
-    dayLabel,
     formattedTime,
     shape,
     isBigEmojiOnly,
@@ -657,11 +653,6 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     if (message.systemType) {
         return (
             <div className="message-item">
-                {dayBreak && (
-                    <div className="chat-room__date-separator" data-date-label={dayLabel}>
-                        <div className="chat-room__date-label">{dayLabel}</div>
-                    </div>
-                )}
                 <div
                     ref={(el) => actions.registerEl(message.id, el)}
                     id={`msg-${message.id}`}
@@ -679,12 +670,6 @@ export const ChatMessageItem = memo(function ChatMessageItem({
 
     return (
         <div className="message-item">
-            {dayBreak && (
-                <div className="chat-room__date-separator" data-date-label={dayLabel}>
-                    <div className="chat-room__date-label">{dayLabel}</div>
-                </div>
-            )}
-
             {showUnreadSeparator && (
                 <div ref={unreadSeparatorRef} className="chat-room__unread-separator">
                     <div className="chat-room__unread-label">

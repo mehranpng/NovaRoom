@@ -1,4 +1,5 @@
-import { Search, Plus, LogOut, Bookmark, Trash2, Pin, PinOff, MessageSquarePlus, X, AtSign, Heart, Bell, BellOff, BellMinus, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import TelegramIcon from './TelegramIcon';
+import { BellOff } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Chat, User } from '../types';
@@ -37,26 +38,6 @@ type IconProps = {
     style?: CSSProperties;
     title?: string;
 };
-
-function FilledGroupIcon({ size = 16, className, style, title }: IconProps) {
-    return (
-        <svg
-            width={size}
-            height={size}
-            viewBox="0 0 24 24"
-            className={className}
-            style={style}
-            aria-hidden={title ? undefined : true}
-            role={title ? 'img' : 'presentation'}
-        >
-            {title ? <title>{title}</title> : null}
-            <path
-                fill="currentColor"
-                d="M7.6 11.2c1.8 0 3.3-1.5 3.3-3.3S9.4 4.6 7.6 4.6 4.3 6.1 4.3 7.9s1.5 3.3 3.3 3.3Zm8.8 0c1.7 0 3.1-1.4 3.1-3.1S18.1 5 16.4 5s-3.1 1.4-3.1 3.1 1.4 3.1 3.1 3.1Zm-8.8 1.2c-2.9 0-5.3 2.3-5.3 5.2v1c0 .5.4.9.9.9h9.4c.5 0 .9-.4.9-.9v-1c0-2.9-2.4-5.2-5.9-5.2Zm9.1.3c-.7 0-1.4.1-2 .3 1.4 1.1 2.3 2.7 2.4 4.6h4.9c.5 0 .9-.4.9-.9v-.6c0-2-1.7-3.4-4.2-3.4Z"
-            />
-        </svg>
-    );
-}
 
 function FilledMegaphoneIcon({ size = 14, className, style, title }: IconProps) {
     return (
@@ -852,7 +833,7 @@ export const ChatList = memo(function ChatList({
 
                     <div className={cx('chat-list__inline-search', searchOpen && 'chat-list__inline-search--open')}>
                         <span className="chat-list__search-icon">
-                            <Search size={16} />
+                            <TelegramIcon name="search" size={16} />
                         </span>
                         <input
                             ref={searchInputRef}
@@ -877,7 +858,7 @@ export const ChatList = memo(function ChatList({
                             }}
                             aria-label="Close search"
                         >
-                            <X size={16} />
+                            <TelegramIcon name="close" size={16} />
                         </button>
                     </div>
 
@@ -894,7 +875,7 @@ export const ChatList = memo(function ChatList({
                                 aria-label="Search"
                                 type="button"
                             >
-                                <Search size={20} />
+                                <TelegramIcon name="search" size={20} />
                             </button>
                         )}
 
@@ -904,7 +885,7 @@ export const ChatList = memo(function ChatList({
                             aria-label="پیام‌های ذخیره شده"
                             type="button"
                         >
-                            <Bookmark size={20} />
+                            <TelegramIcon name="saved-messages" size={20} />
                         </button>
                     </div>
                 </div>
@@ -924,7 +905,7 @@ export const ChatList = memo(function ChatList({
                     isMobile && !hasActiveChat ? <EmptyState /> : null
                 ) : filteredChats.length === 0 ? (
                     <div className="chat-list__empty">
-                        <MessageSquarePlus size={48} strokeWidth={1} />
+                        <TelegramIcon name="message" size={48} />
                         <p>گفتگویی یافت نشد</p>
                     </div>
                 ) : (
@@ -998,12 +979,14 @@ export const ChatList = memo(function ChatList({
                                             >
                                                 پیام‌های ذخیره شده
                                                 {pinned ? (
-                                                    <Pin
-                                                        size={14}
-                                                        className="chat-list__pin-icon"
-                                                        aria-label="سنجاق شده"
-                                                        style={{ opacity: 0.95, fill: 'currentColor' }}
-                                                    />
+                                                    <span role="img" aria-label="سنجاق شده" style={{ display: 'inline-flex' }}>
+                                                        <TelegramIcon
+                                                            name="pin-filled"
+                                                            size={14}
+                                                            className="chat-list__pin-icon"
+                                                            style={{ opacity: 0.95 }}
+                                                        />
+                                                    </span>
                                                 ) : null}
                                             </span>
                                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -1114,22 +1097,26 @@ export const ChatList = memo(function ChatList({
                                             {group ? (
                                                 chat.id === 'official-channel'
                                                     ? <FilledMegaphoneIcon size={14} title="کانال رسمی" style={{ opacity: 0.95 }} />
-                                                    : <FilledGroupIcon size={14} title="گروه" style={{ opacity: 0.9 }} />
+                                                    : <TelegramIcon name="group-filled" size={14} style={{ opacity: 0.9 }} />
                                             ) : null}
                                             {contact.name}
                                             {contact.verified ? <VerifiedBadge size={14} /> : null}
                                             {pinned ? (
-                                                <Pin
-                                                    size={14}
-                                                    className="chat-list__pin-icon"
-                                                    aria-label="سنجاق شده"
-                                                    style={{ opacity: 0.95, fill: 'currentColor' }}
-                                                />
+                                                <span role="img" aria-label="سنجاق شده" style={{ display: 'inline-flex' }}>
+                                                    <TelegramIcon
+                                                        name="pin-filled"
+                                                        size={14}
+                                                        className="chat-list__pin-icon"
+                                                        style={{ opacity: 0.95 }}
+                                                    />
+                                                </span>
                                             ) : null}
                                             {notifyMode === 'muted' ? (
                                                 <BellOff size={14} className="chat-list__mute-icon" aria-label="بی‌صدا" />
                                             ) : notifyMode === 'mentions' ? (
-                                                <BellMinus size={14} className="chat-list__mute-icon" aria-label="فقط منشن و پاسخ" />
+                                                <span role="img" aria-label="فقط منشن و پاسخ" style={{ display: 'inline-flex' }}>
+                                                    <TelegramIcon name="mention" size={14} className="chat-list__mute-icon" />
+                                                </span>
                                             ) : null}
                                         </span>
 
@@ -1159,12 +1146,12 @@ export const ChatList = memo(function ChatList({
                                             <div className="chat-list__badges">
                                                 {unreadReactionCount > 0 && (
                                                     <span className="chat-list__reaction-badge" aria-label="واکنش جدید">
-                                                        <Heart size={11} fill="currentColor" strokeWidth={2.2} />
+                                                        <TelegramIcon name="heart" size={14} />
                                                     </span>
                                                 )}
                                                 {unreadMentionCount > 0 && (
                                                     <span className="chat-list__mention-badge" aria-label="منشن یا پاسخ جدید">
-                                                        <AtSign size={12} strokeWidth={2.5} />
+                                                        <TelegramIcon name="mention" size={14} />
                                                     </span>
                                                 )}
                                                 {unreadCount > 0 && (
@@ -1187,7 +1174,7 @@ export const ChatList = memo(function ChatList({
                 onClick={onNewChatClick}
                 aria-label="گفتگوی جدید"
             >
-                <Plus size={24} />
+                <TelegramIcon name="new-chat-filled" size={24} />
             </button>
 
             <AnimatePresence>
@@ -1220,7 +1207,7 @@ export const ChatList = memo(function ChatList({
                             }}
                             aria-label="بستن پیشنهاد نصب"
                         >
-                            <X size={16} />
+                            <TelegramIcon name="close" size={16} />
                         </button>
                     </motion.div>
                 )}
@@ -1266,7 +1253,7 @@ export const ChatList = memo(function ChatList({
                                 style={{ direction: 'rtl', justifyContent: 'flex-end', gap: 6, padding: '4px 10px 8px', fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}
                             >
                                 <span>اعلان‌ها</span>
-                                <ChevronLeft size={16} />
+                                <TelegramIcon name="previous" size={16} />
                             </button>
                             <button
                                 className="popover__item"
@@ -1278,9 +1265,9 @@ export const ChatList = memo(function ChatList({
                                     void setChatNotifyMode(actionMenuChat.id, 'all');
                                 }}
                             >
-                                <Bell size={16} />
+                                <TelegramIcon name="unmute" size={16} />
                                 همه پیام‌ها
-                                {actionMenuMode === 'all' && <Check size={16} style={{ marginInlineStart: 'auto' }} />}
+                                {actionMenuMode === 'all' && <TelegramIcon name="check" size={16} style={{ marginInlineStart: 'auto' }} />}
                             </button>
                             <button
                                 className="popover__item"
@@ -1292,9 +1279,9 @@ export const ChatList = memo(function ChatList({
                                     void setChatNotifyMode(actionMenuChat.id, 'mentions');
                                 }}
                             >
-                                <BellMinus size={16} />
+                                <TelegramIcon name="mention" size={16} />
                                 فقط منشن و پاسخ
-                                {actionMenuMode === 'mentions' && <Check size={16} style={{ marginInlineStart: 'auto' }} />}
+                                {actionMenuMode === 'mentions' && <TelegramIcon name="check" size={16} style={{ marginInlineStart: 'auto' }} />}
                             </button>
                             <button
                                 className="popover__item"
@@ -1306,9 +1293,9 @@ export const ChatList = memo(function ChatList({
                                     void setChatNotifyMode(actionMenuChat.id, 'muted');
                                 }}
                             >
-                                <BellOff size={16} />
+                                <TelegramIcon name="mute" size={16} />
                                 بی‌صدا
-                                {actionMenuMode === 'muted' && <Check size={16} style={{ marginInlineStart: 'auto' }} />}
+                                {actionMenuMode === 'muted' && <TelegramIcon name="check" size={16} style={{ marginInlineStart: 'auto' }} />}
                             </button>
                         </>
                     ) : (
@@ -1325,7 +1312,7 @@ export const ChatList = memo(function ChatList({
                                 disabled={Boolean(pinBusy[actionMenuChat.id])}
                                 style={pinBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
                             >
-                                {actionMenuPinned ? <PinOff size={16} /> : <Pin size={16} />}
+                                {actionMenuPinned ? <TelegramIcon name="unpin" size={16} /> : <TelegramIcon name="pin" size={16} />}
                                 {actionMenuPinned ? 'برداشتن سنجاق' : 'سنجاق'}
                             </button>
 
@@ -1339,9 +1326,9 @@ export const ChatList = memo(function ChatList({
                                         setActionMenuSubmenu('notifications');
                                     }}
                                 >
-                                    <Bell size={16} />
+                                    <TelegramIcon name="unmute" size={16} />
                                     اعلان‌ها
-                                    <ChevronRight size={16} style={{ marginInlineStart: 'auto', opacity: 0.5 }} />
+                                    <TelegramIcon name="next" size={16} style={{ marginInlineStart: 'auto', opacity: 0.5 }} />
                                 </button>
                             ) : (
                                 <button
@@ -1354,7 +1341,7 @@ export const ChatList = memo(function ChatList({
                                         void setChatNotifyMode(actionMenuChat.id, actionMenuMode === 'all' ? 'muted' : 'all');
                                     }}
                                 >
-                                    {actionMenuMode === 'all' ? <BellOff size={16} /> : <Bell size={16} />}
+                                    {actionMenuMode === 'all' ? <TelegramIcon name="mute" size={16} /> : <TelegramIcon name="unmute" size={16} />}
                                     {actionMenuMode === 'all' ? 'بی‌صدا کردن' : 'باصدا کردن'}
                                 </button>
                             )}
@@ -1373,7 +1360,7 @@ export const ChatList = memo(function ChatList({
                                         disabled={Boolean(actionBusy[actionMenuChat.id])}
                                         style={actionBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
                                     >
-                                        <LogOut size={16} />
+                                        <TelegramIcon name="logout" size={16} />
                                         خروج از گروه
                                     </button>
 
@@ -1390,7 +1377,7 @@ export const ChatList = memo(function ChatList({
                                             disabled={Boolean(actionBusy[actionMenuChat.id])}
                                             style={actionBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
                                         >
-                                            <Trash2 size={16} />
+                                            <TelegramIcon name="delete" size={16} />
                                             حذف گروه
                                         </button>
                                     )}
@@ -1408,7 +1395,7 @@ export const ChatList = memo(function ChatList({
                                     disabled={Boolean(actionBusy[actionMenuChat.id])}
                                     style={actionBusy[actionMenuChat.id] ? { opacity: 0.6, cursor: 'default' } : undefined}
                                 >
-                                    <Trash2 size={16} />
+                                    <TelegramIcon name="delete" size={16} />
                                     حذف گفتگو
                                 </button>
                             )}

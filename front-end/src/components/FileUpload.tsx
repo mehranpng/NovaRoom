@@ -41,6 +41,7 @@ export function FileUpload({ onFileSelected, fileAttached = false, onRegisterUpl
             if (menuRef.current?.contains(target)) return;
             if (target.closest('.file-upload-button')) return;
             closePicker();
+            suppressOutsideClickUntilRef.current = performance.now() + 400;
         };
 
         const onEscape = (e: KeyboardEvent) => {
@@ -55,6 +56,18 @@ export function FileUpload({ onFileSelected, fileAttached = false, onRegisterUpl
         };
     }, [pickerMenuOpen]);
 
+    useEffect(() => {
+        const swallowOutsideClick = (e: MouseEvent) => {
+            if (performance.now() > suppressOutsideClickUntilRef.current) return;
+            suppressOutsideClickUntilRef.current = 0;
+            e.preventDefault();
+            e.stopPropagation();
+        };
+
+        document.addEventListener('click', swallowOutsideClick, true);
+        return () => document.removeEventListener('click', swallowOutsideClick, true);
+    }, []);
+
     useEffect(() => () => { fileUploadPicker.open = false; }, []);
 
     const [pendingImageForEditor, setPendingImageForEditor] = useState<File | null>(null);
@@ -65,6 +78,7 @@ export function FileUpload({ onFileSelected, fileAttached = false, onRegisterUpl
     const menuRef = useRef<HTMLDivElement>(null);
     const pickerSessionRef = useRef(false);
     const pickerCloseTimerRef = useRef<number | null>(null);
+    const suppressOutsideClickUntilRef = useRef(0);
     const editorSessionRef = useRef<{
         originalFile: File;
         strokes: any[];
