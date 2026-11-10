@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Chess, type Square } from 'chess.js';
 import { Chessboard, defaultPieces } from 'react-chessboard';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronLeft, RotateCcw, Undo2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RotateCcw, Undo2 } from 'lucide-react';
 import type { User } from '../../../types';
 import { playChessSound, soundForMove } from '../../../utils/chessSounds';
 import { cx } from '../../../utils/cx';
@@ -610,6 +610,40 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
         return 'مساوی';
     })();
 
+    const selectViewIndex = useCallback(
+        (target: number) => {
+            if (!gameOver) return;
+            const clamped = Math.min(Math.max(0, target), line.length - 1);
+            setViewIndex(clamped === line.length - 1 ? null : clamped);
+            if (clamped === 0) return;
+            const entry = line[clamped];
+            const prev = line[clamped - 1];
+            if (!entry?.lastMove || !prev) return;
+            try {
+                const board = new Chess(prev.fen);
+                const played = entry.san
+                    ? board.move(entry.san)
+                    : board.move({ from: entry.lastMove.from, to: entry.lastMove.to });
+                if (!played) return;
+                const moverColor: PlayColor = clamped % 2 === 1 ? 'white' : 'black';
+                playChessSound(
+                    soundForMove(
+                        {
+                            capture: played.isCapture(),
+                            castle: played.isKingsideCastle() || played.isQueensideCastle(),
+                            promotion: played.isPromotion(),
+                            check: board.inCheck(),
+                        },
+                        moverColor === playerColor,
+                    ),
+                );
+            } catch {
+                void 0;
+            }
+        },
+        [gameOver, line, playerColor],
+    );
+
     const movePairs: { num: number; white?: string; whitePly: number; black?: string; blackPly: number }[] = [];
     const playedMoves = line.slice(1);
     for (let i = 0; i < playedMoves.length; i += 2) {
@@ -837,6 +871,17 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
 
                             {movePairs.length > 0 && (
                                 <div className="chess__moves">
+                                    {gameOver && (
+                                        <button
+                                            type="button"
+                                            className="chess__move-nav"
+                                            aria-label="حرکت قبل"
+                                            disabled={activeIndex === 0}
+                                            onClick={() => selectViewIndex(activeIndex - 1)}
+                                        >
+                                            <ChevronLeft size={16} />
+                                        </button>
+                                    )}
                                     <div className="chess__moves-track">
                                         {movePairs.map((pair) => {
                                             const whiteActive = activeIndex === pair.whitePly;
@@ -855,7 +900,7 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
                                                                 whiteActive && 'chess__move-btn--active',
                                                             )}
                                                             onClick={() => {
-                                                                if (gameOver) setViewIndex(pair.whitePly);
+                                                                if (gameOver) selectViewIndex(pair.whitePly);
                                                             }}
                                                         >
                                                             {pair.white}
@@ -872,7 +917,7 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
                                                                 blackActive && 'chess__move-btn--active',
                                                             )}
                                                             onClick={() => {
-                                                                if (gameOver) setViewIndex(pair.blackPly);
+                                                                if (gameOver) selectViewIndex(pair.blackPly);
                                                             }}
                                                         >
                                                             {pair.black}
@@ -883,6 +928,17 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
                                         })}
                                         <div ref={movesEndRef} />
                                     </div>
+                                    {gameOver && (
+                                        <button
+                                            type="button"
+                                            className="chess__move-nav"
+                                            aria-label="حرکت بعد"
+                                            disabled={activeIndex >= line.length - 1}
+                                            onClick={() => selectViewIndex(activeIndex + 1)}
+                                        >
+                                            <ChevronRight size={16} />
+                                        </button>
+                                    )}
                                 </div>
                             )}
 

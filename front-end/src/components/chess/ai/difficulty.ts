@@ -15,7 +15,7 @@ export const AI_HASH_MB = Number.isFinite(envHashMb) && envHashMb >= 8
     ? Math.min(64, Math.round(envHashMb))
     : 16;
 
-export const AI_DEFAULT_DIFFICULTY: AiDifficulty = 'easy';
+export const AI_DEFAULT_DIFFICULTY: AiDifficulty = 'medium';
 
 export const AI_DIFFICULTY_ORDER: AiDifficulty[] = ['beginner', 'easy', 'medium', 'hard', 'expert'];
 

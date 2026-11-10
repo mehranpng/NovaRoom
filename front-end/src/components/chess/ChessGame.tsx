@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, type Square } from 'chess.js';
 import { Chessboard, defaultPieces } from 'react-chessboard';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronLeft, Check, Hourglass, Link2, Smile, UserRound, Volume2, VolumeX } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, Hourglass, Link2, Smile, UserRound, Volume2, VolumeX } from 'lucide-react';
 import { apiFetch } from '../../config/api';
 import { useChessSocket } from '../../hooks/useChessSocket';
 import type { Chat, ChessColor, ChessEmote, ChessEvent, ChessGameView, User } from '../../types';
@@ -688,11 +688,6 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
             ? Math.max(0, game.firstMoveDeadline - serverEstimate)
             : null;
 
-    const disconnectLeftMs =
-        game.status === 'active' && typeof game.disconnectDeadline === 'number'
-            ? Math.max(0, game.disconnectDeadline - serverEstimate)
-            : null;
-
     const movePairs: { num: number; white?: string; whitePly: number; black?: string; blackPly: number }[] = [];
     for (let i = 0; i < game.moves.length; i += 2) {
         movePairs.push({
@@ -1009,6 +1004,17 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
 
                     {movePairs.length > 0 && (
                         <div className="chess__moves">
+                            {isFinished && (
+                                <button
+                                    type="button"
+                                    className="chess__move-nav"
+                                    aria-label="حرکت قبل"
+                                    disabled={effectivePly === 0}
+                                    onClick={() => handleSelectPly(effectivePly - 1)}
+                                >
+                                    <ChevronLeft size={16} />
+                                </button>
+                            )}
                             <div className="chess__moves-track">
                                 {movePairs.map((pair) => {
                                     const whiteActive = effectivePly === pair.whitePly;
@@ -1051,6 +1057,17 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                                 })}
                                 <div ref={movesEndRef} />
                             </div>
+                            {isFinished && (
+                                <button
+                                    type="button"
+                                    className="chess__move-nav"
+                                    aria-label="حرکت بعد"
+                                    disabled={effectivePly >= maxPly}
+                                    onClick={() => handleSelectPly(effectivePly + 1)}
+                                >
+                                    <ChevronRight size={16} />
+                                </button>
+                            )}
                         </div>
                     )}
 
@@ -1094,25 +1111,6 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                                 {game.turn === myColor ? 'مهلت حرکت اول شما' : 'مهلت حرکت اول حریف'}
                             </span>
                             <span className="chess__timer-pill">{formatClock(firstMoveLeftMs)}</span>
-                        </div>
-                    )}
-
-                    {game.status === 'active' && game.disconnectTarget && (
-                        <div className="chess__timer-banner chess__timer-banner--warn">
-                            <span>
-                                {game.disconnectTarget === 'double'
-                                    ? 'قطع اتصال هر دو بازیکن • مهلت بازگشت'
-                                    : game.disconnectTarget === myColor
-                                      ? disconnectLeftMs !== null
-                                          ? 'اتصال شما قطع شد • مهلت بازگشت'
-                                          : 'اتصال شما قطع است'
-                                      : disconnectLeftMs !== null
-                                        ? 'اتصال حریف قطع شد • مهلت بازگشت'
-                                        : 'اتصال حریف قطع است (شروع تایمر در نوبت حریف)'}
-                            </span>
-                            {disconnectLeftMs !== null && (
-                                <span className="chess__timer-pill">{formatClock(disconnectLeftMs)}</span>
-                            )}
                         </div>
                     )}
 

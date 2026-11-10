@@ -9161,7 +9161,7 @@ html.no-blur-effect .chat-list__header,
 .chess__moves {
     display: flex;
     align-items: center;
-    padding: 8px 12px;
+    padding: 6px;
     border-radius: 16px;
     background: var(--glass-surface-soft);
     border: 1px solid var(--glass-border);
@@ -9964,6 +9964,46 @@ html.no-blur-effect .chat-list__header,
 
 .chess-history__rating--down {
     color: #ef4444;
+}
+
+.chess__move-nav {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+
+.chess__move-nav:hover:not(:disabled) {
+    background: var(--hover-bg);
+    color: var(--text-primary);
+}
+
+.chess__move-nav:active:not(:disabled) {
+    transform: scale(0.94);
+}
+
+.chess__move-nav:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+@media (hover: none) and (pointer: coarse) {
+    .chess__move-nav:hover:not(:disabled) {
+        background: transparent;
+        color: var(--text-secondary);
+    }
+
+    .chess__move-nav:active:not(:disabled) {
+        background: var(--hover-bg);
+    }
 }
 
 .chess__move-btn {
