@@ -44,6 +44,7 @@ type OutgoingEvent =
     | { type: 'forward_message'; requestId: string; messageId: string; targetChatId: string }
     | { type: 'typing'; chatId: string; isTyping: boolean }
     | { type: 'upload_status'; chatId: string; isUploading: boolean }
+    | { type: 'active_chat'; chatId: string | null }
     | { type: 'ai_message'; text: string; aiChatId: string; clientId?: string; useReasoner?: boolean; modelKey?: 'nova-flash' | 'nova-pro'; useWebSearch?: boolean; attachment?: { tempFileId: string; fileName: string; fileSize: number; mimeType: string; isImage: boolean } | null }
     | { type: 'ai_stop' }
     | { type: 'ping' }
@@ -104,6 +105,7 @@ export function useWebSocket({
     const lastPongAtRef = useRef<number>(Date.now());
     const pendingRequestsRef = useRef<Map<string, { resolve: (data: any) => void; reject: (error: Error) => void; timeoutId: number }>>(new Map());
     const pendingSeenByChatRef = useRef<Map<string, string>>(new Map());
+    const activeChatIdRef = useRef<string | null>(null);
     const requestCounterRef = useRef(0);
     const hiddenDisconnectRef = useRef(false);
     const offlineTimerRef = useRef<number | null>(null);
@@ -219,6 +221,10 @@ export function useWebSocket({
             setConnectionState('connected');
             lastPongAtRef.current = Date.now();
             onConnectionChangeRef.current?.(true);
+            try {
+                ws.send(JSON.stringify({ type: 'active_chat', chatId: activeChatIdRef.current }));
+            } catch {
+            }
             if (pendingSeenByChatRef.current.size > 0) {
                 const entries = Array.from(pendingSeenByChatRef.current.entries());
                 pendingSeenByChatRef.current.clear();
@@ -316,9 +322,6 @@ export function useWebSocket({
                     const byUserId = String(data?.byUserId || data?.by_user_id || data?.payload?.byUserId || '').trim();
                     const maxMessageId = String(data?.maxMessageId || data?.payload?.maxMessageId || '').trim();
                     if (resolvedChatId) onMessagesSeenRef.current?.(resolvedChatId, byUserId || undefined, maxMessageId || undefined);
-                } else if (dataType === 'dismiss_notification') {
-                    const tag = String(data?.tag || '').trim();
-                    if (tag) navigator.serviceWorker?.controller?.postMessage({ type: 'nr-dismiss-notification', tag });
                 } else if (dataType === 'reaction_updated') {
                     const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
                     const resolvedMessageId = String(data?.messageId || data?.message_id || data?.payload?.messageId || data?.payload?.message_id || data?.message?.id || '').trim();
@@ -535,8 +538,15 @@ export function useWebSocket({
         [send]
     );
 
-    const dispatchAIEvent = useCallback((data: any) => {
-        if (!data || typeof data !== 'object') return;
+    const sendActiveChat = useCallback(
+        (chatId: string | null) => {
+            activeChatIdRef.current = chatId || null;
+            send({ type: 'active_chat', chatId: chatId || null });
+        },
+        [send]
+    );
+
+    const dispatchAIEvent = useCallback((data: any) => {        if (!data || typeof data !== 'object') return;
         if (data.type === 'ai_response') {
             onAINewMessageRef.current?.(data.message);
         } else if (data.type === 'ai_response_start') {
@@ -877,6 +887,7 @@ export function useWebSocket({
         sendSeen,
         sendTyping,
         sendUploadStatus,
+        sendActiveChat,
         fetchChats,
         fetchMessages,
         reactMessage,

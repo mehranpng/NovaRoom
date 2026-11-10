@@ -160,11 +160,25 @@ export function FileUpload({ onFileSelected, fileAttached = false, onRegisterUpl
         await emitAttachment(file, false, false);
     };
 
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         setPickerSession(false);
-        const file = e.target.files?.[0];
-        void selectFile(file);
-        e.currentTarget.value = '';
+        const input = e.currentTarget;
+        const picked = input.files?.[0];
+        if (!picked) {
+            input.value = '';
+            return;
+        }
+        let stable: File = picked;
+        try {
+            stable = new File([await picked.arrayBuffer()], picked.name, {
+                type: picked.type,
+                lastModified: picked.lastModified,
+            });
+        } catch {
+            stable = picked;
+        }
+        input.value = '';
+        void selectFile(stable);
     };
 
     useEffect(() => {

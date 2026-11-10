@@ -90,6 +90,7 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
   const rootRef = useRef<HTMLDivElement | null>(null);
   const seekTrackRef = useRef<HTMLDivElement | null>(null);
   const isSeekingRef = useRef(false);
+  const recoveredRef = useRef(false);
   const musicPlayer = useMusicPlayer();
   const isImage = isImageFile(file.mimeType); const isAudio = (file.mimeType || '').startsWith('audio/'); const isVideo = (file.mimeType || '').startsWith('video/');
   const audioMeta = useAudioMetadata(isAudio ? mediaUrl : null, !file.audioCover);
@@ -306,6 +307,7 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
     const oldMediaUrl = mediaUrl;
     const oldPreviewUrl = previewUrl;
     const mappedUrl = file.localUrl ?? localBlobUrls.get(file.fileId) ?? null;
+    recoveredRef.current = false;
     
     setMediaUrl(mappedUrl);
     setPreviewUrl(null);
@@ -400,6 +402,20 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
     (onMediaError ?? onMediaLoad)?.();
   };
 
+  const handleImageError = () => {
+    if (mediaUrl && mediaUrl.startsWith('blob:') && !recoveredRef.current) {
+      recoveredRef.current = true;
+      setMediaUrl(null);
+      setMediaLoaded(false);
+      setDownloadState('idle');
+      void ensureObjectUrl().then((restored) => {
+        if (!restored) void startDownload();
+      });
+      return;
+    }
+    handleMediaFailed();
+  };
+
   
   const maxWidth = 280;
   const maxHeight = 440;
@@ -448,7 +464,7 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
         {!mediaLoaded && <div className="media-skeleton skeleton-glass" aria-hidden />}
         {mediaUrl ? (
           isImage ? (
-            <img src={mediaUrl} alt={file.fileName} style={{ objectFit: shouldContain ? 'contain' : 'cover' }} onLoad={handleMediaRendered} onError={handleMediaFailed} onClick={isUploading ? undefined : () => onImageClick?.(mediaUrl, file)} />
+            <img src={mediaUrl} alt={file.fileName} style={{ objectFit: shouldContain ? 'contain' : 'cover' }} onLoad={handleMediaRendered} onError={handleImageError} onClick={isUploading ? undefined : () => onImageClick?.(mediaUrl, file)} />
           ) : (
             <button type="button" className="file-video-thumb" disabled={isUploading} onClick={isUploading ? undefined : () => onVideoClick?.(mediaUrl, file)}>
               <video src={mediaUrl} preload="metadata" muted playsInline onLoadedData={handleMediaRendered} onError={handleMediaFailed} style={{ width: '100%', height: '100%', objectFit: shouldContain ? 'contain' : 'cover', background: 'transparent' }} />

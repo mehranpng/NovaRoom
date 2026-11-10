@@ -49,6 +49,8 @@ import './App.css';
 
 const EMPTY_IDS: string[] = [];
 
+const TYPING_SAFETY_TIMEOUT_MS = 2500;
+
 const normalizeTimestamp = (ts: unknown): number => {
     if (typeof ts === 'number' && Number.isFinite(ts)) return ts;
     if (typeof ts === 'string') {
@@ -930,7 +932,7 @@ export function App() {
         }
         typingTimeoutsRef.current[key] = window.setTimeout(() => {
             clearEntry();
-        }, 1000);
+        }, TYPING_SAFETY_TIMEOUT_MS);
     }, [currentUser?.chatId]);
 
     const handleUploadStatus = useCallback((chatId: string, userId: string, isUploading: boolean) => {
@@ -1827,7 +1829,7 @@ export function App() {
     }, [activeAIChatId]);
 
     
-    const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen, sendTyping, sendUploadStatus, reconnectExhausted, reconnectNow, sendAIMessage, stopAIGeneration } = useWebSocket({
+    const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen, sendTyping, sendUploadStatus, sendActiveChat, reconnectExhausted, reconnectNow, sendAIMessage, stopAIGeneration } = useWebSocket({
         token: authToken,
         enabled: !isChessGameRoute && isAuthenticated,
         onNewMessage: handleNewMessage,
@@ -1857,6 +1859,23 @@ export function App() {
     useEffect(() => {
         setWsReconnectExhausted(reconnectExhausted);
     }, [reconnectExhausted]);
+
+    useEffect(() => {
+        const syncActiveChat = () => {
+            const visibleChatId =
+                view === 'chatRoom' && !showAIChat && document.visibilityState === 'visible'
+                    ? activeChatId
+                    : null;
+            sendActiveChat(visibleChatId);
+        };
+        syncActiveChat();
+        document.addEventListener('visibilitychange', syncActiveChat);
+        window.addEventListener('focus', syncActiveChat);
+        return () => {
+            document.removeEventListener('visibilitychange', syncActiveChat);
+            window.removeEventListener('focus', syncActiveChat);
+        };
+    }, [activeChatId, view, showAIChat, sendActiveChat]);
 
     
     useEffect(() => {
@@ -2719,7 +2738,7 @@ export function App() {
                     window.setTimeout(() => {
                         localBlobUrls.delete(file.fileId);
                         URL.revokeObjectURL(localUrl);
-                    }, 15000);
+                    }, 120000);
                 });
             } catch (error) {
                 clearUploadProgress(clientId);

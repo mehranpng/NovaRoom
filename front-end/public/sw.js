@@ -6,24 +6,13 @@ const toPersianNumber = (value) => Number(value).toLocaleString('fa-IR');
 
 const activeChatByClient = new Map();
 
-const closeNotifications = async (tag) => {
-    if (!tag) return;
-    const notifications = await self.registration.getNotifications({ tag });
-    notifications.forEach((notification) => notification.close());
-};
-
 self.addEventListener('message', (event) => {
-    if (!event.data) return;
-    if (event.data.type === 'nr-active-chat' && event.source && event.source.id) {
+    if (event.data && event.data.type === 'nr-active-chat' && event.source && event.source.id) {
         if (event.data.chatId) {
             activeChatByClient.set(event.source.id, String(event.data.chatId));
         } else {
             activeChatByClient.delete(event.source.id);
         }
-        return;
-    }
-    if (event.data.type === 'nr-dismiss-notification') {
-        event.waitUntil(closeNotifications(String(event.data.tag || '')));
     }
 });
 
@@ -54,10 +43,6 @@ const isViewingTarget = (windows, data, path) =>
 async function handlePush(event) {
     const data = event.data ? event.data.json() : null;
     if (!data) return;
-    if (data.action === 'dismiss') {
-        await closeNotifications(String(data.tag || ''));
-        return;
-    }
     const path = pathFor(data);
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     if (isViewingTarget(windows, data, path)) return;

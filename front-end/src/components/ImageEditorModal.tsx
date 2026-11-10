@@ -206,13 +206,18 @@ export function ImageEditorModal({
     const onCancelRef = useRef(onCancel);
     onCancelRef.current = onCancel;
     const closingRef = useRef(false);
+    const pushedRef = useRef(false);
+    const sendingRef = useRef(false);
+    const [loadFailed, setLoadFailed] = useState(false);
 
     useEffect(() => {
         if (!window.history.state?.imageEditor) {
             window.history.pushState({ ...window.history.state, imageEditor: true }, '');
+            pushedRef.current = true;
         }
 
-        const handleBack = () => {
+        const handleBack = (event: PopStateEvent) => {
+            if (pushedRef.current) event.stopImmediatePropagation();
             if (closingRef.current) return;
             onCancelRef.current();
         };
@@ -235,6 +240,13 @@ export function ImageEditorModal({
         }
         onCancelRef.current();
     }, []);
+
+    useEffect(() => {
+        if (!loadFailed) return;
+        const t = window.setTimeout(closeEditor, 1500);
+        return () => window.clearTimeout(t);
+    }, [loadFailed, closeEditor]);
+
     const isCropped =
         imgNaturalSize.width > 0 &&
         (Math.round(cropRect.x) > 0 ||
@@ -267,13 +279,13 @@ export function ImageEditorModal({
                 nh = 800;
             }
 
-            const MAX_DIM = 2048;
+            const MAX_DIM = 1920;
             let targetW = nw;
             let targetH = nh;
             if (nw > MAX_DIM || nh > MAX_DIM) {
                 const ratio = Math.min(MAX_DIM / nw, MAX_DIM / nh);
-                targetW = Math.round(nw * ratio);
-                targetH = Math.round(nh * ratio);
+                targetW = Math.max(1, Math.round(nw * ratio));
+                targetH = Math.max(1, Math.round(nh * ratio));
             }
 
             setImgElement(img);
@@ -307,7 +319,8 @@ export function ImageEditorModal({
         };
 
         img.onerror = () => {
-            console.error('Error loading image in ImageEditorModal');
+            if (!isMounted) return;
+            setLoadFailed(true);
         };
 
         img.src = objectUrl;
@@ -420,6 +433,23 @@ export function ImageEditorModal({
         window.addEventListener('resize', onResize);
         return () => window.removeEventListener('resize', onResize);
     }, []);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas || typeof ResizeObserver === 'undefined') return;
+        const observer = new ResizeObserver(() => {
+            const rect = canvas.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+                setCanvasDisplaySize((prev) =>
+                    Math.abs(prev.width - rect.width) < 0.5 && Math.abs(prev.height - rect.height) < 0.5
+                        ? prev
+                        : { width: rect.width, height: rect.height }
+                );
+            }
+        });
+        observer.observe(canvas);
+        return () => observer.disconnect();
+    }, [imgElement]);
 
     const getCanvasCoordinatesFromClient = useCallback(
         (clientX: number, clientY: number): Point | null => {
@@ -693,6 +723,8 @@ export function ImageEditorModal({
     }, [handleUndo, handleRedo, closeEditor]);
 
     const handleSend = async () => {
+        if (sendingRef.current) return;
+        sendingRef.current = true;
         triggerHaptic();
 
         const hasDrawn = strokes.length > 0;
@@ -726,42 +758,48 @@ export function ImageEditorModal({
         const cropRendered = isCropped && activeTool !== 'crop';
         const hasCropRegion = isCropped && cropRect.width > 0 && cropRect.height > 0;
 
-        const targetW = cropRendered || !hasCropRegion ? canvas.width : Math.round(cropRect.width);
-        const targetH = cropRendered || !hasCropRegion ? canvas.height : Math.round(cropRect.height);
+        const targetW = Math.max(1, cropRendered || !hasCropRegion ? canvas.width : Math.round(cropRect.width));
+        const targetH = Math.max(1, cropRendered || !hasCropRegion ? canvas.height : Math.round(cropRect.height));
         const sourceX = cropRendered || !hasCropRegion ? 0 : Math.round(cropRect.x);
         const sourceY = cropRendered || !hasCropRegion ? 0 : Math.round(cropRect.y);
 
-        const exportCanvas = document.createElement('canvas');
-        exportCanvas.width = targetW;
-        exportCanvas.height = targetH;
+        try {
+            const exportCanvas = document.createElement('canvas');
+            exportCanvas.width = targetW;
+            exportCanvas.height = targetH;
 
-        const ctx = exportCanvas.getContext('2d');
-        if (!ctx) {
-            closeHistoryEntry();
-            onSend(imageFile, isEdited, currentEditorState);
-            return;
-        }
-
-        ctx.drawImage(canvas, sourceX, sourceY, targetW, targetH, 0, 0, targetW, targetH);
-
-        exportCanvas.toBlob(
-            (blob) => {
-                if (!blob) {
-                    closeHistoryEntry();
-                    onSend(imageFile, isEdited, currentEditorState);
-                    return;
-                }
-                const cleanName = imageFile.name.replace(/\.[^/.]+$/, '') + '.jpg';
-                const finalFile = new File([blob], cleanName, {
-                    type: 'image/jpeg',
-                    lastModified: Date.now(),
-                });
+            const ctx = exportCanvas.getContext('2d');
+            if (!ctx) {
                 closeHistoryEntry();
-                onSend(finalFile, true, currentEditorState);
-            },
-            'image/jpeg',
-            0.92,
-        );
+                onSend(imageFile, isEdited, currentEditorState);
+                return;
+            }
+
+            ctx.drawImage(canvas, sourceX, sourceY, targetW, targetH, 0, 0, targetW, targetH);
+
+            exportCanvas.toBlob(
+                (blob) => {
+                    if (!blob) {
+                        closeHistoryEntry();
+                        onSend(imageFile, isEdited, currentEditorState);
+                        return;
+                    }
+                    const cleanName = imageFile.name.replace(/\.[^/.]+$/, '') + '.jpg';
+                    const finalFile = new File([blob], cleanName, {
+                        type: 'image/jpeg',
+                        lastModified: Date.now(),
+                    });
+                    closeHistoryEntry();
+                    onSend(finalFile, true, currentEditorState);
+                },
+                'image/jpeg',
+                0.92,
+            );
+        } catch {
+            sendingRef.current = false;
+            closeHistoryEntry();
+            onSend(imageFile, false, currentEditorState);
+        }
     };
 
     const scaleToDisplayX = canvasDisplaySize.width / (imgNaturalSize.width || 1);
@@ -787,6 +825,7 @@ export function ImageEditorModal({
             </button>
 
             <div className="image-editor-body">
+                {loadFailed && <div className="image-editor-load-error" role="alert">تصویر قابل نمایش نیست</div>}
                 <div className="image-editor-canvas-stage" ref={stageRef}>
                     <canvas
                         ref={canvasRef}

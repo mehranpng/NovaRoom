@@ -77,6 +77,18 @@
     touch-action: none !important;
 }
 
+.image-editor-load-error {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    color: var(--text-secondary, #a1a1aa);
+    font-size: 15px;
+    text-align: center;
+}
+
 .image-editor-canvas-stage {
     position: relative;
     max-width: 100%;

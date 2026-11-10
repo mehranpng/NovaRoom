@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useLocation, useNavigate } from 'react-router-dom';
 import TelegramIcon from './TelegramIcon';
 import { ChevronLeft, ChevronDown } from 'lucide-react';
-import { AnimatePresence, motion, type Variants } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata, PendingAttachment, PendingForwardDraft, PinnedMessage, GroupPreview } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -41,12 +41,6 @@ import './FileComponents.css';
 
 const EMPTY_REACTIONS: ReactionEntry[] = [];
 const MAX_SELECTED_MESSAGES = 30;
-
-const chatRoomScreenVariants: Variants = {
-    ...screenVariants,
-    hidden: { opacity: 1 },
-    visible: { opacity: 1 },
-};
 
 // shortcut: group member cache skips payloads over 200KB; move it to IndexedDB when huge groups show up.
 const groupMemberCacheKey = (chatId: string) => `novaroom:group-members:v1:${chatId}`;
@@ -3252,7 +3246,7 @@ export function ChatRoom({
     return (
         <motion.div
             className="chat-room chat-room--fade-safe" style={{ position: 'relative' }} ref={roomRef}
-            variants={chatRoomScreenVariants}
+            variants={screenVariants}
             initial="hidden"
             animate="visible"
             exit="exit"
@@ -3386,14 +3380,24 @@ export function ChatRoom({
                                     {isOfficialChannel ? (
                                         <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(chatStats?.totalMembers ?? 0)} عضو</span>
                                     ) : headerActivityLabel ? (
-                                        <span className="status-online-text chat-header-typing" dir="rtl">
-                                            <span>{headerActivityLabel}</span>
-                                            <span className="chat-header-typing__dots" aria-hidden="true">
-                                                <span className="chat-header-typing__dot" />
-                                                <span className="chat-header-typing__dot" />
-                                                <span className="chat-header-typing__dot" />
-                                            </span>
-                                        </span>
+                                        <AnimatePresence initial={false}>
+                                            <motion.span
+                                                key="header-typing"
+                                                className="status-online-text chat-header-typing"
+                                                dir="rtl"
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                exit={{ opacity: 0 }}
+                                                transition={{ duration: 0.2 }}
+                                            >
+                                                <span>{headerActivityLabel}</span>
+                                                <span className="chat-header-typing__dots" aria-hidden="true">
+                                                    <span className="chat-header-typing__dot" />
+                                                    <span className="chat-header-typing__dot" />
+                                                    <span className="chat-header-typing__dot" />
+                                                </span>
+                                            </motion.span>
+                                        </AnimatePresence>
                                     ) : (isGroupChat ? (
                                         <span style={{ direction: 'rtl', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                             <span className="status-online-text">{toPersianDigits(Math.max(1, chatStats?.onlineMembers ?? 1))} آنلاین</span>

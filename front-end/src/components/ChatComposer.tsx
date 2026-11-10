@@ -139,7 +139,7 @@ export const ChatComposer = memo(function ChatComposer({
             typingActiveRef.current = false;
             emitTyping(false);
             typingTimeoutRef.current = null;
-        }, 1500);
+        }, 1000);
     };
 
     useEffect(() => {

@@ -184,6 +184,7 @@ VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "").strip()
 VAPID_SUBJECT = os.getenv("VAPID_SUBJECT", "mailto:admin@novaroom.org").strip()
 
 active_connections: Dict[str, List[WebSocket]] = {}
+ws_session_meta: Dict[WebSocket, Dict[str, Optional[str]]] = {}
 active_ai_connections: Dict[str, List[WebSocket]] = {}
 active_ai_stream_tasks: Dict[str, asyncio.Task] = {}
 chess_rooms: Dict[str, Dict[str, List[WebSocket]]] = {}
@@ -7160,37 +7161,6 @@ async def _send_webpush_bounded(sub: dict, payload: dict) -> Optional[int]:
         return await asyncio.to_thread(_send_webpush_sync, sub, payload)
 
 
-async def notify_devices_dismiss_push(user_id: str, tag: str) -> None:
-    await safe_send(user_id, {"type": "dismiss_notification", "tag": tag})
-    if not VAPID_PUBLIC_KEY or not VAPID_PRIVATE_KEY:
-        return
-    try:
-        user = await cl_users.find_one(
-            {"chatId": user_id, **NOT_PURGING},
-            {"chatId": 1, "login.sessions": 1},
-        )
-        if not user:
-            return
-        valid_hashes = {
-            session.get("tokenHash") for session in _normalize_session_list(user)
-        }
-        subs = await cl_push_subscriptions.find(
-            {"userId": user_id, "tokenHash": {"$in": list(valid_hashes)}}
-        ).to_list(None)
-        if not subs:
-            return
-        statuses = await asyncio.gather(
-            *(_send_webpush_bounded(sub, {"action": "dismiss", "tag": tag}) for sub in subs)
-        )
-        stale_ids = [
-            sub["_id"] for sub, status in zip(subs, statuses) if status in (404, 410)
-        ]
-        if stale_ids:
-            await cl_push_subscriptions.delete_many({"_id": {"$in": stale_ids}})
-    except Exception:
-        traceback.print_exc()
-
-
 async def push_to_users(user_ids: Iterable[str], payload_for_user) -> None:
     if not VAPID_PUBLIC_KEY or not VAPID_PRIVATE_KEY:
         return
@@ -7233,9 +7203,30 @@ async def push_to_users(user_ids: Iterable[str], payload_for_user) -> None:
             valid_hashes = {
                 session.get("tokenHash") for session in _normalize_session_list(user)
             }
+            target_hashes = valid_hashes
+            if not is_chess:
+                alive_sockets = [
+                    ws
+                    for ws in active_connections.get(uid, [])
+                    if ws.client_state == WebSocketState.CONNECTED
+                ]
+                if alive_sockets:
+                    if any(
+                        ws_session_meta.get(ws, {}).get("activeChatId") == payload.get("chatId")
+                        for ws in alive_sockets
+                    ):
+                        continue
+                    target_hashes = {
+                        ws_session_meta.get(ws, {}).get("tokenHash")
+                        for ws in alive_sockets
+                        if ws_session_meta.get(ws, {}).get("tokenHash")
+                    }
+                    if not target_hashes:
+                        continue
             for sub in subscriptions:
                 if sub.get("tokenHash") in valid_hashes:
-                    jobs.append((sub, payload))
+                    if sub.get("tokenHash") in target_hashes:
+                        jobs.append((sub, payload))
                 else:
                     stale_ids.append(sub["_id"])
 
@@ -8484,6 +8475,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
         chat_id = user.get("chatId")
 
         active_connections.setdefault(chat_id, []).append(websocket)
+        ws_session_meta[websocket] = {
+            "userId": chat_id,
+            "tokenHash": hash_access_token(token),
+            "activeChatId": None,
+        }
         became_online = await mark_user_connected(chat_id)
         profile = (
             user.get("profile", {}) if isinstance(user.get("profile"), dict) else {}
@@ -9032,9 +9028,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 saved_chat_id = get_saved_messages_id(chat_id)
                 if chat_id_target == saved_chat_id:
                     continue
-                schedule_push(
-                    notify_devices_dismiss_push(chat_id, f"chat:{chat_id_target}")
-                )
 
                 max_msg = await cl_messages.find_one(
                     {"_id": max_oid, "chatId": chat_id_target}, {"timestamp": 1}
@@ -9319,6 +9312,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         pass
                 active_ai_stream_tasks.pop(chat_id, None)
 
+            elif data.get("type") == "active_chat":
+                active_chat_val = data.get("chatId")
+                meta = ws_session_meta.get(websocket)
+                if meta is not None:
+                    meta["activeChatId"] = str(active_chat_val) if active_chat_val else None
+
             elif data.get("type") == "ping":
                 last_client_activity = time.time()
                 await websocket.send_json({"type": "pong"})
@@ -9331,6 +9330,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
     except Exception:
         print(f"WebSocket Error for {chat_id}: {traceback.format_exc()}")
     finally:
+        ws_session_meta.pop(websocket, None)
         if chat_id and chat_id in active_ai_connections:
             if websocket in active_ai_connections[chat_id]:
                 active_ai_connections[chat_id].remove(websocket)

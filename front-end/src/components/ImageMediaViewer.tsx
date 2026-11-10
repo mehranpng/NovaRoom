@@ -32,6 +32,40 @@ export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token: _toke
     const imageRef = useRef<HTMLImageElement | null>(null);
     const [controlsVisible, setControlsVisible] = useState(true);
     const [fitSize, setFitSize] = useState<{ width: number; height: number } | null>(null);
+    const [displayUrl, setDisplayUrl] = useState(imageUrl);
+    const ownedUrlRef = useRef<string | null>(null);
+    const recoveredRef = useRef(false);
+
+    useEffect(() => {
+        setDisplayUrl(imageUrl);
+        recoveredRef.current = false;
+    }, [imageUrl]);
+
+    useEffect(() => () => {
+        if (ownedUrlRef.current) URL.revokeObjectURL(ownedUrlRef.current);
+    }, []);
+
+    const recoverImage = async () => {
+        const fileId = downloadFile?.fileId;
+        if (recoveredRef.current || !fileId) return;
+        recoveredRef.current = true;
+        try {
+            const cached = await getOrCacheBlob({
+                cacheKey: `chat:${chatId}:file:${fileId}`,
+                loadBlob: async () => {
+                    const response = await fetch(imageUrl);
+                    if (!response.ok) throw new Error('reload failed');
+                    return response.blob();
+                },
+            });
+            const fresh = URL.createObjectURL(cached);
+            if (ownedUrlRef.current) URL.revokeObjectURL(ownedUrlRef.current);
+            ownedUrlRef.current = fresh;
+            setDisplayUrl(fresh);
+        } catch {
+            return;
+        }
+    };
 
     const updateFitSize = () => {
         const stageEl = stageRef.current;
@@ -309,10 +343,11 @@ export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token: _toke
                 </div>
                 <img
                     ref={imageRef}
-                    src={imageUrl}
+                    src={displayUrl}
                     alt="media viewer"
                     className="image-media-viewer__image"
                     onLoad={updateFitSize}
+                    onError={() => void recoverImage()}
                     onDoubleClick={(e) => toggleZoomAtPoint(e.clientX, e.clientY)}
                     onMouseDown={(e) => {
                         if (scaleRef.current <= 1) return;
