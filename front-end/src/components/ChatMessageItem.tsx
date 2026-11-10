@@ -700,7 +700,14 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                         e.stopPropagation();
                         return;
                     }
-                    if (!isSelectionModeActive) return;
+                    if (!isSelectionModeActive) {
+                        if (isMenuActive && !(e.target as HTMLElement).closest('.popover')) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            actions.openMenu(message.id, bubbleRef.current || (e.currentTarget as HTMLElement), e.clientX, e.clientY);
+                        }
+                        return;
+                    }
                     const target = e.target as HTMLElement;
                     if (!target.closest('.message-select-indicator')) {
                         e.preventDefault();
@@ -720,6 +727,11 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     }
                     const target = e.target as HTMLElement;
                     if (target.closest('.message-bubble') || target.closest('.message-select-indicator')) return;
+                    if (isMenuActive && !target.closest('.popover')) {
+                        e.stopPropagation();
+                        actions.openMenu(message.id, bubbleRef.current || (e.currentTarget as HTMLElement), e.clientX, e.clientY);
+                        return;
+                    }
                     e.stopPropagation();
                     actions.openMenu(message.id, bubbleRef.current || (e.currentTarget as HTMLElement), e.clientX, e.clientY);
                 }}
@@ -867,6 +879,10 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                         if (Date.now() < swipeRef.current.blockClickUntil) return;
                         if (isSelectionModeActive) {
                             actions.toggleSelect(message.id);
+                            return;
+                        }
+                        if (isMenuActive) {
+                            actions.openMenu(message.id, e.currentTarget, e.clientX, e.clientY);
                             return;
                         }
                         const ne = e.nativeEvent as MouseEvent;

@@ -316,6 +316,9 @@ export function useWebSocket({
                     const byUserId = String(data?.byUserId || data?.by_user_id || data?.payload?.byUserId || '').trim();
                     const maxMessageId = String(data?.maxMessageId || data?.payload?.maxMessageId || '').trim();
                     if (resolvedChatId) onMessagesSeenRef.current?.(resolvedChatId, byUserId || undefined, maxMessageId || undefined);
+                } else if (dataType === 'dismiss_notification') {
+                    const tag = String(data?.tag || '').trim();
+                    if (tag) navigator.serviceWorker?.controller?.postMessage({ type: 'nr-dismiss-notification', tag });
                 } else if (dataType === 'reaction_updated') {
                     const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
                     const resolvedMessageId = String(data?.messageId || data?.message_id || data?.payload?.messageId || data?.payload?.message_id || data?.message?.id || '').trim();

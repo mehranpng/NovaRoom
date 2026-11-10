@@ -7160,6 +7160,37 @@ async def _send_webpush_bounded(sub: dict, payload: dict) -> Optional[int]:
         return await asyncio.to_thread(_send_webpush_sync, sub, payload)
 
 
+async def notify_devices_dismiss_push(user_id: str, tag: str) -> None:
+    await safe_send(user_id, {"type": "dismiss_notification", "tag": tag})
+    if not VAPID_PUBLIC_KEY or not VAPID_PRIVATE_KEY:
+        return
+    try:
+        user = await cl_users.find_one(
+            {"chatId": user_id, **NOT_PURGING},
+            {"chatId": 1, "login.sessions": 1},
+        )
+        if not user:
+            return
+        valid_hashes = {
+            session.get("tokenHash") for session in _normalize_session_list(user)
+        }
+        subs = await cl_push_subscriptions.find(
+            {"userId": user_id, "tokenHash": {"$in": list(valid_hashes)}}
+        ).to_list(None)
+        if not subs:
+            return
+        statuses = await asyncio.gather(
+            *(_send_webpush_bounded(sub, {"action": "dismiss", "tag": tag}) for sub in subs)
+        )
+        stale_ids = [
+            sub["_id"] for sub, status in zip(subs, statuses) if status in (404, 410)
+        ]
+        if stale_ids:
+            await cl_push_subscriptions.delete_many({"_id": {"$in": stale_ids}})
+    except Exception:
+        traceback.print_exc()
+
+
 async def push_to_users(user_ids: Iterable[str], payload_for_user) -> None:
     if not VAPID_PUBLIC_KEY or not VAPID_PRIVATE_KEY:
         return
@@ -9001,6 +9032,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 saved_chat_id = get_saved_messages_id(chat_id)
                 if chat_id_target == saved_chat_id:
                     continue
+                schedule_push(
+                    notify_devices_dismiss_push(chat_id, f"chat:{chat_id_target}")
+                )
 
                 max_msg = await cl_messages.find_one(
                     {"_id": max_oid, "chatId": chat_id_target}, {"timestamp": 1}

@@ -2803,7 +2803,14 @@ export function ChatRoom({
             return;
         }
 
-        if (msgMenu || reactionMenu || seenByMenu || reactionListMenu) {
+        if (reactionMenu || seenByMenu || reactionListMenu) {
+            setMsgMenu(null);
+            setReactionMenu(null);
+            setSeenByMenu(null); setReactionListMenu(null);
+            return;
+        }
+
+        if (msgMenu) {
             setMsgMenu(null);
             setReactionMenu(null);
             setSeenByMenu(null); setReactionListMenu(null);
