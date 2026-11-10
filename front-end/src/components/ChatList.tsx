@@ -920,7 +920,7 @@ export const ChatList = memo(function ChatList({
                         const notifyMode = getChatNotifyMode(notifyPrefs, chat.id);
 
                         if (isSaved) {
-                            const draftText = (chatDrafts[chat.id]?.text || '').replace(/\s+/g, ' ').trim();
+                            const draftText = chat.id === activeChatId ? '' : (chatDrafts[chat.id]?.text || '').replace(/\s+/g, ' ').trim();
                             return (
                                 <button
                                     key={chat.id}
@@ -1021,7 +1021,7 @@ export const ChatList = memo(function ChatList({
                         }
 
                         const isMine = chat.lastMessage?.senderId === currentUser.chatId;
-                        const draftText = (chatDrafts[chat.id]?.text || '').replace(/\s+/g, ' ').trim();
+                        const draftText = chat.id === activeChatId ? '' : (chatDrafts[chat.id]?.text || '').replace(/\s+/g, ' ').trim();
                         const contact = getContact(chat);
                         const blockedRelation = Boolean((chat.otherUser as any)?.blockedByMe || (chat.otherUser as any)?.blockedByOther);
                         const unreadCount = Math.max(0, Number(chat.unreadCount || 0));

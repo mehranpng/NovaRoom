@@ -8,6 +8,7 @@ const TEXT_SELECTOR = '.message-text:not(.message-text--emoji-only)';
 const EMOJI_ONLY_CLASS = 'message-text--emoji-only';
 const LONG_PRESS_MS = 350;
 const MOVE_TOLERANCE = 8;
+const isCoarsePointer = () => window.matchMedia('(pointer: coarse)').matches;
 
 type Caret = { node: Node; offset: number };
 type HandleSide = 'start' | 'end';
@@ -301,7 +302,7 @@ export function useCustomTextSelection({ enabled, containerRef }: Options) {
             if (target.closest('.cs-handle, .selection-bar')) return;
             if (e.pointerType === 'mouse') {
                 if (e.button !== 0) return;
-                const rawRoot = target.closest<HTMLElement>(TEXT_SELECTOR);
+                const rawRoot = target.closest<HTMLElement>(isCoarsePointer() ? ROOT_SELECTOR : TEXT_SELECTOR);
                 const root = rawRoot && !rawRoot.classList.contains(EMOJI_ONLY_CLASS) ? rawRoot : null;
                 if (!root) {
                     clear();
@@ -368,7 +369,7 @@ export function useCustomTextSelection({ enabled, containerRef }: Options) {
         const onDoubleClick = (e: MouseEvent) => {
             const target = e.target;
             if (!(target instanceof Element)) return;
-            const rawRoot = target.closest<HTMLElement>(TEXT_SELECTOR);
+            const rawRoot = target.closest<HTMLElement>(isCoarsePointer() ? ROOT_SELECTOR : TEXT_SELECTOR);
             const root = rawRoot && !rawRoot.classList.contains(EMOJI_ONLY_CLASS) ? rawRoot : null;
             if (!root) return;
             const caret = caretInRoot(root, e.clientX, e.clientY);

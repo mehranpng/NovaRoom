@@ -2,6 +2,7 @@ import React, { useRef, useState, useLayoutEffect, useEffect, useMemo } from 're
 import { useMusicPlayer, type TrackInfo } from '../contexts/MusicPlayerContext';
 import { useShowTransition } from '../hooks/useShowTransition';
 import TelegramIcon, { type TelegramIconName } from './TelegramIcon';
+import { ImageMediaViewer } from './ImageMediaViewer';
 import { PlayIcon, PauseIcon } from './icons/TelegramIcons';
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.5, 2];
@@ -49,6 +50,7 @@ export const MiniMusicPlayer: React.FC = () => {
   const [isSeeking, setIsSeeking] = useState(false);
   const [scrubProgress, setScrubProgress] = useState(0);
   const [isRateMenuOpen, setIsRateMenuOpen] = useState(false);
+  const [isCoverOpen, setIsCoverOpen] = useState(false);
   const seekLineRef = useRef<HTMLDivElement | null>(null);
   const isSeekingRef = useRef(false);
   const rateWrapperRef = useRef<HTMLDivElement | null>(null);
@@ -63,6 +65,10 @@ export const MiniMusicPlayer: React.FC = () => {
       document.body.removeAttribute('data-music-player');
     };
   }, [Boolean(track)]);
+
+  useEffect(() => {
+    if (!track) setIsCoverOpen(false);
+  }, [track]);
 
   useEffect(() => {
     if (!isRateMenuOpen) return;
@@ -160,13 +166,19 @@ export const MiniMusicPlayer: React.FC = () => {
       className={`mini-music-player tg-music-player${transitionClass ? ` ${transitionClass}` : ''}${!isOpen ? ' is-closing' : ''}`}
       dir="ltr"
     >
-      <div className="tg-music-player__cover" aria-hidden="true">
+      <button
+        type="button"
+        className="tg-music-player__cover"
+        aria-label="Open cover"
+        disabled={!activeTrack.coverArtUrl}
+        onClick={() => setIsCoverOpen(true)}
+      >
         {activeTrack.coverArtUrl ? (
           <img src={activeTrack.coverArtUrl} alt="" />
         ) : (
           <TelegramIcon name="music-note" size={18} />
         )}
-      </div>
+      </button>
 
       <button
         type="button"
@@ -323,6 +335,10 @@ export const MiniMusicPlayer: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {isCoverOpen && activeTrack.coverArtUrl && (
+        <ImageMediaViewer imageUrl={activeTrack.coverArtUrl} onClose={() => setIsCoverOpen(false)} />
+      )}
     </div>
   );
 };

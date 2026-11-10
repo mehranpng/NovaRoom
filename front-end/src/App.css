@@ -57,13 +57,13 @@ textarea {
 
 @keyframes nova-quote-flash {
     0% { --quote-jump-alpha: 0; }
-    15% { --quote-jump-alpha: 1; }
-    72% { --quote-jump-alpha: 1; }
+    25% { --quote-jump-alpha: 1; }
+    65% { --quote-jump-alpha: 1; }
     100% { --quote-jump-alpha: 0; }
 }
 
 html.quote-jump-animating {
-    animation: nova-quote-flash 2s ease-in-out forwards;
+    animation: nova-quote-flash 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 ::highlight(nova-quote-jump) {
@@ -6740,6 +6740,19 @@ html.keyboard-open .chat-room__input-area {
     flex-shrink: 0;
     overflow: hidden;
     margin-right: 2px;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
+    transition: transform 0.12s ease;
+}
+
+.tg-music-player__cover:disabled {
+    cursor: default;
+}
+
+.tg-music-player__cover:not(:disabled):active {
+    transform: scale(0.97);
 }
 
 .tg-music-player__cover img {
@@ -7660,7 +7673,7 @@ html.no-blur-effect .chat-room__jump-box {
     background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
     pointer-events: none;
     z-index: -1;
-    animation: message-row-flash 1.5s ease-in-out forwards;
+    animation: message-row-flash 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 @keyframes message-row-flash {
@@ -7668,11 +7681,11 @@ html.no-blur-effect .chat-room__jump-box {
         opacity: 0;
     }
 
-    12% {
+    25% {
         opacity: 1;
     }
 
-    78% {
+    65% {
         opacity: 1;
     }
 

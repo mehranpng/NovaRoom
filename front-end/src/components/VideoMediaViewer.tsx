@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronsLeft, ChevronsRight, Download, Maximize, Minimize, Pause, Play, X } from 'lucide-react';
 import type { FileMetadata } from '../types';
 import { getOrCacheBlob } from '../utils/mediaCache';
@@ -153,7 +154,7 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token: _toke
         }
     };
 
-    return (
+    return createPortal(
         <div
             className="video-media-viewer"
             role="dialog"
@@ -263,6 +264,7 @@ export function VideoMediaViewer({ videoUrl, onClose, downloadFile, token: _toke
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }

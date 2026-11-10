@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Download, Minus, Plus, X } from 'lucide-react';
 import type { FileMetadata } from '../types';
 import { getOrCacheBlob } from '../utils/mediaCache';
@@ -14,6 +15,7 @@ interface ImageMediaViewerProps {
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
 const TOGGLE_ZOOM_SCALE = 2;
+const MOBILE_QUERY = '(max-width: 1023px)';
 
 export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token: _token = '', chatId = '' }: ImageMediaViewerProps) {
     const [scale, setScale] = useState(1);
@@ -29,6 +31,25 @@ export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token: _toke
     const stageRef = useRef<HTMLDivElement | null>(null);
     const imageRef = useRef<HTMLImageElement | null>(null);
     const [controlsVisible, setControlsVisible] = useState(true);
+    const [fitSize, setFitSize] = useState<{ width: number; height: number } | null>(null);
+
+    const updateFitSize = () => {
+        const stageEl = stageRef.current;
+        const imageEl = imageRef.current;
+        if (!stageEl || !imageEl || !imageEl.naturalWidth || !window.matchMedia(MOBILE_QUERY).matches) {
+            setFitSize(null);
+            return;
+        }
+        const stageRect = stageEl.getBoundingClientRect();
+        const ratio = imageEl.naturalHeight / imageEl.naturalWidth;
+        let width = stageRect.width;
+        let height = width * ratio;
+        if (height > stageRect.height) {
+            height = stageRect.height;
+            width = height / ratio;
+        }
+        setFitSize({ width: Math.round(width), height: Math.round(height) });
+    };
 
     const updateTransform = (nextScale: number, nextOffset: { x: number; y: number }) => {
         scaleRef.current = nextScale;
@@ -175,6 +196,15 @@ export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token: _toke
         };
     }, []);
 
+    useEffect(() => {
+        window.addEventListener('resize', updateFitSize);
+        window.addEventListener('orientationchange', updateFitSize);
+        return () => {
+            window.removeEventListener('resize', updateFitSize);
+            window.removeEventListener('orientationchange', updateFitSize);
+        };
+    }, []);
+
     const zoomIn = () => {
         const nextScale = clampScale(scaleRef.current + 0.25);
         updateTransform(nextScale, clampOffset(offsetRef.current.x, offsetRef.current.y, nextScale));
@@ -233,7 +263,7 @@ export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token: _toke
         }
     };
 
-    return (
+    return createPortal(
         <div className="image-media-viewer" onClick={onClose} role="dialog" aria-modal="true">
             <div
                 ref={stageRef}
@@ -282,15 +312,20 @@ export function ImageMediaViewer({ imageUrl, onClose, downloadFile, token: _toke
                     src={imageUrl}
                     alt="media viewer"
                     className="image-media-viewer__image"
+                    onLoad={updateFitSize}
                     onDoubleClick={(e) => toggleZoomAtPoint(e.clientX, e.clientY)}
                     onMouseDown={(e) => {
                         if (scaleRef.current <= 1) return;
                         dragStartRef.current = { x: e.clientX, y: e.clientY, offsetX: offsetRef.current.x, offsetY: offsetRef.current.y };
                     }}
-                    style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})` }}
+                    style={{
+                        transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+                        ...(fitSize ? { width: fitSize.width, height: fitSize.height, maxWidth: 'none', maxHeight: 'none' } : null),
+                    }}
                     draggable={false}
                 />
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }

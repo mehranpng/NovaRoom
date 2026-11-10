@@ -495,6 +495,7 @@ export function ChatRoom({
     }, [forceContactInfoOpen, chatId, isOfficialChannel]);
 
     const userHasScrolledRef = useRef(Boolean(getChatScrollMemory(chatId)?.userInteracted));
+    const smoothBottomUntilRef = useRef(0);
 
     useEffect(() => {
         return () => {
@@ -704,6 +705,7 @@ export function ChatRoom({
         if (!isAtBottomRef.current) return;
         if (unreadAnchorId) return;
         if (autoJumpedToUnreadRef.current && !userScrolledAfterAutoJumpRef.current) return;
+        if (performance.now() < smoothBottomUntilRef.current) return;
         pinToBottomSync();
     }, [composerHeight]);
 
@@ -1209,7 +1211,7 @@ export function ChatRoom({
     const startHighlight = (messageId: string) => {
         setHighlightId(messageId);
         if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
-        highlightTimeoutRef.current = window.setTimeout(() => setHighlightId(null), 1500);
+        highlightTimeoutRef.current = window.setTimeout(() => setHighlightId(null), 2000);
     };
 
     const scrollToMessage = (messageId: string, retry = 1, quoteText?: string) => {
@@ -1235,8 +1237,8 @@ export function ChatRoom({
         const tr = hasQuoteRect ? quoteRect! : el.getBoundingClientRect();
         const isFullyVisible = tr.top >= cr.top + topBarOffset && tr.bottom <= cr.bottom - 70;
         if (isFullyVisible) {
+            startHighlight(messageId);
             if (quoteRange) startQuoteRangeHighlight(quoteRange, isMine);
-            else startHighlight(messageId);
             return;
         }
 
@@ -1269,8 +1271,8 @@ export function ChatRoom({
                     scrollToMessage(messageId, retry - 1, quoteText);
                     return;
                 }
+                startHighlight(messageId);
                 if (quoteRange) startQuoteRangeHighlight(quoteRange, isMine);
-                else startHighlight(messageId);
                 highlightRafRef.current = null;
                 return;
             }
@@ -1725,6 +1727,9 @@ export function ChatRoom({
 
     const canDeleteAnySelected = selectedMessageIds.length > 0 && deletableSelectedIds.length === selectedMessageIds.length;
 
+    const selectionHistoryPushedRef = useRef(false);
+    const ignoreNextPopRef = useRef(false);
+
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && selectedMessageIds.length > 0) {
@@ -1734,6 +1739,33 @@ export function ChatRoom({
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [selectedMessageIds.length]);
+
+    useEffect(() => {
+        if (isSelectionModeActive && !selectionHistoryPushedRef.current) {
+            window.history.pushState(window.history.state, '', window.location.href);
+            selectionHistoryPushedRef.current = true;
+            return;
+        }
+        if (!isSelectionModeActive && selectionHistoryPushedRef.current) {
+            selectionHistoryPushedRef.current = false;
+            ignoreNextPopRef.current = true;
+            window.history.back();
+        }
+    }, [isSelectionModeActive]);
+
+    useEffect(() => {
+        const onPopState = () => {
+            if (ignoreNextPopRef.current) {
+                ignoreNextPopRef.current = false;
+                return;
+            }
+            if (!selectionHistoryPushedRef.current) return;
+            selectionHistoryPushedRef.current = false;
+            setSelectedMessageIds([]);
+        };
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+    }, []);
 
     useEffect(() => {
         if (selectedMessageIds.length === 0) clearTextSelection();
@@ -1913,9 +1945,11 @@ export function ChatRoom({
         if (!chatContentReady || loading || messages.length === 0) return;
         if (userHasScrolledRef.current) return;
         if (displayUnreadCount > 0 || unreadAnchorId || autoJumpedToUnreadRef.current) return;
+        if (performance.now() < smoothBottomUntilRef.current) return;
         const raf = requestAnimationFrame(() => {
             const container = messagesContainerRef.current;
             if (!container) return;
+            if (performance.now() < smoothBottomUntilRef.current) return;
             const mem = getChatScrollMemory(chatId);
             if (userHasScrolledRef.current || (mem && mem.userInteracted && !mem.atBottom)) return;
             pinToBottomSync();
@@ -2160,7 +2194,7 @@ export function ChatRoom({
             }
             if ((nearBottom || isMyOwnNewMessage) && (!autoJumpedToUnreadRef.current || userScrolledAfterAutoJumpRef.current || isMyOwnNewMessage)) {
                 const openedRecently = Date.now() - openedAtRef.current < 1600;
-                const shouldAnimate = !openedRecently && added <= 2;
+                const shouldAnimate = isMyOwnNewMessage || (!openedRecently && added <= 2);
                 const raf = requestAnimationFrame(() => scrollToBottom(shouldAnimate));
                 prevLenRef.current = messages.length;
                 prevFirstMessageIdRef.current = nextFirstId;
@@ -2702,7 +2736,14 @@ export function ChatRoom({
         setDisplayUnreadCount(0);
         setReplyTo(null);
         setEditingId(null);
+        userHasScrolledRef.current = false;
+        userReadingOlderRef.current = false;
+        smoothBottomUntilRef.current = performance.now() + 1500;
         requestAnimationFrame(() => scrollToBottom(true));
+        window.setTimeout(() => {
+            if (computeNearBottom()) pinToBottomSync();
+            smoothBottomUntilRef.current = 0;
+        }, 1500);
         return true;
     }, [isContactBlocked, canSendInOfficialChannel, pendingForwardDraft, editingId, onSendMessage, handleForwardDraft, chatId]);
 
@@ -3700,7 +3741,7 @@ export function ChatRoom({
                                     type="button"
                                 >
                                     {pinnedMessage?.id === activeMsg.id ? <TelegramIcon name="unpin" size={16} /> : <TelegramIcon name="pin" size={16} />}
-                                    {pinnedMessage?.id === activeMsg.id ? 'برداشتن سنجاق' : 'سنجاق کردن پیام'}
+                                    {pinnedMessage?.id === activeMsg.id ? 'برداشتن سنجاق' : 'سنجاق کردن'}
                                 </button>
                             )}
                             <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><TelegramIcon name="forward" size={16} />فوروارد</button>
