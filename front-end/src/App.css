@@ -7651,6 +7651,11 @@ html.no-blur-effect .chat-room__jump-box {
     transition: transform var(--motion-fast) var(--motion-ease-standard);
 }
 
+.message-avatar-motion {
+    display: inline-flex;
+    will-change: transform, opacity;
+}
+
 .message-row--selecting.message-row--theirs .message-bubble,
 .message-row--selecting.message-row--theirs .message-avatar-wrap {
     transform: translateX(36px);
@@ -7834,6 +7839,22 @@ html.no-blur-effect .chat-room__jump-box {
     .ai-model-switcher:active,
     .ai-model-option:active {
         background-color: var(--hover-bg);
+    }
+
+    .message-select-indicator:hover,
+    .message-select-indicator:active {
+        border-color: var(--border-secondary);
+    }
+
+    .message-select-indicator:active {
+        background-color: var(--glass-surface);
+    }
+
+    .message-select-indicator--selected,
+    .message-select-indicator--selected:hover,
+    .message-select-indicator--selected:active {
+        background-color: var(--accent-primary);
+        border-color: var(--accent-primary);
     }
 
     .chat-list__item:active {

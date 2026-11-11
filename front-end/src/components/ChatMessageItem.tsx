@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
 import { Check, ChevronDown, Copy, Globe } from 'lucide-react';
+import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
@@ -66,6 +67,8 @@ export type ChatMessageItemProps = {
     senderName: string;
     senderAvatar: string;
     senderPending: boolean;
+    showAvatar: boolean;
+    avatarFadesOnDelete: boolean;
     replySenderName: string;
     replySenderPending: boolean;
     replyPreviewText: string;
@@ -475,6 +478,8 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     senderName,
     senderAvatar,
     senderPending,
+    showAvatar,
+    avatarFadesOnDelete,
     replySenderName,
     replySenderPending,
     replyPreviewText,
@@ -591,14 +596,25 @@ export const ChatMessageItem = memo(function ChatMessageItem({
         );
     }, [message.isDeleting, isMine]);
 
+    const avatarElFor = (el: HTMLElement | null) =>
+        el?.parentElement?.querySelector<HTMLElement>('.message-avatar-wrap') ?? null;
+
     const resetDrag = () => {
         const el = bubbleRef.current;
+        const avatarEl = avatarElFor(el);
         if (el) {
             el.style.transition = 'transform 140ms ease-out, box-shadow 220ms ease';
             el.style.transform = '';
             el.style.touchAction = '';
             window.setTimeout(() => {
                 if (el) el.style.transition = '';
+            }, 140);
+        }
+        if (avatarEl) {
+            avatarEl.style.transition = 'transform 140ms ease-out';
+            avatarEl.style.transform = '';
+            window.setTimeout(() => {
+                avatarEl.style.transition = '';
             }, 140);
         }
         setIsSwiping(false);
@@ -608,9 +624,15 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     const applyDragOffset = (dx: number) => {
         const el = bubbleRef.current;
         if (!el) return;
+        const offset = `translateX(${Math.min(0, Math.max(-72, dx))}px)`;
         el.style.transition = 'none';
         el.style.touchAction = 'none';
-        el.style.transform = `translateX(${Math.max(0, Math.min(72, dx))}px)`;
+        el.style.transform = offset;
+        const avatarEl = avatarElFor(el);
+        if (avatarEl) {
+            avatarEl.style.transition = 'none';
+            avatarEl.style.transform = offset;
+        }
     };
 
     const sortedReactions = useMemo(
@@ -660,6 +682,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
         || (message.searchEnabled && searchSources.length > 0)
     );
     const isMediaWithoutBottomContent = isVisualMedia && !hasTextCaption && !hasReactions && !hasAuxiliaryContent;
+    const showGroupAvatar = showAvatar;
 
     if (message.systemType) {
         return (
@@ -752,7 +775,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     const dx = e.clientX - swipeRef.current.startX;
                     const dy = e.clientY - swipeRef.current.startY;
                     if (!swipeRef.current.captured) {
-                        if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
+                        if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx >= 0) return;
                         swipeRef.current.captured = true;
                         actions.swipeLock(true);
                         setIsSwiping(true);
@@ -769,7 +792,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     const dx = e.clientX - swipeRef.current.startX;
                     const dy = e.clientY - swipeRef.current.startY;
                     if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
-                    if (dx > 60 && Math.abs(dx) > Math.abs(dy)) {
+                    if (dx < -60 && Math.abs(dx) > Math.abs(dy)) {
                         actions.reply(message);
                         triggerHaptic();
                     }
@@ -802,7 +825,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     const dx = t.clientX - swipeRef.current.startX;
                     const dy = t.clientY - swipeRef.current.startY;
                     if (!swipeRef.current.captured) {
-                        if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx <= 0) return;
+                        if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) || dx >= 0) return;
                         swipeRef.current.captured = true;
                         actions.swipeLock(true);
                         setIsSwiping(true);
@@ -818,7 +841,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     const dx = t.clientX - swipeRef.current.startX;
                     const dy = t.clientY - swipeRef.current.startY;
                     if (swipeRef.current.captured) swipeRef.current.blockClickUntil = Date.now() + 280;
-                    if (dx > 60 && Math.abs(dx) > Math.abs(dy)) {
+                    if (dx < -60 && Math.abs(dx) > Math.abs(dy)) {
                         actions.reply(message);
                         triggerHaptic();
                     }
@@ -849,7 +872,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     </div>
                 )}
 
-                {isGroupChat && !isMine && (shape === 'msg-shape--single' || shape === 'msg-shape--last') && (
+                {showGroupAvatar && (
                     <div
                         className="message-avatar-wrap"
                         style={{ position: 'absolute', left: 0, bottom: 0, cursor: 'pointer', zIndex: 1 }}
@@ -860,7 +883,17 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                         }}>
                         {senderPending
                             ? <span className="skeleton-glass skeleton-glass--avatar" aria-hidden />
-                            : <Avatar name={senderName} size="sm" src={senderAvatar} />}
+                            : (
+                                <motion.div
+                                    layout={!avatarFadesOnDelete}
+                                    className="message-avatar-motion"
+                                    initial={{ opacity: 0, y: 8 }}
+                                    animate={avatarFadesOnDelete ? { opacity: 0, y: -22 } : { opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.22, ease: 'easeOut', layout: { duration: 0.22, ease: 'easeOut' } }}
+                                >
+                                    <Avatar name={senderName} size="sm" src={senderAvatar} />
+                                </motion.div>
+                            )}
                     </div>
                 )}
 

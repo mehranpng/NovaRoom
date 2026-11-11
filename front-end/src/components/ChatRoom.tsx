@@ -2493,16 +2493,55 @@ export function ChatRoom({
             return next;
         };
 
+        const total = messages.length;
+        const prevNonDeleting = new Array<number>(total).fill(-1);
+        const nextNonDeleting = new Array<number>(total).fill(-1);
+        let lastNonDeleting = -1;
+        for (let i = 0; i < total; i += 1) {
+            prevNonDeleting[i] = lastNonDeleting;
+            if (!messages[i].isDeleting) lastNonDeleting = i;
+        }
+        let upcomingNonDeleting = -1;
+        for (let i = total - 1; i >= 0; i -= 1) {
+            nextNonDeleting[i] = upcomingNonDeleting;
+            if (!messages[i].isDeleting) upcomingNonDeleting = i;
+        }
+
         return messages.map((m, idx) => {
             const prev = idx > 0 ? messages[idx - 1] : null;
             const next = idx < messages.length - 1 ? messages[idx + 1] : null;
             const meta = readMeta(m);
             const isMine = m.senderId === currentUserId;
+            const isSystem = Boolean(m.systemType);
             const dayBreak = !prev || readMeta(prev).dayKey !== meta.dayKey;
             const nextDayBreak = !next || readMeta(next).dayKey !== meta.dayKey;
-            const prevSameSender = Boolean(prev) && !dayBreak && !prev!.systemType && !m.systemType && prev!.senderId === m.senderId;
-            const nextSameSender = Boolean(next) && !nextDayBreak && !next!.systemType && !m.systemType && next!.senderId === m.senderId;
+            const prevSameSender = Boolean(prev) && !dayBreak && !prev!.systemType && !isSystem && prev!.senderId === m.senderId;
+            const nextSameSender = Boolean(next) && !nextDayBreak && !next!.systemType && !isSystem && next!.senderId === m.senderId;
             const dayLabel = dayBreak ? formatDayLabel(m.timestamp) : '';
+            const shape = bubbleShape(prevSameSender, nextSameSender);
+
+            const prevSurvivor = prevNonDeleting[idx] >= 0 ? messages[prevNonDeleting[idx]] : null;
+            const nextSurvivor = nextNonDeleting[idx] >= 0 ? messages[nextNonDeleting[idx]] : null;
+            const sameRun = (other: Message | null) => Boolean(other) && !other!.systemType && other!.senderId === m.senderId && readMeta(other!).dayKey === meta.dayKey;
+            const survivorBefore = sameRun(prevSurvivor);
+            const survivorAfter = sameRun(nextSurvivor);
+            const deletingWithDeletingNeighbor = Boolean(
+                next
+                && next.isDeleting
+                && !next.systemType
+                && next.senderId === m.senderId
+                && readMeta(next).dayKey === meta.dayKey
+            );
+            const avatarShape = bubbleShape(survivorBefore, survivorAfter);
+            const showAvatar = Boolean(
+                isGroupChat
+                && !isMine
+                && !isSystem
+                && (m.isDeleting
+                    ? !survivorBefore && !survivorAfter && !deletingWithDeletingNeighbor
+                    : avatarShape === 'msg-shape--single' || avatarShape === 'msg-shape--last')
+            );
+
             return {
                 m,
                 isMine,
@@ -2510,12 +2549,14 @@ export function ChatRoom({
                 dayKey: meta.dayKey,
                 dayLabel,
                 formattedTime: meta.time,
-                shape: bubbleShape(prevSameSender, nextSameSender),
+                shape,
                 isBigEmojiOnly: meta.isBigEmojiOnly,
                 emojiOnlyClass: meta.emojiOnlyClass,
+                showAvatar,
+                avatarFadesOnDelete: Boolean(m.isDeleting && showAvatar),
             };
         });
-    }, [messages, currentUserId, messageMetaCache]);
+    }, [messages, currentUserId, isGroupChat, messageMetaCache]);
 
     const unreadAnchorForUi = useMemo(
         () => resolveUnreadAnchor(),
@@ -3011,7 +3052,7 @@ export function ChatRoom({
 
     const renderedMessageItems = useMemo(() => {
         const groups: { key: number; label: string; items: ReactNode[] }[] = [];
-        items.forEach(({ m, isMine, dayBreak, dayKey, dayLabel, formattedTime, shape, isBigEmojiOnly, emojiOnlyClass }) => {
+        items.forEach(({ m, isMine, dayBreak, dayKey, dayLabel, formattedTime, shape, isBigEmojiOnly, emojiOnlyClass, showAvatar, avatarFadesOnDelete }) => {
             const showUnreadSeparator = Boolean(unreadAnchorForUi && unreadAnchorForUi === m.id && m.senderId !== currentUserId);
             const seenByCountForMessage = seenByUsersByMessage[m.id]?.length ?? 0;
             const isSeenForUi = Boolean(
@@ -3046,6 +3087,8 @@ export function ChatRoom({
                     senderName={sender?.name || m.senderId || 'ناشناس'}
                     senderAvatar={sender?.avatar || ''}
                     senderPending={senderPending}
+                    showAvatar={showAvatar}
+                    avatarFadesOnDelete={avatarFadesOnDelete}
                     replySenderName={m.replyTo ? getReplySenderName(m.replyTo) : ''}
                     replySenderPending={replySenderPending}
                     replyPreviewText={m.replyTo ? getReplyPreviewText(m.replyTo) : ''}
