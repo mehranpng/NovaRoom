@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import TelegramIcon from './TelegramIcon';
+import { ChessChampionDecoration } from './ChessChampionDecoration';
+import { useChessChampion } from '../contexts/ChessChampionContext';
 import { cx } from '../utils/cx';
 import { API_BASE_URL } from '../config/api';
 import { decryptAvatarBytesClientSide, decryptFileBytesClientSide } from '../utils/e2ee';
@@ -12,6 +14,8 @@ interface AvatarProps {
   savedMessages?: boolean;
   src?: string;
   plain?: boolean;
+  userId?: string;
+  isChessChampion?: boolean;
 }
 
 function getColorIndex(name: string): number {
@@ -168,7 +172,19 @@ export function extractFileIdFromAvatar(rawAvatar: string): string {
   return '';
 }
 
-export function Avatar({ name, size = 'md', online, savedMessages = false, src = '', plain = false }: AvatarProps) {
+export function Avatar({
+  name,
+  size = 'md',
+  online,
+  savedMessages = false,
+  src = '',
+  plain = false,
+  userId,
+  isChessChampion,
+}: AvatarProps) {
+  const { isChampion } = useChessChampion();
+  const showChessChampion = !savedMessages && (isChessChampion ?? (userId ? isChampion(userId) : false));
+
   const [resolvedSrc, setResolvedSrc] = useState<string>(() => {
     if (!src) return '';
     return avatarCache.get(src) || '';
@@ -252,8 +268,11 @@ export function Avatar({ name, size = 'md', online, savedMessages = false, src =
           {getInitials(name)}
         </div>
       )}
+      {showChessChampion && (
+        <ChessChampionDecoration size={size} />
+      )}
       {online === true && (
-        <span className="avatar__status avatar__status--online" />
+        <span className="avatar__status avatar__status--online" style={{ zIndex: 6 }} />
       )}
     </div>
   );

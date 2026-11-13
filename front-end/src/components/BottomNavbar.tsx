@@ -202,6 +202,7 @@ export function BottomNavbar({ activeTab, onSelectTab, currentUser, hasUnseenSet
                                 name={currentUser.name}
                                 size="xs"
                                 src={currentUser.avatar}
+                                isChessChampion={false}
                             />
                         ) : (
                             <PlumpyUserIcon />

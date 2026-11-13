@@ -742,6 +742,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                                         name={oppInfo.name || 'حریف'}
                                         size="sm"
                                         src={oppInfo.avatar}
+                                        userId={oppInfo.chatId}
                                         online={oppId ? game.online[oppColor] : undefined}
                                     />
                                 ) : oppInfo?.isGuest ? (
@@ -896,6 +897,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                                         name={bottomInfo.name || currentUser.name}
                                         size="sm"
                                         src={bottomInfo.avatar}
+                                        userId={bottomInfo.chatId || currentUser.chatId}
                                         online={game.online[myColor]}
                                     />
                                 ) : bottomInfo?.isGuest ? (

@@ -3409,6 +3409,8 @@ export function ChatRoom({
                         <Avatar
                             name={contact.name}
                             size="sm"
+                            userId={isGroupChat || isSavedMessages ? undefined : contact.chatId}
+                            isChessChampion={isGroupChat || isSavedMessages ? false : contact.isChessChampion}
                             online={isGroupChat || isSavedMessages || isContactBlocked ? undefined : Boolean((interactiveOnlineUsers && contact.chatId && interactiveOnlineUsers[contact.chatId]) || contact.online)}
                             savedMessages={isSavedMessages}
                             src={contact.avatar}
@@ -3745,7 +3747,7 @@ export function ChatRoom({
                                         <span className="popover__seen-avatars">
                                             {seenRows.length > 0
                                                 ? seenRows.slice(0, 3).map((u) => (
-                                                    <Avatar key={u.chatId} name={u.name || u.username || ''} src={u.avatar || ''} size="xxs" />
+                                                    <Avatar key={u.chatId} name={u.name || u.username || ''} src={u.avatar || ''} size="xxs" userId={u.chatId} />
                                                 ))
                                                 : [0, 1, 2].map((i) => (
                                                     <span key={i} className="popover__seen-skeleton" aria-hidden />
@@ -3872,7 +3874,7 @@ export function ChatRoom({
                                                 setSeenByMenu(null); setReactionListMenu(null);
                                                 openMember(u.chatId);
                                             }}>
-                                            <Avatar name={u.name || u.username || ''} src={u.avatar || ''} size="xs" />
+                                            <Avatar name={u.name || u.username || ''} src={u.avatar || ''} size="xs" userId={u.chatId} />
                                             <span className="seen-by-menu__name">
                                                 <span>{u.name || u.username || u.chatId}</span>
                                                 {resolveVerified(u.verified) && <VerifiedBadge size={13} />}
@@ -3918,7 +3920,7 @@ export function ChatRoom({
                                             setReactionListMenu(null);
                                             openMember(row.userId);
                                         }}>
-                                        <Avatar name={row.name} src={row.avatar} size="xs" />
+                                        <Avatar name={row.name} src={row.avatar} size="xs" userId={row.userId} />
                                         <span className="seen-by-menu__name">
                                             <span>{row.name}</span>
                                             {row.verified && <VerifiedBadge size={13} />}
@@ -4007,7 +4009,7 @@ export function ChatRoom({
                                                 openMember(ru.userId);
                                             }}
                                         >
-                                            <Avatar name={ru.name} size="xs" src={ru.avatar} />
+                                            <Avatar name={ru.name} size="xs" src={ru.avatar} userId={ru.userId} />
                                             <span className="reaction-menu__name">
                                                 <span>{ru.name}</span>
                                                 {ru.verified && <VerifiedBadge size={13} />}

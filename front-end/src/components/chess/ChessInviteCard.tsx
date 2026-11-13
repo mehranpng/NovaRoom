@@ -182,7 +182,7 @@ export function ChessInviteCard({ invite, isMine }: ChessInviteCardProps) {
                     <div className={cx('chess-invite__seat', whiteWin && 'chess-invite__seat--winner')}>
                         <div className="chess-invite__seat-user">
                             {whiteInfo ? (
-                                <Avatar name={whiteInfo.name || 'سفید'} size="xs" src={whiteInfo.avatar} />
+                                <Avatar name={whiteInfo.name || 'سفید'} size="xs" src={whiteInfo.avatar} userId={whiteInfo.chatId} />
                             ) : (
                                 <span className="chess-invite__seat-wait">
                                     <Hourglass size={13} />
@@ -201,7 +201,7 @@ export function ChessInviteCard({ invite, isMine }: ChessInviteCardProps) {
                     <div className={cx('chess-invite__seat', blackWin && 'chess-invite__seat--winner')}>
                         <div className="chess-invite__seat-user">
                             {blackInfo ? (
-                                <Avatar name={blackInfo.name || 'سیاه'} size="xs" src={blackInfo.avatar} />
+                                <Avatar name={blackInfo.name || 'سیاه'} size="xs" src={blackInfo.avatar} userId={blackInfo.chatId} />
                             ) : (
                                 <span className="chess-invite__seat-wait">
                                     <Hourglass size={13} />

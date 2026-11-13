@@ -891,7 +891,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                     animate={avatarFadesOnDelete ? { opacity: 0, y: -22 } : { opacity: 1, y: 0 }}
                                     transition={{ duration: 0.22, ease: 'easeOut', layout: { duration: 0.22, ease: 'easeOut' } }}
                                 >
-                                    <Avatar name={senderName} size="sm" src={senderAvatar} />
+                                    <Avatar name={senderName} size="sm" src={senderAvatar} userId={message.senderId} />
                                 </motion.div>
                             )}
                     </div>
@@ -1164,8 +1164,8 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                             const isMyReaction = userIds.includes(currentUserId);
                                             const reactors = !isOfficialChannel && reaction.count <= 3
                                                 ? userIds.slice(0, 3)
-                                                    .map((uid) => reactionMembers?.[uid])
-                                                    .filter((member): member is { name?: string; avatar?: string } => Boolean(member))
+                                                    .map((uid) => ({ uid, ...(reactionMembers?.[uid] || {}) }))
+                                                    .filter((member): member is { uid: string; name?: string; avatar?: string } => Boolean(member.name || member.avatar))
                                                 : [];
                                             const showCount = isOfficialChannel || reaction.count > 3 || reactors.length === 0;
                                             return (
@@ -1191,7 +1191,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                                     {reactors.length > 0 && (
                                                         <span className="message-reaction__avatars">
                                                             {reactors.map((member, i) => (
-                                                                <Avatar key={i} name={member.name || ''} size="xxs" src={member.avatar || ''} />
+                                                                <Avatar key={i} name={member.name || ''} size="xxs" src={member.avatar || ''} userId={member.uid} />
                                                             ))}
                                                         </span>
                                                     )}

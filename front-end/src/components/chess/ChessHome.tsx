@@ -474,6 +474,7 @@ export function ChessHome({ currentUser, chats, onOpenGame, onOpenAiGame, onSele
                                                             name={oppInfo?.name || 'حریف'}
                                                             size="sm"
                                                             src={oppInfo?.avatar}
+                                                            userId={oppInfo?.chatId}
                                                         />
                                                     )}
                                                     <div className="chess-history__meta">
@@ -537,6 +538,8 @@ export function ChessHome({ currentUser, chats, onOpenGame, onOpenAiGame, onSele
                                             name={currentUser.name}
                                             size="sm"
                                             src={currentUser.avatar}
+                                            userId={currentUser.chatId}
+                                            isChessChampion={leaderboard?.myStats.rank === 1}
                                         />
                                         <div className="chess-leaderboard__meta">
                                             <div className="chess-leaderboard__name">
@@ -601,6 +604,8 @@ export function ChessHome({ currentUser, chats, onOpenGame, onOpenAiGame, onSele
                                                         name={entry.user.name}
                                                         size="sm"
                                                         src={entry.user.avatar}
+                                                        userId={entry.user.chatId}
+                                                        isChessChampion={entry.rank === 1}
                                                     />
                                                     <div className="chess-leaderboard__meta">
                                                         <div className="chess-leaderboard__name">

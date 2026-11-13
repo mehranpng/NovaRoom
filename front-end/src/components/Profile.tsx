@@ -285,7 +285,7 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
                         aria-label="مشاهده تصویر پروفایل"
                         style={{ cursor: user.avatar ? 'zoom-in' : 'default' }}
                     >
-                        <Avatar name={user.name} size="xl" src={user.avatar || ''} />
+                        <Avatar name={user.name} size="xl" src={user.avatar || ''} userId={user.chatId} isChessChampion={user.isChessChampion} />
                     </button>
 
                     <h2 className="profile__name">

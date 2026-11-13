@@ -674,6 +674,7 @@ body,
     border-radius: 50%;
     border-style: solid;
     border-color: var(--bg-primary);
+    z-index: 6;
 }
 
 .avatar--sm .avatar__status {
@@ -745,6 +746,116 @@ body,
 .avatar-color-7 {
     background: linear-gradient(135deg, #14b8a6, #16a34a);
 }
+
+/* ==========================================================================
+   NovaRoom Chess Champion Avatar Decoration (Discord-style V3 - Under Avatar)
+   ========================================================================== */
+
+.chess-champ-wrap {
+    position: absolute;
+    bottom: -19%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 76%;
+    pointer-events: none;
+    z-index: 5;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.chess-champ-wrap--xl {
+    bottom: -21%;
+    width: 74%;
+}
+
+.chess-champ-wrap--lg {
+    bottom: -20%;
+    width: 75%;
+}
+
+.chess-champ-wrap--md-lg {
+    bottom: -19%;
+    width: 76%;
+}
+
+.chess-champ-wrap--md {
+    bottom: -19%;
+    width: 76%;
+}
+
+.chess-champ-wrap--sm {
+    bottom: -18%;
+    width: 78%;
+}
+
+.chess-champ-wrap--xs {
+    bottom: -18%;
+    width: 82%;
+}
+
+.chess-champ-wrap--tiny {
+    bottom: -18%;
+    width: 88%;
+}
+
+.chess-champ-svg {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+    display: block;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.75)) drop-shadow(0 0 3px rgba(245, 158, 11, 0.35));
+}
+
+/* Falling Golden Particles (Strictly drifting DOWNWARDS) */
+.chess-champ-emitter {
+    position: absolute;
+    bottom: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 6px;
+    pointer-events: none;
+    overflow: visible;
+}
+
+.champ-spark {
+    position: absolute;
+    top: 0;
+    width: 2.2px;
+    height: 2.2px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #FFFBEB 20%, #FDE047 60%, #F59E0B 100%);
+    box-shadow: 0 0 2px #FDE047, 0 0 4px #F59E0B;
+    pointer-events: none;
+    animation: sparkRainDown 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes sparkRainDown {
+    0% {
+        transform: translate3d(0, 0, 0) scale(0.3);
+        opacity: 0;
+    }
+    20% {
+        opacity: 1;
+        transform: translate3d(0, 2px, 0) scale(1.1);
+    }
+    65% {
+        opacity: 0.8;
+        transform: translate3d(var(--dx, 0px), 6px, 0) scale(0.7);
+    }
+    100% {
+        opacity: 0;
+        transform: translate3d(var(--dx, 0px), 11px, 0) scale(0.1);
+    }
+}
+
+.s-1 { left: 2px; --dx: -1.2px; animation-delay: 0s; }
+.s-2 { left: 5px; --dx: 0.8px; animation-delay: 0.35s; width: 2.8px; height: 2.8px; }
+.s-3 { left: 9px; --dx: -0.6px; animation-delay: 0.7s; width: 2.5px; height: 2.5px; }
+.s-4 { left: 12px; --dx: 1.2px; animation-delay: 1.05s; }
+.s-5 { left: 15px; --dx: -0.8px; animation-delay: 1.4s; }
 
 
 

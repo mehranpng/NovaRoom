@@ -1095,6 +1095,8 @@ export const ChatList = memo(function ChatList({
                                 <Avatar
                                     name={contact.name}
                                     size="md-lg"
+                                    userId={group ? undefined : contact.chatId}
+                                    isChessChampion={group ? false : contact.isChessChampion}
                                     online={group || blockedRelation ? undefined : Boolean((interactiveOnlineUsers && contact.chatId && interactiveOnlineUsers[contact.chatId]) || contact.online)}
                                     src={isOfficial ? '/logo/ch.png' : contact.avatar}
                                 />

@@ -193,7 +193,7 @@ export function ChessUserProfile({
                 <div className="chess-lobby__inner">
                     <div className="chess-card chess-user-profile__card">
                         <div className="chess-user-profile__header">
-                            <Avatar name={targetUser.name} size="lg" src={targetUser.avatar} />
+                            <Avatar name={targetUser.name} size="lg" src={targetUser.avatar} userId={targetUser.chatId} isChessChampion={entry.rank === 1} />
                             <div className="chess-user-profile__identity">
                                 <div className="chess-user-profile__name-row">
                                     <span className="chess-user-profile__name">{targetUser.name}</span>
@@ -291,6 +291,7 @@ export function ChessUserProfile({
                                                         name={oppInfo?.name || 'حریف'}
                                                         size="sm"
                                                         src={oppInfo?.avatar}
+                                                        userId={oppInfo?.chatId}
                                                     />
                                                 )}
                                                 <div className="chess-history__meta">

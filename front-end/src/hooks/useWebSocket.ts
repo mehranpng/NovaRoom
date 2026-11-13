@@ -3,6 +3,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { API_BASE_URL, API_WS_URL } from '../config/api';
 import type { FileMetadata } from '../types';
 import { decryptMessageClientSide, encryptChatTextClientSide, extractMentionedUsernames, syncGroupE2EEKeys } from '../utils/e2ee';
+import { setGlobalChessChampion } from '../contexts/ChessChampionContext';
 
 interface UseWebSocketProps {
     token: string | null;
@@ -365,6 +366,8 @@ export function useWebSocket({
                     if (resolvedChatId) {
                         onGroupBannedRef.current?.(resolvedChatId);
                     }
+                } else if (dataType === 'chess_champion_updated') {
+                    setGlobalChessChampion(data.champion || null);
                 } else if (data.type === 'ai_response') {
                     onAINewMessageRef.current?.(data.message);
                 } else if (data.type === 'ai_response_start') {

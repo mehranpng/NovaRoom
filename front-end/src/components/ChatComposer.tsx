@@ -294,7 +294,7 @@ export const ChatComposer = memo(function ChatComposer({
                                 }
                                 onClick={() => selectMentionCandidate(member)}
                             >
-                                <Avatar name={member.name || member.username} src={member.avatar} size="xs" />
+                                <Avatar name={member.name || member.username} src={member.avatar} size="xs" userId={member.chatId} />
                                 <div className="chat-room__mention-item-info">
                                     <div className="chat-room__mention-item-name-row">
                                         <span className="chat-room__mention-item-name emoji-font">
