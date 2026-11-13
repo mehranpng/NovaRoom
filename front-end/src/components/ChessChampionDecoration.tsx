@@ -13,8 +13,9 @@ export const ChessChampionDecoration: React.FC<ChessChampionDecorationProps> = R
     const goldGradId = `goldGrad_${id}`;
     const hiGradId = `hiGrad_${id}`;
     const darkGradId = `darkGrad_${id}`;
+    const shineGradId = `shineGrad_${id}`;
+    const goldClipId = `goldClip_${id}`;
 
-    // Tiny chips (xxs: 18px) render a simplified micro crown
     const isTiny = size === 'xxs';
 
     if (isTiny) {
@@ -37,30 +38,58 @@ export const ChessChampionDecoration: React.FC<ChessChampionDecorationProps> = R
 
     return (
       <div className={`chess-champ-wrap chess-champ-wrap--${size} ${className}`} aria-hidden="true">
+        <div className="chess-champ-sparkles">
+          <svg className="chess-champ-sparkle sp-1" viewBox="0 0 12 12" fill="none">
+            <path d="M6 0 L7.3 4.7 L12 6 L7.3 7.3 L6 12 L4.7 7.3 L0 6 L4.7 4.7 Z" fill="#FFFDF0" />
+          </svg>
+          <svg className="chess-champ-sparkle sp-2" viewBox="0 0 12 12" fill="none">
+            <path d="M6 0 L7.3 4.7 L12 6 L7.3 7.3 L6 12 L4.7 7.3 L0 6 L4.7 4.7 Z" fill="#FEF08A" />
+          </svg>
+          <svg className="chess-champ-sparkle sp-3" viewBox="0 0 12 12" fill="none">
+            <path d="M6 0 L7.3 4.7 L12 6 L7.3 7.3 L6 12 L4.7 7.3 L0 6 L4.7 4.7 Z" fill="#FFFDF0" />
+          </svg>
+          <svg className="chess-champ-sparkle sp-4" viewBox="0 0 12 12" fill="none">
+            <path d="M6 0 L7.3 4.7 L12 6 L7.3 7.3 L6 12 L4.7 7.3 L0 6 L4.7 4.7 Z" fill="#FEF08A" />
+          </svg>
+        </div>
         <svg className="chess-champ-svg" viewBox="-12 0 124 68" fill="none" xmlns="http://www.w3.org/2000/svg">
           <defs>
-            {/* Rich 24K Metallic Gold */}
             <linearGradient id={goldGradId} x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#FFFDF0" />
-              <stop offset="25%" stopColor="#FDE047" />
-              <stop offset="55%" stopColor="#EAB308" />
-              <stop offset="85%" stopColor="#CA8A04" />
-              <stop offset="100%" stopColor="#854D0E" />
+              <stop offset="0%" stopColor="#FFFDF5" />
+              <stop offset="18%" stopColor="#FDE047" />
+              <stop offset="36%" stopColor="#D97706" />
+              <stop offset="52%" stopColor="#FFF7CC" />
+              <stop offset="70%" stopColor="#EAB308" />
+              <stop offset="88%" stopColor="#B45309" />
+              <stop offset="100%" stopColor="#78350F" />
             </linearGradient>
 
-            {/* Specular Highlight Gold */}
             <linearGradient id={hiGradId} x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stopColor="#FFFFFF" />
-              <stop offset="40%" stopColor="#FEF08A" />
-              <stop offset="100%" stopColor="#EAB308" />
+              <stop offset="42%" stopColor="#FEF08A" />
+              <stop offset="100%" stopColor="#D97706" />
             </linearGradient>
 
-            {/* Dark Obsidian Core */}
             <linearGradient id={darkGradId} x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stopColor="#241e17" />
               <stop offset="50%" stopColor="#14110d" />
               <stop offset="100%" stopColor="#0a0806" />
             </linearGradient>
+
+            <linearGradient id={shineGradId} x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0" />
+              <stop offset="35%" stopColor="#FEF9C3" stopOpacity="0.28" />
+              <stop offset="50%" stopColor="#FFFFFF" stopOpacity="0.88" />
+              <stop offset="65%" stopColor="#FEF9C3" stopOpacity="0.28" />
+              <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
+            </linearGradient>
+
+            <clipPath id={goldClipId}>
+              <path d="M 32 28 C 19 21, 6 14, -6 4 C -2 15, 6 26, 18 33 C 8 30, 0 23, -7 16 C -3 27, 8 36, 22 40 C 14 38, 7 34, 3 28 C 7 38, 17 45, 33 46 Z" />
+              <path d="M 68 28 C 81 21, 94 14, 106 4 C 102 15, 94 26, 82 33 C 92 30, 100 23, 107 16 C 103 27, 92 36, 78 40 C 86 38, 93 34, 97 28 C 93 38, 83 45, 67 46 Z" />
+              <path d="M 33 16 L 50 12 L 67 16 L 70 36 C 70 48, 60 56, 50 60 C 40 56, 30 48, 30 36 Z" />
+              <path d="M 36 15 L 32 5 L 40 10 L 50 1 L 60 10 L 68 5 L 64 15 Z" />
+            </clipPath>
           </defs>
 
           {/* 1. Stretched Left Heraldic Wing (Extended & sweeping gracefully along circle curve) */}
@@ -151,36 +180,40 @@ export const ChessChampionDecoration: React.FC<ChessChampionDecorationProps> = R
           />
 
           {/* 7. Crisp Small Diamond Stars on Wingtips */}
-          {/* Left Star */}
           <g transform="translate(-4, 8)">
-            <path
-              d="M 0 -6 L 1.5 -1.8 L 6 0 L 1.5 1.8 L 0 6 L -1.5 1.8 L -6 0 L -1.5 -1.8 Z"
-              fill={`url(#${hiGradId})`}
-              stroke="#78350F"
-              strokeWidth="0.4"
-            />
-            <circle cx="0" cy="0" r="1.2" fill="#FFFFFF" />
+            <g className="chess-champ-star chess-champ-star--left">
+              <path
+                d="M 0 -6 L 1.5 -1.8 L 6 0 L 1.5 1.8 L 0 6 L -1.5 1.8 L -6 0 L -1.5 -1.8 Z"
+                fill={`url(#${hiGradId})`}
+                stroke="#78350F"
+                strokeWidth="0.4"
+              />
+              <circle cx="0" cy="0" r="1.2" fill="#FFFFFF" />
+            </g>
           </g>
-          {/* Right Star */}
           <g transform="translate(104, 8)">
-            <path
-              d="M 0 -6 L 1.5 -1.8 L 6 0 L 1.5 1.8 L 0 6 L -1.5 1.8 L -6 0 L -1.5 -1.8 Z"
-              fill={`url(#${hiGradId})`}
-              stroke="#78350F"
-              strokeWidth="0.4"
+            <g className="chess-champ-star chess-champ-star--right">
+              <path
+                d="M 0 -6 L 1.5 -1.8 L 6 0 L 1.5 1.8 L 0 6 L -1.5 1.8 L -6 0 L -1.5 -1.8 Z"
+                fill={`url(#${hiGradId})`}
+                stroke="#78350F"
+                strokeWidth="0.4"
+              />
+              <circle cx="0" cy="0" r="1.2" fill="#FFFFFF" />
+            </g>
+          </g>
+          <g clipPath={`url(#${goldClipId})`} pointerEvents="none">
+            <rect
+              className="chess-champ-shine-beam"
+              x="-24"
+              y="-10"
+              width="28"
+              height="92"
+              transform="skewX(-22)"
+              fill={`url(#${shineGradId})`}
             />
-            <circle cx="0" cy="0" r="1.2" fill="#FFFFFF" />
           </g>
         </svg>
-
-        {/* 8. Golden Sparks Emitter (Underneath badge, drifting strictly downwards) */}
-        <div className="chess-champ-emitter">
-          <span className="champ-spark s-1" />
-          <span className="champ-spark s-2" />
-          <span className="champ-spark s-3" />
-          <span className="champ-spark s-4" />
-          <span className="champ-spark s-5" />
-        </div>
       </div>
     );
   }

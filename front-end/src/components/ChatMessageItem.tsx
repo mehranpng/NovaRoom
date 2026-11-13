@@ -891,7 +891,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                     animate={avatarFadesOnDelete ? { opacity: 0, y: -22 } : { opacity: 1, y: 0 }}
                                     transition={{ duration: 0.22, ease: 'easeOut', layout: { duration: 0.22, ease: 'easeOut' } }}
                                 >
-                                    <Avatar name={senderName} size="sm" src={senderAvatar} userId={message.senderId} />
+                                    <Avatar name={senderName} size="sm" src={senderAvatar} userId={message.senderId} isChessChampion={false} />
                                 </motion.div>
                             )}
                     </div>
@@ -1191,7 +1191,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                                     {reactors.length > 0 && (
                                                         <span className="message-reaction__avatars">
                                                             {reactors.map((member, i) => (
-                                                                <Avatar key={i} name={member.name || ''} size="xxs" src={member.avatar || ''} userId={member.uid} />
+                                                                <Avatar key={i} name={member.name || ''} size="xxs" src={member.avatar || ''} userId={member.uid} isChessChampion={false} />
                                                             ))}
                                                         </span>
                                                     )}

@@ -801,61 +801,116 @@ body,
 }
 
 .chess-champ-svg {
+    position: relative;
+    z-index: 1;
     width: 100%;
     height: auto;
     overflow: visible;
     display: block;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.75)) drop-shadow(0 0 3px rgba(245, 158, 11, 0.35));
 }
 
-/* Falling Golden Particles (Strictly drifting DOWNWARDS) */
-.chess-champ-emitter {
+.chess-champ-shine-beam {
+    animation: champGoldShine 3.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes champGoldShine {
+    0% {
+        transform: translateX(-25px) skewX(-22deg);
+        opacity: 0;
+    }
+    12% {
+        opacity: 1;
+    }
+    45% {
+        transform: translateX(155px) skewX(-22deg);
+        opacity: 1;
+    }
+    52%, 100% {
+        transform: translateX(155px) skewX(-22deg);
+        opacity: 0;
+    }
+}
+
+.chess-champ-star {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+}
+
+.chess-champ-star--left {
+    animation: champStarTwinkle 2.4s ease-in-out infinite;
+}
+
+.chess-champ-star--right {
+    animation: champStarTwinkle 2.4s ease-in-out 1.2s infinite;
+}
+
+@keyframes champStarTwinkle {
+    0%, 100% {
+        transform: scale(0.92) rotate(0deg);
+        opacity: 0.85;
+    }
+    50% {
+        transform: scale(1.18) rotate(12deg);
+        opacity: 1;
+    }
+}
+
+.chess-champ-sparkles {
     position: absolute;
-    bottom: -3px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 20px;
-    height: 6px;
+    inset: -14% 0 20% 0;
     pointer-events: none;
+    z-index: 2;
     overflow: visible;
 }
 
-.champ-spark {
+.chess-champ-sparkle {
     position: absolute;
-    top: 0;
-    width: 2.2px;
-    height: 2.2px;
-    border-radius: 50%;
-    background: radial-gradient(circle, #FFFBEB 20%, #FDE047 60%, #F59E0B 100%);
-    box-shadow: 0 0 2px #FDE047, 0 0 4px #F59E0B;
-    pointer-events: none;
-    animation: sparkRainDown 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    width: 11%;
+    aspect-ratio: 1;
+    opacity: 0;
+    animation: champSparkleTwinkle 2.6s ease-in-out infinite;
 }
 
-@keyframes sparkRainDown {
-    0% {
-        transform: translate3d(0, 0, 0) scale(0.3);
-        opacity: 0;
-    }
-    20% {
-        opacity: 1;
-        transform: translate3d(0, 2px, 0) scale(1.1);
-    }
-    65% {
-        opacity: 0.8;
-        transform: translate3d(var(--dx, 0px), 6px, 0) scale(0.7);
-    }
-    100% {
-        opacity: 0;
-        transform: translate3d(var(--dx, 0px), 11px, 0) scale(0.1);
-    }
+.sp-1 {
+    top: -4%;
+    left: 22%;
+    animation-delay: 0s;
 }
 
-.s-1 { left: 2px; --dx: -1.2px; animation-delay: 0s; }
-.s-2 { left: 5px; --dx: 0.8px; animation-delay: 0.35s; width: 2.8px; height: 2.8px; }
-.s-3 { left: 9px; --dx: -0.6px; animation-delay: 0.7s; width: 2.5px; height: 2.5px; }
-.s-4 { left: 12px; --dx: 1.2px; animation-delay: 1.05s; }
-.s-5 { left: 15px; --dx: -0.8px; animation-delay: 1.4s; }
+.sp-2 {
+    top: -12%;
+    left: 48%;
+    width: 13%;
+    animation-delay: 0.65s;
+}
+
+.sp-3 {
+    top: -2%;
+    right: 20%;
+    animation-delay: 1.3s;
+}
+
+.sp-4 {
+    top: 16%;
+    left: 34%;
+    width: 9%;
+    animation-delay: 1.95s;
+}
+
+@keyframes champSparkleTwinkle {
+    0%, 100% {
+        transform: scale(0.2) rotate(0deg);
+        opacity: 0;
+    }
+    30% {
+        transform: scale(1) rotate(25deg);
+        opacity: 0.95;
+    }
+    60% {
+        transform: scale(0.35) rotate(45deg);
+        opacity: 0;
+    }
+}
 
 
 
@@ -4895,6 +4950,21 @@ html.keyboard-open .chat-room__input-area {
     bottom: -74px;
     inset-inline-end: -34px;
     opacity: 0.2;
+}
+
+.profile__hero--chess-champion {
+    background:
+        radial-gradient(circle at 16% -16%, rgba(245, 158, 11, 0.26), transparent 58%),
+        linear-gradient(155deg, color-mix(in srgb, #F59E0B 18%, var(--bg-primary)), var(--glass-surface-soft));
+    border: 1px solid color-mix(in srgb, #F59E0B 28%, var(--glass-border));
+}
+
+.profile__hero--chess-champion .profile__hero-orb {
+    background: radial-gradient(circle at 32% 32%, #F59E0B, transparent 72%);
+}
+
+.profile__hero--chess-champion .profile__avatar-wrap {
+    background: linear-gradient(145deg, #FDE047, #D97706);
 }
 
 .profile__avatar-wrap {

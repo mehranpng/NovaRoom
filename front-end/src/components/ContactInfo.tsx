@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { User } from '../types';
 import { Avatar, extractFileIdFromAvatar, getAvatarDisplayUrl } from './Avatar';
+import { useChessChampion } from '../contexts/ChessChampionContext';
 import { VerifiedBadge } from './VerifiedBadge';
 import { apiFetch } from '../config/api';
 import { ImageMediaViewer } from './ImageMediaViewer';
@@ -375,6 +376,8 @@ export function ContactInfo({
     };
 
     const originalAvatar = String(user.avatar || '');
+    const { isChampion } = useChessChampion();
+    const isChessChampion = !isGroup && Boolean((user as any).isChessChampion ?? isChampion(user.chatId));
     const previewAvatar = avatarTouched ? groupAvatar : originalAvatar;
 
     const canRemoveAvatar = Boolean(previewAvatar);
@@ -435,7 +438,7 @@ export function ContactInfo({
             </div>
 
             <div className="contact-info__content">
-                <div className="profile__hero">
+                <div className={`profile__hero${isChessChampion ? ' profile__hero--chess-champion' : ''}`}>
                     <span className="profile__hero-orb profile__hero-orb--one" aria-hidden="true" />
                     <span className="profile__hero-orb profile__hero-orb--two" aria-hidden="true" />
 

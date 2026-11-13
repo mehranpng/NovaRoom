@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import type { User } from '../types';
 import { Avatar, getAvatarDisplayUrl } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
+import { useChessChampion } from '../contexts/ChessChampionContext';
 import { cx } from '../utils/cx';
 import { apiFetch } from '../config/api';
 import { ImageMediaViewer } from './ImageMediaViewer';
@@ -41,6 +42,8 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
     const [openedProfileImage, setOpenedProfileImage] = useState<{ url: string; fileId: string } | null>(null);
     const navigate = useNavigate();
     const location = useLocation();
+    const { isChampion } = useChessChampion();
+    const isChessChampion = Boolean(user.isChessChampion ?? isChampion(user.chatId));
 
     const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
     const [usernameHint, setUsernameHint] = useState<string>('');
@@ -274,7 +277,7 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
             </div>
 
             <div className="profile__content" onScroll={handleScroll}>
-                <div className="profile__hero">
+                <div className={`profile__hero${isChessChampion ? ' profile__hero--chess-champion' : ''}`}>
                     <span className="profile__hero-orb profile__hero-orb--one" aria-hidden="true" />
                     <span className="profile__hero-orb profile__hero-orb--two" aria-hidden="true" />
 
