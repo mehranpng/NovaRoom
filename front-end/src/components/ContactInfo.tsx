@@ -450,6 +450,8 @@ export function ContactInfo({
                             name={user.name}
                             size="xl"
                             src={user.avatar}
+                            userId={isGroup ? undefined : user.chatId}
+                            isChessChampion={isGroup ? false : (user as any).isChessChampion}
                         />
                     </button>
 
@@ -620,7 +622,7 @@ export function ContactInfo({
                                             <div className="group-settings-ban-list">
                                                 {bannedUsers.map((bu) => (
                                                     <div key={bu.chatId} className="group-settings-ban-item">
-                                                        <Avatar name={bu.name} size="sm" src={bu.avatar} />
+                                                        <Avatar name={bu.name} size="sm" src={bu.avatar} userId={bu.chatId} />
                                                         <div className="group-settings-ban-info">
                                                             <div className="group-settings-ban-name">
                                                                 <span className="truncate">{bu.name}</span>

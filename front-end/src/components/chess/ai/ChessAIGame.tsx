@@ -852,7 +852,7 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
 
                             <div className="chess__player">
                                 <div className="chess__player-info">
-                                    <Avatar name={currentUser.name} size="sm" src={currentUser.avatar} />
+                                    <Avatar name={currentUser.name} size="sm" src={currentUser.avatar} userId={currentUser.chatId} />
                                     <div className="chess__player-text">
                                         <div className="chess__player-line">
                                             <span className="chess__player-name">{currentUser.name}</span>

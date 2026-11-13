@@ -14,10 +14,21 @@ export interface User {
     bioVisibility?: PrivacyVisibility;
     hideOnlineStatus?: boolean;
     verified?: boolean;
+    isChessChampion?: boolean;
     registrationDate?: string;
     adminLevel?: 'admin0' | 'admin1' | null;
     createdBy?: string;
     deletionScheduledFor?: number | null;
+}
+
+export interface ChessChampionInfo {
+    chatId: string;
+    name: string;
+    username: string;
+    avatar?: string;
+    elo?: number;
+    wins?: number;
+    gamesPlayed?: number;
 }
 
 export interface MessageReply {

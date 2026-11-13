@@ -160,6 +160,7 @@ export function ForwardModal({ isOpen, chats, currentUserId, currentUserIsAdmin 
                                                 name={user.name || user.username}
                                                 size="md"
                                                 online={user.online}
+                                                userId={isGroupChat(chat) ? undefined : user.chatId}
                                                 src={chat.id === 'official-channel' ? '/logo/ch.png' : user.avatar}
                                             />
                                             <div className="forward-sheet__item-info">

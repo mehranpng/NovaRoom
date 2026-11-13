@@ -3747,6 +3747,56 @@ async def login(req: LoginRequest, request: Request):
     }
 
 
+_cached_chess_champion: Optional[dict] = None
+_cached_chess_champion_time: float = 0.0
+
+
+async def get_current_chess_champion(force_refresh: bool = False) -> Optional[dict]:
+    global _cached_chess_champion, _cached_chess_champion_time
+    now = time.time()
+    if not force_refresh and _cached_chess_champion is not None and (now - _cached_chess_champion_time < 30.0):
+        return _cached_chess_champion
+
+    try:
+        top = await cl_users.find(
+            {
+                **NOT_PURGING,
+                "chatId": {"$not": {"$regex": "^guest_"}},
+                "chessStats.gamesPlayed": {"$gt": 0},
+            }
+        ).sort([("chessStats.elo", -1), ("chessStats.wins", -1), ("chessStats.gamesPlayed", -1), ("chatId", 1)]).limit(1).to_list(1)
+
+        if not top:
+            _cached_chess_champion = None
+            _cached_chess_champion_time = now
+            return None
+
+        u = top[0]
+        stats = u.get("chessStats") or {}
+        prof = u.get("profile") or {}
+        _cached_chess_champion = {
+            "chatId": u["chatId"],
+            "name": prof.get("name", ""),
+            "username": prof.get("username", ""),
+            "avatar": prof.get("avatar", ""),
+            "elo": int(stats.get("elo", 1200)),
+            "wins": int(stats.get("wins", 0)),
+            "gamesPlayed": int(stats.get("gamesPlayed", 0)),
+        }
+        _cached_chess_champion_time = now
+        return _cached_chess_champion
+    except Exception as e:
+        logger.error(f"Error resolving chess champion: {e}")
+        return _cached_chess_champion
+
+
+@app.get("/chess/champion")
+@limiter.limit("120/minute")
+async def get_chess_champion_endpoint(request: Request):
+    champ = await get_current_chess_champion()
+    return {"champion": champ}
+
+
 class PrivacySettingsUpdate(BaseModel):
     lastSeenVisibility: Optional[Literal["everyone", "friends", "nobody"]] = None
     avatarVisibility: Optional[Literal["everyone", "friends", "nobody"]] = None
@@ -3758,6 +3808,8 @@ class PrivacySettingsUpdate(BaseModel):
 async def get_profile(request: Request, current_user: dict = Depends(get_current_user)):
     user_settings = current_user.get("settings") or {}
     last_seen = current_user.get("lastSeen")
+    champ = await get_current_chess_champion()
+    is_chess_champ = bool(champ and champ.get("chatId") == current_user["chatId"])
     return {
         "chatId": current_user["chatId"],
         "username": current_user["profile"]["username"],
@@ -3767,6 +3819,7 @@ async def get_profile(request: Request, current_user: dict = Depends(get_current
         "online": resolve_user_online_state(current_user),
         "lastSeen": dt_to_epoch_ms(last_seen) if last_seen else None,
         "verified": bool(current_user.get("verified", False)),
+        "isChessChampion": is_chess_champ,
         "registrationDate": current_user.get("registrationDate"),
         "adminLevel": get_admin_level(current_user),
         "e2ee": current_user.get("e2ee") or None,
@@ -4837,6 +4890,8 @@ async def get_chat_list(
 
     saved_chat_id = get_saved_messages_id(my_id)
     saved_count = await cl_messages.count_documents({"chatId": saved_chat_id})
+    champ = await get_current_chess_champion()
+    champ_id = champ.get("chatId") if champ else None
 
     result = []
 
@@ -5050,6 +5105,11 @@ async def get_chat_list(
                             if other_user
                             else False
                         )
+                    ),
+                    "isChessChampion": (
+                        False
+                        if is_group
+                        else bool(champ_id and (other_user.get("chatId") if other_user else other_id) == champ_id)
                     ),
                     "registrationDate": (
                         None
@@ -7520,6 +7580,17 @@ async def chess_apply_elo_if_needed(game: dict) -> bool:
         {"chatId": b_id},
         {"$set": {"chessStats.elo": changes["black"]["after"], "chessStats.updatedAt": now}, "$inc": b_inc},
     )
+    global _cached_chess_champion
+    _cached_chess_champion = None
+    try:
+        new_champ = await get_current_chess_champion(force_refresh=True)
+        if active_connections:
+            asyncio.create_task(broadcast(list(active_connections.keys()), {
+                "type": "chess_champion_updated",
+                "champion": new_champ,
+            }))
+    except Exception as e:
+        logger.error(f"Error broadcasting chess champion update: {e}")
     return True
 
 

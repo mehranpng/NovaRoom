@@ -294,7 +294,7 @@ export function GroupMembersView({
                                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
                                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                                 >
-                                    <Avatar name={member.name} size="md" src={member.avatar} online={isMemberOnline(member)} />
+                                    <Avatar name={member.name} size="md" src={member.avatar} userId={member.chatId} online={isMemberOnline(member)} />
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>
                                             {member.name}

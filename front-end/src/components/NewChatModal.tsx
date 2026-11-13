@@ -313,7 +313,7 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
                                                 className="new-chat-screen__user"
                                                 onClick={() => handleSelectUser(user)}
                                             >
-                                                <Avatar name={user.name} size="md" online={user.online} src={user.avatar} />
+                                                <Avatar name={user.name} size="md" online={user.online} src={user.avatar} userId={user.chatId} isChessChampion={user.isChessChampion} />
                                                 <span className="new-chat-screen__user-text">
                                                     <span className="new-chat-screen__user-name">
                                                         {user.name}

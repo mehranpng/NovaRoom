@@ -17,6 +17,7 @@ import { ResetPasswordLink } from './components/ResetPasswordLink';
 import { NewChatModal } from './components/NewChatModal';
 import { MiniMusicPlayer } from './components/MiniMusicPlayer';
 import { MusicPlayerProvider } from './contexts/MusicPlayerContext';
+import { ChessChampionProvider } from './contexts/ChessChampionContext';
 import { cx } from './utils/cx';
 import { NotificationCenter } from './components/NotificationCenter';
 import { PwaInstallModal } from './components/PwaInstallModal';
@@ -3798,6 +3799,7 @@ export function App() {
         : 'chats';
 
     return (
+        <ChessChampionProvider>
         <MusicPlayerProvider>
             <NotificationCenter />
             <PwaInstallModal />
@@ -4057,5 +4059,6 @@ export function App() {
             </div>
             <MiniMusicPlayer />
         </MusicPlayerProvider>
+        </ChessChampionProvider>
     );
 }
