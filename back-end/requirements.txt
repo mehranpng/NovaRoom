@@ -10,10 +10,10 @@ openai==3.37.0
 httpx==0.28.1
 python-multipart==0.0.32
 aiofiles==25.1.0
-slowapi==0.1.10
 pypdf==6.21.4
 chess==1.11.2
 boto3==1.43.123
 cryptography>=42.0.0
 pywebpush==2.0.3
-
+p-redis-limiter==0.1.2
+redis>=5.0.0

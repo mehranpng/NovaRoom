@@ -10,10 +10,6 @@ from fastapi import (
     UploadFile,
     File as FastAPIFile,
 )
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import Response, FileResponse, StreamingResponse
@@ -80,6 +76,8 @@ if _root_env.exists():
 else:
     load_dotenv(find_dotenv(usecwd=True))
 
+from security import PRODUCTION, SecurityMiddleware, close_redis, limiter
+
 def normalize_ip_address(value: Any) -> str:
     text = str(value or "").strip()
     if not text:
@@ -105,10 +103,12 @@ def extract_client_ip(request: Optional[Request]) -> str:
     return normalize_ip_address(host) or "127.0.0.1"
 
 
-limiter = Limiter(key_func=extract_client_ip, default_limits=["200/minute"])
-app = FastAPI(title="NovaRoom API")
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app = FastAPI(
+    title="NovaRoom API",
+    docs_url=None if PRODUCTION else "/docs",
+    redoc_url=None if PRODUCTION else "/redoc",
+    openapi_url=None if PRODUCTION else "/openapi.json",
+)
 
 class ApiPrefixMiddleware:
     def __init__(self, app):
@@ -132,7 +132,7 @@ class ApiPrefixMiddleware:
 _cors_origins_raw = os.getenv("CORS_ORIGINS", "*").strip()
 _cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()] or ["*"]
 
-app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(SecurityMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
@@ -2575,6 +2575,11 @@ async def startup_db():
     asyncio.create_task(account_deletion_worker())
 
 
+@app.on_event("shutdown")
+async def shutdown_security():
+    await close_redis()
+
+
 class PushSubscriptionKeys(BaseModel):
     p256dh: str = Field(..., min_length=1, max_length=200)
     auth: str = Field(..., min_length=1, max_length=100)
@@ -2909,7 +2914,7 @@ async def unblock_user(
 
 
 @app.get("/auth/register-link/{token}")
-@limiter.limit("30/minute")
+@limiter.limit("10/minute;40/hour")
 async def validate_register_link(request: Request, token: str):
     value = str(token or "").strip()
     if not value or len(value) > 128:
@@ -2922,7 +2927,7 @@ async def validate_register_link(request: Request, token: str):
 
 
 @app.post("/auth/register", response_model=TokenResponse)
-@limiter.limit("5/minute;20/hour")
+@limiter.limit("3/minute;10/hour")
 async def register_with_link(req: RegisterWithLinkRequest, request: Request):
     name = str(req.name or "").strip()
     if not name or len(name) > 64:
@@ -3026,7 +3031,7 @@ async def register_with_link(req: RegisterWithLinkRequest, request: Request):
 
 
 @app.get("/auth/password-link/{token}")
-@limiter.limit("30/minute")
+@limiter.limit("10/minute;40/hour")
 async def validate_password_link(request: Request, token: str):
     value = str(token or "").strip()
     if not value or len(value) > 128:
@@ -3048,7 +3053,7 @@ async def validate_password_link(request: Request, token: str):
 
 
 @app.post("/auth/password-link/consume")
-@limiter.limit("10/minute;40/hour")
+@limiter.limit("5/minute;15/hour")
 async def consume_password_link(req: ConsumePasswordLinkRequest, request: Request):
     new_password = str(req.newPassword or "")
     if len(new_password) < 8:
@@ -3083,7 +3088,7 @@ async def consume_password_link(req: ConsumePasswordLinkRequest, request: Reques
 
 
 @app.post("/auth/change-password")
-@limiter.limit("5/minute;20/hour")
+@limiter.limit("3/minute;10/hour")
 async def change_password(
     req: ChangePasswordRequest,
     request: Request,
@@ -3190,7 +3195,7 @@ async def get_account_deletion(
 
 
 @app.get("/admin/me")
-@limiter.limit("60/minute;600/hour")
+@limiter.limit("30/minute;300/hour")
 async def admin_me(request: Request, current_user: dict = Depends(require_admin)):
     level = get_admin_level(current_user)
     response: Dict[str, Any] = {
@@ -3203,7 +3208,7 @@ async def admin_me(request: Request, current_user: dict = Depends(require_admin)
 
 
 @app.post("/admin/register-links")
-@limiter.limit("60/minute;600/hour")
+@limiter.limit("30/minute;300/hour")
 async def admin_create_register_link(
     request: Request,
     payload: Optional[CreateLinkRequest] = None,
@@ -3229,7 +3234,7 @@ async def admin_create_register_link(
 
 
 @app.get("/admin/register-links")
-@limiter.limit("60/minute;600/hour")
+@limiter.limit("30/minute;300/hour")
 async def admin_list_register_links(
     request: Request, current_user: dict = Depends(require_admin)
 ):
@@ -3258,7 +3263,7 @@ async def admin_list_register_links(
 
 
 @app.delete("/admin/register-links/{link_id}")
-@limiter.limit("60/minute;600/hour")
+@limiter.limit("30/minute;300/hour")
 async def admin_delete_register_link(
     request: Request, link_id: str, current_user: dict = Depends(require_admin)
 ):
@@ -3276,7 +3281,7 @@ async def admin_delete_register_link(
 
 
 @app.get("/admin/users")
-@limiter.limit("60/minute;600/hour")
+@limiter.limit("30/minute;300/hour")
 async def admin_list_users(
     request: Request,
     q: str = "",
@@ -3391,7 +3396,7 @@ async def admin_list_users(
 
 
 @app.get("/admin/users/{chat_id}")
-@limiter.limit("100/minute;1000/hour")
+@limiter.limit("30/minute;300/hour")
 async def admin_user_detail(
     request: Request, chat_id: str, current_user: dict = Depends(require_admin0)
 ):
@@ -3435,7 +3440,7 @@ async def admin_user_detail(
 
 
 @app.post("/admin/users/{chat_id}/verify")
-@limiter.limit("60/minute;600/hour")
+@limiter.limit("30/minute;300/hour")
 async def admin_set_verified(
     request: Request,
     chat_id: str,
@@ -3456,7 +3461,7 @@ async def admin_set_verified(
 
 
 @app.post("/admin/users/{chat_id}/admin-level")
-@limiter.limit("30/minute;200/hour")
+@limiter.limit("30/minute;300/hour")
 async def admin_set_level(
     request: Request,
     chat_id: str,
@@ -3478,7 +3483,7 @@ async def admin_set_level(
 
 
 @app.post("/admin/users/{chat_id}/password-link")
-@limiter.limit("30/minute;200/hour")
+@limiter.limit("30/minute;300/hour")
 async def admin_create_password_link(
     request: Request,
     chat_id: str,
@@ -3499,7 +3504,7 @@ async def admin_create_password_link(
 
 
 @app.post("/admin/users/{chat_id}/delete")
-@limiter.limit("10/minute;60/hour")
+@limiter.limit("30/minute;300/hour")
 async def admin_delete_user(
     request: Request,
     chat_id: str,
@@ -3536,7 +3541,7 @@ async def admin_delete_user(
 
 
 @app.put("/admin/registration")
-@limiter.limit("30/minute;200/hour")
+@limiter.limit("30/minute;300/hour")
 async def admin_set_registration(
     request: Request,
     payload: RegistrationStateRequest,
@@ -3560,7 +3565,7 @@ def _build_quota_reset_fields(payload: AdminAIResetQuotaRequest) -> Dict[str, in
 
 
 @app.put("/admin/ai/settings")
-@limiter.limit("30/minute;200/hour")
+@limiter.limit("30/minute;300/hour")
 async def admin_update_ai_settings(
     request: Request,
     payload: AdminAISettingsRequest,
@@ -3587,7 +3592,7 @@ async def admin_update_ai_settings(
 
 
 @app.post("/admin/ai/reset-usage")
-@limiter.limit("20/minute;100/hour")
+@limiter.limit("30/minute;300/hour")
 async def admin_reset_all_ai_usage(
     request: Request,
     payload: AdminAIResetQuotaRequest,
@@ -3604,7 +3609,7 @@ async def admin_reset_all_ai_usage(
 
 
 @app.put("/admin/users/{chat_id}/ai-limits")
-@limiter.limit("30/minute;200/hour")
+@limiter.limit("30/minute;300/hour")
 async def admin_update_user_ai_limits(
     request: Request,
     chat_id: str,
@@ -3644,7 +3649,7 @@ async def admin_update_user_ai_limits(
 
 
 @app.post("/admin/users/{chat_id}/ai-reset")
-@limiter.limit("30/minute;200/hour")
+@limiter.limit("30/minute;300/hour")
 async def admin_reset_user_ai_usage(
     request: Request,
     chat_id: str,
@@ -3674,7 +3679,7 @@ async def admin_reset_user_ai_usage(
 
 
 @app.post("/auth/login", response_model=TokenResponse)
-@limiter.limit("5/minute;20/hour")
+@limiter.limit("5/minute;15/hour;40/day")
 async def login(req: LoginRequest, request: Request):
     ident = str(req.identifier or req.email or "").strip()
     if not ident:
@@ -5898,7 +5903,7 @@ async def _user_can_access_file(user_id: str, file_id: str) -> bool:
 
 
 @app.post("/files/upload")
-@limiter.limit("30/minute;500/hour")
+@limiter.limit("10/minute;60/hour")
 async def upload_file(
     request: Request,
     file: UploadFile = FastAPIFile(...),
@@ -9691,7 +9696,7 @@ async def delete_ai_memory(
 
 
 @app.post("/ai/files/upload")
-@limiter.limit("30/minute;300/hour")
+@limiter.limit("10/minute;60/hour")
 async def upload_ai_file(
     request: Request,
     file: UploadFile = FastAPIFile(...),
@@ -9916,7 +9921,7 @@ class AIStreamRequest(BaseModel):
 
 
 @app.post("/ai/stream")
-@limiter.limit("30/minute;300/hour")
+@limiter.limit("6/minute;60/hour")
 async def stream_ai_message_sse(
     request: Request,
     body: AIStreamRequest,

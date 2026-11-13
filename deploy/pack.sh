@@ -20,6 +20,10 @@ if [ ! -f "${ENV_FILE}" ]; then
   fi
 fi
 
+if ! grep -q '^PRODUCTION=true' "${ENV_FILE}"; then
+  echo "[!] Warning: PRODUCTION=true is not set in deploy/.env. Redis rate limiting and docs lockdown will be OFF."
+fi
+
 if ! command -v zip &> /dev/null; then
   echo "[!] Error: 'zip' utility is not installed. Please install it with: sudo apt-get install zip"
   exit 1
@@ -171,6 +175,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nginx \
     supervisor \
     curl \
+    redis-server \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /etc/nginx/sites-enabled/* /etc/nginx/sites-available/* /var/www/html/*
 

@@ -3765,10 +3765,20 @@ export function ChatRoom({
                                         <TelegramIcon name="heart-outline" size={16} />
                                         <span>واکنش‌ها</span>
                                     </span>
-                                    <span className="popover__seen-emojis">
-                                        {menuReactions.slice(0, 3).map((r, index) => (
-                                            <span key={`${r.emoji}-${index}`}>{r.emoji}</span>
-                                        ))}
+                                    <span className="popover__seen-avatars">
+                                        {Array.from(new Set(menuReactions.flatMap((r) => r.userIds || []))).slice(0, 3).map((userId) => {
+                                            const member = groupMembers[userId];
+                                            return (
+                                                <Avatar
+                                                    key={userId}
+                                                    name={member?.name || userId}
+                                                    src={member?.avatar || ''}
+                                                    size="xxs"
+                                                    userId={userId}
+                                                    isChessChampion={false}
+                                                />
+                                            );
+                                        })}
                                     </span>
                                 </button>
                             )}
