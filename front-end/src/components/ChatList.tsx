@@ -485,12 +485,12 @@ export const ChatList = memo(function ChatList({
         const key = getPinnedKey(currentUser.chatId);
         const stored = safeJsonParse<{ ids: string[] }>(localStorage.getItem(key));
         if (stored?.ids?.length) {
-            setPinnedIds(stored.ids.slice(0, 20));
+            setPinnedIds(stored.ids.slice(0, 5));
         }
 
         apiFetch<{ pinnedChatIds: string[] }>('/profile/me/pins')
             .then((r) => {
-                const ids = (r?.pinnedChatIds || []).slice(0, 20);
+                const ids = (r?.pinnedChatIds || []).slice(0, 5);
                 setPinnedIds(ids);
                 localStorage.setItem(key, JSON.stringify({ ids }));
             })
@@ -596,8 +596,8 @@ export const ChatList = memo(function ChatList({
         const prev = pinnedIdsRef.current;
         const currentlyPinned = prev.includes(chatId);
 
-        if (!currentlyPinned && prev.length >= 20) {
-            alert('حداکثر ۲۰ گفتگو را می‌توانید سنجاق کنید');
+        if (!currentlyPinned && prev.length >= 5) {
+            alert('حداکثر ۵ گفتگو را می‌توانید سنجاق کنید');
             return;
         }
 
@@ -614,14 +614,14 @@ export const ChatList = memo(function ChatList({
                 ? await apiFetch<{ pinnedChatIds: string[] }>(url, { method: 'DELETE' })
                 : await apiFetch<{ pinnedChatIds: string[] }>(url, { method: 'POST' });
 
-            const ids = (r?.pinnedChatIds || []).slice(0, 20);
+            const ids = (r?.pinnedChatIds || []).slice(0, 5);
             setPinnedIds(ids);
             persistPinned(ids);
         } catch (e: any) {
             
             apiFetch<{ pinnedChatIds: string[] }>('/profile/me/pins')
                 .then((r) => {
-                    const ids = (r?.pinnedChatIds || []).slice(0, 20);
+                    const ids = (r?.pinnedChatIds || []).slice(0, 5);
                     setPinnedIds(ids);
                     persistPinned(ids);
                 })
