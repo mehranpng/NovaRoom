@@ -6,8 +6,10 @@ import "./index.css";
 import { App } from "./App";
 import { installScrollbarAutohide } from "./utils/scrollbarAutohide";
 import { initEmojiFont } from "./utils/emojiFont";
+import { initMessageTextSize } from "./utils/messageTextSize";
 
 installScrollbarAutohide();
+initMessageTextSize();
 void initEmojiFont();
 
 if (typeof window !== "undefined") {

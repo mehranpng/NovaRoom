@@ -189,8 +189,7 @@ function getInitialThemeMode(): ThemeMode {
 }
 
 function getInitialTone(): ThemeTone {
-  if (typeof window === 'undefined') return 'neutral';
-  return localStorage.getItem(TONE_STORAGE_KEY) === 'custom' ? 'custom' : 'neutral';
+  return 'neutral';
 }
 
 function getInitialIntensity(): AccentIntensity {
@@ -222,12 +221,12 @@ function getInitialVisualEffects(): boolean {
 }
 
 function getInitialChatWallpaper(): ChatWallpaperPattern {
-  if (typeof window === 'undefined') return 'none';
+  if (typeof window === 'undefined') return 'topography';
   const stored = localStorage.getItem(WALLPAPER_STORAGE_KEY);
   if (stored && WALLPAPER_OPTIONS.some((o) => o.id === stored)) {
     return stored as ChatWallpaperPattern;
   }
-  return 'none';
+  return 'topography';
 }
 
 function getInitialChatWallpaperIntensity(): number {
@@ -336,7 +335,8 @@ export function syncThemeColor(surface?: string) {
 
 export function useDarkMode() {
   const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode);
-  const [themeTone, setThemeTone] = useState<ThemeTone>(getInitialTone);
+  const [themeTone] = useState<ThemeTone>(getInitialTone);
+  const setThemeTone = () => {};
   const [themePalette, setThemePalette] = useState<ThemePalette>(getInitialPalette);
   const [accentIntensity, setAccentIntensity] = useState<AccentIntensity>(getInitialIntensity);
   const [ultraDarkMode, setUltraDarkMode] = useState<boolean>(getInitialUltraDark);
@@ -370,7 +370,7 @@ export function useDarkMode() {
     root.classList.toggle('dark-mode', isDarkMode);
 
     localStorage.setItem(STORAGE_KEY, themeMode);
-    localStorage.setItem(TONE_STORAGE_KEY, themeTone);
+    localStorage.setItem(TONE_STORAGE_KEY, 'neutral');
     localStorage.setItem(PALETTE_STORAGE_KEY, themePalette);
     localStorage.setItem(INTENSITY_STORAGE_KEY, accentIntensity);
     localStorage.setItem(ULTRA_DARK_STORAGE_KEY, ultraDarkMode ? 'true' : 'false');

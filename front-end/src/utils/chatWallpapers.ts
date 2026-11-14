@@ -22,7 +22,7 @@ export const WALLPAPER_STORAGE_KEY = 'chatWallpaperPattern';
 export const WALLPAPER_INTENSITY_STORAGE_KEY = 'chatWallpaperIntensity';
 export const DEFAULT_WALLPAPER_INTENSITY = 50;
 export const WALLPAPER_SCALE_STORAGE_KEY = 'chatWallpaperScale';
-export const DEFAULT_WALLPAPER_SCALE = 100;
+export const DEFAULT_WALLPAPER_SCALE = 60;
 
 export const WALLPAPER_OPTIONS: WallpaperOption[] = [
     { id: 'none', label: 'بدون الگو' },

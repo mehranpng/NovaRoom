@@ -2542,7 +2542,7 @@ export function AIChatRoom({
                     overflow: hidden;
                 }
                 .ai-reasoning-content {
-                    font-size: 13px;
+                    font-size: calc(var(--message-text-size, 16px) - 2px);
                     line-height: 1.7;
                     color: var(--text-secondary);
                     white-space: pre-wrap;

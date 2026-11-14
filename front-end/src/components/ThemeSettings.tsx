@@ -2,9 +2,15 @@ import { Fragment, useEffect, useMemo, useState, useRef } from 'react';
 import { Check, Download, Loader2, Monitor, Moon, Sun, Trash2 } from 'lucide-react';
 import { cx } from '../utils/cx';
 import { useScrollFade } from '../hooks/useScrollFade';
-import { useDarkMode, type AccentIntensity, type ThemeMode, type ThemePalette, type ThemeTone } from '../hooks/useDarkMode';
+import { useDarkMode, type AccentIntensity, type ThemeMode, type ThemePalette } from '../hooks/useDarkMode';
 import { WALLPAPER_OPTIONS, generateWallpaperDataUri, getWallpaperSize, scaleWallpaperOpacity } from '../utils/chatWallpapers';
 import { toPersianDigits } from '../utils/format';
+import {
+    MESSAGE_TEXT_SIZE_MAX,
+    MESSAGE_TEXT_SIZE_MIN,
+    MESSAGE_TEXT_SIZE_VALUES,
+    useMessageTextSize,
+} from '../utils/messageTextSize';
 import {
     isEmojiFontDownloaded,
     isEmojiFontActive,
@@ -26,18 +32,11 @@ const intensityOptions: Array<{ value: AccentIntensity; label: string }> = [
     { value: 'high', label: 'زیاد' },
 ];
 
-const toneOptions: Array<{ value: ThemeTone; label: string; description: string }> = [
-    { value: 'neutral', label: 'خنثی', description: 'فقط رنگ‌های اصلی تغییر می‌کند.' },
-    { value: 'custom', label: 'کلی', description: 'کل ظاهر برنامه با پالت رنگی می‌شود.' },
-];
-
 export function ThemeSettings() {
     const { scrolled, handleScroll } = useScrollFade();
     const {
         themeMode,
         setThemeMode,
-        themeTone,
-        setThemeTone,
         themePalette,
         setThemePalette,
         paletteOptions,
@@ -58,7 +57,8 @@ export function ThemeSettings() {
         setChatWallpaperScale,
     } = useDarkMode();
     const ultraDarkAvailable = isDarkMode;
-    const shouldDisableCustomTone = isDarkMode && ultraDarkMode;
+    const [messageTextSize, setMessageTextSize] = useMessageTextSize();
+    const messageTextSizeProgress = ((messageTextSize - MESSAGE_TEXT_SIZE_MIN) / (MESSAGE_TEXT_SIZE_MAX - MESSAGE_TEXT_SIZE_MIN)) * 100;
 
     const activeAccentColor = paletteOptions[themePalette]?.color || '#3b82f6';
     const previewPatternUri = useMemo(
@@ -149,12 +149,6 @@ export function ThemeSettings() {
         setEmojiDownloaded(false);
         setEmojiActive(false);
     };
-
-    useEffect(() => {
-        if (shouldDisableCustomTone && themeTone === 'custom') {
-            setThemeTone('neutral');
-        }
-    }, [shouldDisableCustomTone, themeTone, setThemeTone]);
 
     return (
         <>
@@ -256,36 +250,6 @@ export function ThemeSettings() {
             </div>
 
             <div className="tg-island-title">رنگ‌بندی و پالت</div>
-            <div className="tg-island">
-                {toneOptions.map((option, idx) => {
-                    const isDisabled = option.value === 'custom' && shouldDisableCustomTone;
-                    return (
-                        <Fragment key={option.value}>
-                            {idx > 0 && <div className="tg-island__divider tg-island__divider--plain" aria-hidden="true" />}
-                            <button
-                                type="button"
-                                className={cx('tg-list-item', isDisabled && 'tg-list-item--disabled')}
-                                onClick={() => {
-                                    if (isDisabled) return;
-                                    setThemeTone(option.value);
-                                }}
-                                disabled={isDisabled}
-                            >
-                                <span className="tg-list-item__copy">
-                                    <span className="tg-list-item__title">{option.label}</span>
-                                    <span className="tg-list-item__subtitle">{option.description}</span>
-                                </span>
-                                {themeTone === option.value && (
-                                    <span className="tg-list-item__end" style={{ color: 'var(--accent-primary)' }}>
-                                        <Check size={18} />
-                                    </span>
-                                )}
-                            </button>
-                        </Fragment>
-                    );
-                })}
-            </div>
-
             <div className="tg-island" style={{ padding: '14px 16px', gap: 10 }}>
                 <p className="profile__field-label" style={{ margin: 0 }}>شدت رنگ ها</p>
                 <input
@@ -345,8 +309,54 @@ export function ThemeSettings() {
                 </div>
             </div>
 
-            <div className="tg-island-title">طرح پس‌زمینه چت</div>
+            <div className="tg-island-title">پس‌زمینه چت و اندازه فونت</div>
             <div className="tg-island" style={{ padding: '14px 16px' }}>
+                <p className="profile__field-label" style={{ marginTop: 0, marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>اندازه متن پیام‌ها</span>
+                    <span style={{ fontFamily: 'Vazir, sans-serif', color: 'var(--accent-primary)', fontWeight: 700 }}>
+                        {toPersianDigits(messageTextSize)}
+                    </span>
+                </p>
+                <input
+                    type="range"
+                    min={MESSAGE_TEXT_SIZE_MIN}
+                    max={MESSAGE_TEXT_SIZE_MAX}
+                    step={1}
+                    className="theme-intensity-slider"
+                    dir="rtl"
+                    value={messageTextSize}
+                    aria-label="اندازه متن پیام‌ها"
+                    onChange={(e) => setMessageTextSize(Number(e.currentTarget.value))}
+                    style={{
+                        width: '100%',
+                        border: 'none',
+                        outline: 'none',
+                        boxShadow: 'none',
+                        background: `linear-gradient(270deg, var(--accent-primary) 0%, var(--accent-primary) ${messageTextSizeProgress}%, var(--border-secondary) ${messageTextSizeProgress}%, var(--border-secondary) 100%)`,
+                    }}
+                />
+                <div className="theme-font-size-steps" role="group" aria-label="انتخاب اندازه متن پیام‌ها" style={{ marginTop: 8, marginBottom: 16 }}>
+                    {MESSAGE_TEXT_SIZE_VALUES.map((sizeOption) => {
+                        const isActive = messageTextSize === sizeOption;
+                        return (
+                            <button
+                                key={sizeOption}
+                                type="button"
+                                className={cx('theme-font-size-step', isActive && 'theme-font-size-step--active')}
+                                aria-pressed={isActive}
+                                onClick={() => {
+                                    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                                        navigator.vibrate(10);
+                                    }
+                                    setMessageTextSize(sizeOption);
+                                }}
+                            >
+                                {toPersianDigits(sizeOption)}
+                            </button>
+                        );
+                    })}
+                </div>
+
                 <p className="profile__field-label" style={{ marginBottom: 10 }}>پیش‌نمایش</p>
 
                     <div style={{
@@ -375,7 +385,7 @@ export function ThemeSettings() {
                             <div className="message-item">
                                 <div className="message-row message-row--mine">
                                     <div className="message-bubble message-bubble--mine msg-shape--single">
-                                        <div className="message-text">بهترین ادمین نواروم کیه به نظرت؟</div>
+                                        <div className="message-text">کی اسم نواروم رو انتخاب کرد؟</div>
                                         <div className="message-footer-row">
                                             <div className="message-meta message-meta--mine" dir="ltr">
                                                 <span className="message-time">۱۲:۳۰</span>
@@ -419,7 +429,7 @@ export function ThemeSettings() {
                         type="range"
                         min={0}
                         max={100}
-                        step={1}
+                        step={5}
                         className="theme-intensity-slider"
                         dir="rtl"
                         value={chatWallpaperIntensity}
