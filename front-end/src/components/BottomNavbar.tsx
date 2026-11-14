@@ -65,16 +65,18 @@ export interface BottomNavbarProps {
     currentUser?: User | null;
     hasUnseenSettings?: boolean;
     deletionScheduledFor?: number | null;
+    compact?: boolean;
+    expandOnMount?: boolean;
 }
 
-export function BottomNavbar({ activeTab, onSelectTab, currentUser, hasUnseenSettings, deletionScheduledFor }: BottomNavbarProps) {
+export function BottomNavbar({ activeTab, onSelectTab, currentUser, hasUnseenSettings, deletionScheduledFor, compact = false, expandOnMount = false }: BottomNavbarProps) {
     const now = useNow(Boolean(deletionScheduledFor));
     const deletionRemaining = deletionScheduledFor ? formatDeletionRemaining(deletionScheduledFor, now) : '';
 
     return (
         <>
             <div className="bottom-navbar-scrim" aria-hidden="true" />
-            <nav className="bottom-navbar" aria-label="ناوبری اصلی">
+            <nav className={cx('bottom-navbar', compact && 'bottom-navbar--compact', expandOnMount && 'bottom-navbar--expand-in')} aria-label="ناوبری اصلی">
                 <button
                     type="button"
                     className={cx('bottom-navbar__tab', activeTab === 'ai' && 'bottom-navbar__tab--active')}

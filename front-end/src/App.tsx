@@ -818,7 +818,9 @@ export function App() {
                         prevChat.lastMessage?.id === chat.lastMessage?.id &&
                         prevChat.lastMessage?.text === chat.lastMessage?.text &&
                         prevChat.lastMessage?.timestamp === chat.lastMessage?.timestamp &&
-                        prevChat.lastMessage?.senderId === chat.lastMessage?.senderId;
+                        prevChat.lastMessage?.senderId === chat.lastMessage?.senderId &&
+                        Boolean(prevChat.lastMessage?.seen) === Boolean(chat.lastMessage?.seen) &&
+                        prevChat.lastMessage?.deliveryStatus === chat.lastMessage?.deliveryStatus;
                     const sameOtherUser =
                         prevChat.otherUser?.chatId === chat.otherUser?.chatId &&
                         prevChat.otherUser?.name === chat.otherUser?.name &&
@@ -1174,6 +1176,8 @@ export function App() {
                     senderId: newMsg.senderId,
                     timestamp: newMsg.timestamp,
                     file: newMsg.file,
+                    seen: Boolean(newMsg.seen),
+                    deliveryStatus: newMsg.deliveryStatus,
                 },
                 unreadCount: (shouldIncrementUnread && !alreadyLast) ? (chat.unreadCount || 0) + 1 : chat.unreadCount,
                 unreadMentionIds: nextMentionIds,
@@ -1286,13 +1290,31 @@ export function App() {
             });
         };
 
+        const remainingMsgs = (messagesRef.current[chatId] || []).filter(m => !idsSet.has(m.id));
+        const fallbackLastMsg = remainingMsgs.length > 0 ? remainingMsgs[remainingMsgs.length - 1] : null;
+
         setChats(prev => prev.map(c => {
             if (c.id !== chatId) return c;
             const nextMentionIds = (c.unreadMentionIds || []).filter(id => !idsSet.has(id));
             const nextReactionIds = (c.unreadReactionIds || []).filter(id => !idsSet.has(id));
+            const lastWasDeleted = Boolean(c.lastMessage?.id && idsSet.has(c.lastMessage.id));
             const nextLastMessage = lastMessage
                 ? { ...lastMessage, timestamp: normalizeTimestamp(lastMessage.timestamp) }
-                : null;
+                : lastMessage === null
+                    ? null
+                    : lastWasDeleted
+                        ? (fallbackLastMsg
+                            ? {
+                                id: fallbackLastMsg.id,
+                                text: fallbackLastMsg.text,
+                                senderId: fallbackLastMsg.senderId,
+                                timestamp: normalizeTimestamp(fallbackLastMsg.timestamp),
+                                file: fallbackLastMsg.file,
+                                seen: Boolean(fallbackLastMsg.seen),
+                                deliveryStatus: fallbackLastMsg.deliveryStatus,
+                            }
+                            : null)
+                        : c.lastMessage;
             return {
                 ...c,
                 lastMessage: nextLastMessage,
@@ -1573,6 +1595,24 @@ export function App() {
             });
             return changed ? { ...prev, [chatId]: next } : prev;
         });
+        setChats(prev => prev.map((c) => {
+            if (c.id !== chatId || !c.lastMessage || c.lastMessage.senderId !== myId || c.lastMessage.seen) return c;
+            if (maxMessageId && c.lastMessage.id && c.lastMessage.id !== maxMessageId) {
+                const list = messagesRef.current[chatId];
+                if (list) {
+                    const maxIdx = list.findIndex(m => m.id === maxMessageId);
+                    const lastIdx = list.findIndex(m => m.id === c.lastMessage?.id);
+                    if (maxIdx >= 0 && lastIdx > maxIdx) return c;
+                }
+            }
+            return {
+                ...c,
+                lastMessage: {
+                    ...c.lastMessage,
+                    seen: true,
+                },
+            };
+        }));
     }, [touchInteractiveUser]);
 
     const handleReactionUpdated = useCallback((chatId: string, messageId: string, reactions: any[], unreadReactionUserIds?: string[]) => {
@@ -2736,20 +2776,35 @@ export function App() {
                 };
                 return nextState;
             });
-            setChats((prev) => prev.map((chat) => (
-                chat.id === targetChatId
-                    ? {
-                        ...chat,
-                        lastMessage: {
-                            id: clientId,
-                            text: text || '',
-                            senderId: currentUser.chatId,
-                            timestamp: now,
-                            file: optimisticFile,
-                        },
-                    }
-                    : chat
-            )));
+            setChats((prev) => {
+                const nextLastMessage = {
+                    id: clientId,
+                    text: text || '',
+                    senderId: currentUser.chatId,
+                    timestamp: now,
+                    file: optimisticFile,
+                    seen: false,
+                    deliveryStatus: 'sending' as const,
+                };
+                if (prev.some((chat) => chat.id === targetChatId)) {
+                    return prev.map((chat) => (
+                        chat.id === targetChatId
+                            ? { ...chat, lastMessage: nextLastMessage }
+                            : chat
+                    ));
+                }
+                const contact = pendingUser || activeContact;
+                if (!contact) return prev;
+                const newChat: Chat = {
+                    id: targetChatId,
+                    participantIds: [currentUser.chatId, contact.chatId].filter(Boolean),
+                    chatType: 'direct',
+                    otherUser: contact,
+                    lastMessage: nextLastMessage,
+                    unreadCount: 0,
+                };
+                return [newChat, ...prev];
+            });
             if (attachment) setUploadProgress(clientId, { phase: initialUploadPhase, progress: 0 });
             return optimisticFile?.localUrl;
         };
@@ -3431,6 +3486,8 @@ export function App() {
     }, [aiResponding, aiRespondingChatId, navigate]);
 
     const handleSelectNavTab = useCallback((tab: 'ai' | 'chess' | 'chats' | 'settings' | 'profile') => {
+        wasCompactOnNavRef.current = chatListCompactNavRef.current;
+        setChatListCompactNav(false);
         if (tab === 'ai') {
             handleOpenAIChat();
         } else if (tab === 'chess') {
@@ -3757,6 +3814,28 @@ export function App() {
 
     const activeContact = useMemo(() => getActiveContact(), [getActiveContact]);
 
+    const [chatListCompactNav, setChatListCompactNav] = useState(false);
+    const chatListCompactNavRef = useRef(false);
+    chatListCompactNavRef.current = chatListCompactNav;
+    const wasCompactOnNavRef = useRef(false);
+
+    useEffect(() => {
+        if (view === 'chatList' && !showAIChat) {
+            setChatListCompactNav(false);
+        }
+        wasCompactOnNavRef.current = false;
+    }, [view, showAIChat]);
+
+    const sendingChatIds = useMemo(() => {
+        const map: Record<string, boolean> = {};
+        for (const [cid, list] of Object.entries(messages)) {
+            if (list?.some((m) => m.deliveryStatus === 'sending')) {
+                map[cid] = true;
+            }
+        }
+        return map;
+    }, [messages]);
+
     useEffect(() => {
         if (!isAuthenticated) return;
         apiFetch('/auth/login-events').then((r: any) => {
@@ -3860,6 +3939,9 @@ export function App() {
                             onReconnectNow={reconnectNow}
                             onDragHoverChat={handleDragHoverChat}
                             loading={isInitialChatsLoad}
+                            sendingChatIds={sendingChatIds}
+                            scrollHidden={chatListCompactNav}
+                            onScrollHideChange={setChatListCompactNav}
                         />
                         <BottomNavbar
                             activeTab={activeNavTab}
@@ -3867,6 +3949,7 @@ export function App() {
                             currentUser={currentUser}
                             hasUnseenSettings={unseenLoginCount > 0}
                             deletionScheduledFor={currentUser?.deletionScheduledFor ?? null}
+                            compact={chatListCompactNav}
                         />
                     </div>
                 )}
@@ -3965,6 +4048,7 @@ export function App() {
                                         currentUser={currentUser}
                                         hasUnseenSettings={unseenLoginCount > 0}
                                         deletionScheduledFor={currentUser?.deletionScheduledFor ?? null}
+                                        expandOnMount={wasCompactOnNavRef.current}
                                     />
                                 )}
                             </>
@@ -3995,6 +4079,7 @@ export function App() {
                                         currentUser={currentUser}
                                         hasUnseenSettings={unseenLoginCount > 0}
                                         deletionScheduledFor={currentUser?.deletionScheduledFor ?? null}
+                                        expandOnMount={wasCompactOnNavRef.current}
                                     />
                                 )}
                             </>
@@ -4020,6 +4105,7 @@ export function App() {
                                         currentUser={currentUser}
                                         hasUnseenSettings={unseenLoginCount > 0}
                                         deletionScheduledFor={currentUser?.deletionScheduledFor ?? null}
+                                        expandOnMount={wasCompactOnNavRef.current}
                                     />
                                 )}
                             </>

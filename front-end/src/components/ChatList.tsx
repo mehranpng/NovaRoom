@@ -31,6 +31,9 @@ interface ChatListProps {
     onReconnectNow: () => void;
     onDragHoverChat?: (chatId: string) => void;
     loading?: boolean;
+    sendingChatIds?: Record<string, boolean>;
+    scrollHidden?: boolean;
+    onScrollHideChange?: (hidden: boolean) => void;
 }
 
 type IconProps = {
@@ -43,10 +46,49 @@ type IconProps = {
 function FilledMegaphoneIcon({ size = 14, className, style, title }: IconProps) {
     return (
         <span className={className} style={{ display: 'inline-flex', ...style }} title={title}>
-            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path d="M3 10.5c0-.83.67-1.5 1.5-1.5H7l7.8-4.68A1 1 0 0 1 16.3 5v14a1 1 0 0 1-1.5.86L7 15H4.5A1.5 1.5 0 0 1 3 13.5v-3Z" fill="currentColor" />
-                <path d="M9 15.5 10.8 20a1 1 0 0 1-1.86.74L7.1 16" fill="currentColor" opacity=".9" />
-                <path d="M18.8 8.2a1 1 0 0 1 1.4 0 5 5 0 0 1 0 7.07 1 1 0 1 1-1.4-1.42 3 3 0 0 0 0-4.23 1 1 0 0 1 0-1.42Z" fill="currentColor" />
+            <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
+                <path d="M13.258 22.38c.692 0 1.039 0 1.307.125.283.132.511.36.643.643.126.268.125.615.125 1.307v1.486a2.667 2.667 0 0 1-5.333 0v-1.486c0-.692 0-1.039.125-1.307.132-.283.36-.511.643-.643.269-.126.615-.125 1.308-.125zm11.43-18.987a2.67 2.67 0 0 1 2.07 1.011c.575.728.575 2.127.575 4.926v11.887c0 2.799 0 4.198-.575 4.926a2.67 2.67 0 0 1-2.07 1.011c-.927.008-2.032-.852-4.241-2.57l-3.676-2.86c-.35-.271-.525-.408-.708-.521a4 4 0 0 0-1.671-.573c-.215-.024-.437-.023-.88-.023H10a5.334 5.334 0 0 1 0-10.666h3.512c.443 0 .665 0 .88-.024a4 4 0 0 0 1.67-.573c.184-.113.36-.25.709-.522l3.676-2.86c2.209-1.717 3.314-2.577 4.242-2.57" fill="currentColor" />
+            </svg>
+        </span>
+    );
+}
+
+function FilledGroupIcon({ size = 14, className, style, title }: IconProps) {
+    return (
+        <span className={className} style={{ display: 'inline-flex', ...style }} title={title}>
+            <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
+                <path d="M11.333 18c3.651 0 6.012 1.056 7.447 2.082q.023.016.044.033.168.12.32.24l.073.06q.109.09.209.176.064.055.125.11.138.125.258.243c.635.63.858 1.526.858 2.422 0 1.455-1.18 2.634-2.634 2.634H4.634C3.18 26 2 24.82 2 23.366c0-.896.223-1.791.858-2.422C4.052 19.759 6.618 18 11.333 18M22 19.333c4.037 0 6.236 1.462 7.26 2.45.546.525.74 1.282.74 2.04C30 25.025 29.025 26 27.823 26H22.1c.493-.759.78-1.663.78-2.634 0-1.208-.295-2.784-1.511-3.992l-.028-.026q.321-.015.659-.015m0-10.666c2.21 0 4 1.79 4 4s-1.79 4-4 4-4-1.791-4-4 1.79-4 4-4M11.333 6C13.911 6 16 8.09 16 10.667s-2.09 4.666-4.667 4.666-4.666-2.089-4.666-4.666S8.756 6 11.333 6" fill="currentColor" />
+            </svg>
+        </span>
+    );
+}
+
+function ChatListOutgoingStatus({ status }: { status: 'sending' | 'sent' | 'seen' }) {
+    if (status === 'sending') {
+        return (
+            <span className="chat-list__outgoing-status chat-list__outgoing-status--sending" aria-label="در حال ارسال">
+                <svg width="13" height="13" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                    <circle cx="6" cy="6" r="4.75" stroke="currentColor" strokeWidth="1.25" opacity="0.85" />
+                    <line x1="6" y1="6" x2="6" y2="3.3" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" className="message-status-clock-hand" />
+                    <line x1="6" y1="6" x2="8" y2="6" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+                </svg>
+            </span>
+        );
+    }
+    if (status === 'sent') {
+        return (
+            <span className="chat-list__outgoing-status" aria-label="ارسال شده">
+                <svg width="14" height="12" viewBox="0 0 16 12" fill="none" aria-hidden="true">
+                    <path d="M13.6 2.2L6.2 9.6L2.4 5.8" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+            </span>
+        );
+    }
+    return (
+        <span className="chat-list__outgoing-status" aria-label="خوانده شده">
+            <svg width="17" height="12" viewBox="0 0 19 12" fill="none" aria-hidden="true">
+                <path d="M11.8 2.2L4.9 9.4L1.5 6.0" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M17.3 2.2L10.4 9.4L8.2 7.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
         </span>
     );
@@ -358,6 +400,9 @@ export const ChatList = memo(function ChatList({
     onOpenSavedMessages,
     onDragHoverChat,
     loading = false,
+    sendingChatIds,
+    scrollHidden,
+    onScrollHideChange,
 }: ChatListProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchOpen, setSearchOpen] = useState(false);
@@ -392,6 +437,17 @@ export const ChatList = memo(function ChatList({
     const [dragHoverChatId, setDragHoverChatId] = useState<string | null>(null);
 
     const [listScrolled, setListScrolled] = useState(false);
+    const [fabHidden, setFabHidden] = useState(false);
+    const lastScrollTopRef = useRef(0);
+    const fabHiddenRef = useRef(false);
+    const effectiveFabHidden = scrollHidden !== undefined ? scrollHidden : fabHidden;
+
+    useEffect(() => {
+        if (scrollHidden !== undefined) {
+            fabHiddenRef.current = scrollHidden;
+            setFabHidden(scrollHidden);
+        }
+    }, [scrollHidden]);
     const [pinBusy, setPinBusy] = useState<Record<string, boolean>>({});
     const [actionBusy, setActionBusy] = useState<Record<string, boolean>>({});
 
@@ -896,7 +952,28 @@ export const ChatList = memo(function ChatList({
             <div
                 className="chat-list__items"
                 ref={chatItemsRef}
-                onScroll={(event) => setListScrolled(isElementScrolled(event.currentTarget))}
+                onScroll={(event) => {
+                    const el = event.currentTarget;
+                    setListScrolled(isElementScrolled(el));
+                    const st = el.scrollTop;
+                    const delta = st - lastScrollTopRef.current;
+                    let nextHidden = fabHiddenRef.current;
+                    if (st <= 16) {
+                        nextHidden = false;
+                        lastScrollTopRef.current = st;
+                    } else if (delta > 8) {
+                        nextHidden = true;
+                        lastScrollTopRef.current = st;
+                    } else if (delta < -8) {
+                        nextHidden = false;
+                        lastScrollTopRef.current = st;
+                    }
+                    if (nextHidden !== fabHiddenRef.current) {
+                        fabHiddenRef.current = nextHidden;
+                        setFabHidden(nextHidden);
+                        onScrollHideChange?.(nextHidden);
+                    }
+                }}
                 style={{ position: 'relative' }}
                 onDrop={clearDragHoverState}
                 onDragEnd={clearDragHoverState}
@@ -921,6 +998,7 @@ export const ChatList = memo(function ChatList({
 
                         if (isSaved) {
                             const draftText = chat.id === activeChatId ? '' : (chatDrafts[chat.id]?.text || '').replace(/\s+/g, ' ').trim();
+                            const savedUnread = Math.max(0, Number(chat.unreadCount || 0));
                             return (
                                 <button
                                     key={chat.id}
@@ -955,6 +1033,7 @@ export const ChatList = memo(function ChatList({
                                         lastTouchAtRef.current = Date.now();
                                         startLongPress(chat.id, e.currentTarget, 1);
                                     }}
+                                    style={{ touchAction: 'manipulation' }}
                                     onTouchEnd={cancelLongPress}
                                     onTouchMove={cancelLongPress}
                                     onContextMenu={(e) => {
@@ -971,28 +1050,20 @@ export const ChatList = memo(function ChatList({
                                         e.preventDefault();
                                         queueDragHoverOpenChat(chat.id);
                                     }}
-                                    className={cx('chat-list__item', isActive && 'chat-list__item--active', chatActionMenu?.chatId === chat.id && 'chat-list__item--menu-open', dragHoverChatId === chat.id && 'chat-list__item--drag-hover')}
+                                    className={cx('chat-list__item', isActive && 'chat-list__item--active', pinned && 'chat-list__item--pinned', chatActionMenu?.chatId === chat.id && 'chat-list__item--menu-open', dragHoverChatId === chat.id && 'chat-list__item--drag-hover')}
                                 >
                                     <Avatar name="" size="md-lg" savedMessages={true} />
                                     <div className="chat-list__item-content">
                                         <div className="chat-list__item-row">
-                                            <span
-                                                className="chat-list__item-name"
-                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                                            >
-                                                پیام‌های ذخیره شده
+                                            <span className="chat-list__item-name-group">
+                                                <span className="chat-list__item-name">پیام‌های ذخیره شده</span>
                                                 {pinned ? (
-                                                    <span role="img" aria-label="سنجاق شده" style={{ display: 'inline-flex' }}>
-                                                        <TelegramIcon
-                                                            name="pin-filled"
-                                                            size={14}
-                                                            className="chat-list__pin-icon"
-                                                            style={{ opacity: 0.95 }}
-                                                        />
+                                                    <span className="chat-list__pin-badge" role="img" aria-label="سنجاق شده">
+                                                        <TelegramIcon name="pin-filled" size={14} className="chat-list__pin-icon" />
                                                     </span>
                                                 ) : null}
                                             </span>
-                                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                                            <div className="chat-list__item-meta">
                                                 {chat.lastMessage && (
                                                     <span className="chat-list__item-time">
                                                         {toPersianDigits(formatTime(chat.lastMessage.timestamp))}
@@ -1011,8 +1082,10 @@ export const ChatList = memo(function ChatList({
                                                     getLastMessagePreview(chat.lastMessage, 'پیام‌های ذخیره شده شما')
                                                 )}
                                             </p>
-                                            {chat.unreadCount > 0 && (
-                                                <span className="chat-list__unread-badge">{toPersianDigits(chat.unreadCount)}</span>
+                                            {savedUnread > 0 && (
+                                                <div className="chat-list__badges">
+                                                    <span className="chat-list__unread-badge">{toPersianDigits(savedUnread)}</span>
+                                                </div>
                                             )}
                                         </div>
                                     </div>
@@ -1067,7 +1140,7 @@ export const ChatList = memo(function ChatList({
                                     lastTouchAtRef.current = Date.now();
                                     startLongPress(chat.id, e.currentTarget, menuItemCount);
                                 }}
-                                touch-action="manipulation"
+                                style={{ touchAction: 'manipulation' }}
                                 onTouchEnd={cancelLongPress}
                                 onTouchMove={cancelLongPress}
                                 onContextMenu={(e) => {
@@ -1103,37 +1176,40 @@ export const ChatList = memo(function ChatList({
 
                                 <div className="chat-list__item-content">
                                     <div className="chat-list__item-row">
-                                        <span
-                                            className="chat-list__item-name"
-                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                                        >
+                                        <span className="chat-list__item-name-group">
                                             {group ? (
                                                 chat.id === 'official-channel'
-                                                    ? <FilledMegaphoneIcon size={14} title="کانال رسمی" style={{ opacity: 0.95 }} />
-                                                    : <TelegramIcon name="group-filled" size={14} style={{ opacity: 0.9 }} />
+                                                    ? <FilledMegaphoneIcon size={15} title="کانال رسمی" className="chat-list__type-icon" />
+                                                    : <FilledGroupIcon size={15} title="گروه" className="chat-list__type-icon" />
                                             ) : null}
-                                            {contact.name}
+                                            <span className="chat-list__item-name">{contact.name}</span>
                                             {contact.verified ? <VerifiedBadge size={14} /> : null}
                                             {pinned ? (
-                                                <span role="img" aria-label="سنجاق شده" style={{ display: 'inline-flex' }}>
-                                                    <TelegramIcon
-                                                        name="pin-filled"
-                                                        size={14}
-                                                        className="chat-list__pin-icon"
-                                                        style={{ opacity: 0.95 }}
-                                                    />
+                                                <span className="chat-list__pin-badge" role="img" aria-label="سنجاق شده">
+                                                    <TelegramIcon name="pin-filled" size={14} className="chat-list__pin-icon" />
                                                 </span>
                                             ) : null}
                                             {notifyMode === 'muted' ? (
                                                 <BellOff size={14} className="chat-list__mute-icon" aria-label="بی‌صدا" />
                                             ) : notifyMode === 'mentions' ? (
-                                                <span role="img" aria-label="فقط منشن و پاسخ" style={{ display: 'inline-flex' }}>
+                                                <span role="img" aria-label="فقط منشن و پاسخ" className="chat-list__mute-icon-wrap">
                                                     <TelegramIcon name="mention" size={14} className="chat-list__mute-icon" />
                                                 </span>
                                             ) : null}
                                         </span>
 
-                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                                        <div className="chat-list__item-meta">
+                                            {chat.lastMessage && (isMine || sendingChatIds?.[chat.id]) && !draftText && (
+                                                <ChatListOutgoingStatus
+                                                    status={
+                                                        sendingChatIds?.[chat.id] || chat.lastMessage.deliveryStatus === 'sending'
+                                                            ? 'sending'
+                                                            : chat.lastMessage.seen
+                                                                ? 'seen'
+                                                                : 'sent'
+                                                    }
+                                                />
+                                            )}
                                             {chat.lastMessage && (
                                                 <span className="chat-list__item-time">
                                                     {toPersianDigits(formatTime(chat.lastMessage.timestamp))}
@@ -1142,28 +1218,28 @@ export const ChatList = memo(function ChatList({
                                         </div>
                                     </div>
 
-                                <div className="chat-list__item-preview">
-                                    <p className="chat-list__item-text">
-                                        {draftText ? (
-                                            <>
-                                                <span className="chat-list__item-draft-prefix">پیش‌نویس: </span>
-                                                <span className="chat-list__item-draft-text">{draftText}</span>
-                                            </>
-                                        ) : (
-                                            <>
-                                                {group && groupStats ? (
-                                                    <span style={{ direction: 'rtl', display: 'inline-flex', alignItems: 'center', gap: 4, marginInlineEnd: 6 }}>
-                                                        <span style={{ color: 'var(--accent-soft-text)' }}>{toPersianDigits(groupStats.onlineMembers)} آنلاین</span>
-                                                        <span style={{ color: 'var(--text-muted)' }}>•</span>
-                                                        <span style={{ color: 'var(--text-secondary)' }}>{toPersianDigits(groupStats.totalMembers)} عضو</span>
-                                                        <span style={{ color: 'var(--text-muted)' }}>|</span>
-                                                    </span>
-                                                ) : null}
-                                                {isMine && <span className="chat-list__item-text-prefix">شما: </span>}
-                                                {getLastMessagePreview(chat.lastMessage, 'هنوز پیامی ارسال نشده')}
-                                            </>
-                                        )}
-                                    </p>
+                                    <div className="chat-list__item-preview">
+                                        <p className="chat-list__item-text">
+                                            {draftText ? (
+                                                <>
+                                                    <span className="chat-list__item-draft-prefix">پیش‌نویس: </span>
+                                                    <span className="chat-list__item-draft-text">{draftText}</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    {group && groupStats ? (
+                                                        <span className="chat-list__group-stats">
+                                                            <span className="chat-list__group-online">{toPersianDigits(groupStats.onlineMembers)} آنلاین</span>
+                                                            <span className="chat-list__group-sep">•</span>
+                                                            <span className="chat-list__group-total">{toPersianDigits(groupStats.totalMembers)} عضو</span>
+                                                            <span className="chat-list__group-sep">|</span>
+                                                        </span>
+                                                    ) : null}
+                                                    {isMine && <span className="chat-list__item-text-prefix">شما: </span>}
+                                                    {getLastMessagePreview(chat.lastMessage, 'هنوز پیامی ارسال نشده')}
+                                                </>
+                                            )}
+                                        </p>
                                         {(unreadReactionCount > 0 || unreadMentionCount > 0 || unreadCount > 0) && (
                                             <div className="chat-list__badges">
                                                 {unreadReactionCount > 0 && (
@@ -1192,7 +1268,7 @@ export const ChatList = memo(function ChatList({
 
             <button
                 type="button"
-                className={cx('chat-list__fab', showInstallBanner && 'chat-list__fab--above-banner')}
+                className={cx('chat-list__fab', showInstallBanner && 'chat-list__fab--above-banner', effectiveFabHidden && 'chat-list__fab--hidden')}
                 onClick={onNewChatClick}
                 aria-label="گفتگوی جدید"
             >

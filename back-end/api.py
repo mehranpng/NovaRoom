@@ -4995,6 +4995,23 @@ async def get_chat_list(
             return_exceptions=True,
         )
 
+    last_msg_oids = []
+    for chat in chats:
+        lm = chat.get("lastMessage")
+        if isinstance(lm, dict) and lm.get("id"):
+            lm_id_str = str(lm.get("id"))
+            if ObjectId.is_valid(lm_id_str):
+                last_msg_oids.append(ObjectId(lm_id_str))
+
+    last_msg_seen_by_map: Dict[str, List[str]] = {}
+    if last_msg_oids:
+        lm_docs = await cl_messages.find(
+            {"_id": {"$in": last_msg_oids}},
+            {"seenBy": 1},
+        ).to_list(len(last_msg_oids))
+        for doc in lm_docs:
+            last_msg_seen_by_map[str(doc["_id"])] = list(doc.get("seenBy", []) or [])
+
     for chat in chats:
         is_group = chat.get("chatType") == "group"
         other_id = next(
@@ -5013,12 +5030,25 @@ async def get_chat_list(
         last_msg = chat.get("lastMessage")
         if isinstance(last_msg, dict) and last_msg.get("timestamp") is not None:
             chat_scope = f"chat:{chat.get('_id', '')}"
+            lm_id = str(last_msg.get("id") or "")
+            lm_seen_by = last_msg_seen_by_map.get(lm_id, [])
+            lm_sender = last_msg.get("senderId")
+            chat_participants = chat.get("participants", []) or []
+            if lm_sender == my_id:
+                other_participants = [p for p in chat_participants if p != lm_sender]
+                lm_seen = bool(
+                    other_participants
+                    and any(p in lm_seen_by for p in other_participants)
+                )
+            else:
+                lm_seen = my_id in lm_seen_by
             last_msg = {
                 **last_msg,
                 "text": decrypt_with_fallback(
                     last_msg.get("text", ""), session_token, chat_scope
                 ),
                 "timestamp": dt_to_epoch_ms(last_msg.get("timestamp")),
+                "seen": lm_seen,
             }
 
         pinned_msg = chat.get("pinnedMessage")
@@ -7830,14 +7860,17 @@ async def build_last_message(chat_id: str, session_token: str = "") -> Optional[
         return None
 
     doc = m[0]
+    seen_by = doc.get("seenBy", []) or []
+    sender_id = doc.get("senderId")
     return {
         "id": str(doc["_id"]),
         "text": decrypt_with_fallback(
             doc.get("text", ""), session_token, f"chat:{chat_id}"
         ),
-        "senderId": doc.get("senderId"),
+        "senderId": sender_id,
         "timestamp": doc.get("timestamp"),
         "file": doc.get("file"),
+        "seen": any(p != sender_id for p in seen_by),
     }
 
 

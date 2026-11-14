@@ -132,6 +132,8 @@ export interface ChatLastMessage {
     
     timestamp: number;
     file?: FileMetadata;
+    seen?: boolean;
+    deliveryStatus?: 'sending' | 'sent';
 }
 
 export type PendingForwardDraft = {
