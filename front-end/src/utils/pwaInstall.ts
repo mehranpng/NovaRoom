@@ -1,11 +1,5 @@
 import { useSyncExternalStore } from 'react';
 
-interface BeforeInstallPromptEvent extends Event {
-    readonly platforms: string[];
-    readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
-    prompt(): Promise<void>;
-}
-
 const DISMISS_COOKIE_NAME = 'nr_pwa_banner_dismissed';
 const COOKIE_MAX_AGE_SEC = 60 * 60 * 24 * 365;
 
@@ -49,15 +43,12 @@ export const isIosDevice = (): boolean => {
 export type PwaState = {
     isMobileWeb: boolean;
     bannerDismissed: boolean;
-    canPromptNatively: boolean;
     guideOpen: boolean;
 };
 
-let deferredPrompt: BeforeInstallPromptEvent | null = null;
 let state: PwaState = {
     isMobileWeb: checkIsMobileDevice() && !checkIsStandalone(),
     bannerDismissed: getCookie(DISMISS_COOKIE_NAME) === '1',
-    canPromptNatively: false,
     guideOpen: false,
 };
 
@@ -73,20 +64,20 @@ const recomputeState = (patch?: Partial<PwaState>) => {
         ...state,
         ...patch,
         isMobileWeb: nextMobileWeb,
-        canPromptNatively: Boolean(deferredPrompt),
     };
     emit();
 };
 
 if (typeof window !== 'undefined') {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => void 0);
+    }
+
     window.addEventListener('beforeinstallprompt', (event) => {
         event.preventDefault();
-        deferredPrompt = event as BeforeInstallPromptEvent;
-        recomputeState();
     });
 
     window.addEventListener('appinstalled', () => {
-        deferredPrompt = null;
         recomputeState({ guideOpen: false });
     });
 
@@ -115,20 +106,6 @@ export function closePwaGuide(): void {
     recomputeState({ guideOpen: false });
 }
 
-export async function triggerPwaInstall(): Promise<void> {
-    if (deferredPrompt) {
-        const promptEvent = deferredPrompt;
-        try {
-            await promptEvent.prompt();
-            const choice = await promptEvent.userChoice;
-            if (choice.outcome === 'accepted') {
-                deferredPrompt = null;
-            }
-        } catch {
-            void 0;
-        }
-        recomputeState();
-        return;
-    }
+export function triggerPwaInstall(): void {
     recomputeState({ guideOpen: true });
 }

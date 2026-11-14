@@ -43,6 +43,7 @@ import {
     loadNotificationPrefs,
     playNotificationSound,
     registerServiceWorker,
+    requestPermissionAndSubscribe,
     unsubscribePush,
 } from './utils/pushNotifications';
 import './App.css';
@@ -375,11 +376,48 @@ export function App() {
 
     useEffect(() => {
         if (!isAuthenticated || !authToken) return;
-        void registerServiceWorker();
-        void loadNotificationPrefs();
-        if (getPermission() === 'granted') {
-            void ensurePushSubscription();
-        }
+        let cancelled = false;
+        let cleanupGestureListeners = () => {};
+
+        const attachGestureFallback = () => {
+            const onFirstInteraction = () => {
+                cleanupGestureListeners();
+                if (cancelled || getPermission() !== 'default') return;
+                void requestPermissionAndSubscribe();
+            };
+            window.addEventListener('pointerdown', onFirstInteraction, { capture: true, once: true });
+            window.addEventListener('keydown', onFirstInteraction, { capture: true, once: true });
+            cleanupGestureListeners = () => {
+                window.removeEventListener('pointerdown', onFirstInteraction, { capture: true });
+                window.removeEventListener('keydown', onFirstInteraction, { capture: true });
+            };
+        };
+
+        void (async () => {
+            await registerServiceWorker();
+            if (cancelled) return;
+            void loadNotificationPrefs();
+            const perm = getPermission();
+            if (perm === 'granted') {
+                void ensurePushSubscription();
+            } else if (perm === 'default') {
+                try {
+                    const result = await requestPermissionAndSubscribe();
+                    if (!cancelled && result === 'default') {
+                        attachGestureFallback();
+                    }
+                } catch {
+                    if (!cancelled && getPermission() === 'default') {
+                        attachGestureFallback();
+                    }
+                }
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+            cleanupGestureListeners();
+        };
     }, [isAuthenticated, authToken]);
 
     useEffect(() => {

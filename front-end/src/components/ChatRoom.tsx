@@ -3410,7 +3410,7 @@ export function ChatRoom({
                             name={contact.name}
                             size="sm"
                             userId={isGroupChat || isSavedMessages ? undefined : contact.chatId}
-                            isChessChampion={false}
+                            isChessChampion={isGroupChat || isSavedMessages ? false : contact.isChessChampion}
                             online={isGroupChat || isSavedMessages || isContactBlocked ? undefined : Boolean((interactiveOnlineUsers && contact.chatId && interactiveOnlineUsers[contact.chatId]) || contact.online)}
                             savedMessages={isSavedMessages}
                             src={contact.avatar}

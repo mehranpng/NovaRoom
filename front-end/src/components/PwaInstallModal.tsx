@@ -86,7 +86,7 @@ export function PwaInstallModal() {
                                     <div className="pwa-guide__step">
                                         <span className="pwa-guide__step-number">۲</span>
                                         <span className="pwa-guide__step-text">
-                                            گزینه <b>Install app</b> یا <b>Add to Home screen</b> را انتخاب کنید.
+                                            گزینه <b>Install app</b> یا <b>Add to Home screen</b> و سپس <b>Install</b> را انتخاب کنید.
                                         </span>
                                         <span className="pwa-guide__step-icon" aria-hidden="true">
                                             <Download size={17} />

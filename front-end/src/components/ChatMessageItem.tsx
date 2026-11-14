@@ -891,7 +891,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                     animate={avatarFadesOnDelete ? { opacity: 0, y: -22 } : { opacity: 1, y: 0 }}
                                     transition={{ duration: 0.22, ease: 'easeOut', layout: { duration: 0.22, ease: 'easeOut' } }}
                                 >
-                                    <Avatar name={senderName} size="sm" src={senderAvatar} userId={message.senderId} isChessChampion={false} />
+                                    <Avatar name={senderName} size="sm" src={senderAvatar} userId={message.senderId} />
                                 </motion.div>
                             )}
                     </div>
