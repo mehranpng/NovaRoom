@@ -1,4 +1,4 @@
-import { Bell, ChevronLeft, HardDrive, Laptop, LayoutDashboard, Link2, Palette, Shield, ShieldCheck } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Devices } from './Devices';
 import { ThemeSettings } from './ThemeSettings';
@@ -8,6 +8,7 @@ import { PrivacySettings } from './PrivacySettings';
 import { NotificationSettings } from './NotificationSettings';
 import { AdminPanel } from './admin/AdminPanel';
 import { AdminLinksPage } from './admin/AdminLinksPage';
+import TelegramIcon, { type TelegramIconName } from './TelegramIcon';
 import { screenVariants } from '../utils/screenMotion';
 import { cx } from '../utils/cx';
 import { useScrollFade } from '../hooks/useScrollFade';
@@ -62,7 +63,7 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
     if (section === 'adminMenu') {
         const isOwner = currentUser?.adminLevel === 'admin0';
         return (
-            <motion.div className="profile" variants={screenVariants} initial="hidden" animate="visible" exit="exit">
+            <motion.div key="adminMenu" className="profile" variants={screenVariants} initial="hidden" animate="visible" exit="exit">
                 <div className={cx('header-fade', 'header-fade--screen', scrolled && 'header-fade--visible')} aria-hidden="true" />
                 <div className="profile__header">
                     <div className="profile__header-side">
@@ -73,29 +74,46 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
                     <h1 className="profile__header-title">داشبورد ادمین</h1>
                 </div>
 
-                <div className="adm-content" onScroll={handleScroll}>
-                    {isOwner && (
+                <div className="profile__content tg-settings-scroll" onScroll={handleScroll}>
+                    <div className="tg-island">
+                        {isOwner && (
+                            <>
+                                <button
+                                    type="button"
+                                    className="tg-list-item"
+                                    onClick={() => onOpenSection('adminPanel')}
+                                >
+                                    <span className="tg-icon-backdrop tg-icon-backdrop--blue" aria-hidden="true">
+                                        <TelegramIcon name="admin-filled" size={20} />
+                                    </span>
+                                    <span className="tg-list-item__copy">
+                                        <span className="tg-list-item__title">پنل ادمین</span>
+                                        <span className="tg-list-item__subtitle">مدیریت سیستم، کاربران و تنظیمات سرور</span>
+                                    </span>
+                                    <span className="tg-list-item__end">
+                                        <ChevronLeft size={18} />
+                                    </span>
+                                </button>
+                                <div className="tg-island__divider" aria-hidden="true" />
+                            </>
+                        )}
                         <button
                             type="button"
-                            className="adm-settings-row adm-tap"
-                            onClick={() => onOpenSection('adminPanel')}
+                            className="tg-list-item"
+                            onClick={() => onOpenSection('adminLinks')}
                         >
-                            <span className="adm-settings-row__label">
-                                <ShieldCheck size={18} /> پنل ادمین
+                            <span className="tg-icon-backdrop tg-icon-backdrop--green" aria-hidden="true">
+                                <TelegramIcon name="link" size={20} />
                             </span>
-                            <ChevronLeft size={18} className="adm-settings-row__chevron" />
+                            <span className="tg-list-item__copy">
+                                <span className="tg-list-item__title">ساخت لینک ثبت‌نام</span>
+                                <span className="tg-list-item__subtitle">ایجاد و مدیریت لینک‌های دعوت کاربران جدید</span>
+                            </span>
+                            <span className="tg-list-item__end">
+                                <ChevronLeft size={18} />
+                            </span>
                         </button>
-                    )}
-                    <button
-                        type="button"
-                        className="adm-settings-row adm-tap"
-                        onClick={() => onOpenSection('adminLinks')}
-                    >
-                        <span className="adm-settings-row__label">
-                            <Link2 size={18} /> ساخت لینک ثبت‌ نام
-                        </span>
-                        <ChevronLeft size={18} className="adm-settings-row__chevron" />
-                    </button>
+                    </div>
                 </div>
             </motion.div>
         );
@@ -103,7 +121,7 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
 
     if (section === 'theme') {
         return (
-            <motion.div className="profile" variants={screenVariants} initial="hidden" animate="visible" exit="exit">
+            <motion.div key="theme" className="profile" variants={screenVariants} initial="hidden" animate="visible" exit="exit">
                 <div className={cx('header-fade', 'header-fade--screen', scrolled && 'header-fade--visible')} aria-hidden="true" />
                 <div className="profile__header">
                     <div className="profile__header-side">
@@ -121,14 +139,62 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
         return <DataStorageSettings onBack={onBackToMenu} />;
     }
 
+    const settingsItems: {
+        section: SettingsSection;
+        title: string;
+        subtitle: string;
+        icon: TelegramIconName;
+        iconBg: 'orange' | 'red' | 'gray' | 'green' | 'blue';
+        dot?: 'danger' | 'accent';
+    }[] = [
+        {
+            section: 'theme',
+            title: 'تم و شخصی‌سازی',
+            subtitle: 'رنگ‌بندی، پس‌زمینه و ظاهر برنامه',
+            icon: 'appearance-filled',
+            iconBg: 'orange',
+        },
+        {
+            section: 'notifications',
+            title: 'اعلان‌ها',
+            subtitle: 'صداها، پیام‌ها و هشدارهای بازی',
+            icon: 'notifications-filled',
+            iconBg: 'red',
+            dot: notificationsBlocked ? 'danger' : undefined,
+        },
+        {
+            section: 'privacy',
+            title: 'حریم خصوصی و امنیت',
+            subtitle: 'تغییر رمز عبور و مدیریت حساب',
+            icon: 'lock-filled',
+            iconBg: 'gray',
+            dot: currentUser?.deletionScheduledFor ? 'danger' : undefined,
+        },
+        {
+            section: 'dataStorage',
+            title: 'داده‌ها و ذخیره‌سازی',
+            subtitle: 'مدیریت حافظه پنهان و فایل‌ها',
+            icon: 'piechart-filled',
+            iconBg: 'green',
+        },
+        {
+            section: 'devices',
+            title: 'دستگاه‌ها',
+            subtitle: 'نشست‌های فعال و گزارش ورود',
+            icon: 'devices-filled',
+            iconBg: 'blue',
+            dot: hasUnseenLoginLogs ? 'accent' : undefined,
+        },
+    ];
+
     return (
-        <motion.div className="profile" variants={screenVariants} initial="hidden" animate="visible" exit="exit">
+        <motion.div key="menu" className="profile" variants={screenVariants} initial="hidden" animate="visible" exit="exit">
             <div className={cx('header-fade', 'header-fade--screen', scrolled && 'header-fade--visible')} aria-hidden="true" />
             <div className="profile__header">
                 <h1 className="profile__header-title">تنظیمات</h1>
             </div>
 
-            <div className="profile__content" onScroll={handleScroll} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: 12, paddingInline: 14, paddingTop: 68, flex: '0 0 auto' }}>
+            <div className="profile__content tg-settings-scroll" onScroll={handleScroll}>
                 {pwa.isMobileWeb && (
                     <button
                         type="button"
@@ -145,79 +211,55 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
                 )}
 
                 {currentUser?.adminLevel && (
-                    <button
-                        type="button"
-                        className="adm-settings-row adm-settings-row--spaced adm-tap"
-                        onClick={() => onOpenSection('adminMenu')}
-                    >
-                        <span className="adm-settings-row__label">
-                            <LayoutDashboard size={18} /> داشبورد ادمین
-                        </span>
-                        <ChevronLeft size={18} className="adm-settings-row__chevron" />
-                    </button>
+                    <div className="tg-island">
+                        <button
+                            type="button"
+                            className="tg-list-item"
+                            onClick={() => onOpenSection('adminMenu')}
+                        >
+                            <span className="tg-icon-backdrop tg-icon-backdrop--purple" aria-hidden="true">
+                                <TelegramIcon name="settings-filled" size={20} />
+                            </span>
+                            <span className="tg-list-item__copy">
+                                <span className="tg-list-item__title">داشبورد ادمین</span>
+                                <span className="tg-list-item__subtitle">مدیریت کاربران و لینک‌های ثبت‌نام</span>
+                            </span>
+                            <span className="tg-list-item__end">
+                                <ChevronLeft size={18} />
+                            </span>
+                        </button>
+                    </div>
                 )}
-                <button
-                    type="button"
-                    className="popover__item"
-                    onClick={() => onOpenSection('theme')}
-                    style={{ border: '1px solid var(--glass-border)', background: 'var(--glass-surface-soft)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', boxShadow: 'var(--shadow-xs), var(--glass-specular)', borderRadius: 9999, height: 60, justifyContent: 'space-between', direction: 'rtl', padding: '6px 22px', position: 'relative' }}
-                >
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textAlign: 'right' }}>
-                        <Palette size={18} /> تم و شخصی سازی
-                    </span>
-                    <ChevronLeft size={18} style={{ marginInlineStart: 8 }} />
-                </button>
 
-                <button
-                    type="button"
-                    className="popover__item"
-                    onClick={() => onOpenSection('notifications')}
-                    style={{ border: '1px solid var(--glass-border)', background: 'var(--glass-surface-soft)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', boxShadow: 'var(--shadow-xs), var(--glass-specular)', borderRadius: 9999, height: 60, justifyContent: 'space-between', direction: 'rtl', padding: '6px 22px', position: 'relative' }}
-                >
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textAlign: 'right' }}>
-                        <Bell size={18} /> اعلان‌ها
-                    </span>
-                    {notificationsBlocked && <span className="adm-dot-danger" aria-hidden="true" />}
-                    <ChevronLeft size={18} style={{ marginInlineStart: 8 }} />
-                </button>
-
-                <button
-                    type="button"
-                    className="popover__item"
-                    onClick={() => onOpenSection('privacy')}
-                    style={{ border: '1px solid var(--glass-border)', background: 'var(--glass-surface-soft)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', boxShadow: 'var(--shadow-xs), var(--glass-specular)', borderRadius: 9999, height: 60, justifyContent: 'space-between', direction: 'rtl', padding: '6px 22px', position: 'relative' }}
-                >
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textAlign: 'right' }}>
-                        <Shield size={18} /> حریم خصوصی و امنیت
-                    </span>
-                    {currentUser?.deletionScheduledFor && <span className="adm-dot-danger" aria-hidden="true" />}
-                    <ChevronLeft size={18} style={{ marginInlineStart: 8 }} />
-                </button>
-
-                <button
-                    type="button"
-                    className="popover__item"
-                    onClick={() => onOpenSection('dataStorage')}
-                    style={{ border: '1px solid var(--glass-border)', background: 'var(--glass-surface-soft)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', boxShadow: 'var(--shadow-xs), var(--glass-specular)', borderRadius: 9999, height: 60, justifyContent: 'space-between', direction: 'rtl', padding: '6px 22px' }}
-                >
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textAlign: 'right' }}>
-                        <HardDrive size={18} />داده‌ها و ذخیره‌ سازی
-                    </span>
-                    <ChevronLeft size={18} style={{ marginInlineStart: 8 }} />
-                </button>
-                <button
-                    type="button"
-                    className="popover__item"
-                    onClick={() => onOpenSection('devices')}
-                    style={{ border: '1px solid var(--glass-border)', background: 'var(--glass-surface-soft)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', boxShadow: 'var(--shadow-xs), var(--glass-specular)', borderRadius: 9999, height: 60, justifyContent: 'space-between', direction: 'rtl', padding: '6px 22px', position: 'relative' }}
-                >
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textAlign: 'right' }}>
-                        <Laptop size={18} /> دستگاه‌ها
-                    </span>
-                    {hasUnseenLoginLogs && <span style={{ position: 'absolute', top: 12, left: 12, width: 8, height: 8, borderRadius: 99, background: 'var(--accent-primary)' }} />}
-                    <ChevronLeft size={18} style={{ marginInlineStart: 8 }} />
-                </button>
-
+                <div className="tg-island">
+                    {settingsItems.map((item, idx) => (
+                        <div key={item.section}>
+                            {idx > 0 && <div className="tg-island__divider" aria-hidden="true" />}
+                            <button
+                                type="button"
+                                className="tg-list-item"
+                                onClick={() => onOpenSection(item.section)}
+                            >
+                                <span className={cx('tg-icon-backdrop', `tg-icon-backdrop--${item.iconBg}`)} aria-hidden="true">
+                                    <TelegramIcon name={item.icon} size={20} />
+                                </span>
+                                <span className="tg-list-item__copy">
+                                    <span className="tg-list-item__title">{item.title}</span>
+                                    <span className="tg-list-item__subtitle">{item.subtitle}</span>
+                                </span>
+                                <span className="tg-list-item__end">
+                                    {item.dot && (
+                                        <span
+                                            className={cx('tg-list-item__dot', item.dot === 'danger' && 'tg-list-item__dot--danger')}
+                                            aria-hidden="true"
+                                        />
+                                    )}
+                                    <ChevronLeft size={18} />
+                                </span>
+                            </button>
+                        </div>
+                    ))}
+                </div>
             </div>
         </motion.div>
     );

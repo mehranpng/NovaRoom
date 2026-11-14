@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, Check, ChevronDown, ChevronLeft, KeyRound, Shield, Trash2 } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, ChevronLeft, KeyRound, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import TelegramIcon from './TelegramIcon';
 import { screenVariants } from '../utils/screenMotion';
 import { cx } from '../utils/cx';
 import { useScrollFade } from '../hooks/useScrollFade';
@@ -127,7 +128,7 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
             if (
                 target?.closest('.adm-privacy-popover') ||
                 target?.closest('.adm-privacy-row__head') ||
-                target?.closest('.adm-settings-row')
+                target?.closest('.tg-list-item')
             ) {
                 return;
             }
@@ -136,7 +137,7 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
         };
         const handleClickCapture = (event: MouseEvent) => {
             const target = event.target as Element | null;
-            if (!target?.closest('.adm-settings-row')) return;
+            if (!target?.closest('.tg-list-item')) return;
             event.preventDefault();
             event.stopPropagation();
             setExpandedField(null);
@@ -495,41 +496,55 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
                     )}
                 </div>
             ) : (
-                <div className="adm-content" onScroll={handleScroll}>
-                    <section className="adm-card">
-                        <div className="adm-card__title">
-                            <Shield size={18} />
-                            حریم خصوصی
-                        </div>
+                <div className="profile__content tg-settings-scroll" onScroll={handleScroll}>
+                    <div className="tg-island-title">امنیت</div>
+                    <div className="tg-island">
+                        <button
+                            type="button"
+                            className="tg-list-item"
+                            onClick={() => setView('password')}
+                        >
+                            <span className="tg-icon-backdrop tg-icon-backdrop--green" aria-hidden="true">
+                                <TelegramIcon name="2fa-filled" size={20} />
+                            </span>
+                            <span className="tg-list-item__copy">
+                                <span className="tg-list-item__title">تغییر رمز عبور</span>
+                                <span className="tg-list-item__subtitle">به‌روزرسانی رمز عبور و کلید رمزنگاری</span>
+                            </span>
+                            <span className="tg-list-item__end">
+                                <ChevronLeft size={18} />
+                            </span>
+                        </button>
+
+                        <div className="tg-island__divider" aria-hidden="true" />
+
+                        <button
+                            type="button"
+                            className="tg-list-item tg-list-item--destructive"
+                            onClick={() => setView('deleteAccount')}
+                        >
+                            <span className="tg-icon-backdrop tg-icon-backdrop--red" aria-hidden="true">
+                                <TelegramIcon name="delete" size={20} />
+                            </span>
+                            <span className="tg-list-item__copy">
+                                <span className="tg-list-item__title">حذف حساب</span>
+                                <span className="tg-list-item__subtitle">حذف دائمی حساب کاربری و اطلاعات</span>
+                            </span>
+                            <span className="tg-list-item__end">
+                                {scheduledFor && <span className="tg-list-item__dot tg-list-item__dot--danger" aria-hidden="true" />}
+                                <ChevronLeft size={18} />
+                            </span>
+                        </button>
+                    </div>
+
+                    <div className="tg-island-title">حریم خصوصی</div>
+                    <div className="tg-island" style={{ padding: '6px 10px' }}>
                         <div className="adm-privacy-list">
                             {renderPrivacyRow('lastSeenVisibility', 'آخرین بازدید')}
                             {renderPrivacyRow('avatarVisibility', 'عکس پروفایل')}
                             {renderPrivacyRow('bioVisibility', 'بیوگرافی')}
                         </div>
-                    </section>
-
-                    <button
-                        type="button"
-                        className={cx('adm-settings-row', 'adm-settings-row--top-gap', !expandedField && 'adm-tap')}
-                        onClick={() => setView('password')}
-                    >
-                        <span className="adm-settings-row__label">
-                            <KeyRound size={18} /> تغییر رمز عبور
-                        </span>
-                        <ChevronLeft size={18} className="adm-settings-row__chevron" />
-                    </button>
-
-                    <button
-                        type="button"
-                        className={cx('adm-settings-row', 'adm-settings-row--danger', !expandedField && 'adm-tap')}
-                        onClick={() => setView('deleteAccount')}
-                    >
-                        <span className="adm-settings-row__label">
-                            <Trash2 size={18} /> حذف حساب
-                        </span>
-                        {scheduledFor && <span className="adm-dot-danger" aria-hidden="true" />}
-                        <ChevronLeft size={18} className="adm-settings-row__chevron" />
-                    </button>
+                    </div>
                 </div>
             )}
             {renderPrivacyPopover()}

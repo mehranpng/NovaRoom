@@ -1,6 +1,7 @@
-import { useEffect, useState, type CSSProperties } from 'react';
-import { Bell, BellOff, BellRing, ChevronLeft } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { BellOff, ChevronLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
+import TelegramIcon from './TelegramIcon';
 import { screenVariants } from '../utils/screenMotion';
 import { cx } from '../utils/cx';
 import { useScrollFade } from '../hooks/useScrollFade';
@@ -17,33 +18,7 @@ interface Props {
     onBack: () => void;
 }
 
-const panelStyle: CSSProperties = {
-    border: '1px solid var(--glass-border)',
-    borderRadius: 20,
-    overflow: 'hidden',
-    background: 'var(--glass-surface-soft)',
-    backdropFilter: 'var(--glass-blur)',
-    WebkitBackdropFilter: 'var(--glass-blur)',
-    boxShadow: 'var(--shadow-xs), var(--glass-specular)',
-};
-
-const statusCardStyle: CSSProperties = {
-    ...panelStyle,
-    borderRadius: 9999,
-};
-
-const rowStyle: CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    direction: 'rtl',
-    padding: '12px 14px',
-    borderTop: '1px solid var(--glass-border)',
-};
-
 function Switch({ enabled, onToggle, disabled }: { enabled: boolean; onToggle: () => void; disabled?: boolean }) {
-    const isDarkMode = typeof document !== 'undefined' && document.documentElement.classList.contains('dark-mode');
     return (
         <button
             type="button"
@@ -51,32 +26,9 @@ function Switch({ enabled, onToggle, disabled }: { enabled: boolean; onToggle: (
             disabled={disabled}
             aria-pressed={enabled}
             aria-label="toggle"
-            style={{
-                width: 48,
-                height: 28,
-                borderRadius: 999,
-                border: isDarkMode
-                    ? (enabled ? '1px solid color-mix(in srgb, var(--accent-primary) 70%, var(--border-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 35%, var(--border-primary))')
-                    : (enabled ? '1px solid color-mix(in srgb, var(--text-primary) 28%, var(--accent-primary))' : '1px solid color-mix(in srgb, var(--text-primary) 24%, var(--border-primary))'),
-                background: enabled ? 'var(--accent-primary)' : (isDarkMode ? 'var(--bg-tertiary)' : 'color-mix(in srgb, var(--text-primary) 24%, var(--bg-primary))'),
-                position: 'relative',
-                transition: 'all .2s ease',
-                flexShrink: 0,
-                cursor: disabled ? 'default' : 'pointer',
-            }}
+            className={cx('tg-switch', enabled && 'tg-switch--on')}
         >
-            <span
-                style={{
-                    position: 'absolute',
-                    top: 2,
-                    right: enabled ? 2 : 22,
-                    width: 22,
-                    height: 22,
-                    borderRadius: '50%',
-                    background: isDarkMode ? '#fff' : (enabled ? '#fff' : '#d3d3d3'),
-                    transition: 'all .2s ease',
-                }}
-            />
+            <span className="tg-switch__thumb" />
         </button>
     );
 }
@@ -86,7 +38,6 @@ export function NotificationSettings({ onBack }: Props) {
     const prefs = useNotificationPrefs();
     const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(getPermission());
     const support = getPushSupport();
-    const statusCardPill = support !== 'needs-install' && (permission === 'granted' || support === 'unsupported');
 
     useEffect(() => {
         const refresh = () => setPermission(getPermission());
@@ -170,60 +121,76 @@ export function NotificationSettings({ onBack }: Props) {
     const renderStatus = () => {
         if (support === 'needs-install') {
             return (
-                <div style={{ padding: '20px 32px', direction: 'rtl' }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>
-                        برای دریافت اعلان، برنامه را به صفحه اصلی اضافه کنید
-                    </div>
-                    <div style={{ fontSize: 13, lineHeight: 1.9, color: 'var(--text-secondary)' }}>
-                        در Safari روی دکمه اشتراک‌گذاری بزنید و «Add to Home Screen» را انتخاب کنید، سپس برنامه را از صفحه اصلی باز کنید.
+                <div className="tg-row" style={{ alignItems: 'flex-start' }}>
+                    <span className="tg-icon-backdrop tg-icon-backdrop--orange" aria-hidden="true">
+                        <TelegramIcon name="notifications-filled" size={20} />
+                    </span>
+                    <div className="tg-list-item__copy">
+                        <span className="tg-list-item__title">نصب برای دریافت اعلان</span>
+                        <span className="tg-list-item__subtitle" style={{ lineHeight: 1.75 }}>
+                            در Safari روی دکمه اشتراک‌گذاری بزنید و «Add to Home Screen» را انتخاب کنید، سپس برنامه را از صفحه اصلی باز کنید.
+                        </span>
                     </div>
                 </div>
             );
         }
         if (support === 'unsupported') {
             return (
-                <div style={{ padding: '20px 32px', direction: 'rtl', fontSize: 14 }}>
-                    مرورگر شما از اعلان‌ها پشتیبانی نمی‌کند.
+                <div className="tg-row">
+                    <span className="tg-icon-backdrop tg-icon-backdrop--gray" aria-hidden="true">
+                        <BellOff size={18} />
+                    </span>
+                    <div className="tg-list-item__copy">
+                        <span className="tg-list-item__title">پشتیبانی نمی‌شود</span>
+                        <span className="tg-list-item__subtitle">مرورگر شما از اعلان‌ها پشتیبانی نمی‌کند.</span>
+                    </div>
                 </div>
             );
         }
         if (permission === 'denied') {
             return (
-                <div style={{ padding: '20px 32px', direction: 'rtl' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 14, marginBottom: 6 }}>
-                        <BellOff size={18} color="#e11919" aria-hidden="true" />
-                        دسترسی اعلان مسدود است
-                    </div>
-                    <div style={{ fontSize: 13, lineHeight: 1.9, color: 'var(--text-secondary)' }}>
-                        شما دسترسی اعلان را برای این سایت مسدود کرده‌اید. برای فعال‌سازی، روی آیکون قفل کنار آدرس سایت بزنید، بخش Notifications را روی Allow بگذارید و صفحه را دوباره بارگذاری کنید.
+                <div className="tg-row" style={{ alignItems: 'flex-start' }}>
+                    <span className="tg-icon-backdrop tg-icon-backdrop--red" aria-hidden="true">
+                        <BellOff size={18} />
+                    </span>
+                    <div className="tg-list-item__copy">
+                        <span className="tg-list-item__title">دسترسی اعلان مسدود است</span>
+                        <span className="tg-list-item__subtitle" style={{ lineHeight: 1.75 }}>
+                            شما دسترسی اعلان را برای این سایت مسدود کرده‌اید. برای فعال‌سازی، روی آیکون قفل کنار آدرس سایت بزنید، بخش Notifications را روی Allow بگذارید و صفحه را دوباره بارگذاری کنید.
+                        </span>
                     </div>
                 </div>
             );
         }
         if (permission === 'default') {
             return (
-                <div style={{ padding: '20px 32px', direction: 'rtl' }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>
-                        دسترسی اعلان داده نشده است
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '8px 12px', direction: 'rtl' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                        <span className="tg-icon-backdrop tg-icon-backdrop--orange" aria-hidden="true">
+                            <TelegramIcon name="notifications-filled" size={20} />
+                        </span>
+                        <div className="tg-list-item__copy">
+                            <span className="tg-list-item__title">دسترسی اعلان داده نشده است</span>
+                            <span className="tg-list-item__subtitle" style={{ lineHeight: 1.7 }}>
+                                برای دریافت اعلان پیام‌های جدید، اجازه دسترسی بدهید.
+                            </span>
+                        </div>
                     </div>
-                    <div style={{ fontSize: 13, lineHeight: 1.9, color: 'var(--text-secondary)', marginBottom: 12 }}>
-                        برای دریافت اعلان پیام‌های جدید، اجازه دسترسی بدهید.
-                    </div>
-                    <button
-                        type="button"
-                        className="notif-settings__action"
-                        onClick={requestAccess}
-                        style={{ border: '1px solid var(--glass-border)', background: 'var(--accent-primary)', color: '#fff', borderRadius: 9999, padding: '9px 18px', fontWeight: 700, fontSize: 13, fontFamily: 'inherit' }}
-                    >
+                    <button type="button" className="tg-action-btn" onClick={requestAccess} style={{ alignSelf: 'flex-start', marginInlineStart: 48 }}>
                         اجازه دسترسی
                     </button>
                 </div>
             );
         }
         return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 32px', direction: 'rtl', fontSize: 13, fontWeight: 600 }}>
-                <BellRing size={16} color="var(--accent-primary)" aria-hidden="true" />
-                اعلان‌ها روی این دستگاه فعال هستند
+            <div className="tg-row">
+                <span className="tg-icon-backdrop tg-icon-backdrop--green" aria-hidden="true">
+                    <TelegramIcon name="notifications-filled" size={20} />
+                </span>
+                <div className="tg-list-item__copy">
+                    <span className="tg-list-item__title">اعلان‌ها فعال هستند</span>
+                    <span className="tg-list-item__subtitle">اعلان‌ها روی این دستگاه با موفقیت فعال شده است</span>
+                </div>
             </div>
         );
     };
@@ -240,56 +207,68 @@ export function NotificationSettings({ onBack }: Props) {
                 <h1 className="profile__header-title">اعلان‌ها</h1>
             </div>
 
-            <div className="profile__content" onScroll={handleScroll} style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingInline: 14, paddingTop: 68, flex: '0 0 auto' }}>
-                <div style={statusCardPill ? statusCardStyle : panelStyle}>{renderStatus()}</div>
+            <div className="profile__content tg-settings-scroll" onScroll={handleScroll}>
+                <div className="tg-island">{renderStatus()}</div>
 
-                <div style={panelStyle}>
-                    <div style={{ ...rowStyle, borderTop: 'none' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <span style={{ fontSize: 14, fontWeight: 600 }}>اعلان پیام‌ها</span>
-                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>دریافت اعلان پیام‌های جدید در گفتگوها</span>
+                <div className="tg-island-title">تنظیمات اعلان</div>
+                <div className="tg-island">
+                    <div className="tg-row">
+                        <div className="tg-list-item__copy">
+                            <span className="tg-list-item__title">اعلان پیام‌ها</span>
+                            <span className="tg-list-item__subtitle">دریافت اعلان پیام‌های جدید در گفتگوها</span>
                         </div>
                         <Switch enabled={prefs.enabled} onToggle={() => void toggleEnabled()} />
                     </div>
 
-                    <div style={rowStyle}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <span style={{ fontSize: 14, fontWeight: 600 }}>اعلان شطرنج</span>
-                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>دریافت اعلان شروع بازی و هشدار تایمر شطرنج</span>
+                    <div className="tg-island__divider tg-island__divider--plain" aria-hidden="true" />
+
+                    <div className="tg-row">
+                        <div className="tg-list-item__copy">
+                            <span className="tg-list-item__title">اعلان شطرنج</span>
+                            <span className="tg-list-item__subtitle">دریافت اعلان شروع بازی و هشدار تایمر شطرنج</span>
                         </div>
                         <Switch enabled={prefs.chess} onToggle={() => void toggleChess()} />
                     </div>
                 </div>
 
-                <div style={panelStyle}>
-                    <div style={{ ...rowStyle, borderTop: 'none', opacity: anyEnabled ? 1 : 0.5 }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <span style={{ fontSize: 14, fontWeight: 600 }}>صدای اعلان</span>
-                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>پخش صدا داخل برنامه هنگام دریافت اعلان (جدا از صدای دستگاه)</span>
+                <div className="tg-island-title">صدا و هوشمندی</div>
+                <div className="tg-island">
+                    <div className={cx('tg-row', !anyEnabled && 'tg-row--disabled')}>
+                        <div className="tg-list-item__copy">
+                            <span className="tg-list-item__title">صدای اعلان</span>
+                            <span className="tg-list-item__subtitle">پخش صدا داخل برنامه هنگام دریافت اعلان (جدا از صدای دستگاه)</span>
                         </div>
                         <Switch enabled={prefs.sound} onToggle={() => void toggleSound()} disabled={!anyEnabled} />
                     </div>
 
-                    <div style={{ ...rowStyle, opacity: prefs.enabled ? 1 : 0.5 }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <span style={{ fontSize: 14, fontWeight: 600 }}>اعلان هوشمند</span>
-                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>کاهش صدای اعلان در پیام‌های پشت‌سرهم از یک گفتگو</span>
+                    <div className="tg-island__divider tg-island__divider--plain" aria-hidden="true" />
+
+                    <div className={cx('tg-row', !prefs.enabled && 'tg-row--disabled')}>
+                        <div className="tg-list-item__copy">
+                            <span className="tg-list-item__title">اعلان هوشمند</span>
+                            <span className="tg-list-item__subtitle">کاهش صدای اعلان در پیام‌های پشت‌سرهم از یک گفتگو</span>
                         </div>
                         <Switch enabled={prefs.smart} onToggle={() => void toggleSmart()} disabled={!prefs.enabled} />
                     </div>
                 </div>
 
                 {permission === 'granted' && (
-                    <button
-                        type="button"
-                        className="notif-settings__test"
-                        onClick={() => void testNotification()}
-                        disabled={!anyEnabled}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', height: 52, borderRadius: 9999, border: '1px solid var(--glass-border)', background: 'var(--glass-surface-soft)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', boxShadow: 'var(--shadow-xs), var(--glass-specular)', color: 'var(--text-primary)', fontWeight: 600, fontSize: 14, fontFamily: 'inherit', cursor: anyEnabled ? 'pointer' : 'default', opacity: anyEnabled ? 1 : 0.5, transition: 'background .15s ease, transform .08s ease' }}
-                    >
-                        <Bell size={16} />
-                        آزمایش اعلان
-                    </button>
+                    <div className="tg-island">
+                        <button
+                            type="button"
+                            className={cx('tg-list-item', !anyEnabled && 'tg-list-item--disabled')}
+                            onClick={() => void testNotification()}
+                            disabled={!anyEnabled}
+                        >
+                            <span className="tg-icon-backdrop tg-icon-backdrop--blue" aria-hidden="true">
+                                <TelegramIcon name="notifications-filled" size={20} />
+                            </span>
+                            <span className="tg-list-item__copy">
+                                <span className="tg-list-item__title">آزمایش اعلان</span>
+                                <span className="tg-list-item__subtitle">ارسال یک اعلان آزمایشی به دستگاه</span>
+                            </span>
+                        </button>
+                    </div>
                 )}
             </div>
         </motion.div>

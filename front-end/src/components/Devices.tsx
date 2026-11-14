@@ -1,4 +1,6 @@
-import { ChevronLeft, Laptop, ShieldOff, FileText } from 'lucide-react';
+import { ChevronLeft, FileText } from 'lucide-react';
+import TelegramIcon from './TelegramIcon';
+import { getSessionDeviceMeta } from '../utils/sessionDevice';
 import { screenVariants } from '../utils/screenMotion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '../config/api';
@@ -154,7 +156,7 @@ export function Devices({ onBack, onOpenLogs, hasUnseenLoginLogs }: DevicesProps
                 </div>
             </div>
 
-            <div className="profile__content" onScroll={handleScroll} style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingInline: 14, paddingTop: 68 }}>
+            <div className="profile__content tg-settings-scroll" onScroll={handleScroll}>
                 {loading ? (
                     <div style={{ textAlign: 'center', direction: 'rtl', opacity: 0.8, fontSize: 13, padding: '14px 0' }}>
                         در حال بارگیری نشست‌ها...
@@ -165,72 +167,95 @@ export function Devices({ onBack, onOpenLogs, hasUnseenLoginLogs }: DevicesProps
                     </div>
                 ) : (
                     <>
-                        {currentSession && (
-                            <div
-                                key={currentSession.session.tokenHash}
-                                className="profile__chat-id-card profile__chat-id-card--flat"
-                                style={{
-                                    border: '1px solid color-mix(in srgb, var(--accent-primary) 24%, var(--border-primary))',
-                                    background: 'color-mix(in srgb, var(--accent-primary) 6%, var(--bg-secondary))',
-                                }}
-                            >
-                                <div className="profile__chat-id-row" style={{ alignItems: 'center', justifyContent: 'space-between', direction: 'rtl', textAlign: 'right', minHeight: 62 }}>
-                                    <div style={{ display: 'grid', gap: 3 }}>
-                                        <p className="profile__chat-id-value" style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'Vazir, sans-serif' }}>
-                                            <Laptop size={16} /> {currentSession.deviceName}
-                                            <span style={{ fontSize: 12, opacity: 0.85, fontFamily: 'Vazir, sans-serif' }}>(دستگاه فعلی)</span>
-                                        </p>
-                                        <p className="profile__field-label">آی‌پی: {currentSession.ip}</p>
-                                        <p className="profile__field-label">آخرین استفاده: {currentSession.lastUsed}</p>
-                                        <p className="profile__field-label">ایجاد نشست: {currentSession.created}</p>
+                        {currentSession && (() => {
+                            const meta = getSessionDeviceMeta(currentSession.deviceName);
+                            return (
+                                <>
+                                    <div className="tg-island-title">این دستگاه</div>
+                                    <div className="tg-island">
+                                        <div className="tg-row" style={{ alignItems: 'flex-start', paddingBlock: 10 }}>
+                                            <span className={cx('tg-icon-backdrop', `tg-icon-backdrop--${meta.color}`)} style={{ marginTop: 2 }} aria-hidden="true">
+                                                <TelegramIcon name={meta.icon} size={20} />
+                                            </span>
+                                            <div className="tg-list-item__copy">
+                                                <span className="tg-list-item__title">{currentSession.deviceName}</span>
+                                                <span className="tg-list-item__subtitle" style={{ color: 'var(--text-primary)', opacity: 0.85 }}>
+                                                    دستگاه فعلی • آی‌پی: {currentSession.ip}
+                                                </span>
+                                                <span className="tg-list-item__subtitle">
+                                                    آخرین استفاده: {currentSession.lastUsed}
+                                                </span>
+                                                <span className="tg-list-item__subtitle">
+                                                    ایجاد نشست: {currentSession.created}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {hasOtherSessions && (
+                                            <>
+                                                <div className="tg-island__divider" aria-hidden="true" />
+                                                <button
+                                                    type="button"
+                                                    className="tg-list-item tg-list-item--destructive"
+                                                    disabled={bulkBusy}
+                                                    onClick={() => setConfirmAction({ kind: 'others' })}
+                                                >
+                                                    <span className="tg-icon-backdrop tg-icon-backdrop--red" aria-hidden="true">
+                                                        <TelegramIcon name="stop" size={20} />
+                                                    </span>
+                                                    <span className="tg-list-item__copy">
+                                                        <span className="tg-list-item__title">قطع دسترسی دیگر دستگاه‌ها</span>
+                                                        <span className="tg-list-item__subtitle">خروج از همه نشست‌ها به جز این دستگاه</span>
+                                                    </span>
+                                                </button>
+                                            </>
+                                        )}
                                     </div>
-                                </div>
-                            </div>
-                        )}
+                                </>
+                            );
+                        })()}
 
                         {hasOtherSessions && (
-                            <button
-                                className="profile__save-btn"
-                                style={{
-                                    width: '100%',
-                                    justifyContent: 'center',
-                                    minHeight: 48,
-                                    marginTop: 2,
-                                    marginBottom: 4,
-                                    background: 'color-mix(in srgb, #dc2626 82%, var(--bg-tertiary))',
-                                }}
-                                disabled={bulkBusy}
-                                onClick={() => setConfirmAction({ kind: 'others' })}
-                            >
-                                <ShieldOff size={15} /> قطع دسترسی دیگر دستگاه ها
-                            </button>
-                        )}
-
-                        {otherSessions.map(({ session, deviceName, ip, lastUsed, created }) => (
-                            <div
-                                key={session.tokenHash}
-                                className="profile__chat-id-card profile__chat-id-card--flat"
-                            >
-                                <div className="profile__chat-id-row" style={{ alignItems: 'center', justifyContent: 'space-between', direction: 'rtl', textAlign: 'right', minHeight: 62 }}>
-                                    <div style={{ display: 'grid', gap: 3 }}>
-                                        <p className="profile__chat-id-value" style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'Vazir, sans-serif' }}>
-                                            <Laptop size={16} /> {deviceName}
-                                        </p>
-                                        <p className="profile__field-label">آی‌پی: {ip}</p>
-                                        <p className="profile__field-label">آخرین استفاده: {lastUsed}</p>
-                                        <p className="profile__field-label">ایجاد نشست: {created}</p>
-                                    </div>
-                                    <button
-                                        className="profile__avatar-btn profile__avatar-btn--danger"
-                                        style={{ marginRight: 'auto', alignSelf: 'center' }}
-                                        disabled={busyHash === session.tokenHash || bulkBusy}
-                                        onClick={() => setConfirmAction({ kind: 'one', session })}
-                                    >
-                                        <ShieldOff size={14} /> قطع دسترسی
-                                    </button>
+                            <>
+                                <div className="tg-island-title">نشست‌های فعال دیگر</div>
+                                <div className="tg-island">
+                                    {otherSessions.map(({ session, deviceName, ip, lastUsed, created }, idx) => {
+                                        const meta = getSessionDeviceMeta(deviceName);
+                                        return (
+                                            <div key={session.tokenHash}>
+                                                {idx > 0 && <div className="tg-island__divider" aria-hidden="true" />}
+                                                <div className="tg-row" style={{ alignItems: 'flex-start', paddingBlock: 10 }}>
+                                                    <span className={cx('tg-icon-backdrop', `tg-icon-backdrop--${meta.color}`)} style={{ marginTop: 2 }} aria-hidden="true">
+                                                        <TelegramIcon name={meta.icon} size={20} />
+                                                    </span>
+                                                    <div className="tg-list-item__copy">
+                                                        <span className="tg-list-item__title">{deviceName}</span>
+                                                        <span className="tg-list-item__subtitle" style={{ color: 'var(--text-primary)', opacity: 0.85 }}>
+                                                            آی‌پی: {ip}
+                                                        </span>
+                                                        <span className="tg-list-item__subtitle">
+                                                            آخرین استفاده: {lastUsed}
+                                                        </span>
+                                                        <span className="tg-list-item__subtitle">
+                                                            ایجاد نشست: {created}
+                                                        </span>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        className="tg-action-btn tg-action-btn--danger"
+                                                        style={{ alignSelf: 'center', flexShrink: 0 }}
+                                                        disabled={busyHash === session.tokenHash || bulkBusy}
+                                                        onClick={() => setConfirmAction({ kind: 'one', session })}
+                                                    >
+                                                        قطع دسترسی
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
-                            </div>
-                        ))}
+                            </>
+                        )}
                     </>
                 )}
             </div>

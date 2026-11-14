@@ -1867,6 +1867,317 @@ body,
     font-weight: 700;
 }
 
+.tg-settings-scroll {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 68px 14px 104px;
+    max-width: 540px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+.tg-island {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px;
+    border-radius: 24px;
+    background: var(--glass-surface-soft);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+    direction: rtl;
+}
+
+.tg-list-item {
+    position: relative;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 56px;
+    padding: 11px 14px;
+    border: none;
+    border-radius: 16px;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: inherit;
+    text-align: right;
+    cursor: pointer;
+    transition: background-color 150ms ease, transform 120ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .tg-list-item:hover {
+        background: var(--hover-bg);
+    }
+}
+
+.tg-list-item:active {
+    background: var(--hover-bg);
+    transform: scale(0.985);
+}
+
+.tg-icon-backdrop {
+    position: relative;
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    color: #ffffff;
+    background-color: var(--tg-icon-bg, #2196f3);
+}
+
+.tg-icon-backdrop--blue {
+    --tg-icon-bg: #2196f3;
+}
+
+.tg-icon-backdrop--gray {
+    --tg-icon-bg: #78909c;
+}
+
+.tg-icon-backdrop--green {
+    --tg-icon-bg: #4caf50;
+}
+
+.tg-icon-backdrop--orange {
+    --tg-icon-bg: #fb8c00;
+}
+
+.tg-icon-backdrop--pink {
+    --tg-icon-bg: #e91e63;
+}
+
+.tg-icon-backdrop--purple {
+    --tg-icon-bg: #7e57c2;
+}
+
+.tg-icon-backdrop--red {
+    --tg-icon-bg: #f44336;
+}
+
+.tg-list-item__copy {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: right;
+}
+
+.tg-list-item__title {
+    font-size: 14.5px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--text-primary);
+}
+
+.tg-list-item__subtitle {
+    font-size: 12.5px;
+    font-weight: 400;
+    line-height: 1.35;
+    color: var(--text-secondary);
+}
+
+.tg-list-item__end {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    color: var(--text-tertiary);
+}
+
+.tg-list-item__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    background: var(--accent-primary);
+}
+
+.tg-list-item__dot--danger {
+    background: #ef4444;
+}
+
+.tg-island-title {
+    padding: 4px 16px 2px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--text-secondary);
+    direction: rtl;
+    text-align: right;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tg-island-desc {
+    padding: 0 16px 4px;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+    direction: rtl;
+    text-align: right;
+}
+
+.tg-island__divider {
+    height: 1px;
+    background: var(--glass-border);
+    margin-inline-start: 58px;
+    margin-inline-end: 12px;
+    opacity: 0.65;
+}
+
+.tg-island__divider--plain {
+    margin-inline: 12px;
+}
+
+.tg-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    min-height: 54px;
+    padding: 11px 14px;
+    border-radius: 16px;
+    direction: rtl;
+    text-align: right;
+}
+
+.tg-row--disabled {
+    opacity: 0.5;
+}
+
+.tg-list-item--disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.tg-list-item--disabled:active {
+    background: transparent;
+    transform: none;
+}
+
+.tg-list-item--destructive .tg-list-item__title,
+.tg-list-item--destructive .tg-list-item__end {
+    color: #ef4444;
+}
+
+.tg-list-item__value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent-primary);
+}
+
+.tg-switch {
+    width: 48px;
+    height: 28px;
+    border-radius: 9999px;
+    border: 1px solid color-mix(in srgb, var(--text-primary) 22%, var(--border-primary));
+    background: color-mix(in srgb, var(--text-primary) 22%, var(--bg-primary));
+    position: relative;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: background-color 180ms ease, border-color 180ms ease, transform 120ms ease;
+}
+
+.dark-mode .tg-switch {
+    border-color: color-mix(in srgb, var(--text-primary) 32%, var(--border-primary));
+    background: var(--bg-tertiary);
+}
+
+.tg-switch--on {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+
+.dark-mode .tg-switch--on {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+
+.tg-switch:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.tg-switch:not(:disabled):active {
+    transform: scale(0.95);
+}
+
+.tg-switch__thumb {
+    position: absolute;
+    top: 2px;
+    right: 22px;
+    width: 22px;
+    height: 22px;
+    border-radius: 9999px;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+    transition: right 180ms ease;
+}
+
+.tg-switch--on .tg-switch__thumb {
+    right: 2px;
+}
+
+.tg-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 9px 18px;
+    border-radius: 9999px;
+    border: none;
+    background: var(--accent-primary);
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background-color 150ms ease, transform 120ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .tg-action-btn:not(:disabled):hover {
+        background: var(--accent-hover);
+    }
+}
+
+.tg-action-btn:not(:disabled):active {
+    background: var(--accent-hover);
+    transform: scale(0.97);
+}
+
+.tg-action-btn--danger {
+    padding: 7px 12px;
+    font-size: 12px;
+    background: color-mix(in srgb, #ef4444 14%, transparent);
+    color: #ef4444;
+    border: 1px solid color-mix(in srgb, #ef4444 30%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .tg-action-btn--danger:not(:disabled):hover {
+        background: color-mix(in srgb, #ef4444 22%, transparent);
+    }
+}
+
+.tg-action-btn--danger:not(:disabled):active {
+    background: color-mix(in srgb, #ef4444 26%, transparent);
+    transform: scale(0.97);
+}
+
+.tg-action-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .bottom-navbar-scrim {
     position: absolute;
     bottom: 0;
