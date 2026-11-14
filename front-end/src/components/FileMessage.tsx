@@ -15,6 +15,7 @@ import { ProgressSpinner } from './ProgressSpinner';
 import { MediaBadge } from './MediaBadge';
 import { AnimatedFileSize } from './AnimatedFileSize';
 import { DownloadIcon, PlayIcon, PauseIcon } from './icons/TelegramIcons';
+import { Lock, LockOpen } from 'lucide-react';
 
 interface FileMessageProps { file: FileMetadata; token: string; chatId: string; uploading?: boolean; uploadId?: string; hideCancel?: boolean; overlayMeta?: React.ReactNode; flushBottom?: boolean; onCancelUpload?: () => void; onMediaLoad?: () => void; onMediaError?: () => void; onImageClick?: (imageUrl: string, file: FileMetadata) => void; onVideoClick?: (videoUrl: string, file: FileMetadata) => void; }
 type DownloadState = 'idle' | 'downloading' | 'decrypting' | 'done' | 'error';
@@ -424,15 +425,15 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
       <ProgressSpinner
         size={size}
         progress={isEncrypting || isTransferParked ? 0.25 : transferProgress}
-        noCross={isUploading ? hideCancel : downloadState !== 'downloading'}
-        ariaLabel={isUploading ? 'لغو آپلود' : downloadState === 'downloading' ? 'لغو دانلود' : 'در حال انتقال'}
+        noCross={isUploading ? hideCancel : (downloadState !== 'downloading' && downloadState !== 'decrypting')}
+        ariaLabel={isUploading ? 'لغو آپلود' : (downloadState === 'downloading' || downloadState === 'decrypting') ? 'لغو دانلود' : 'در حال انتقال'}
         onClick={(e) => {
           e.stopPropagation();
           if (isUploading) {
             if (!hideCancel) onCancelUpload?.();
             return;
           }
-          if (downloadState === 'downloading') cancelDownload();
+          if (downloadState === 'downloading' || downloadState === 'decrypting') cancelDownload();
         }}
       />
     </div>
@@ -489,7 +490,15 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
           </button>
         )}
         {isTransferring ? (
-          <MediaBadge>{isEncrypting ? '...' : `${Math.round(transferProgress * 100)}%`}</MediaBadge>
+          <MediaBadge>
+            {upload?.phase === 'encrypting' ? (
+              <Lock size={12} />
+            ) : downloadState === 'decrypting' ? (
+              <LockOpen size={12} />
+            ) : (
+              `${Math.round(transferProgress * 100)}%`
+            )}
+          </MediaBadge>
         ) : isVideo ? (
           <MediaBadge>{formatDuration(mediaDuration)}</MediaBadge>
         ) : null}

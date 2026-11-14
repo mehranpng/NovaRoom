@@ -147,6 +147,7 @@ export async function downloadEmojiFont(
 ): Promise<ArrayBuffer> {
     const response = await fetch(`${API_BASE_URL}/static/fonts/NotoColorEmoji.ttf`, {
         signal,
+        cache: 'no-store',
     });
     if (!response.ok) {
         throw new Error(`Download failed with status ${response.status}`);

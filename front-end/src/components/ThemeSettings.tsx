@@ -626,7 +626,7 @@ export function ThemeSettings() {
                         <div style={{ display: 'grid', gap: 10, width: '100%' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: 'var(--text-secondary)' }}>
                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                    <Loader2 size={14} className="spin" /> در حال دریافت فونت...
+                                    <Loader2 size={14} className="animate-spin" /> در حال دریافت فونت...
                                 </span>
                                 <span>{Math.round(emojiProgress)}٪ ({emojiLoadedMB} مگابایت)</span>
                             </div>

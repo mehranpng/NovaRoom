@@ -52,7 +52,7 @@ export const ChessChampionDecoration: React.FC<ChessChampionDecorationProps> = R
             <path d="M6 0 L7.3 4.7 L12 6 L7.3 7.3 L6 12 L4.7 7.3 L0 6 L4.7 4.7 Z" fill="#FEF08A" />
           </svg>
         </div>
-        <svg className="chess-champ-svg" viewBox="-12 0 124 68" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <svg className="chess-champ-svg" viewBox="-38 -6 176 74" fill="none" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id={goldGradId} x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#FFFDF5" />
@@ -85,35 +85,35 @@ export const ChessChampionDecoration: React.FC<ChessChampionDecorationProps> = R
             </linearGradient>
 
             <clipPath id={goldClipId}>
-              <path d="M 32 28 C 19 21, 6 14, -6 4 C -2 15, 6 26, 18 33 C 8 30, 0 23, -7 16 C -3 27, 8 36, 22 40 C 14 38, 7 34, 3 28 C 7 38, 17 45, 33 46 Z" />
-              <path d="M 68 28 C 81 21, 94 14, 106 4 C 102 15, 94 26, 82 33 C 92 30, 100 23, 107 16 C 103 27, 92 36, 78 40 C 86 38, 93 34, 97 28 C 93 38, 83 45, 67 46 Z" />
+              <path d="M 32 30 C 10 28, -15 18, -34 -2 C -25 18, -10 32, 10 40 C -5 41, -20 35, -30 24 C -19 40, -1 49, 19 52 C 8 52, -3 48, -10 42 C -1 52, 14 57, 33 56 Z" />
+              <path d="M 68 30 C 90 28, 115 18, 134 -2 C 125 18, 110 32, 90 40 C 105 41, 120 35, 130 24 C 119 40, 101 49, 81 52 C 92 52, 103 48, 110 42 C 101 52, 86 57, 67 56 Z" />
               <path d="M 33 16 L 50 12 L 67 16 L 70 36 C 70 48, 60 56, 50 60 C 40 56, 30 48, 30 36 Z" />
               <path d="M 36 15 L 32 5 L 40 10 L 50 1 L 60 10 L 68 5 L 64 15 Z" />
             </clipPath>
           </defs>
 
-          {/* 1. Stretched Left Heraldic Wing (Extended & sweeping gracefully along circle curve) */}
+          {/* 1. Stretched Left Heraldic Wing (Fuller & larger along ~half the avatar circle) */}
           <path
-            d="M 32 28 C 19 21, 6 14, -6 4 C -2 15, 6 26, 18 33 C 8 30, 0 23, -7 16 C -3 27, 8 36, 22 40 C 14 38, 7 34, 3 28 C 7 38, 17 45, 33 46 Z"
+            d="M 32 30 C 10 28, -15 18, -34 -2 C -25 18, -10 32, 10 40 C -5 41, -20 35, -30 24 C -19 40, -1 49, 19 52 C 8 52, -3 48, -10 42 C -1 52, 14 57, 33 56 Z"
             fill={`url(#${goldGradId})`}
             stroke="#78350F"
             strokeWidth="0.7"
           />
           <path
-            d="M 32 30 C 20 24, 9 17, 1 10 C 6 18, 14 27, 24 33 Z"
+            d="M 32 33 C 12 30, -9 21, -24 6 C -14 21, 1 32, 20 40 Z"
             fill={`url(#${hiGradId})`}
             opacity="0.6"
           />
 
-          {/* 2. Stretched Right Heraldic Wing (Symmetrical mirror, sweeping out to x = 106) */}
+          {/* 2. Stretched Right Heraldic Wing (Symmetrical mirror, sweeping out to x = 134) */}
           <path
-            d="M 68 28 C 81 21, 94 14, 106 4 C 102 15, 94 26, 82 33 C 92 30, 100 23, 107 16 C 103 27, 92 36, 78 40 C 86 38, 93 34, 97 28 C 93 38, 83 45, 67 46 Z"
+            d="M 68 30 C 90 28, 115 18, 134 -2 C 125 18, 110 32, 90 40 C 105 41, 120 35, 130 24 C 119 40, 101 49, 81 52 C 92 52, 103 48, 110 42 C 101 52, 86 57, 67 56 Z"
             fill={`url(#${goldGradId})`}
             stroke="#78350F"
             strokeWidth="0.7"
           />
           <path
-            d="M 68 30 C 80 24, 91 17, 99 10 C 94 18, 86 27, 76 33 Z"
+            d="M 68 33 C 88 30, 109 21, 124 6 C 114 21, 99 32, 80 40 Z"
             fill={`url(#${hiGradId})`}
             opacity="0.6"
           />
@@ -143,8 +143,8 @@ export const ChessChampionDecoration: React.FC<ChessChampionDecorationProps> = R
           />
           <polygon points="50,1 50,14 44,11" fill={`url(#${hiGradId})`} opacity="0.8" />
           <polygon points="50,1 50,14 56,11" fill="#CA8A04" opacity="0.9" />
-          {/* Small Ruby Gem on crown apex */}
-          <circle cx="50" cy="1" r="2.2" fill="#EF4444" stroke="#FFF" strokeWidth="0.6" />
+          {/* Gold Gem on crown apex */}
+          <circle cx="50" cy="1" r="2.2" fill="#FDE047" stroke="#78350F" strokeWidth="0.4" />
           <circle cx="32" cy="5" r="1.6" fill="#FEF08A" stroke="#78350F" strokeWidth="0.4" />
           <circle cx="68" cy="5" r="1.6" fill="#FEF08A" stroke="#78350F" strokeWidth="0.4" />
 
@@ -180,7 +180,7 @@ export const ChessChampionDecoration: React.FC<ChessChampionDecorationProps> = R
           />
 
           {/* 7. Crisp Small Diamond Stars on Wingtips */}
-          <g transform="translate(-4, 8)">
+          <g transform="translate(-32, 2)">
             <g className="chess-champ-star chess-champ-star--left">
               <path
                 d="M 0 -6 L 1.5 -1.8 L 6 0 L 1.5 1.8 L 0 6 L -1.5 1.8 L -6 0 L -1.5 -1.8 Z"
@@ -191,7 +191,7 @@ export const ChessChampionDecoration: React.FC<ChessChampionDecorationProps> = R
               <circle cx="0" cy="0" r="1.2" fill="#FFFFFF" />
             </g>
           </g>
-          <g transform="translate(104, 8)">
+          <g transform="translate(132, 2)">
             <g className="chess-champ-star chess-champ-star--right">
               <path
                 d="M 0 -6 L 1.5 -1.8 L 6 0 L 1.5 1.8 L 0 6 L -1.5 1.8 L -6 0 L -1.5 -1.8 Z"

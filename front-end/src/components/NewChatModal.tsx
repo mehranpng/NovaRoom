@@ -342,6 +342,35 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
                             style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
                         >
                             <div style={{ ...surfaceStyle, padding: 16 }}>
+                                <p className="profile__field-label" style={{ marginBottom: 10 }}>عضویت با لینک</p>
+                                <form onSubmit={handleSearchByLink}>
+                                    <div style={{ position: 'relative' }}>
+                                        <LinkIcon size={16} style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
+                                        <input
+                                            type="text"
+                                            className="profile__field-input"
+                                            style={{ paddingRight: 40, borderRadius: 9999, background: 'var(--bg-primary)' }}
+                                            placeholder="novaroom://group/INVITE_CODE"
+                                            value={inviteInput}
+                                            onChange={(e) => {
+                                                setInviteInput(e.target.value);
+                                                if (joinError) setJoinError('');
+                                            }}
+                                        />
+                                    </div>
+                                    {joinError && <p className="new-chat-screen__error">{joinError}</p>}
+                                    <button
+                                        type="submit"
+                                        className="new-chat-screen__action"
+                                        disabled={searchingInvite || !inviteInput.trim()}
+                                    >
+                                        {searchingInvite ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+                                        {searchingInvite ? 'در حال جستجو...' : 'جستجو'}
+                                    </button>
+                                </form>
+                            </div>
+
+                            <div style={{ ...surfaceStyle, padding: 16 }}>
                                 <p className="profile__field-label" style={{ marginBottom: 10 }}>ساخت گروه</p>
                                 <div style={{ position: 'relative' }}>
                                     <input
@@ -389,35 +418,6 @@ export function NewChatModal({ onClose, onUserSelected, onCreateGroup, onJoinGro
                                         </div>
                                     </div>
                                 )}
-                            </div>
-
-                            <div style={{ ...surfaceStyle, padding: 16 }}>
-                                <p className="profile__field-label" style={{ marginBottom: 10 }}>عضویت با لینک</p>
-                                <form onSubmit={handleSearchByLink}>
-                                    <div style={{ position: 'relative' }}>
-                                        <LinkIcon size={16} style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', pointerEvents: 'none' }} />
-                                        <input
-                                            type="text"
-                                            className="profile__field-input"
-                                            style={{ paddingRight: 40, borderRadius: 9999, background: 'var(--bg-primary)' }}
-                                            placeholder="novaroom://group/INVITE_CODE"
-                                            value={inviteInput}
-                                            onChange={(e) => {
-                                                setInviteInput(e.target.value);
-                                                if (joinError) setJoinError('');
-                                            }}
-                                        />
-                                    </div>
-                                    {joinError && <p className="new-chat-screen__error">{joinError}</p>}
-                                    <button
-                                        type="submit"
-                                        className="new-chat-screen__action"
-                                        disabled={searchingInvite || !inviteInput.trim()}
-                                    >
-                                        {searchingInvite ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-                                        {searchingInvite ? 'در حال جستجو...' : 'جستجو'}
-                                    </button>
-                                </form>
                             </div>
 
                             <div style={{ ...surfaceStyle, padding: 16, marginTop: 18, direction: 'rtl', textAlign: 'right' }}>
