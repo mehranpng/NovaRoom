@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 import TelegramIcon from './TelegramIcon';
@@ -112,7 +112,7 @@ export function LoginLogs({ onBack, events }: { onBack: () => void; events: Logi
             <div className="tg-island-title">گزارش ورودهای اخیر</div>
             <div className="tg-island">
               {formattedEvents.map((item, idx) => (
-                <div key={item.key}>
+                <Fragment key={item.key}>
                   {idx > 0 && <div className="tg-island__divider" aria-hidden="true" />}
                   <div className="tg-row">
                     <span className={cx('tg-icon-backdrop', `tg-icon-backdrop--${item.meta.color}`)} aria-hidden="true">
@@ -124,7 +124,7 @@ export function LoginLogs({ onBack, events }: { onBack: () => void; events: Logi
                     </div>
                     {item.unseen && <span className="tg-list-item__dot" aria-hidden="true" />}
                   </div>
-                </div>
+                </Fragment>
               ))}
             </div>
           </>

@@ -41,9 +41,9 @@ export function GroupJoinSheet({ open, group, joining = false, error = '', onClo
                         aria-modal="true"
                         aria-label="عضویت در گروه"
                         dir="rtl"
-                        initial={{ y: '100%' }}
+                        initial={{ y: '110%' }}
                         animate={{ y: 0 }}
-                        exit={{ y: '100%' }}
+                        exit={{ y: '110%' }}
                         transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
                         onClick={(e) => e.stopPropagation()}
                         drag="y"

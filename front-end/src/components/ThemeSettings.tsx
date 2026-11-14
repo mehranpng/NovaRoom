@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { Fragment, useEffect, useMemo, useState, useRef } from 'react';
 import { Check, Download, Loader2, Monitor, Moon, Sun, Trash2 } from 'lucide-react';
 import { cx } from '../utils/cx';
 import { useScrollFade } from '../hooks/useScrollFade';
@@ -163,7 +163,7 @@ export function ThemeSettings() {
             <div className="tg-island-title">حالت نمایش</div>
             <div className="tg-island">
                 {modeOptions.map(({ value, label, icon: Icon }, idx) => (
-                    <div key={value}>
+                    <Fragment key={value}>
                         {idx > 0 && <div className="tg-island__divider tg-island__divider--plain" aria-hidden="true" />}
                         <button
                             type="button"
@@ -180,7 +180,7 @@ export function ThemeSettings() {
                                 </span>
                             )}
                         </button>
-                    </div>
+                    </Fragment>
                 ))}
             </div>
 
@@ -260,7 +260,7 @@ export function ThemeSettings() {
                 {toneOptions.map((option, idx) => {
                     const isDisabled = option.value === 'custom' && shouldDisableCustomTone;
                     return (
-                        <div key={option.value}>
+                        <Fragment key={option.value}>
                             {idx > 0 && <div className="tg-island__divider tg-island__divider--plain" aria-hidden="true" />}
                             <button
                                 type="button"
@@ -281,7 +281,7 @@ export function ThemeSettings() {
                                     </span>
                                 )}
                             </button>
-                        </div>
+                        </Fragment>
                     );
                 })}
             </div>

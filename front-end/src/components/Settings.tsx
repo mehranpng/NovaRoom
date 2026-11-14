@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Devices } from './Devices';
@@ -233,7 +234,7 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
 
                 <div className="tg-island">
                     {settingsItems.map((item, idx) => (
-                        <div key={item.section}>
+                        <Fragment key={item.section}>
                             {idx > 0 && <div className="tg-island__divider" aria-hidden="true" />}
                             <button
                                 type="button"
@@ -257,7 +258,7 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
                                     <ChevronLeft size={18} />
                                 </span>
                             </button>
-                        </div>
+                        </Fragment>
                     ))}
                 </div>
             </div>

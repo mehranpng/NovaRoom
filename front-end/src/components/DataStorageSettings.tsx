@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import TelegramIcon from './TelegramIcon';
 import { screenVariants } from '../utils/screenMotion';
@@ -144,7 +144,7 @@ export function DataStorageSettings({ onBack }: Props) {
                     { key: 'audio' as const, label: 'آهنگ‌ها', subtitle: 'دریافت خودکار فایل‌های صوتی و موسیقی', enabled: audioAutoDownload },
                     { key: 'file' as const, label: 'فایل‌ها', subtitle: 'دریافت خودکار اسناد و فایل‌ها', enabled: fileAutoDownload },
                 ].map((row, idx) => (
-                    <div key={row.key}>
+                    <Fragment key={row.key}>
                         {idx > 0 && <div className="tg-island__divider tg-island__divider--plain" aria-hidden="true" />}
                         <div className="tg-row">
                             <span className="tg-list-item__copy">
@@ -161,7 +161,7 @@ export function DataStorageSettings({ onBack }: Props) {
                                 <span className="tg-switch__thumb" />
                             </button>
                         </div>
-                    </div>
+                    </Fragment>
                 ))}
             </div>
         </div>

@@ -21,6 +21,7 @@ import {
     setChessLobbySnapshot,
 } from '../../utils/chessCache';
 import { cx } from '../../utils/cx';
+import { useScrollFade } from '../../hooks/useScrollFade';
 import { toPersianDigits } from '../../utils/format';
 import { notify } from '../../utils/notificationBus';
 import { screenVariants } from '../../utils/screenMotion';
@@ -102,6 +103,7 @@ export function resetChessLobbyScroll() {
 }
 
 export function ChessHome({ currentUser, chats, onOpenGame, onOpenAiGame, onSelectLeaderboardEntry }: ChessHomeProps) {
+    const { scrolled, handleScroll } = useScrollFade();
     const initialSnapshot = getChessLobbySnapshot();
     const [currentGame, setCurrentGame] = useState<ChessGameView | null>(() => initialSnapshot?.currentGame ?? null);
     const [history, setHistory] = useState<ChessGameView[]>(() => initialSnapshot?.history ?? []);
@@ -316,11 +318,12 @@ export function ChessHome({ currentUser, chats, onOpenGame, onOpenAiGame, onSele
 
     return (
         <motion.div className="profile chess-lobby" variants={screenVariants} initial="hidden" animate="visible" exit="exit">
+            <div className={cx('header-fade', 'header-fade--screen', scrolled && 'header-fade--visible')} aria-hidden="true" />
             <div className="profile__header">
                 <h1 className="profile__header-title">شطرنج</h1>
             </div>
 
-            <div className="profile__content" ref={contentRef}>
+            <div className="profile__content" ref={contentRef} onScroll={handleScroll}>
                 <div className="chess-lobby__inner">
                     {currentGame ? (
                         <div className="chess-card">

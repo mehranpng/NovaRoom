@@ -4681,9 +4681,11 @@ html.keyboard-open .chat-room__input-area {
 
 .contact-info__content {
     flex: 1;
+    min-height: 0;
     height: 100%;
     overflow-y: auto;
-    padding: 70px 16px 32px;
+    overscroll-behavior: contain;
+    padding: 66px 14px 40px;
 }
 
 .contact-info__content>* {
@@ -4760,22 +4762,43 @@ html.keyboard-open .chat-room__input-area {
     height: 46px;
     margin-top: -4px;
     border-radius: 9999px;
-    border: 1px solid color-mix(in srgb, var(--accent-danger) 30%, transparent);
-    background: color-mix(in srgb, var(--accent-danger) 9%, var(--glass-surface-soft));
-    color: var(--accent-danger);
+    border: none;
+    background: var(--accent-danger);
+    color: #ffffff;
     font-family: inherit;
     font-size: 14px;
     font-weight: 700;
     cursor: pointer;
-    transition: background 0.15s ease, transform 0.14s ease;
+    transition: filter 0.15s ease, background 0.15s ease, transform 0.14s ease;
 }
 
-.contact-info__block-btn:hover {
-    background: color-mix(in srgb, var(--accent-danger) 14%, var(--glass-surface-soft));
+@media (hover: hover) and (pointer: fine) {
+    .contact-info__block-btn:hover {
+        filter: brightness(1.06);
+    }
 }
 
 .contact-info__block-btn:active {
-    transform: scale(0.985);
+    filter: brightness(0.92);
+    transform: scale(0.97);
+}
+
+.contact-info__block-btn--unblock {
+    border: 1px solid color-mix(in srgb, var(--accent-primary) 30%, transparent);
+    background: color-mix(in srgb, var(--accent-primary) 12%, var(--glass-surface-soft));
+    color: var(--accent-primary);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .contact-info__block-btn--unblock:hover {
+        filter: none;
+        background: color-mix(in srgb, var(--accent-primary) 18%, var(--glass-surface-soft));
+    }
+}
+
+.contact-info__block-btn--unblock:active {
+    filter: none;
+    background: color-mix(in srgb, var(--accent-primary) 22%, var(--glass-surface-soft));
 }
 
 .contact-info__avatar-editor {
@@ -5362,12 +5385,14 @@ html.keyboard-open .chat-room__input-area {
     transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
-.profile__avatar-btn:hover {
-    background: var(--glass-surface-elevated);
+@media (hover: hover) and (pointer: fine) {
+    .profile__avatar-btn:hover {
+        background: var(--glass-surface-elevated);
+    }
 }
 
 .profile__avatar-btn:active {
-    transform: scale(0.96);
+    transform: scale(0.97);
 }
 
 .profile__avatar-btn--upload {
@@ -5376,8 +5401,14 @@ html.keyboard-open .chat-room__input-area {
     border-color: color-mix(in srgb, var(--accent-primary) 28%, transparent);
 }
 
-.profile__avatar-btn--upload:hover {
-    background: color-mix(in srgb, var(--accent-primary) 20%, transparent);
+@media (hover: hover) and (pointer: fine) {
+    .profile__avatar-btn--upload:hover {
+        background: color-mix(in srgb, var(--accent-primary) 20%, transparent);
+    }
+}
+
+.profile__avatar-btn--upload:active {
+    background: color-mix(in srgb, var(--accent-primary) 24%, transparent);
 }
 
 .profile__avatar-btn--danger {
@@ -5386,8 +5417,14 @@ html.keyboard-open .chat-room__input-area {
     border-color: color-mix(in srgb, var(--accent-danger) 26%, var(--glass-border));
 }
 
-.profile__avatar-btn--danger:hover {
-    background: color-mix(in srgb, var(--accent-danger) 10%, transparent);
+@media (hover: hover) and (pointer: fine) {
+    .profile__avatar-btn--danger:hover {
+        background: color-mix(in srgb, var(--accent-danger) 10%, transparent);
+    }
+}
+
+.profile__avatar-btn--danger:active {
+    background: color-mix(in srgb, var(--accent-danger) 14%, transparent);
 }
 
 .profile__avatar-btn:disabled,
@@ -5435,12 +5472,15 @@ html.keyboard-open .chat-room__input-area {
     transition: transform 0.14s ease, filter 0.15s ease;
 }
 
-.profile__edit-action:hover {
-    filter: brightness(1.05);
+@media (hover: hover) and (pointer: fine) {
+    .profile__edit-action:hover {
+        filter: brightness(1.05);
+    }
 }
 
 .profile__edit-action:active {
-    transform: scale(0.985);
+    filter: brightness(0.95);
+    transform: scale(0.97);
 }
 
 .profile__logout-btn {
@@ -5462,12 +5502,15 @@ html.keyboard-open .chat-room__input-area {
     transition: background 0.15s ease, transform 0.14s ease;
 }
 
-.profile__logout-btn:hover {
-    background: color-mix(in srgb, var(--accent-danger) 14%, var(--glass-surface-soft));
+@media (hover: hover) and (pointer: fine) {
+    .profile__logout-btn:hover {
+        background: color-mix(in srgb, var(--accent-danger) 14%, var(--glass-surface-soft));
+    }
 }
 
 .profile__logout-btn:active {
-    transform: scale(0.985);
+    background: color-mix(in srgb, var(--accent-danger) 18%, var(--glass-surface-soft));
+    transform: scale(0.97);
 }
 
 .profile__section-title {
@@ -5618,7 +5661,7 @@ html.keyboard-open .chat-room__input-area {
 }
 
 .profile__field-input--username {
-    padding-left: 32px;
+    padding-left: 38px;
     padding-right: 16px;
     direction: ltr;
     text-align: left;
@@ -5634,10 +5677,14 @@ html.keyboard-open .chat-room__input-area {
 
 .profile__username-at {
     position: absolute;
-    left: 16px;
+    left: 14px;
     top: 50%;
     transform: translateY(-50%);
-    color: var(--text-tertiary);
+    color: var(--text-secondary);
+    font-size: 15px;
+    font-weight: 700;
+    pointer-events: none;
+    user-select: none;
 }
 
 .profile__textarea {
@@ -6735,6 +6782,7 @@ html.keyboard-open .chat-room__input-area {
     display: flex;
     align-items: flex-end;
     justify-content: center;
+    padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
     background: rgba(15, 23, 42, 0.42);
 }
 
@@ -6744,17 +6792,15 @@ html.keyboard-open .chat-room__input-area {
 
 .forward-sheet {
     width: 100%;
-    max-width: 480px;
-    max-height: min(82dvh, 640px);
+    max-width: 460px;
+    max-height: min(80dvh, 620px);
     display: flex;
     flex-direction: column;
     background: var(--bg-primary);
     border: 1px solid var(--border-primary);
-    border-bottom: none;
-    border-radius: 24px 24px 0 0;
+    border-radius: 26px;
     box-shadow: var(--shadow-lg);
     overflow: hidden;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
     text-align: left;
 }
 
@@ -7680,8 +7726,13 @@ body[data-music-player='active'] .chat-room__pinned-bar {
 
 body[data-music-player='active'] .profile__content,
 body[data-music-player='active'] .contact-info__content,
-body[data-music-player='active'] .adm-content {
+body[data-music-player='active'] .adm-content,
+body[data-music-player='active'] .chess__body {
     padding-top: 122px !important;
+}
+
+body[data-music-player='active'] .ai-chat-drawer {
+    top: 64px;
 }
 
 body[data-music-player='active'] .chat-room__messages {

@@ -16,6 +16,7 @@ import {
 import { playChessEmoteSound, playChessSound, soundForMove } from '../../utils/chessSounds';
 import { copyText } from '../../utils/clipboard';
 import { cx } from '../../utils/cx';
+import { useScrollFade } from '../../hooks/useScrollFade';
 import { toPersianDigits } from '../../utils/format';
 import { notify } from '../../utils/notificationBus';
 import { closeChessNotifications } from '../../utils/pushNotifications';
@@ -135,6 +136,7 @@ export function CapturedRow({ pieces, color }: { pieces: { piece: string; count:
 }
 
 export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestMode, chats, onExitGame }: ChessGameProps) {
+    const { scrolled, handleScroll } = useScrollFade();
     const initialCached = getCachedChessGame(gameId);
     const [game, setGame] = useState<ChessGameView | null>(() => initialCached);
     const [pendingFen, setPendingFen] = useState<string | null>(null);
@@ -721,6 +723,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
 
     return (
         <motion.div className="profile chess" variants={screenVariants} initial="hidden" animate="visible" exit="exit">
+            <div className={cx('header-fade', 'header-fade--screen', scrolled && 'header-fade--visible')} aria-hidden="true" />
             <div className="profile__header">
                 <div className="profile__header-side">
                     <button onClick={onExitGame} className="profile__header-back back-icon-btn" aria-label="بازگشت">
@@ -732,7 +735,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                 </h1>
             </div>
 
-            <div className="chess__body">
+            <div className="chess__body" onScroll={handleScroll}>
                 <div className="chess__stage">
                     <div className="chess__player">
                         <div className="chess__player-info">

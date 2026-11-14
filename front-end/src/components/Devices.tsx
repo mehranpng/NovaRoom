@@ -2,7 +2,7 @@ import { ChevronLeft, FileText } from 'lucide-react';
 import TelegramIcon from './TelegramIcon';
 import { getSessionDeviceMeta } from '../utils/sessionDevice';
 import { screenVariants } from '../utils/screenMotion';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '../config/api';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cx } from '../utils/cx';
@@ -222,7 +222,7 @@ export function Devices({ onBack, onOpenLogs, hasUnseenLoginLogs }: DevicesProps
                                     {otherSessions.map(({ session, deviceName, ip, lastUsed, created }, idx) => {
                                         const meta = getSessionDeviceMeta(deviceName);
                                         return (
-                                            <div key={session.tokenHash}>
+                                            <Fragment key={session.tokenHash}>
                                                 {idx > 0 && <div className="tg-island__divider" aria-hidden="true" />}
                                                 <div className="tg-row" style={{ alignItems: 'flex-start', paddingBlock: 10 }}>
                                                     <span className={cx('tg-icon-backdrop', `tg-icon-backdrop--${meta.color}`)} style={{ marginTop: 2 }} aria-hidden="true">
@@ -250,7 +250,7 @@ export function Devices({ onBack, onOpenLogs, hasUnseenLoginLogs }: DevicesProps
                                                         قطع دسترسی
                                                     </button>
                                                 </div>
-                                            </div>
+                                            </Fragment>
                                         );
                                     })}
                                 </div>

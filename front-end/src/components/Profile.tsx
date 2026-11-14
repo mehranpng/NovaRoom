@@ -250,6 +250,7 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
 
     return (
         <motion.div
+            key={isEditing ? 'edit' : 'view'}
             className="profile"
             variants={screenVariants}
             initial="hidden"
@@ -260,7 +261,7 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
             <div className="profile__header">
                 {isEditing && (
                     <div className="profile__header-side">
-                        <button onClick={handleCancel} className="profile__header-back back-icon-btn" aria-label="بازگشت به پروفایل">
+                        <button type="button" onClick={handleCancel} className="profile__header-back back-icon-btn" aria-label="بازگشت به پروفایل">
                             <ChevronLeft size={22} />
                         </button>
                     </div>
@@ -268,7 +269,7 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
                 <h1 className="profile__header-title">{isEditing ? 'ویرایش پروفایل' : 'پروفایل'}</h1>
                 {isEditing && (
                     <div className="profile__header-actions">
-                        <button onClick={handleSave} className="profile__save-btn" disabled={!canSave}>
+                        <button type="button" onClick={handleSave} className="profile__save-btn" disabled={!canSave}>
                             <Save size={15} />
                             <span className="profile__btn-label">{saving ? 'در حال ذخیره' : 'ذخیره'}</span>
                         </button>
@@ -432,6 +433,7 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
                                         <span className="profile__info-value" style={{ direction: 'ltr', textAlign: 'right' }}>@{user.username}</span>
                                     </div>
                                     <button
+                                        type="button"
                                         onClick={() => handleCopy(`@${user.username}`, 'username')}
                                         className={cx('profile__copy-btn', copiedField === 'username' && 'profile__copy-btn--copied')}
                                         aria-label="کپی نام کاربری"
@@ -447,6 +449,7 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
                                         <span className="profile__info-value profile__info-value--mono">{user.chatId}</span>
                                     </div>
                                     <button
+                                        type="button"
                                         onClick={() => handleCopy(user.chatId, 'chatId')}
                                         className={cx('profile__copy-btn', copiedField === 'chatId' && 'profile__copy-btn--copied')}
                                         aria-label="کپی شناسه چت"

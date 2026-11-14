@@ -81,9 +81,10 @@ export function ForwardModal({ isOpen, chats, currentUserId, currentUserIsAdmin 
                 <motion.div
                     className="forward-sheet-overlay"
                     onClick={onClose}
-                    initial={false}
-                    exit={{ opacity: 1 }}
-                    transition={{ duration: 0.28 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2, ease: 'easeOut' }}
                 >
                     <motion.div
                         className="forward-sheet"
@@ -91,9 +92,9 @@ export function ForwardModal({ isOpen, chats, currentUserId, currentUserIsAdmin 
                         aria-modal="true"
                         aria-label="فوروارد پیام"
                         onClick={(e) => e.stopPropagation()}
-                        initial={{ y: '100%' }}
+                        initial={{ y: '110%' }}
                         animate={{ y: 0 }}
-                        exit={{ y: '100%' }}
+                        exit={{ y: '110%' }}
                         transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
                         drag="y"
                         dragListener={false}

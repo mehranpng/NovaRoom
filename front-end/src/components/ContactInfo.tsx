@@ -1,5 +1,5 @@
 import { ChevronLeft, Copy, Check, Calendar, Link2, MessageCircle, Save, Image as ImageIcon, Trash2, RotateCcw, Ban, FileText, AtSign, UserRound, Hash, Settings, Loader2, Lock, UserX } from 'lucide-react';
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { screenVariants } from '../utils/screenMotion';
 import { useScrollFade } from '../hooks/useScrollFade';
 import { syncThemeColor } from '../hooks/useDarkMode';
@@ -69,6 +69,7 @@ export function ContactInfo({
     const [loadingBans, setLoadingBans] = useState(false);
     const [bansLoaded, setBansLoaded] = useState(false);
     const [unbanningId, setUnbanningId] = useState<string | null>(null);
+    const [showBlockConfirm, setShowBlockConfirm] = useState(false);
     const navigate = useNavigate();
     const location = useLocation();
     const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -437,7 +438,7 @@ export function ContactInfo({
                 )}
             </div>
 
-            <div className="contact-info__content">
+            <div className="contact-info__content" onScroll={handleScroll}>
                 <div className={`profile__hero${isChessChampion ? ' profile__hero--chess-champion' : ''}`}>
                     <span className="profile__hero-orb profile__hero-orb--one" aria-hidden="true" />
                     <span className="profile__hero-orb profile__hero-orb--two" aria-hidden="true" />
@@ -536,7 +537,7 @@ export function ContactInfo({
                     )}
                 </div>
 
-                <div className="profile__fields" onScroll={handleScroll}>
+                <div className="profile__fields">
                     {isGroup && canEditGroup && editingGroup && (
                         <>
                             {loadingBans || !bansLoaded ? (
@@ -673,8 +674,8 @@ export function ContactInfo({
                             {onToggleBlock && (
                                 <button
                                     type="button"
-                                    onClick={() => onToggleBlock(user)}
-                                    className="contact-info__block-btn"
+                                    onClick={() => setShowBlockConfirm(true)}
+                                    className={cx('contact-info__block-btn', isBlocked && 'contact-info__block-btn--unblock')}
                                     aria-label={isBlocked ? 'آنبلاک کردن' : 'بلاک کردن'}
                                 >
                                     <Ban size={17} />
@@ -829,6 +830,58 @@ export function ContactInfo({
                     onCancel={() => setPendingAvatarFile(null)}
                 />
             )}
+
+            <AnimatePresence>
+                {showBlockConfirm && onToggleBlock && (
+                    <motion.div
+                        className="chat-room-modal-overlay"
+                        style={{ zIndex: 140 }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2, ease: 'easeOut' }}
+                        onClick={() => setShowBlockConfirm(false)}
+                    >
+                        <motion.div
+                            className="chat-room-confirm-modal"
+                            onClick={(event) => event.stopPropagation()}
+                            initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                        >
+                            <h3 className="chat-room-confirm-modal__title">
+                                {isBlocked ? 'آنبلاک کردن کاربر؟' : 'بلاک کردن کاربر؟'}
+                            </h3>
+                            <p className="chat-room-confirm-modal__text">
+                                {isBlocked
+                                    ? `آیا مطمئن هستید که می‌خواهید ${user.name} را از حالت بلاک خارج کنید؟`
+                                    : `با بلاک کردن ${user.name}، امکان ارسال و دریافت پیام بین شما غیرفعال می‌شود.`}
+                            </p>
+                            <div className="chat-room-confirm-modal__actions">
+                                <button
+                                    type="button"
+                                    className="chat-room-confirm-modal__btn"
+                                    onClick={() => setShowBlockConfirm(false)}
+                                >
+                                    لغو
+                                </button>
+                                <button
+                                    type="button"
+                                    className={cx('chat-room-confirm-modal__btn', !isBlocked && 'chat-room-confirm-modal__btn--danger')}
+                                    style={isBlocked ? { background: 'var(--accent-primary)', color: '#ffffff' } : undefined}
+                                    onClick={() => {
+                                        setShowBlockConfirm(false);
+                                        void onToggleBlock(user);
+                                    }}
+                                >
+                                    {isBlocked ? 'آنبلاک کردن' : 'بلاک کردن'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </motion.div>
     );
 }

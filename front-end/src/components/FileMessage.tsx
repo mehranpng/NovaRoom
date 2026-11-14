@@ -88,6 +88,7 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
   const [nearViewport, setNearViewport] = useState(false);
   const [mediaLoaded, setMediaLoaded] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
+  const [scrubPercent, setScrubPercent] = useState(0);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const seekTrackRef = useRef<HTMLDivElement | null>(null);
   const isSeekingRef = useRef(false);
@@ -130,13 +131,18 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
       ? (trackDuration > 0 ? `${formatDuration(trackDuration)} • ${formatFileSize(file.fileSize, 1)}` : formatFileSize(file.fileSize, 1))
       : formatDuration(trackDuration);
 
-  const seekFromClientX = (clientX: number) => {
+  const getRatioFromClientX = (clientX: number): number => {
     const track = seekTrackRef.current;
-    if (!track || musicPlayer.duration <= 0) return;
+    if (!track) return 0;
     const rect = track.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-    musicPlayer.seek(ratio * musicPlayer.duration);
+    if (rect.width <= 0) return 0;
+    return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
   };
+
+  const displayedPercent = isSeeking ? scrubPercent : seekPercent;
+  const displayedTime = isSeeking && musicPlayer.duration > 0
+    ? (scrubPercent / 100) * musicPlayer.duration
+    : musicPlayer.currentTime;
 
   const decodeResponseBlob = async (response: Response): Promise<Blob> => {
     const encryptedBytes = new Uint8Array(await response.arrayBuffer());
@@ -546,34 +552,62 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
         <div className="audio-title" title={audioTitle}>{audioTitle}</div>
         {isActiveTrack && trackDuration > 0 ? (
           <div className={`audio-seek${isSeeking ? ' is-seeking' : ''}`} dir="ltr">
-            <span className="audio-seek__time">{formatDuration(musicPlayer.currentTime)}</span>
+            <span className="audio-seek__time">{formatDuration(displayedTime)}</span>
             <div
               className="audio-seek__hit"
               data-no-message-gesture
               onPointerDown={(e) => {
+                if (e.button !== 0 && e.pointerType === 'mouse') return;
                 e.stopPropagation();
-                e.currentTarget.setPointerCapture(e.pointerId);
+                try {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                } catch {}
                 isSeekingRef.current = true;
                 setIsSeeking(true);
-                seekFromClientX(e.clientX);
+                const ratio = getRatioFromClientX(e.clientX);
+                setScrubPercent(ratio * 100);
+                if (musicPlayer.duration > 0) musicPlayer.seek(ratio * musicPlayer.duration);
               }}
               onPointerMove={(e) => {
+                if (!isSeekingRef.current) return;
                 e.stopPropagation();
-                if (isSeekingRef.current) seekFromClientX(e.clientX);
+                const ratio = getRatioFromClientX(e.clientX);
+                setScrubPercent(ratio * 100);
+                if (musicPlayer.duration > 0) musicPlayer.seek(ratio * musicPlayer.duration);
               }}
               onPointerUp={(e) => {
+                if (!isSeekingRef.current) return;
                 e.stopPropagation();
                 isSeekingRef.current = false;
                 setIsSeeking(false);
-                if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+                try {
+                  if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+                    e.currentTarget.releasePointerCapture(e.pointerId);
+                  }
+                } catch {}
+                const ratio = getRatioFromClientX(e.clientX);
+                if (musicPlayer.duration > 0) musicPlayer.seek(ratio * musicPlayer.duration);
               }}
               onPointerCancel={(e) => {
+                if (!isSeekingRef.current) return;
                 e.stopPropagation();
                 isSeekingRef.current = false;
                 setIsSeeking(false);
+                try {
+                  if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+                    e.currentTarget.releasePointerCapture(e.pointerId);
+                  }
+                } catch {}
               }}
               onTouchStart={(e) => e.stopPropagation()}
-              onTouchMove={(e) => e.stopPropagation()}
+              onTouchMove={(e) => {
+                e.stopPropagation();
+                if (isSeekingRef.current && e.touches[0]) {
+                  const ratio = getRatioFromClientX(e.touches[0].clientX);
+                  setScrubPercent(ratio * 100);
+                  if (musicPlayer.duration > 0) musicPlayer.seek(ratio * musicPlayer.duration);
+                }
+              }}
               onTouchEnd={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
               onContextMenu={(e) => {
@@ -582,8 +616,8 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
               }}
             >
               <div ref={seekTrackRef} className="audio-seek__track">
-                <span className="audio-seek__fill" style={{ width: `${seekPercent}%` }} />
-                <span className="audio-seek__thumb" style={{ left: `${seekPercent}%` }} />
+                <span className="audio-seek__fill" style={{ width: `${displayedPercent}%` }} />
+                <span className="audio-seek__thumb" style={{ left: `${displayedPercent}%` }} />
               </div>
             </div>
           </div>

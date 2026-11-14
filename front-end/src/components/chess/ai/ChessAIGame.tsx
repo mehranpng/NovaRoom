@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, RotateCcw, Undo2 } from 'lucide-react';
 import type { User } from '../../../types';
 import { playChessSound, soundForMove } from '../../../utils/chessSounds';
 import { cx } from '../../../utils/cx';
+import { useScrollFade } from '../../../hooks/useScrollFade';
 import { toPersianDigits } from '../../../utils/format';
 import { screenVariants } from '../../../utils/screenMotion';
 import { Avatar } from '../../Avatar';
@@ -119,6 +120,7 @@ const isSavedGamePlayable = (saved: SavedAiGame): boolean => {
 const positionKey = (value: string): string => value.split(' ').slice(0, 4).join(' ');
 
 export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
+    const { scrolled, handleScroll } = useScrollFade();
     const [saved] = useState<SavedAiGame | null>(loadSavedAiGame);
     const savedGame = saved && isTimeValue(saved.timeValue) && isSavedGamePlayable(saved) ? saved : null;
     const [phase, setPhase] = useState<GamePhase>(savedGame ? 'playing' : 'setup');
@@ -665,6 +667,7 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
             animate="visible"
             exit="exit"
         >
+            <div className={cx('header-fade', 'header-fade--screen', scrolled && 'header-fade--visible')} aria-hidden="true" />
             <div className="profile__header">
                 <div className="profile__header-side">
                     <button onClick={onExitGame} className="profile__header-back back-icon-btn" aria-label="بازگشت">
@@ -674,7 +677,7 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
                 <h1 className="profile__header-title">شطرنج با ربات</h1>
             </div>
 
-            <div className="chess__body">
+            <div className="chess__body" onScroll={handleScroll}>
                 <div className="chess__stage">
                     {phase === 'setup' ? (
                         <div className="chess-card chess-ai__setup">

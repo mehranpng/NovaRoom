@@ -636,8 +636,10 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    height: 1.125rem;
+    height: 1.5rem;
     margin-top: 0.125rem;
+    touch-action: none !important;
+    user-select: none !important;
 }
 
 .audio-seek__time {
@@ -654,10 +656,11 @@
     display: flex;
     align-items: center;
     min-width: 0;
-    padding-block: 0.5rem;
+    min-height: 1.75rem;
+    padding-block: 0.625rem;
     cursor: pointer;
-    touch-action: none;
-    user-select: none;
+    touch-action: none !important;
+    user-select: none !important;
     -webkit-touch-callout: none;
 }
 
@@ -668,7 +671,7 @@
     border-radius: 0.125rem;
     background: rgba(0, 0, 0, 0.15);
     cursor: pointer;
-    touch-action: none;
+    touch-action: none !important;
 }
 
 .dark-mode .message-bubble--theirs .audio-seek__track {
