@@ -8,11 +8,12 @@ export type NotificationPrefs = {
     enabled: boolean;
     chess: boolean;
     sound: boolean;
+    smart: boolean;
     chatModes: Record<string, ChatNotifyMode>;
 };
 
 const STORAGE_KEY = 'nr_notify_prefs';
-const DEFAULT_PREFS: NotificationPrefs = { enabled: true, chess: true, sound: true, chatModes: {} };
+const DEFAULT_PREFS: NotificationPrefs = { enabled: true, chess: true, sound: true, smart: true, chatModes: {} };
 
 const normalizePrefs = (value: unknown): NotificationPrefs => {
     const record = (value && typeof value === 'object' ? value : {}) as Partial<NotificationPrefs>;
@@ -20,6 +21,7 @@ const normalizePrefs = (value: unknown): NotificationPrefs => {
         enabled: record.enabled !== false,
         chess: record.chess !== false,
         sound: record.sound !== false,
+        smart: record.smart !== false,
         chatModes: record.chatModes && typeof record.chatModes === 'object' ? record.chatModes : {},
     };
 };
@@ -172,7 +174,7 @@ export function getChatNotifyMode(current: NotificationPrefs, chatId: string): C
 }
 
 export async function updateNotificationPrefs(
-    patch: Partial<Pick<NotificationPrefs, 'enabled' | 'chess' | 'sound'>>
+    patch: Partial<Pick<NotificationPrefs, 'enabled' | 'chess' | 'sound' | 'smart'>>
 ): Promise<void> {
     const previous = prefs;
     setPrefs({ ...prefs, ...patch });

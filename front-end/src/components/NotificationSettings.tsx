@@ -145,6 +145,11 @@ export function NotificationSettings({ onBack }: Props) {
         if (next) playNotificationSound();
     };
 
+    const toggleSmart = async () => {
+        if (!prefs.enabled) return;
+        await updateNotificationPrefs({ smart: !prefs.smart });
+    };
+
     const testNotification = async () => {
         try {
             const registration = await navigator.serviceWorker.ready;
@@ -239,10 +244,10 @@ export function NotificationSettings({ onBack }: Props) {
                 <div style={statusCardPill ? statusCardStyle : panelStyle}>{renderStatus()}</div>
 
                 <div style={panelStyle}>
-                    <div style={rowStyle}>
+                    <div style={{ ...rowStyle, borderTop: 'none' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             <span style={{ fontSize: 14, fontWeight: 600 }}>اعلان پیام‌ها</span>
-                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>دریافت اعلان پیام‌های جدید در گفتگوها و گروه‌ها</span>
+                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>دریافت اعلان پیام‌های جدید در گفتگوها</span>
                         </div>
                         <Switch enabled={prefs.enabled} onToggle={() => void toggleEnabled()} />
                     </div>
@@ -254,13 +259,23 @@ export function NotificationSettings({ onBack }: Props) {
                         </div>
                         <Switch enabled={prefs.chess} onToggle={() => void toggleChess()} />
                     </div>
+                </div>
 
-                    <div style={{ ...rowStyle, opacity: anyEnabled ? 1 : 0.5 }}>
+                <div style={panelStyle}>
+                    <div style={{ ...rowStyle, borderTop: 'none', opacity: anyEnabled ? 1 : 0.5 }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             <span style={{ fontSize: 14, fontWeight: 600 }}>صدای اعلان</span>
-                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>پخش صدا هنگام دریافت اعلان</span>
+                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>پخش صدا داخل برنامه هنگام دریافت اعلان (جدا از صدای دستگاه)</span>
                         </div>
                         <Switch enabled={prefs.sound} onToggle={() => void toggleSound()} disabled={!anyEnabled} />
+                    </div>
+
+                    <div style={{ ...rowStyle, opacity: prefs.enabled ? 1 : 0.5 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <span style={{ fontSize: 14, fontWeight: 600 }}>اعلان هوشمند</span>
+                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>کاهش صدای اعلان در پیام‌های پشت‌سرهم از یک گفتگو</span>
+                        </div>
+                        <Switch enabled={prefs.smart} onToggle={() => void toggleSmart()} disabled={!prefs.enabled} />
                     </div>
                 </div>
 
@@ -276,10 +291,6 @@ export function NotificationSettings({ onBack }: Props) {
                         آزمایش اعلان
                     </button>
                 )}
-
-                <div style={{ fontSize: 12, lineHeight: 1.9, color: 'var(--text-tertiary)', direction: 'rtl', padding: '2px 6px' }}>
-                    برای بی‌صدا کردن یک گفتگو، از منوی آن گفتگو در فهرست گفتگوها یا داخل گفتگو استفاده کنید.
-                </div>
             </div>
         </motion.div>
     );

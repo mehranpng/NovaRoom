@@ -2598,6 +2598,7 @@ class NotificationSettingsUpdate(BaseModel):
     enabled: Optional[bool] = None
     chess: Optional[bool] = None
     sound: Optional[bool] = None
+    smart: Optional[bool] = None
 
 
 class ChatNotifyModeUpdate(BaseModel):
@@ -2710,6 +2711,8 @@ async def update_notification_settings(
         updates["settings.notifications.chess"] = bool(body.chess)
     if body.sound is not None:
         updates["settings.notifications.sound"] = bool(body.sound)
+    if body.smart is not None:
+        updates["settings.notifications.smart"] = bool(body.smart)
     if updates:
         await cl_users.update_one({"chatId": me}, {"$set": updates})
     user = await cl_users.find_one({"chatId": me}, {"settings": 1})
@@ -7173,6 +7176,7 @@ def _notif_settings(user_doc) -> dict:
         "enabled": bool(raw.get("enabled", True)),
         "chess": bool(raw.get("chess", True)),
         "sound": bool(raw.get("sound", True)),
+        "smart": bool(raw.get("smart", True)),
     }
 
 
@@ -7189,8 +7193,30 @@ def _notification_prefs(user_doc) -> dict:
         "enabled": settings["enabled"],
         "chess": settings["chess"],
         "sound": settings["sound"],
+        "smart": settings["smart"],
         "chatModes": _chat_notify_modes(user_doc),
     }
+
+
+SMART_NOTIFY_COOLDOWN_SEC = 30.0
+_smart_notify_last_sound: Dict[Tuple[str, str], float] = {}
+
+
+def _should_silence_smart_notification(user_id: str, chat_id: str) -> bool:
+    if not user_id or not chat_id:
+        return False
+    now = time.monotonic()
+    if len(_smart_notify_last_sound) > 10000:
+        cutoff = now - SMART_NOTIFY_COOLDOWN_SEC
+        stale = [k for k, ts in _smart_notify_last_sound.items() if ts < cutoff]
+        for k in stale:
+            _smart_notify_last_sound.pop(k, None)
+    key = (user_id, chat_id)
+    last_ts = _smart_notify_last_sound.get(key)
+    if last_ts is not None and (now - last_ts) < SMART_NOTIFY_COOLDOWN_SEC:
+        return True
+    _smart_notify_last_sound[key] = now
+    return False
 
 
 def _send_webpush_sync(sub: dict, payload: dict) -> Optional[int]:
@@ -7288,12 +7314,21 @@ async def push_to_users(user_ids: Iterable[str], payload_for_user) -> None:
                     }
                     if not target_hashes:
                         continue
+            user_subs = []
             for sub in subscriptions:
                 if sub.get("tokenHash") in valid_hashes:
                     if sub.get("tokenHash") in target_hashes:
-                        jobs.append((sub, payload))
+                        user_subs.append(sub)
                 else:
                     stale_ids.append(sub["_id"])
+            if not user_subs:
+                continue
+            if not is_chess and settings["smart"]:
+                chat_key = str(payload.get("chatId") or "")
+                if _should_silence_smart_notification(uid, chat_key):
+                    payload["silent"] = True
+            for sub in user_subs:
+                jobs.append((sub, payload))
 
         if jobs:
             statuses = await asyncio.gather(

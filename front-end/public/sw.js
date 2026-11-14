@@ -82,19 +82,20 @@ async function handlePush(event) {
     }
 
     const hasTab = windows.length > 0;
+    const isSilent = Boolean(data.silent);
     await self.registration.showNotification(title, {
         body,
         tag,
-        renotify: true,
+        renotify: !isSilent,
         icon: data.icon,
         badge: '/logo/badge.png',
         dir: 'rtl',
         lang: 'fa',
-        silent: data.silent || hasTab,
+        silent: isSilent || hasTab,
         data: { url: data.url, count },
     });
 
-    if (!data.silent && hasTab) {
+    if (!isSilent && hasTab) {
         windows.forEach((client) => client.postMessage({ type: 'nr-push-shown', chatId: data.chatId || null }));
     }
 }
