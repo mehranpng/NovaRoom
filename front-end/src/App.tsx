@@ -63,6 +63,16 @@ const normalizeTimestamp = (ts: unknown): number => {
     return Date.now();
 };
 
+const toChatLastMessage = (m: Message) => ({
+    id: m.id,
+    text: m.text,
+    senderId: m.senderId,
+    timestamp: normalizeTimestamp(m.timestamp),
+    file: m.file,
+    seen: Boolean(m.seen),
+    deliveryStatus: m.deliveryStatus,
+});
+
 const areReactionsEqual = (a?: Message['reactions'], b?: Message['reactions']): boolean => {
     if (a === b) return true;
     const listA = Array.isArray(a) ? a : [];
@@ -755,16 +765,22 @@ export function App() {
                 const presenceMatch = presenceCandidateIds
                     .map((id) => userPresenceRef.current[id])
                     .find(Boolean);
-                const resolvedOnline = typeof presenceMatch?.online === 'boolean'
-                    ? presenceMatch.online
-                    : Boolean(c?.otherUser?.online);
+                const resolvedOnline = c?.otherUser?.lastSeenCategory
+                    ? Boolean(c?.otherUser?.online)
+                    : (typeof presenceMatch?.online === 'boolean'
+                        ? presenceMatch.online
+                        : Boolean(c?.otherUser?.online));
+                const updatedAt = c?.updatedAt
+                    ? normalizeTimestamp(c.updatedAt)
+                    : (newGroupTimestamps.current[c.id] ?? 0);
                 if (!c?.lastMessage) {
-                    const pinnedTs = newGroupTimestamps.current[c.id] ?? 0;
+                    const pinnedTs = newGroupTimestamps.current[c.id] || updatedAt || 0;
                     return {
                         ...c,
                         otherUser: c?.otherUser ? { ...c.otherUser, bio: decryptedOtherBio || '', online: resolvedOnline } : c?.otherUser,
                         lastMessage: { id: '', text: '', senderId: '', timestamp: pinnedTs },
                         pinnedMessage: decryptedPinnedMessage,
+                        updatedAt,
                     } as Chat;
                 }
                 return {
@@ -775,6 +791,7 @@ export function App() {
                         timestamp: normalizeTimestamp(c.lastMessage.timestamp),
                     },
                     pinnedMessage: decryptedPinnedMessage,
+                    updatedAt,
                 } as Chat;
             }));
 
@@ -799,9 +816,34 @@ export function App() {
                         Number(prevChat.unreadCount || 0) === 0 &&
                         prevChat.lastMessage?.id === rawChat.lastMessage?.id &&
                         Date.now() - (lastReadAtByChatRef.current[rawChat.id] || 0) < 8000;
-                    const chat = (isCurrentlyOpenAtBottom || recentlyMarkedRead) && Number(rawChat.unreadCount || 0) > 0
-                        ? { ...rawChat, unreadCount: 0 }
+                    const chatMsgs = messagesRef.current[rawChat.id];
+                    const hasSendingInChat = Boolean(chatMsgs?.some((m) => m.deliveryStatus === 'sending'));
+                    const keepPrevLastMessage = Boolean(
+                        prevChat &&
+                        prevChat.lastMessage &&
+                        (
+                            (
+                                prevChat.lastMessage.deliveryStatus === 'sending' &&
+                                hasSendingInChat &&
+                                (!rawChat.lastMessage?.id || chatMsgs?.some((m) => m.deliveryStatus === 'sending' && m.id === prevChat.lastMessage?.id))
+                            ) ||
+                            (
+                                !rawChat.lastMessage?.id &&
+                                Boolean(prevChat.lastMessage.id) &&
+                                (Boolean(newGroupTimestamps.current[rawChat.id]) || prevChat.lastMessage.deliveryStatus === 'sending')
+                            )
+                        )
+                    );
+                    const baseChat = keepPrevLastMessage && prevChat
+                        ? {
+                            ...rawChat,
+                            lastMessage: prevChat.lastMessage,
+                            updatedAt: Math.max(Number(rawChat.updatedAt || 0), Number(prevChat.updatedAt || 0)),
+                        }
                         : rawChat;
+                    const chat = (isCurrentlyOpenAtBottom || recentlyMarkedRead) && Number(baseChat.unreadCount || 0) > 0
+                        ? { ...baseChat, unreadCount: 0 }
+                        : baseChat;
 
                     if (!prevChat) {
                         changed = true;
@@ -820,7 +862,8 @@ export function App() {
                         prevChat.lastMessage?.timestamp === chat.lastMessage?.timestamp &&
                         prevChat.lastMessage?.senderId === chat.lastMessage?.senderId &&
                         Boolean(prevChat.lastMessage?.seen) === Boolean(chat.lastMessage?.seen) &&
-                        prevChat.lastMessage?.deliveryStatus === chat.lastMessage?.deliveryStatus;
+                        prevChat.lastMessage?.deliveryStatus === chat.lastMessage?.deliveryStatus &&
+                        Number(prevChat.updatedAt || 0) === Number(chat.updatedAt || 0);
                     const sameOtherUser =
                         prevChat.otherUser?.chatId === chat.otherUser?.chatId &&
                         prevChat.otherUser?.name === chat.otherUser?.name &&
@@ -828,6 +871,8 @@ export function App() {
                         prevChat.otherUser?.avatar === chat.otherUser?.avatar &&
                         prevChat.otherUser?.bio === chat.otherUser?.bio &&
                         prevChat.otherUser?.online === chat.otherUser?.online &&
+                        prevChat.otherUser?.lastSeen === chat.otherUser?.lastSeen &&
+                        prevChat.otherUser?.lastSeenCategory === chat.otherUser?.lastSeenCategory &&
                         (prevChat.otherUser as any)?.verified === (chat.otherUser as any)?.verified &&
                         (prevChat.otherUser as any)?.blockedByMe === (chat.otherUser as any)?.blockedByMe &&
                         (prevChat.otherUser as any)?.blockedByOther === (chat.otherUser as any)?.blockedByOther;
@@ -1291,6 +1336,7 @@ export function App() {
         };
 
         const remainingMsgs = (messagesRef.current[chatId] || []).filter(m => !idsSet.has(m.id));
+        const activeSendingMsg = [...remainingMsgs].reverse().find(m => m.deliveryStatus === 'sending') || null;
         const fallbackLastMsg = remainingMsgs.length > 0 ? remainingMsgs[remainingMsgs.length - 1] : null;
 
         setChats(prev => prev.map(c => {
@@ -1298,26 +1344,29 @@ export function App() {
             const nextMentionIds = (c.unreadMentionIds || []).filter(id => !idsSet.has(id));
             const nextReactionIds = (c.unreadReactionIds || []).filter(id => !idsSet.has(id));
             const lastWasDeleted = Boolean(c.lastMessage?.id && idsSet.has(c.lastMessage.id));
-            const nextLastMessage = lastMessage
+            const serverLastMsg = lastMessage
                 ? { ...lastMessage, timestamp: normalizeTimestamp(lastMessage.timestamp) }
-                : lastMessage === null
-                    ? null
-                    : lastWasDeleted
-                        ? (fallbackLastMsg
-                            ? {
-                                id: fallbackLastMsg.id,
-                                text: fallbackLastMsg.text,
-                                senderId: fallbackLastMsg.senderId,
-                                timestamp: normalizeTimestamp(fallbackLastMsg.timestamp),
-                                file: fallbackLastMsg.file,
-                                seen: Boolean(fallbackLastMsg.seen),
-                                deliveryStatus: fallbackLastMsg.deliveryStatus,
-                            }
-                            : null)
-                        : c.lastMessage;
+                : null;
+            let nextLastMessage = c.lastMessage ?? null;
+
+            if (activeSendingMsg && (!serverLastMsg || normalizeTimestamp(activeSendingMsg.timestamp) >= serverLastMsg.timestamp)) {
+                nextLastMessage = toChatLastMessage(activeSendingMsg);
+            } else if (serverLastMsg) {
+                nextLastMessage = serverLastMsg;
+            } else if (lastMessage === null) {
+                nextLastMessage = fallbackLastMsg ? toChatLastMessage(fallbackLastMsg) : null;
+            } else if (lastWasDeleted) {
+                nextLastMessage = fallbackLastMsg ? toChatLastMessage(fallbackLastMsg) : null;
+            }
+
+            if (!nextLastMessage) {
+                delete newGroupTimestamps.current[chatId];
+            }
+
             return {
                 ...c,
                 lastMessage: nextLastMessage,
+                updatedAt: nextLastMessage?.timestamp ? normalizeTimestamp(nextLastMessage.timestamp) : Date.now(),
                 unreadMentionIds: nextMentionIds,
                 unreadReactionIds: nextReactionIds,
             };
@@ -1907,6 +1956,31 @@ export function App() {
         setAIRespondingChatId(null);
     }, [activeAIChatId]);
 
+    const clearPresenceCache = useCallback((userId?: string) => {
+        if (userId) {
+            delete userPresenceRef.current[userId];
+            if (presenceOfflineGraceTimersRef.current[userId]) {
+                window.clearTimeout(presenceOfflineGraceTimersRef.current[userId]);
+                delete presenceOfflineGraceTimersRef.current[userId];
+            }
+            return;
+        }
+        userPresenceRef.current = {};
+        Object.keys(presenceOfflineGraceTimersRef.current).forEach((key) => {
+            window.clearTimeout(presenceOfflineGraceTimersRef.current[key]);
+            delete presenceOfflineGraceTimersRef.current[key];
+        });
+    }, []);
+
+    const handlePrivacyUpdated = useCallback((userId: string) => {
+        if (userId) {
+            clearPresenceCache(userId);
+        } else {
+            clearPresenceCache();
+        }
+        void loadChats(false);
+    }, [clearPresenceCache, loadChats]);
+
     
     const { sendMessage: sendViaWS, editMessage: editViaWS, deleteMessage: deleteViaWS, sendSeen, sendTyping, sendUploadStatus, sendActiveChat, reconnectExhausted, reconnectNow, sendAIMessage, stopAIGeneration } = useWebSocket({
         token: authToken,
@@ -1923,6 +1997,7 @@ export function App() {
         onMessageUnpinned: handleMessageUnpinned,
         onGroupBanned: handleGroupBanned,
         onGroupE2EEUpdated: handleGroupE2EEUpdated,
+        onPrivacyUpdated: handlePrivacyUpdated,
         onConnectionChange: setWsConnected,
         onReconnectExhausted: handleWsReconnectExhausted,
         onAINewMessage: handleNewAIMessage,
@@ -2789,7 +2864,7 @@ export function App() {
                 if (prev.some((chat) => chat.id === targetChatId)) {
                     return prev.map((chat) => (
                         chat.id === targetChatId
-                            ? { ...chat, lastMessage: nextLastMessage }
+                            ? { ...chat, lastMessage: nextLastMessage, updatedAt: now }
                             : chat
                     ));
                 }
@@ -2801,6 +2876,7 @@ export function App() {
                     chatType: 'direct',
                     otherUser: contact,
                     lastMessage: nextLastMessage,
+                    updatedAt: now,
                     unreadCount: 0,
                 };
                 return [newChat, ...prev];
@@ -2888,6 +2964,8 @@ export function App() {
                 });
 
                 const createdChatId = res.chatId as string;
+                const createdAt = Date.now();
+                newGroupTimestamps.current[createdChatId] = createdAt;
 
                 setChats(prev => {
                     if (prev.some(c => c.id === createdChatId)) return prev;
@@ -2895,6 +2973,7 @@ export function App() {
                         id: createdChatId,
                         participantIds: [currentUser.chatId, pendingUser.chatId],
                         otherUser: pendingUser,
+                        updatedAt: createdAt,
                         unreadCount: 0,
                     };
                     return [newChat, ...prev];
@@ -2932,13 +3011,21 @@ export function App() {
 
         if (msgToDelete?.deliveryStatus === 'sending') {
             cancelUpload(messageId);
-            setMessages((prev) => {
-                const nextState = {
-                    ...prev,
-                    [activeChatId]: prev[activeChatId].filter((m) => m.id !== messageId)
+            const remaining = currentMessages.filter((m) => m.id !== messageId);
+            const fallbackLast = remaining.length > 0 ? remaining[remaining.length - 1] : null;
+            setMessages((prev) => ({
+                ...prev,
+                [activeChatId]: (prev[activeChatId] || []).filter((m) => m.id !== messageId),
+            }));
+            setChats((prev) => prev.map((c) => {
+                if (c.id !== activeChatId || c.lastMessage?.id !== messageId) return c;
+                const nextLastMessage = fallbackLast ? toChatLastMessage(fallbackLast) : null;
+                return {
+                    ...c,
+                    lastMessage: nextLastMessage,
+                    updatedAt: nextLastMessage ? normalizeTimestamp(nextLastMessage.timestamp) : Date.now(),
                 };
-                return nextState;
-            });
+            }));
             return;
         }
 
@@ -2965,9 +3052,20 @@ export function App() {
         }
 
         if (sendingIds.size > 0) {
+            const remainingAfterSending = currentMessages.filter((m) => !sendingIds.has(m.id));
+            const fallbackLast = remainingAfterSending.length > 0 ? remainingAfterSending[remainingAfterSending.length - 1] : null;
             setMessages((prev) => ({
                 ...prev,
                 [activeChatId]: (prev[activeChatId] || []).filter((m) => !sendingIds.has(m.id)),
+            }));
+            setChats((prev) => prev.map((c) => {
+                if (c.id !== activeChatId || !c.lastMessage?.id || !sendingIds.has(c.lastMessage.id)) return c;
+                const nextLastMessage = fallbackLast ? toChatLastMessage(fallbackLast) : null;
+                return {
+                    ...c,
+                    lastMessage: nextLastMessage,
+                    updatedAt: nextLastMessage ? normalizeTimestamp(nextLastMessage.timestamp) : Date.now(),
+                };
             }));
         }
 
@@ -3088,6 +3186,20 @@ export function App() {
             ...prev,
             [targetChatId]: [...(prev[targetChatId] || []), ...optimisticForwards],
         }));
+
+        const lastOptimisticForward = optimisticForwards[optimisticForwards.length - 1];
+        if (lastOptimisticForward) {
+            const forwardLastMessage = toChatLastMessage(lastOptimisticForward);
+            setChats((prev) => prev.map((chat) => (
+                chat.id === targetChatId
+                    ? {
+                        ...chat,
+                        lastMessage: forwardLastMessage,
+                        updatedAt: forwardLastMessage.timestamp,
+                    }
+                    : chat
+            )));
+        }
 
         const clientIdsSet = new Set(resolvedEntries.map((e) => e.forwardClientId));
         for (const entry of resolvedEntries) {
@@ -3361,7 +3473,10 @@ export function App() {
             return rest;
         });
         const nextRecent = [...recentChatIdsRef.current.filter((id) => id !== chatId), chatId];
-        const evictedIds = nextRecent.length > 10 ? nextRecent.slice(0, nextRecent.length - 10) : [];
+        const rawEvictedIds = nextRecent.length > 10 ? nextRecent.slice(0, nextRecent.length - 10) : [];
+        const evictedIds = rawEvictedIds.filter(
+            (evictId) => !(messagesRef.current[evictId] || []).some((m) => m.deliveryStatus === 'sending')
+        );
         recentChatIdsRef.current = nextRecent.slice(-10);
         const savedScroll = getChatScrollMemory(chatId);
         const preserveScroll = Boolean(
@@ -4095,7 +4210,13 @@ export function App() {
                                     loginEvents={loginEvents}
                                     hasUnseenLoginLogs={unseenLoginCount > 0}
                                     currentUser={currentUser}
-                                    onUpdateCurrentUser={(updates) => setCurrentUser((prev) => prev ? { ...prev, ...updates } : prev)}
+                                    onUpdateCurrentUser={(updates) => {
+                                        setCurrentUser((prev) => prev ? { ...prev, ...updates } : prev);
+                                        if ('lastSeenVisibility' in updates || 'avatarVisibility' in updates || 'bioVisibility' in updates) {
+                                            clearPresenceCache();
+                                            void loadChats(false);
+                                        }
+                                    }}
                                     onLogout={handleLogout}
                                 />
                                 {view === 'settings' && (

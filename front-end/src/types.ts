@@ -156,6 +156,7 @@ export interface Chat {
     unreadCount: number;
     unreadMentionIds?: string[];
     unreadReactionIds?: string[];
+    updatedAt?: number;
 }
 
 export interface AIChatSummary {

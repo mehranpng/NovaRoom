@@ -4007,6 +4007,17 @@ async def update_privacy_settings(
             for key, value in update_data.items()
         },
     }
+    chat_id = str(current_user.get("chatId") or "")
+    if chat_id:
+        recipients = {chat_id}
+        async for chat_doc in cl_chats.find({"participants": chat_id}, {"participants": 1}):
+            for p in chat_doc.get("participants", []) or []:
+                if p:
+                    recipients.add(str(p))
+        await broadcast(
+            recipients,
+            {"type": "privacy_updated", "userId": chat_id},
+        )
     return privacy_settings_payload(updated_settings)
 
 
@@ -5166,6 +5177,7 @@ async def get_chat_list(
                 },
                 "lastMessage": last_msg,
                 "pinnedMessage": pinned_msg,
+                "updatedAt": dt_to_epoch_ms(chat.get("updatedAt") or chat.get("createdAt")),
                 "unreadCount": unread_map.get(chat["_id"], 0),
                 "unreadMentionIds": (
                     mention_ids_map.get(chat["_id"], [])
@@ -6651,9 +6663,8 @@ async def batch_delete_messages(
     elif chat_doc:
         participants = chat_doc.get("participants", []) or []
 
-    last_msg = None
+    last_msg = await build_last_message(chat_id, session_token)
     if not is_saved and not is_official:
-        last_msg = await build_last_message(chat_id, session_token)
         update_fields = {"lastMessage": last_msg, "updatedAt": utc_now()}
         curr_pinned = (chat_doc.get("pinnedMessage") or {}) if chat_doc else {}
         unpinned = False
@@ -9109,9 +9120,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 await cl_messages.delete_one({"_id": oid})
                 await release_files(file_ids)
 
-                last_msg = None
+                last_msg = await build_last_message(chat_id_target, token)
                 if not is_saved and not is_official:
-                    last_msg = await build_last_message(chat_id_target, token)
                     await cl_chats.update_one(
                         {"_id": chat_id_target},
                         {"$set": {"lastMessage": last_msg, "updatedAt": utc_now()}},

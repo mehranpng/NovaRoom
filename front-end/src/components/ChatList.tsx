@@ -829,14 +829,16 @@ export const ChatList = memo(function ChatList({
     
     
     const sortedChats = useMemo(() => {
+        const getChatSortTs = (chat: Chat) => {
+            const msgTs = chat.lastMessage?.timestamp ? normalizeTs(chat.lastMessage.timestamp) : 0;
+            return msgTs > 0 ? msgTs : (chat.updatedAt ? normalizeTs(chat.updatedAt) : 0);
+        };
         return [...localChats].sort((a, b) => {
             const aPinned = pinnedIds.includes(a.id) ? 1 : 0;
             const bPinned = pinnedIds.includes(b.id) ? 1 : 0;
             if (aPinned !== bPinned) return bPinned - aPinned;
 
-            const aTime = a.lastMessage ? normalizeTs(a.lastMessage.timestamp) : 0;
-            const bTime = b.lastMessage ? normalizeTs(b.lastMessage.timestamp) : 0;
-            return bTime - aTime;
+            return getChatSortTs(b) - getChatSortTs(a);
         });
     }, [localChats, pinnedIds]);
 
@@ -1064,7 +1066,10 @@ export const ChatList = memo(function ChatList({
                                                 ) : null}
                                             </span>
                                             <div className="chat-list__item-meta">
-                                                {chat.lastMessage && (
+                                                {(sendingChatIds?.[chat.id] || chat.lastMessage?.deliveryStatus === 'sending') && (
+                                                    <ChatListOutgoingStatus status="sending" />
+                                                )}
+                                                {chat.lastMessage && (chat.lastMessage.id || chat.lastMessage.text || chat.lastMessage.file) && Number(chat.lastMessage.timestamp) > 0 && (
                                                     <span className="chat-list__item-time">
                                                         {toPersianDigits(formatTime(chat.lastMessage.timestamp))}
                                                     </span>
@@ -1199,18 +1204,18 @@ export const ChatList = memo(function ChatList({
                                         </span>
 
                                         <div className="chat-list__item-meta">
-                                            {chat.lastMessage && (isMine || sendingChatIds?.[chat.id]) && !draftText && (
+                                            {(Boolean(sendingChatIds?.[chat.id] || chat.lastMessage?.deliveryStatus === 'sending') || (chat.lastMessage && isMine && !draftText)) && (
                                                 <ChatListOutgoingStatus
                                                     status={
-                                                        sendingChatIds?.[chat.id] || chat.lastMessage.deliveryStatus === 'sending'
+                                                        sendingChatIds?.[chat.id] || chat.lastMessage?.deliveryStatus === 'sending'
                                                             ? 'sending'
-                                                            : chat.lastMessage.seen
+                                                            : chat.lastMessage?.seen
                                                                 ? 'seen'
                                                                 : 'sent'
                                                     }
                                                 />
                                             )}
-                                            {chat.lastMessage && (
+                                            {chat.lastMessage && (chat.lastMessage.id || chat.lastMessage.text || chat.lastMessage.file) && Number(chat.lastMessage.timestamp) > 0 && (
                                                 <span className="chat-list__item-time">
                                                     {toPersianDigits(formatTime(chat.lastMessage.timestamp))}
                                                 </span>

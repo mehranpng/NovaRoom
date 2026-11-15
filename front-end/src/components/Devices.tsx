@@ -190,27 +190,18 @@ export function Devices({ onBack, onOpenLogs, hasUnseenLoginLogs }: DevicesProps
                                                 </span>
                                             </div>
                                         </div>
-
-                                        {hasOtherSessions && (
-                                            <>
-                                                <div className="tg-island__divider" aria-hidden="true" />
-                                                <button
-                                                    type="button"
-                                                    className="tg-list-item tg-list-item--destructive"
-                                                    disabled={bulkBusy}
-                                                    onClick={() => setConfirmAction({ kind: 'others' })}
-                                                >
-                                                    <span className="tg-icon-backdrop tg-icon-backdrop--red" aria-hidden="true">
-                                                        <TelegramIcon name="stop" size={20} />
-                                                    </span>
-                                                    <span className="tg-list-item__copy">
-                                                        <span className="tg-list-item__title">قطع دسترسی دیگر دستگاه‌ها</span>
-                                                        <span className="tg-list-item__subtitle">خروج از همه نشست‌ها به جز این دستگاه</span>
-                                                    </span>
-                                                </button>
-                                            </>
-                                        )}
                                     </div>
+
+                                    {hasOtherSessions && (
+                                        <button
+                                            type="button"
+                                            className="tg-pill-destructive-btn"
+                                            disabled={bulkBusy}
+                                            onClick={() => setConfirmAction({ kind: 'others' })}
+                                        >
+                                            قطع دسترسی دیگر دستگاه‌ها
+                                        </button>
+                                    )}
                                 </>
                             );
                         })()}

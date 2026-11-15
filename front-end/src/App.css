@@ -448,13 +448,14 @@ body,
 .skeleton-chat-item {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: 16px;
 }
 
 .skeleton-avatar {
-    width: 50px;
-    height: 50px;
+    width: 54px;
+    height: 54px;
     border-radius: 50%;
     flex-shrink: 0;
 }
@@ -462,17 +463,50 @@ body,
 .skeleton-chat-content {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+}
+
+.skeleton-chat-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    min-height: 22px;
 }
 
 .skeleton-chat-name {
-    height: 18px;
-    width: 45%;
-    margin-bottom: 6px;
+    height: 15px;
+    width: 44%;
+    border-radius: 7px;
+}
+
+.skeleton-chat-time {
+    height: 11px;
+    width: 34px;
+    border-radius: 5px;
+    flex-shrink: 0;
+}
+
+.skeleton-chat-preview {
+    display: flex;
+    align-items: center;
+    min-height: 22px;
 }
 
 .skeleton-chat-message {
-    height: 15px;
-    width: 70%;
+    height: 13px;
+    width: 68%;
+    border-radius: 6px;
+}
+
+@media (max-width: 768px) {
+    .skeleton-chat-item {
+        border-radius: 0;
+        padding: 9px 12px;
+    }
 }
 
 .chat-messages-skeleton {
@@ -1573,22 +1607,6 @@ body,
         padding: 9px 12px;
     }
 
-    .chat-list__item::after {
-        content: "";
-        position: absolute;
-        left: 76px;
-        right: 0;
-        bottom: 0;
-        height: 1px;
-        background: color-mix(in srgb, var(--border-primary) 55%, transparent);
-        pointer-events: none;
-    }
-
-    .chat-list__item:last-of-type::after,
-    .chat-list__item--active::after {
-        display: none;
-    }
-
     .chat-list__item--active,
     .chat-list__item--active:active,
     .dark-mode .chat-list__item--active,
@@ -2155,6 +2173,41 @@ body,
     color: #ef4444;
 }
 
+.tg-pill-destructive-btn {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 18px;
+    border-radius: 9999px;
+    border: 1px solid var(--border-primary);
+    background: var(--bg-secondary);
+    color: #ef4444;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    text-align: center;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.14s ease, background-color 0.14s ease, opacity 0.14s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .tg-pill-destructive-btn:hover:not(:disabled) {
+        background: var(--bg-tertiary);
+    }
+}
+
+.tg-pill-destructive-btn:active:not(:disabled) {
+    transform: scale(0.97);
+    background: var(--bg-tertiary);
+}
+
+.tg-pill-destructive-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
 .tg-list-item__value {
     font-size: 13px;
     font-weight: 600;
@@ -2305,12 +2358,12 @@ body,
 }
 
 .bottom-navbar--compact {
-    transform: translateX(-50%) translateY(4px) scale(0.76);
+    transform: translateX(-50%) translateY(2px) scale(0.86);
 }
 
 @keyframes bottom-navbar-expand-in {
     from {
-        transform: translateX(-50%) translateY(4px) scale(0.76);
+        transform: translateX(-50%) translateY(2px) scale(0.86);
     }
     to {
         transform: translateX(-50%) translateY(0) scale(1);
@@ -2587,7 +2640,7 @@ body,
     text-overflow: ellipsis;
     white-space: nowrap;
     direction: rtl;
-    text-align: right;
+    text-align: left;
 }
 
 .chat-list__item-text-prefix {
@@ -3362,6 +3415,26 @@ body[data-music-player='active'] .chat-room__date-separator {
 
 .chat-room__date-separator--idle {
     opacity: 0;
+}
+
+@keyframes dateSeparatorFadeOut {
+    from {
+        opacity: 1;
+        transform: scale(1);
+        max-height: 48px;
+        margin: 8px 0 12px;
+    }
+    to {
+        opacity: 0;
+        transform: scale(0.92);
+        max-height: 0;
+        margin: 0;
+    }
+}
+
+.chat-room__date-separator--deleting {
+    overflow: hidden;
+    animation: dateSeparatorFadeOut 280ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
 }
 
 @media (min-width: 640px) {

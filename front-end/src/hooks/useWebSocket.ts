@@ -20,6 +20,7 @@ interface UseWebSocketProps {
     onMessageUnpinned?: (chatId: string) => void;
     onGroupBanned?: (chatId: string) => void;
     onGroupE2EEUpdated?: (chatId: string) => void;
+    onPrivacyUpdated?: (userId: string) => void;
     onConnectionChange?: (isConnected: boolean) => void;
     onReconnectExhausted?: () => void;
     onAINewMessage?: (message: any) => void;
@@ -81,6 +82,7 @@ export function useWebSocket({
     onMessageUnpinned,
     onGroupBanned,
     onGroupE2EEUpdated,
+    onPrivacyUpdated,
     onConnectionChange,
     onReconnectExhausted,
     onAINewMessage,
@@ -125,6 +127,7 @@ export function useWebSocket({
     const onMessageUnpinnedRef = useRef(onMessageUnpinned);
     const onGroupBannedRef = useRef(onGroupBanned);
     const onGroupE2EEUpdatedRef = useRef(onGroupE2EEUpdated);
+    const onPrivacyUpdatedRef = useRef(onPrivacyUpdated);
     const onConnectionChangeRef = useRef(onConnectionChange);
     const onReconnectExhaustedRef = useRef(onReconnectExhausted);
     const onAINewMessageRef = useRef(onAINewMessage);
@@ -149,6 +152,7 @@ export function useWebSocket({
     useEffect(() => { onMessageUnpinnedRef.current = onMessageUnpinned; }, [onMessageUnpinned]);
     useEffect(() => { onGroupBannedRef.current = onGroupBanned; }, [onGroupBanned]);
     useEffect(() => { onGroupE2EEUpdatedRef.current = onGroupE2EEUpdated; }, [onGroupE2EEUpdated]);
+    useEffect(() => { onPrivacyUpdatedRef.current = onPrivacyUpdated; }, [onPrivacyUpdated]);
     useEffect(() => { onConnectionChangeRef.current = onConnectionChange; }, [onConnectionChange]);
     useEffect(() => { onReconnectExhaustedRef.current = onReconnectExhausted; }, [onReconnectExhausted]);
     useEffect(() => { onAINewMessageRef.current = onAINewMessage; }, [onAINewMessage]);
@@ -398,6 +402,8 @@ export function useWebSocket({
                     });
                 } else if (data.type === 'block_status_changed') {
                     window.dispatchEvent(new Event('novaroom:block_status_changed'));
+                } else if (data.type === 'privacy_updated') {
+                    onPrivacyUpdatedRef.current?.(String(data.userId || '').trim());
                 } else if (data.type === 'notify_settings_changed') {
                     window.dispatchEvent(new Event('novaroom:notify_settings_changed'));
                 } else if (data.type === 'account_deletion') {

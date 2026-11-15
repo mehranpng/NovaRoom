@@ -78,25 +78,22 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
                 <div className="profile__content tg-settings-scroll" onScroll={handleScroll}>
                     <div className="tg-island">
                         {isOwner && (
-                            <>
-                                <button
-                                    type="button"
-                                    className="tg-list-item"
-                                    onClick={() => onOpenSection('adminPanel')}
-                                >
-                                    <span className="tg-icon-backdrop tg-icon-backdrop--blue" aria-hidden="true">
-                                        <TelegramIcon name="admin-filled" size={20} />
-                                    </span>
-                                    <span className="tg-list-item__copy">
-                                        <span className="tg-list-item__title">پنل ادمین</span>
-                                        <span className="tg-list-item__subtitle">مدیریت سیستم، کاربران و تنظیمات سرور</span>
-                                    </span>
-                                    <span className="tg-list-item__end">
-                                        <ChevronLeft size={18} />
-                                    </span>
-                                </button>
-                                <div className="tg-island__divider" aria-hidden="true" />
-                            </>
+                            <button
+                                type="button"
+                                className="tg-list-item"
+                                onClick={() => onOpenSection('adminPanel')}
+                            >
+                                <span className="tg-icon-backdrop tg-icon-backdrop--blue" aria-hidden="true">
+                                    <TelegramIcon name="admin-filled" size={20} />
+                                </span>
+                                <span className="tg-list-item__copy">
+                                    <span className="tg-list-item__title">پنل ادمین</span>
+                                    <span className="tg-list-item__subtitle">مدیریت سیستم، کاربران و تنظیمات سرور</span>
+                                </span>
+                                <span className="tg-list-item__end">
+                                    <ChevronLeft size={18} />
+                                </span>
+                            </button>
                         )}
                         <button
                             type="button"
@@ -104,7 +101,7 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
                             onClick={() => onOpenSection('adminLinks')}
                         >
                             <span className="tg-icon-backdrop tg-icon-backdrop--green" aria-hidden="true">
-                                <TelegramIcon name="link" size={20} />
+                                <TelegramIcon name="link-filled" size={20} />
                             </span>
                             <span className="tg-list-item__copy">
                                 <span className="tg-list-item__title">ساخت لینک ثبت‌نام</span>
@@ -233,9 +230,8 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
                 )}
 
                 <div className="tg-island">
-                    {settingsItems.map((item, idx) => (
+                    {settingsItems.map((item) => (
                         <Fragment key={item.section}>
-                            {idx > 0 && <div className="tg-island__divider" aria-hidden="true" />}
                             <button
                                 type="button"
                                 className="tg-list-item"

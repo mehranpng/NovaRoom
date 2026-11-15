@@ -3051,7 +3051,7 @@ export function ChatRoom({
     }, [isGroupChat, groupMembers, currentUser, contact]);
 
     const renderedMessageItems = useMemo(() => {
-        const groups: { key: number; label: string; items: ReactNode[] }[] = [];
+        const groups: { key: number; label: string; items: ReactNode[]; allDeleting: boolean }[] = [];
         items.forEach(({ m, isMine, dayBreak, dayKey, dayLabel, formattedTime, shape, isBigEmojiOnly, emojiOnlyClass, showAvatar, avatarFadesOnDelete }) => {
             const showUnreadSeparator = Boolean(unreadAnchorForUi && unreadAnchorForUi === m.id && m.senderId !== currentUserId);
             const seenByCountForMessage = seenByUsersByMessage[m.id]?.length ?? 0;
@@ -3109,14 +3109,19 @@ export function ChatRoom({
             );
 
             if (dayBreak) {
-                groups.push({ key: dayKey, label: dayLabel, items: [item] });
+                groups.push({ key: dayKey, label: dayLabel, items: [item], allDeleting: Boolean(m.isDeleting) });
             } else if (groups.length > 0) {
-                groups[groups.length - 1].items.push(item);
+                const currentGroup = groups[groups.length - 1];
+                currentGroup.items.push(item);
+                currentGroup.allDeleting = currentGroup.allDeleting && Boolean(m.isDeleting);
             }
         });
         return groups.map((group) => (
             <div className="chat-room__date-group" key={group.key}>
-                <div className="chat-room__date-separator" data-date-separator>
+                <div
+                    className={cx('chat-room__date-separator', group.allDeleting && 'chat-room__date-separator--deleting')}
+                    data-date-separator
+                >
                     <span className="chat-room__date-label">{group.label}</span>
                 </div>
                 {group.items}
