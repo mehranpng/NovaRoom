@@ -26,10 +26,31 @@ export const getAuthToken = (): string | null => {
     return tokenFromCookie ? decodeURIComponent(tokenFromCookie) : null;
 };
 
+export const getClientDeviceId = (): string => {
+    if (typeof localStorage === 'undefined') return '';
+    const key = 'novaroom_device_id';
+    let id = localStorage.getItem(key) || '';
+    if (!/^[a-zA-Z0-9_-]{12,64}$/.test(id)) {
+        id =
+            typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+                ? crypto.randomUUID().replace(/-/g, '')
+                : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 14)}`;
+        try {
+            localStorage.setItem(key, id);
+        } catch {
+            return id;
+        }
+    }
+    return id;
+};
+
 export const getHeaders = (includeAuth = true) => {
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
     };
+
+    const deviceId = getClientDeviceId();
+    if (deviceId) headers['X-Device-Id'] = deviceId;
 
     if (includeAuth) {
         const token = getAuthToken();

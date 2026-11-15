@@ -7,6 +7,7 @@ import type { User } from '../../../types';
 import { playChessSound, soundForMove } from '../../../utils/chessSounds';
 import { cx } from '../../../utils/cx';
 import { useScrollFade } from '../../../hooks/useScrollFade';
+import { useChessboardTouchGuard } from '../../../hooks/useChessboardTouchGuard';
 import { toPersianDigits } from '../../../utils/format';
 import { screenVariants } from '../../../utils/screenMotion';
 import { Avatar } from '../../Avatar';
@@ -144,15 +145,19 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
     const [starting, setStarting] = useState(false);
     const [downloadPercent, setDownloadPercent] = useState(0);
     const [setupError, setSetupError] = useState<string | null>(null);
-    const [boardKey, setBoardKey] = useState(0);
     const [viewIndex, setViewIndex] = useState<number | null>(null);
 
+    const {
+        boardKey,
+        markDragStart,
+        markDragEnd,
+        wrapProps: boardWrapProps,
+    } = useChessboardTouchGuard();
     const engineRef = useRef<StockfishEngine | null>(null);
     const fenRef = useRef(START_FEN);
     const movesEndRef = useRef<HTMLDivElement | null>(null);
     const activeMoveRef = useRef<HTMLButtonElement | null>(null);
     const mountedRef = useRef(true);
-    const draggingRef = useRef(false);
 
     const timeConfig = AI_TIME_OPTIONS.find((option) => option.value === timeValue) ?? AI_TIME_OPTIONS[0];
     const latest = line[line.length - 1];
@@ -192,26 +197,6 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
         const onVisibilityChange = () => setPageVisible(!document.hidden);
         document.addEventListener('visibilitychange', onVisibilityChange);
         return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-    }, []);
-
-    useEffect(() => {
-        const releaseStuckDrag = () => {
-            if (!draggingRef.current) return;
-            window.setTimeout(() => {
-                if (!draggingRef.current) return;
-                draggingRef.current = false;
-                setSelected(null);
-                setBoardKey((key) => key + 1);
-            }, 120);
-        };
-        window.addEventListener('pointerup', releaseStuckDrag);
-        window.addEventListener('pointercancel', releaseStuckDrag);
-        window.addEventListener('touchend', releaseStuckDrag);
-        return () => {
-            window.removeEventListener('pointerup', releaseStuckDrag);
-            window.removeEventListener('pointercancel', releaseStuckDrag);
-            window.removeEventListener('touchend', releaseStuckDrag);
-        };
     }, []);
 
     useEffect(() => {
@@ -781,7 +766,7 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
                                 )}
                             </div>
 
-                            <div className="chess__board-wrap">
+                            <div className="chess__board-wrap" {...boardWrapProps}>
                                 <Chessboard
                                     key={boardKey}
                                     options={{
@@ -800,15 +785,17 @@ export function ChessAIGame({ currentUser, onExitGame }: ChessAIGameProps) {
                                         darkSquareStyle: { backgroundColor: '#769656' },
                                         canDragPiece: ({ piece }) => canPlay && piece.pieceType.startsWith(playerCode),
                                         onPieceDrag: ({ square }) => {
-                                            draggingRef.current = true;
-                                            if (square) setSelected(square as Square);
+                                            markDragStart();
+                                            if (square) {
+                                                window.requestAnimationFrame(() => setSelected(square as Square));
+                                            }
                                         },
                                         onPieceDragCancel: () => {
-                                            draggingRef.current = false;
+                                            markDragEnd();
                                             setSelected(null);
                                         },
                                         onPieceDrop: ({ sourceSquare, targetSquare }) => {
-                                            draggingRef.current = false;
+                                            markDragEnd();
                                             if (!targetSquare || sourceSquare === targetSquare) return false;
                                             return tryPlayerMove(sourceSquare as Square, targetSquare as Square);
                                         },

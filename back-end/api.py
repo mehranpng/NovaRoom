@@ -2548,8 +2548,9 @@ async def startup_db():
             cl_chess_games.create_index("creatorId"),
             cl_chess_games.create_index([("players.white", 1), ("status", 1)]),
             cl_chess_games.create_index([("players.black", 1), ("status", 1)]),
+            cl_chess_games.create_index([("status", 1), ("rated", 1), ("finishedAt", -1)]),
             cl_chess_games.create_index("inviteToken", unique=True, sparse=True),
-            cl_users.create_index([("chessStats.gamesPlayed", -1), ("chessStats.elo", -1)]),
+            cl_users.create_index([("chessStats.gamesPlayed", -1), ("chessStats.uniqueOpponents", -1), ("chessStats.elo", -1)]),
             cl_users.create_index([("chessStats.elo", -1)]),
             cl_users.create_index("deletion.status", sparse=True),
             cl_users.create_index("deletion.scheduledFor", sparse=True),
@@ -3757,6 +3758,12 @@ async def login(req: LoginRequest, request: Request):
 
 _cached_chess_champion: Optional[dict] = None
 _cached_chess_champion_time: float = 0.0
+
+
+def extract_device_id(conn: Any, explicit: Optional[str] = None) -> str:
+    raw = explicit or (conn.headers.get("x-device-id") if conn else "")
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]", "", str(raw or "").strip())[:64]
+    return cleaned if len(cleaned) >= 8 else ""
 
 
 async def get_current_chess_champion(force_refresh: bool = False) -> Optional[dict]:
@@ -7624,17 +7631,87 @@ async def chess_expire_waiting(game_id: str):
             pass
 
 
+async def chess_count_pair_rated_games_24h(
+    user_a: str,
+    user_b: str,
+    since_ms: int,
+    exclude_game_id: Optional[str] = None,
+) -> int:
+    if not user_a or not user_b or chess_service.is_guest_id(user_a) or chess_service.is_guest_id(user_b):
+        return 0
+    query: dict = {
+        "status": "finished",
+        "rated": True,
+        "finishedAt": {"$gte": since_ms},
+        "$or": [
+            {"players.white": user_a, "players.black": user_b},
+            {"players.white": user_b, "players.black": user_a},
+        ],
+    }
+    if exclude_game_id:
+        query["_id"] = {"$ne": exclude_game_id}
+    return await cl_chess_games.count_documents(query)
+
+
+def chess_apply_join_policies(
+    game: dict,
+    user_id: str,
+    ip: str,
+    device_id: str,
+    pair_limit_reached: bool,
+) -> None:
+    chess_service.record_client_meta(game, user_id, ip=ip, device_id=device_id)
+    if not game.get("rated"):
+        return
+    shared = chess_service.detect_shared_client(game)
+    if shared:
+        chess_service.apply_unrated(game, shared)
+        return
+    if pair_limit_reached:
+        chess_service.apply_unrated(game, "pair_limit")
+
+
 async def chess_apply_elo_if_needed(game: dict) -> bool:
     if game.get("status") != "finished" or game.get("eloProcessed"):
         return False
     if game.get("reason") in chess_service.UNRATED_REASONS or game.get("result") not in ("1-0", "0-1", "1/2-1/2"):
-        game["rated"] = False
+        chess_service.apply_unrated(
+            game,
+            game.get("reason") if game.get("reason") in chess_service.UNRATED_REASONS else "aborted",
+        )
         game["eloProcessed"] = True
         return True
     w_id = game.get("players", {}).get("white")
     b_id = game.get("players", {}).get("black")
     if not w_id or not b_id or chess_service.is_guest_id(w_id) or chess_service.is_guest_id(b_id):
-        game["rated"] = False
+        chess_service.apply_unrated(game, "guest")
+        game["eloProcessed"] = True
+        return True
+    if not chess_service.is_timed(game) or game.get("timeControl") == "unlimited":
+        chess_service.apply_unrated(game, "unlimited")
+        game["eloProcessed"] = True
+        return True
+    if chess_service.is_early_unrated_end(game):
+        chess_service.apply_unrated(game, "too_short")
+        game["eloProcessed"] = True
+        return True
+    shared = chess_service.detect_shared_client(game)
+    if shared:
+        chess_service.apply_unrated(game, shared)
+        game["eloProcessed"] = True
+        return True
+    if game.get("rated") is False and game.get("unratedReason"):
+        game["eloProcessed"] = True
+        return True
+    finished_at = int(game.get("finishedAt") or now_ms())
+    pair_count = await chess_count_pair_rated_games_24h(
+        w_id,
+        b_id,
+        finished_at - chess_service.PAIR_RATED_WINDOW_MS,
+        exclude_game_id=game.get("_id"),
+    )
+    if pair_count >= chess_service.PAIR_RATED_LIMIT_24H:
+        chess_service.apply_unrated(game, "pair_limit")
         game["eloProcessed"] = True
         return True
     w_doc = await cl_users.find_one({"chatId": w_id}, {"chessStats": 1})
@@ -7655,9 +7732,16 @@ async def chess_apply_elo_if_needed(game: dict) -> bool:
         game["eloProcessed"] = True
         return True
     game["rated"] = True
+    game["unratedReason"] = None
     game["eloProcessed"] = True
     game["ratingChanges"] = changes
     now = now_ms()
+    w_opps = list(dict.fromkeys([str(x) for x in (w_stats.get("opponents") or []) if x]))
+    if b_id not in w_opps and len(w_opps) < 100:
+        w_opps.append(b_id)
+    b_opps = list(dict.fromkeys([str(x) for x in (b_stats.get("opponents") or []) if x]))
+    if w_id not in b_opps and len(b_opps) < 100:
+        b_opps.append(w_id)
     w_inc = {"chessStats.gamesPlayed": 1}
     b_inc = {"chessStats.gamesPlayed": 1}
     if game["result"] == "1-0":
@@ -7671,11 +7755,27 @@ async def chess_apply_elo_if_needed(game: dict) -> bool:
         b_inc["chessStats.draws"] = 1
     await cl_users.update_one(
         {"chatId": w_id},
-        {"$set": {"chessStats.elo": changes["white"]["after"], "chessStats.updatedAt": now}, "$inc": w_inc},
+        {
+            "$set": {
+                "chessStats.elo": changes["white"]["after"],
+                "chessStats.updatedAt": now,
+                "chessStats.opponents": w_opps,
+                "chessStats.uniqueOpponents": len(w_opps),
+            },
+            "$inc": w_inc,
+        },
     )
     await cl_users.update_one(
         {"chatId": b_id},
-        {"$set": {"chessStats.elo": changes["black"]["after"], "chessStats.updatedAt": now}, "$inc": b_inc},
+        {
+            "$set": {
+                "chessStats.elo": changes["black"]["after"],
+                "chessStats.updatedAt": now,
+                "chessStats.opponents": b_opps,
+                "chessStats.uniqueOpponents": len(b_opps),
+            },
+            "$inc": b_inc,
+        },
     )
     global _cached_chess_champion
     _cached_chess_champion = None
@@ -7707,6 +7807,7 @@ async def chess_backfill_stats():
                             {"$set": {
                                 "eloProcessed": True,
                                 "rated": bool(fresh.get("rated")),
+                                "unratedReason": fresh.get("unratedReason"),
                                 "ratingChanges": fresh.get("ratingChanges"),
                             }},
                         )
@@ -7715,6 +7816,31 @@ async def chess_backfill_stats():
             finally:
                 if not lock.locked():
                     chess_locks.pop(game_id, None)
+        async for user in cl_users.find(
+            {"chessStats.gamesPlayed": {"$gt": 0}, "chessStats.uniqueOpponents": {"$exists": False}},
+            {"chatId": 1},
+        ):
+            uid = user["chatId"]
+            opps = set()
+            async for g in cl_chess_games.find(
+                {
+                    "status": "finished",
+                    "rated": True,
+                    "$or": [{"players.white": uid}, {"players.black": uid}],
+                },
+                {"players": 1},
+            ):
+                players = g.get("players") or {}
+                opp = players.get("black") if players.get("white") == uid else players.get("white")
+                if opp and not chess_service.is_guest_id(opp):
+                    opps.add(opp)
+                    if len(opps) >= 100:
+                        break
+            opp_list = sorted(opps)
+            await cl_users.update_one(
+                {"chatId": uid},
+                {"$set": {"chessStats.opponents": opp_list, "chessStats.uniqueOpponents": len(opp_list)}},
+            )
     except Exception as e:
         print(f"Chess backfill warning: {e}")
 
@@ -10223,6 +10349,12 @@ async def create_chess_game(
     except ChessError as error:
         raise chess_http_error(error)
     game["_id"] = uuid.uuid4().hex
+    chess_service.record_client_meta(
+        game,
+        me,
+        ip=extract_client_ip(request),
+        device_id=extract_device_id(request),
+    )
     await cl_chess_games.insert_one(game)
     chess_schedule(game)
     return {"game": await chess_response(game)}
@@ -10634,14 +10766,26 @@ async def accept_chess_game(
     creator_active = await chess_find_blocking_game(game["creatorId"], now, only_active=True)
     if creator_active and creator_active["_id"] != game_id:
         raise HTTPException(status_code=409, detail="already_in_game")
+    joiner_ip = extract_client_ip(request)
+    joiner_device = extract_device_id(request)
+    pair_count = await chess_count_pair_rated_games_24h(
+        game["creatorId"],
+        me,
+        now - chess_service.PAIR_RATED_WINDOW_MS,
+    )
+    pair_limit_reached = pair_count >= chess_service.PAIR_RATED_LIMIT_24H
+
+    def _accept_action(g, n):
+        ev = (
+            chess_service.join_group(g, me, invited_group_id, n)
+            if invited_group_id
+            else chess_service.join(g, me, n)
+        )
+        chess_apply_join_policies(g, me, joiner_ip, joiner_device, pair_limit_reached)
+        return ev
+
     try:
-        if invited_group_id:
-            game, _ = await chess_run(
-                game_id,
-                lambda g, n: chess_service.join_group(g, me, invited_group_id, n),
-            )
-        else:
-            game, _ = await chess_run(game_id, lambda g, n: chess_service.join(g, me, n))
+        game, _ = await chess_run(game_id, _accept_action)
     except ChessError as error:
         raise chess_http_error(error)
     schedule_push(notify_chess_joined(game, me))
@@ -10692,8 +10836,22 @@ async def join_chess_by_link(
         creator_active = await chess_find_blocking_game(game["creatorId"], now, only_active=True)
         if creator_active and creator_active["_id"] != game_id:
             raise HTTPException(status_code=409, detail="already_in_game")
+        joiner_ip = extract_client_ip(request)
+        joiner_device = extract_device_id(request)
+        pair_count = await chess_count_pair_rated_games_24h(
+            game["creatorId"],
+            me,
+            now - chess_service.PAIR_RATED_WINDOW_MS,
+        )
+        pair_limit_reached = pair_count >= chess_service.PAIR_RATED_LIMIT_24H
+
+        def _link_join_action(g, n):
+            ev = chess_service.join_by_link(g, me, n)
+            chess_apply_join_policies(g, me, joiner_ip, joiner_device, pair_limit_reached)
+            return ev
+
         try:
-            game, _ = await chess_run(game_id, lambda g, n: chess_service.join_by_link(g, me, n))
+            game, _ = await chess_run(game_id, _link_join_action)
         except ChessError as error:
             raise chess_http_error(error)
         schedule_push(notify_chess_joined(game, me))
@@ -10868,6 +11026,7 @@ async def chess_websocket(
     gameId: str = Query(...),
     token: Optional[str] = Query(None),
     guestToken: Optional[str] = Query(None),
+    deviceId: Optional[str] = Query(None),
 ):
     await websocket.accept()
     game = await cl_chess_games.find_one({"_id": gameId})
@@ -10880,16 +11039,25 @@ async def chess_websocket(
     if not game or chess_service.color_of(game, user_id) is None:
         await websocket.close(code=1008)
         return
+    ws_ip = extract_client_ip(websocket)
+    ws_device = extract_device_id(websocket, deviceId)
     room = chess_rooms.setdefault(gameId, {})
     room.setdefault(user_id, []).append(websocket)
     pending = chess_abandon_tasks.pop(f"{gameId}:{user_id}", None)
     if pending:
         pending.cancel()
+
+    def _ws_connect_action(g, n):
+        ev = chess_service.set_connected(g, user_id, True, n)
+        chess_service.record_client_meta(g, user_id, ip=ws_ip, device_id=ws_device)
+        if g.get("status") == "active" and g.get("rated"):
+            shared = chess_service.detect_shared_client(g)
+            if shared:
+                chess_service.apply_unrated(g, shared)
+        return ev
+
     try:
-        game, _ = await chess_run(
-            gameId,
-            lambda g, n: chess_service.set_connected(g, user_id, True, n),
-        )
+        game, _ = await chess_run(gameId, _ws_connect_action)
     except ChessError:
         await websocket.close(code=1008)
         return

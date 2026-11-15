@@ -40,6 +40,11 @@ DOUBLE_DISCONNECT_MS = 60 * 1000
 WAITING_TTL_MS = 10 * 60 * 1000
 UNRATED_REASONS = {"aborted", "first_move_timeout", "double_disconnect_draw"}
 ABORTED_REASONS = {"aborted", "first_move_timeout"}
+EARLY_END_REASONS = {"resign", "disconnect_abandonment", "long_move_abandonment", "agreement"}
+MIN_RATED_PLIES_EARLY_END = 10
+PAIR_RATED_LIMIT_24H = 3
+PAIR_RATED_WINDOW_MS = 24 * 60 * 60 * 1000
+LOOPBACK_IPS = {"127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"}
 OTHER = {"white": "black", "black": "white"}
 WIN = {"white": "1-0", "black": "0-1"}
 REASONS = {
@@ -124,6 +129,11 @@ def new_game(creator_id, color, time_control, now):
         "guestId": None,
         "guestToken": None,
         "rated": False,
+        "unratedReason": None,
+        "clientMeta": {
+            "white": {"ips": [], "devices": []},
+            "black": {"ips": [], "devices": []},
+        },
         "eloProcessed": False,
         "ratingChanges": None,
     }
@@ -183,13 +193,67 @@ def _active_color(game, user_id):
     return color
 
 
+def apply_unrated(game, reason):
+    game["rated"] = False
+    if reason and not game.get("unratedReason"):
+        game["unratedReason"] = reason
+
+
+def is_early_unrated_end(game):
+    return (
+        game.get("reason") in EARLY_END_REASONS
+        and len(game.get("moves") or []) < MIN_RATED_PLIES_EARLY_END
+    )
+
+
+def record_client_meta(game, user_id, ip=None, device_id=None):
+    color = color_of(game, user_id)
+    if color is None:
+        return False
+    meta = game.setdefault(
+        "clientMeta",
+        {
+            "white": {"ips": [], "devices": []},
+            "black": {"ips": [], "devices": []},
+        },
+    )
+    slot = meta.setdefault(color, {"ips": [], "devices": []})
+    changed = False
+    ip_val = str(ip or "").strip()[:64]
+    dev_val = str(device_id or "").strip()[:64]
+    if ip_val and ip_val not in slot["ips"] and len(slot["ips"]) < 8:
+        slot["ips"].append(ip_val)
+        changed = True
+    if dev_val and dev_val not in slot["devices"] and len(slot["devices"]) < 8:
+        slot["devices"].append(dev_val)
+        changed = True
+    return changed
+
+
+def detect_shared_client(game):
+    meta = game.get("clientMeta") or {}
+    white_meta = meta.get("white") or {}
+    black_meta = meta.get("black") or {}
+    white_devices = {d for d in (white_meta.get("devices") or []) if d}
+    black_devices = {d for d in (black_meta.get("devices") or []) if d}
+    if white_devices & black_devices:
+        return "same_device"
+    white_ips = {ip for ip in (white_meta.get("ips") or []) if ip and ip not in LOOPBACK_IPS}
+    black_ips = {ip for ip in (black_meta.get("ips") or []) if ip and ip not in LOOPBACK_IPS}
+    if white_ips & black_ips:
+        return "same_ip"
+    return None
+
+
 def _finish(game, result, reason, now):
     if is_timed(game) and len(game["moves"]) >= 2 and reason != "timeout":
         turn = turn_by_ply(game)
         elapsed = max(0, now - game["lastMoveAt"])
         game["clocks"][turn] = max(0, game["clocks"][turn] - elapsed)
     if reason in UNRATED_REASONS or result == "*":
-        game["rated"] = False
+        apply_unrated(game, reason if reason in UNRATED_REASONS else "aborted")
+    elif reason in EARLY_END_REASONS and len(game["moves"]) < MIN_RATED_PLIES_EARLY_END:
+        apply_unrated(game, "too_short")
     game["status"] = "finished"
     game["result"] = result
     game["reason"] = reason
@@ -249,10 +313,14 @@ def set_group_invitee(game, user_id, group_id):
     game["invitedGroupId"] = group_id
 
 
-def _seat_opponent(game, user_id, now, rated):
+def _seat_opponent(game, user_id, now, rated, unrated_reason=None):
     seat = "black" if game["players"]["white"] else "white"
     game["players"][seat] = user_id
-    game["rated"] = rated
+    if not is_timed(game) or game.get("timeControl") == "unlimited":
+        rated = False
+        unrated_reason = unrated_reason or "unlimited"
+    game["rated"] = bool(rated)
+    game["unratedReason"] = None if rated else unrated_reason
     game["status"] = "active"
     game["startedAt"] = now
     game["lastMoveAt"] = now
@@ -266,9 +334,8 @@ def join(game, user_id, now):
         raise ChessError("not_joinable")
     if user_id == game["creatorId"] or user_id != game["invitedChatId"]:
         raise ChessError("forbidden")
-    return _seat_opponent(
-        game, user_id, now, not is_guest_id(game["creatorId"]) and not is_guest_id(user_id)
-    )
+    rated = not is_guest_id(game["creatorId"]) and not is_guest_id(user_id)
+    return _seat_opponent(game, user_id, now, rated, None if rated else "guest")
 
 
 def join_by_link(game, user_id, now, guest_token=None):
@@ -283,12 +350,8 @@ def join_by_link(game, user_id, now, guest_token=None):
     if is_guest_id(user_id):
         game["guestId"] = user_id
         game["guestToken"] = guest_token
-    return _seat_opponent(
-        game,
-        user_id,
-        now,
-        False if is_guest_id(user_id) else not is_guest_id(game["creatorId"]),
-    )
+    rated = False if is_guest_id(user_id) else not is_guest_id(game["creatorId"])
+    return _seat_opponent(game, user_id, now, rated, None if rated else "guest")
 
 
 def join_group(game, user_id, group_id, now):
@@ -298,7 +361,8 @@ def join_group(game, user_id, group_id, now):
         raise ChessError("forbidden")
     if not game.get("invitedGroupId") or game["invitedGroupId"] != group_id:
         raise ChessError("forbidden")
-    return _seat_opponent(game, user_id, now, not is_guest_id(game["creatorId"]))
+    rated = not is_guest_id(game["creatorId"]) and not is_guest_id(user_id)
+    return _seat_opponent(game, user_id, now, rated, None if rated else "guest")
 
 
 def apply_move(game, user_id, uci, now):

@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Check, Hourglass, Link2, Smile, UserRound, Volume2, VolumeX } from 'lucide-react';
 import { apiFetch } from '../../config/api';
 import { useChessSocket } from '../../hooks/useChessSocket';
+import { useChessboardTouchGuard } from '../../hooks/useChessboardTouchGuard';
 import type { Chat, ChessColor, ChessEmote, ChessEvent, ChessGameView, User } from '../../types';
 import {
     fetchChessGameCached,
@@ -137,6 +138,12 @@ export function CapturedRow({ pieces, color }: { pieces: { piece: string; count:
 
 export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestMode, chats, onExitGame }: ChessGameProps) {
     const { scrolled, handleScroll } = useScrollFade();
+    const {
+        boardKey,
+        markDragStart,
+        markDragEnd,
+        wrapProps: boardWrapProps,
+    } = useChessboardTouchGuard();
     const initialCached = getCachedChessGame(gameId);
     const [game, setGame] = useState<ChessGameView | null>(() => initialCached);
     const [pendingFen, setPendingFen] = useState<string | null>(null);
@@ -807,8 +814,9 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                         )}
                     </div>
 
-                    <div className="chess__board-wrap">
+                    <div className="chess__board-wrap" {...boardWrapProps}>
                         <Chessboard
+                            key={boardKey}
                             options={{
                                 position: displayedFen,
                                 boardOrientation: myColor,
@@ -829,9 +837,17 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                                     return piece.pieceType.startsWith(code);
                                 },
                                 onPieceDrag: ({ square }) => {
-                                    if (square) setSelected(square);
+                                    markDragStart();
+                                    if (square) {
+                                        window.requestAnimationFrame(() => setSelected(square));
+                                    }
+                                },
+                                onPieceDragCancel: () => {
+                                    markDragEnd();
+                                    setSelected(null);
                                 },
                                 onPieceDrop: ({ sourceSquare, targetSquare }) => {
+                                    markDragEnd();
                                     if (!targetSquare || sourceSquare === targetSquare) return false;
                                     return tryMove(sourceSquare, targetSquare);
                                 },

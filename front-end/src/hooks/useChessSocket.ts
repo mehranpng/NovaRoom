@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { API_WS_URL } from '../config/api';
+import { API_WS_URL, getClientDeviceId } from '../config/api';
 import type { ChessColor, ChessEmote, ChessEvent, ChessGameView } from '../types';
 
 interface Options {
@@ -34,6 +34,8 @@ export function useChessSocket({ token, guestToken, gameId, onState, onError, on
         const params = new URLSearchParams({ gameId });
         if (token) params.set('token', token);
         if (guestToken) params.set('guestToken', guestToken);
+        const deviceId = getClientDeviceId();
+        if (deviceId) params.set('deviceId', deviceId);
 
         const connect = () => {
             const ws = new WebSocket(`${API_WS_URL}/ws/chess?${params.toString()}`);

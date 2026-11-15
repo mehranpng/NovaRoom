@@ -302,7 +302,7 @@ export function ChessUserProfile({
                                                         {formatTimeControl(g.timeControl)}
                                                         {reason ? ` • ${reason}` : ''}
                                                         {` • ${toPersianDigits(Math.ceil(g.ply / 2))} حرکت`}
-                                                        {ratingChange && (
+                                                        {ratingChange ? (
                                                             <span
                                                                 className={cx(
                                                                     'chess-history__rating',
@@ -312,7 +312,9 @@ export function ChessUserProfile({
                                                             >
                                                                 {` • ${ratingChange.delta > 0 ? '+' : ratingChange.delta < 0 ? '−' : ''}${toPersianDigits(Math.abs(ratingChange.delta))}`}
                                                             </span>
-                                                        )}
+                                                        ) : g.rated === false && g.result !== '*' ? (
+                                                            <span>{' • بدون امتیاز'}</span>
+                                                        ) : null}
                                                     </div>
                                                 </div>
                                             </div>
