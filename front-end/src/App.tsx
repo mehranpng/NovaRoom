@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import type { Message, View, User, Chat, ChatLastMessage, FileMetadata, AIChatSummary, AIModelKey, PendingForwardDraft, AIUsageStatus, AIMemoryItem, AIAttachmentMeta, AISearchSource, PendingAttachment } from './types';
+import type { Message, View, User, Chat, ChatLastMessage, FileMetadata, AIChatSummary, AIModelKey, PendingForwardDraft, AIUsageStatus, AIMemoryItem, AIAttachmentMeta, AISearchSource, PendingAttachment, TicTacToeData } from './types';
 import { apiFetch, getAuthToken } from './config/api';
 import { cancelUpload, enqueueUpload, registerUpload, releaseUpload, uploadChatFile, localBlobUrls, registerLocalBlobUrl } from './utils/chatFileUploader';
 import { clearUploadProgress, setUploadProgress } from './utils/uploadProgressStore';
@@ -1231,6 +1231,17 @@ export function App() {
     }, [currentUser?.chatId, currentUser?.username, loadChats, playChatSound, touchInteractiveUser]);
 
 
+    const handleTicTacToeUpdated = useCallback((chatId: string, messageId: string, ticTacToe: TicTacToeData) => {
+        setMessages((prev) => {
+            const arr = prev[chatId];
+            if (!arr) return prev;
+            return {
+                ...prev,
+                [chatId]: arr.map((m) => (m.id === messageId ? { ...m, ticTacToe } : m)),
+            };
+        });
+    }, []);
+
     const handleMessageEdited = useCallback((chatId: string, updated: Message) => {
         setMessages(prev => {
             const arr = prev[chatId];
@@ -2008,6 +2019,7 @@ export function App() {
         onAIStreamDone: handleAIStreamDone,
         onAISearchResults: handleAISearchResults,
         onAIMemoriesUpdated: handleAIMemoriesUpdated,
+        onTicTacToeUpdated: handleTicTacToeUpdated,
     });
 
     useEffect(() => {
@@ -3002,6 +3014,35 @@ export function App() {
 
         await dispatch(activeChatId);
     }, [activeChatId, currentUser, pendingUser, sendViaWS, editViaWS, loadChats, navigate, chats, isUserBlocked, messages, authToken, sendUploadStatus]);
+
+    const handleEnsureActiveChat = useCallback(async (): Promise<string | null> => {
+        if (activeChatId) return activeChatId;
+        if (!pendingUser || !currentUser) return null;
+        if (isUserBlocked(pendingUser)) return null;
+        const res = await apiFetch('/chats', {
+            method: 'POST',
+            body: JSON.stringify({ targetChatId: pendingUser.chatId }),
+        });
+        const createdChatId = res.chatId as string;
+        const createdAt = Date.now();
+        newGroupTimestamps.current[createdChatId] = createdAt;
+        setChats((prev) => {
+            if (prev.some((c) => c.id === createdChatId)) return prev;
+            const newChat: Chat = {
+                id: createdChatId,
+                participantIds: [currentUser.chatId, pendingUser.chatId],
+                otherUser: pendingUser,
+                updatedAt: createdAt,
+                unreadCount: 0,
+            };
+            return [newChat, ...prev];
+        });
+        setActiveChatId(createdChatId);
+        setPendingUser(null);
+        setView('chatRoom');
+        navigate(`/chat/${encodeURIComponent(createdChatId)}`, { replace: true });
+        return createdChatId;
+    }, [activeChatId, pendingUser, currentUser, isUserBlocked, navigate]);
 
     const handleDeleteMessage = useCallback((messageId: string) => {
         if (!activeChatId) return;
@@ -4298,6 +4339,9 @@ export function App() {
                                 onAckMention={handleAckMention}
                                 onAckReaction={handleAckReaction}
                                 onJoinGroupByCode={handleJoinGroup}
+                                onEnsureChat={handleEnsureActiveChat}
+                                onTicTacToeSent={handleNewMessage}
+                                onTicTacToeUpdated={handleTicTacToeUpdated}
                             />
                         ) : (
                             <EmptyState />

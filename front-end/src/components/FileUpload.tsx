@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { File as FileIcon, Image, Music2, Paperclip, Video } from 'lucide-react';
+import { File as FileIcon, Grid3X3, Image, Music2, Paperclip, Video } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { PendingAttachment } from '../types';
 import { validateFileSize } from '../utils/fileUtils';
@@ -10,11 +10,12 @@ interface FileUploadProps {
     onFileSelected: (attachment: PendingAttachment) => void;
     fileAttached?: boolean;
     onRegisterUploadFile?: (handler: ((file: File) => void) | null) => void;
+    onStartTicTacToe?: () => void;
 }
 
 export const fileUploadPicker = { open: false };
 
-export function FileUpload({ onFileSelected, fileAttached = false, onRegisterUploadFile }: FileUploadProps) {
+export function FileUpload({ onFileSelected, fileAttached = false, onRegisterUploadFile, onStartTicTacToe }: FileUploadProps) {
     const [pickerMenuOpen, setPickerMenuOpenState] = useState(false);
 
     const setPickerMenuOpen = (value: boolean | ((prev: boolean) => boolean)) => {
@@ -300,6 +301,20 @@ export function FileUpload({ onFileSelected, fileAttached = false, onRegisterUpl
                             whileHover={{ x: -2 }} whileTap={{ scale: 0.98 }}>
                             <span className="file-upload-picker-item__label"><FileIcon size={16} />فایل</span>
                         </motion.label>
+                        {onStartTicTacToe && (
+                            <motion.button
+                                type="button"
+                                className="file-upload-picker-item"
+                                onClick={() => {
+                                    closePicker();
+                                    onStartTicTacToe();
+                                }}
+                                whileHover={{ x: -2 }}
+                                whileTap={{ scale: 0.98 }}
+                            >
+                                <span className="file-upload-picker-item__label"><Grid3X3 size={16} />دوز</span>
+                            </motion.button>
+                        )}
                     </motion.div>
                 )}
             </AnimatePresence>

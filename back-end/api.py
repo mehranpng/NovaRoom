@@ -12,7 +12,7 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import Response, FileResponse, StreamingResponse
+from fastapi.responses import Response, FileResponse, StreamingResponse, JSONResponse
 from starlette.websockets import WebSocketState
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta, timezone
@@ -5633,6 +5633,7 @@ async def get_messages(
                 "forwardedFrom": m.get("forwardedFrom"),
                 "file": m.get("file"),
                 "chessInvite": m.get("chessInvite"),
+                "ticTacToe": m.get("ticTacToe"),
                 "reasoningContent": decrypt_with_fallback(
                     m.get("reasoningContent", ""), session_token, chat_scope
                 ),
@@ -5812,6 +5813,7 @@ async def get_messages(
             "searchStatus": str(m.get("searchStatus") or ""),
             "searchSources": m.get("searchSources") or "",
             "chessInvite": m.get("chessInvite"),
+            "ticTacToe": m.get("ticTacToe"),
             "systemType": m.get("systemType"),
             "clientId": m.get("clientId"),
         }
@@ -6774,6 +6776,8 @@ async def forward_message(
             original_msg = await cl_ai_messages.find_one({"_id": oid})
             is_ai_message = True
         if not original_msg:
+            continue
+        if not is_ai_message and original_msg.get("ticTacToe"):
             continue
 
         if is_ai_message:
@@ -8950,7 +8954,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 msg = await cl_messages.find_one({"_id": oid, "chatId": chat_id_target})
                 if not msg or msg.get("senderId") != chat_id:
                     continue
-                if msg.get("systemType"):
+                if msg.get("systemType") or msg.get("ticTacToe") or msg.get("chessInvite"):
                     continue
 
                 saved_chat_id = get_saved_messages_id(chat_id)
@@ -10958,6 +10962,369 @@ async def chess_websocket(
                 )
             except ChessError:
                 pass
+
+
+TICTACTOE_MESSAGE_TEXT = "⭕ بازی دوز"
+TICTACTOE_WIN_LINES = (
+    (0, 1, 2),
+    (3, 4, 5),
+    (6, 7, 8),
+    (0, 3, 6),
+    (1, 4, 7),
+    (2, 5, 8),
+    (0, 4, 8),
+    (2, 4, 6),
+)
+
+
+class TicTacToeCreateRequest(BaseModel):
+    chatId: str
+    targetUserId: Optional[str] = None
+
+
+class TicTacToeMoveRequest(BaseModel):
+    cell: int
+
+
+def _resolve_tictactoe_player_name(user_doc: dict) -> str:
+    profile = user_doc.get("profile") or {}
+    return (
+        str(profile.get("name") or "").strip()
+        or str(profile.get("username") or "").strip()
+        or "کاربر"
+    )
+
+
+async def _validate_tictactoe_chat(chat_id: str, me: str) -> Tuple[dict, List[str], bool]:
+    if (
+        not chat_id
+        or chat_id == "saved"
+        or chat_id == get_saved_messages_id(me)
+        or is_official_channel_chat(chat_id)
+    ):
+        raise HTTPException(status_code=403, detail="tictactoe_not_allowed_in_chat")
+    chat_doc = await cl_chats.find_one(
+        {"_id": chat_id}, {"participants": 1, "chatType": 1}
+    )
+    if not chat_doc:
+        raise HTTPException(status_code=404, detail="chat_not_found")
+    participants = list(chat_doc.get("participants", []) or [])
+    if me not in participants:
+        raise HTTPException(status_code=403, detail="forbidden")
+    is_group = chat_doc.get("chatType") == "group"
+    if not is_group:
+        other_id = next((p for p in participants if p != me), "")
+        if other_id and await _is_direct_blocked_between(me, other_id):
+            raise HTTPException(status_code=403, detail="blocked")
+    return chat_doc, participants, is_group
+
+
+@app.post("/tictactoe/games")
+@limiter.limit("30/minute")
+async def create_tictactoe_game(
+    request: Request,
+    body: TicTacToeCreateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    me = current_user["chatId"]
+    chat_id = str(body.chatId or "").strip()
+    if chat_id == "pending":
+        target_id = str(body.targetUserId or "").strip()
+        if not target_id or target_id == me or target_id == "saved" or is_official_channel_chat(target_id):
+            raise HTTPException(status_code=400, detail="bad_request")
+        target_user = await cl_users.find_one(
+            {"chatId": target_id, "deletion.status": {"$ne": "purging"}},
+            {"chatId": 1},
+        )
+        if not target_user:
+            raise HTTPException(status_code=404, detail="user_not_found")
+        if await _is_direct_blocked_between(me, target_id):
+            raise HTTPException(status_code=403, detail="blocked")
+        chat_id = get_chat_id_for_two(me, target_id)
+        if not await cl_chats.find_one({"_id": chat_id}, {"_id": 1}):
+            now_create = utc_now()
+            await cl_chats.insert_one(
+                {
+                    "_id": chat_id,
+                    "participants": sorted([me, target_id]),
+                    "createdAt": now_create,
+                    "updatedAt": now_create,
+                    "lastMessage": None,
+                }
+            )
+
+    _, participants, is_group = await _validate_tictactoe_chat(chat_id, me)
+    now_dt = utc_now()
+    tic_tac_toe = {
+        "board": ["", "", "", "", "", "", "", "", ""],
+        "playerX": me,
+        "playerXName": _resolve_tictactoe_player_name(current_user),
+        "playerO": None,
+        "playerOName": None,
+        "turn": "X",
+        "status": "waiting",
+        "winner": None,
+        "winLine": None,
+    }
+    message_doc = {
+        "chatId": chat_id,
+        "senderId": me,
+        "text": TICTACTOE_MESSAGE_TEXT,
+        "textEncrypted": True,
+        "timestamp": now_dt,
+        "seenBy": [me],
+        "replyTo": None,
+        "reactions": [],
+        "unreadMentionUserIds": [],
+        "unreadReactionUserIds": [],
+        "ticTacToe": tic_tac_toe,
+    }
+    inserted = await cl_messages.insert_one(message_doc)
+    msg_id = str(inserted.inserted_id)
+    last_msg = {
+        "id": msg_id,
+        "text": TICTACTOE_MESSAGE_TEXT,
+        "senderId": me,
+        "timestamp": now_dt,
+        "file": None,
+    }
+    await cl_chats.update_one(
+        {"_id": chat_id},
+        {"$set": {"lastMessage": last_msg, "updatedAt": now_dt}},
+    )
+    payload_message = {
+        "id": msg_id,
+        "chatId": chat_id,
+        "senderId": me,
+        "text": TICTACTOE_MESSAGE_TEXT,
+        "timestamp": dt_to_epoch_ms(now_dt),
+        "seen": False,
+        "replyTo": None,
+        "edited": False,
+        "reactions": [],
+        "file": None,
+        "clientId": None,
+        "ticTacToe": tic_tac_toe,
+    }
+    await broadcast(
+        participants,
+        {
+            "type": "new_message",
+            "chatId": chat_id,
+            "message": payload_message,
+        },
+    )
+    schedule_push(
+        notify_chat_message(chat_id, me, participants, is_group, False, [])
+    )
+    return {"chatId": chat_id, "message": payload_message}
+
+
+@app.post("/tictactoe/games/{message_id}/join")
+@limiter.limit("60/minute")
+async def join_tictactoe_game(
+    request: Request,
+    message_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    me = current_user["chatId"]
+    oid = await try_object_id(message_id)
+    if not oid:
+        raise HTTPException(status_code=400, detail="invalid_message_id")
+    msg = await cl_messages.find_one({"_id": oid}, {"chatId": 1, "ticTacToe": 1})
+    if not msg or not isinstance(msg.get("ticTacToe"), dict):
+        raise HTTPException(status_code=404, detail="not_found")
+    chat_id = msg["chatId"]
+    _, participants, _ = await _validate_tictactoe_chat(chat_id, me)
+    player_o_name = _resolve_tictactoe_player_name(current_user)
+    updated = await cl_messages.find_one_and_update(
+        {
+            "_id": oid,
+            "chatId": chat_id,
+            "ticTacToe.status": "waiting",
+            "ticTacToe.playerO": None,
+            "ticTacToe.playerX": {"$ne": me},
+        },
+        {
+            "$set": {
+                "ticTacToe.playerO": me,
+                "ticTacToe.playerOName": player_o_name,
+                "ticTacToe.status": "playing",
+                "ticTacToe.turn": "X",
+            }
+        },
+        return_document=ReturnDocument.AFTER,
+    )
+    if not updated:
+        latest = await cl_messages.find_one({"_id": oid}, {"ticTacToe": 1})
+        latest_ttt = latest.get("ticTacToe") if latest else None
+        if latest_ttt and latest_ttt.get("playerX") == me:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "cannot_join_own_game", "ticTacToe": latest_ttt},
+            )
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "already_joined", "ticTacToe": latest_ttt},
+        )
+    next_ttt = updated["ticTacToe"]
+    await broadcast(
+        participants,
+        {
+            "type": "tictactoe_updated",
+            "chatId": chat_id,
+            "messageId": message_id,
+            "ticTacToe": next_ttt,
+        },
+    )
+    return {"ticTacToe": next_ttt}
+
+
+@app.post("/tictactoe/games/{message_id}/move")
+@limiter.limit("120/minute")
+async def move_tictactoe_game(
+    request: Request,
+    message_id: str,
+    body: TicTacToeMoveRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    me = current_user["chatId"]
+    cell = body.cell
+    if cell < 0 or cell > 8:
+        raise HTTPException(status_code=400, detail="invalid_cell")
+    oid = await try_object_id(message_id)
+    if not oid:
+        raise HTTPException(status_code=400, detail="invalid_message_id")
+    msg = await cl_messages.find_one({"_id": oid}, {"chatId": 1, "ticTacToe": 1})
+    if not msg or not isinstance(msg.get("ticTacToe"), dict):
+        raise HTTPException(status_code=404, detail="not_found")
+    chat_id = msg["chatId"]
+    _, participants, _ = await _validate_tictactoe_chat(chat_id, me)
+    ttt = msg["ticTacToe"]
+    if ttt.get("status") == "waiting" and ttt.get("playerO") is None:
+        if ttt.get("playerX") == me:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "waiting_for_opponent", "ticTacToe": ttt},
+            )
+        player_o_name = _resolve_tictactoe_player_name(current_user)
+        updated = await cl_messages.find_one_and_update(
+            {
+                "_id": oid,
+                "chatId": chat_id,
+                "ticTacToe.status": "waiting",
+                "ticTacToe.playerO": None,
+                "ticTacToe.playerX": {"$ne": me},
+                f"ticTacToe.board.{cell}": "",
+            },
+            {
+                "$set": {
+                    "ticTacToe.playerO": me,
+                    "ticTacToe.playerOName": player_o_name,
+                    f"ticTacToe.board.{cell}": "O",
+                    "ticTacToe.status": "playing",
+                    "ticTacToe.turn": "X",
+                }
+            },
+            return_document=ReturnDocument.AFTER,
+        )
+        if not updated:
+            latest = await cl_messages.find_one({"_id": oid}, {"ticTacToe": 1})
+            latest_ttt = latest.get("ticTacToe") if latest else None
+            return JSONResponse(
+                status_code=409,
+                content={"detail": "already_joined", "ticTacToe": latest_ttt},
+            )
+        next_ttt = updated["ticTacToe"]
+        await broadcast(
+            participants,
+            {
+                "type": "tictactoe_updated",
+                "chatId": chat_id,
+                "messageId": message_id,
+                "ticTacToe": next_ttt,
+            },
+        )
+        return {"ticTacToe": next_ttt}
+
+    if ttt.get("playerX") == me:
+        my_symbol = "X"
+    elif ttt.get("playerO") == me:
+        my_symbol = "O"
+    else:
+        raise HTTPException(status_code=403, detail="not_a_player")
+
+    board = list(ttt.get("board") or [])
+    if (
+        ttt.get("status") != "playing"
+        or ttt.get("turn") != my_symbol
+        or len(board) != 9
+        or board[cell] != ""
+    ):
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "invalid_move_state", "ticTacToe": ttt},
+        )
+
+    next_board = list(board)
+    next_board[cell] = my_symbol
+    winner = None
+    win_line = None
+    for a, b, c in TICTACTOE_WIN_LINES:
+        if next_board[a] == next_board[b] == next_board[c] == my_symbol:
+            winner = my_symbol
+            win_line = [a, b, c]
+            break
+
+    if winner:
+        next_status = "finished"
+        next_turn = my_symbol
+    elif all(v in ("X", "O") for v in next_board):
+        next_status = "finished"
+        winner = "draw"
+        next_turn = my_symbol
+    else:
+        next_status = "playing"
+        next_turn = "O" if my_symbol == "X" else "X"
+
+    updated = await cl_messages.find_one_and_update(
+        {
+            "_id": oid,
+            "chatId": chat_id,
+            "ticTacToe.status": "playing",
+            "ticTacToe.turn": my_symbol,
+            f"ticTacToe.player{my_symbol}": me,
+            f"ticTacToe.board.{cell}": "",
+        },
+        {
+            "$set": {
+                f"ticTacToe.board.{cell}": my_symbol,
+                "ticTacToe.turn": next_turn,
+                "ticTacToe.status": next_status,
+                "ticTacToe.winner": winner,
+                "ticTacToe.winLine": win_line,
+            }
+        },
+        return_document=ReturnDocument.AFTER,
+    )
+    if not updated:
+        latest = await cl_messages.find_one({"_id": oid}, {"ticTacToe": 1})
+        latest_ttt = latest.get("ticTacToe") if latest else None
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "invalid_move_state", "ticTacToe": latest_ttt},
+        )
+    next_ttt = updated["ticTacToe"]
+    await broadcast(
+        participants,
+        {
+            "type": "tictactoe_updated",
+            "chatId": chat_id,
+            "messageId": message_id,
+            "ticTacToe": next_ttt,
+        },
+    )
+    return {"ticTacToe": next_ttt}
 
 
 if __name__ == "__main__":

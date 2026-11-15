@@ -50,6 +50,7 @@ type ChatComposerProps = {
     onInputFocus: () => void;
     notificationsMuted?: boolean;
     onToggleNotifications?: () => void;
+    onStartTicTacToe?: () => void;
 };
 
 function isMobileKeyboardInput() {
@@ -92,6 +93,7 @@ export const ChatComposer = memo(function ChatComposer({
     onInputFocus,
     notificationsMuted = false,
     onToggleNotifications,
+    onStartTicTacToe,
 }: ChatComposerProps) {
     const [text, setText] = useState(() => (editingId ? editDraft : (getChatDraft(chatId)?.text ?? '')));
     const [caretPos, setCaretPos] = useState(0);
@@ -402,6 +404,7 @@ export const ChatComposer = memo(function ChatComposer({
                             onFileSelected={handleFileSelected}
                             fileAttached={Boolean(displayedAttachment)}
                             onRegisterUploadFile={onRegisterUploadFile}
+                            onStartTicTacToe={onStartTicTacToe}
                         />
                         <textarea ref={textareaRef} className="chat-room__text-input" placeholder="پیام..."
                             wrap="soft"

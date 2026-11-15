@@ -1,0 +1,205 @@
+.ttt-card {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    width: 184px;
+    max-width: 100%;
+    padding: 1px;
+    direction: rtl;
+    --ttt-x-color: #e11d48;
+    --ttt-o-color: var(--accent-primary, #0284c7);
+}
+
+.ttt-card--mine {
+    --ttt-x-color: currentColor;
+    --ttt-o-color: currentColor;
+}
+
+.ttt-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.ttt-title-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+}
+
+.ttt-title-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 7px;
+    background: color-mix(in srgb, currentColor 11%, transparent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.ttt-title {
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.ttt-badge {
+    padding: 2px 7px;
+    border-radius: 9999px;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.ttt-badge--turn {
+    background: color-mix(in srgb, currentColor 22%, transparent);
+    border: 1px solid color-mix(in srgb, currentColor 34%, transparent);
+    font-weight: 700;
+}
+
+.ttt-badge--win {
+    background: color-mix(in srgb, currentColor 18%, transparent);
+    font-weight: 700;
+}
+
+.ttt-players {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+}
+
+.ttt-player {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    padding: 4px 8px;
+    border-radius: 9999px;
+    background: color-mix(in srgb, currentColor 7%, transparent);
+    border: 1px solid transparent;
+    transition: background-color 0.16s ease, border-color 0.16s ease, opacity 0.16s ease;
+}
+
+.ttt-player--active {
+    background: color-mix(in srgb, currentColor 18%, transparent);
+    border-color: color-mix(in srgb, currentColor 42%, transparent);
+    font-weight: 700;
+}
+
+.ttt-turn-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    margin-inline-start: auto;
+    flex-shrink: 0;
+}
+
+.ttt-player--winner {
+    background: color-mix(in srgb, currentColor 18%, transparent);
+    border-color: color-mix(in srgb, currentColor 32%, transparent);
+    font-weight: 700;
+}
+
+.ttt-player--waiting {
+    opacity: 0.7;
+}
+
+.ttt-player__mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.ttt-player__mark--x {
+    color: var(--ttt-x-color);
+}
+
+.ttt-player__mark--o {
+    color: var(--ttt-o-color);
+}
+
+.ttt-player__name {
+    font-size: 11px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.ttt-board {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 4px;
+    width: 100%;
+    aspect-ratio: 1;
+    padding: 4px;
+    border-radius: 12px;
+    background: color-mix(in srgb, currentColor 7%, transparent);
+    direction: ltr;
+}
+
+.ttt-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    aspect-ratio: 1;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, currentColor 8%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, currentColor 6%, transparent);
+    color: inherit;
+    cursor: default;
+    transition: transform 0.12s ease, background-color 0.15s ease, opacity 0.18s ease, border-color 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.ttt-cell--playable {
+    cursor: pointer;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+    border-color: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .ttt-cell--playable:hover:not(:disabled) {
+        background: color-mix(in srgb, currentColor 17%, transparent);
+    }
+}
+
+.ttt-cell--playable:active:not(:disabled) {
+    transform: scale(0.95);
+    background: color-mix(in srgb, currentColor 20%, transparent);
+}
+
+.ttt-cell--win {
+    background: color-mix(in srgb, currentColor 22%, transparent);
+    border-color: color-mix(in srgb, currentColor 36%, transparent);
+}
+
+.ttt-cell--dim {
+    opacity: 0.48;
+}
+
+.ttt-mark-svg {
+    display: block;
+}
+
+.ttt-mark-svg--x {
+    color: var(--ttt-x-color);
+}
+
+.ttt-mark-svg--o {
+    color: var(--ttt-o-color);
+}

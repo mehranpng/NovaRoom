@@ -117,6 +117,7 @@ export interface Message {
     analyzingAttachment?: boolean;
     aiAttachment?: AIAttachmentMeta;
     chessInvite?: ChessInvite;
+    ticTacToe?: TicTacToeData;
     upload?: { phase: 'uploading' | 'encrypting'; progress: number };
     forwarding?: boolean;
     unreadMentionUserIds?: string[];
@@ -305,6 +306,22 @@ export interface ChessInvite {
     timeControl: string;
     shared?: boolean;
     groupId?: string;
+}
+
+export type TicTacToeCell = '' | 'X' | 'O';
+export type TicTacToeSymbol = 'X' | 'O';
+export type TicTacToeStatus = 'waiting' | 'playing' | 'finished';
+
+export interface TicTacToeData {
+    board: TicTacToeCell[];
+    playerX: string;
+    playerXName: string;
+    playerO: string | null;
+    playerOName: string | null;
+    turn: TicTacToeSymbol;
+    status: TicTacToeStatus;
+    winner: 'X' | 'O' | 'draw' | null;
+    winLine: number[] | null;
 }
 
 export type View = 'chatList' | 'chatRoom' | 'newChat' | 'profile' | 'profileEdit' | 'settings' | 'settingsDevices' | 'settingsTheme' | 'settingsLogs' | 'settingsDataStorage' | 'settingsPrivacy' | 'settingsNotifications' | 'settingsAdmin' | 'settingsAdminPanel' | 'settingsAdminLinks' | 'chess';

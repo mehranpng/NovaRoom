@@ -62,6 +62,9 @@
 }
 
 .file-upload-picker-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
     border: none;
     border-radius: 16px;
     background: transparent;
@@ -71,11 +74,17 @@
     text-align: right;
     padding: 9px 12px;
     cursor: pointer;
-    transition: background 0.16s ease, color 0.16s ease;
+    transition: background 0.16s ease, color 0.16s ease, transform 0.12s ease;
 }
 
-.file-upload-picker-item:hover {
-    background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+@media (hover: hover) and (pointer: fine) {
+    .file-upload-picker-item:hover {
+        background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+    }
+}
+
+.file-upload-picker-item:active {
+    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
 }
 
 .file-upload-picker-item__label {

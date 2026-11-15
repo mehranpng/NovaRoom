@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import TelegramIcon from './TelegramIcon';
 import { ChevronLeft, ChevronDown } from 'lucide-react';
 import { AnimatePresence, motion } from "framer-motion";
-import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata, PendingAttachment, PendingForwardDraft, PinnedMessage, GroupPreview } from '../types';
+import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata, PendingAttachment, PendingForwardDraft, PinnedMessage, GroupPreview, TicTacToeData } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
 import { API_BASE_URL, apiFetch, getMessageSeenBy } from '../config/api';
@@ -21,6 +21,7 @@ import { screenVariants } from '../utils/screenMotion';
 import { deleteCachedBlob, getCachedBlob, getOrCacheBlob } from '../utils/mediaCache';
 import { pendingUploadedFileByChat } from '../utils/pendingUploads';
 import { getCachedChessGame } from '../utils/chessCache';
+import { notify } from '../utils/notificationBus';
 import {
     clearChatDraft,
     getChatDraft,
@@ -157,6 +158,9 @@ interface ChatRoomProps {
     onAckMention?: (chatId: string, messageId: string) => void | Promise<void>;
     onAckReaction?: (chatId: string, messageId: string) => void | Promise<void>;
     onJoinGroupByCode?: (inviteCode: string) => Promise<void>;
+    onEnsureChat?: () => Promise<string | null>;
+    onTicTacToeSent?: (chatId: string, message: Message) => void;
+    onTicTacToeUpdated?: (chatId: string, messageId: string, ticTacToe: TicTacToeData) => void;
 }
 
 function bubbleShape(prevSameSender: boolean, nextSameSender: boolean) {
@@ -329,6 +333,9 @@ export function ChatRoom({
     onAckMention,
     onAckReaction,
     onJoinGroupByCode,
+    onEnsureChat,
+    onTicTacToeSent,
+    onTicTacToeUpdated,
 }: ChatRoomProps) {
     const currentChat = useMemo(
         () => chats.find((c) => c.id === chatId) || null,
@@ -908,6 +915,9 @@ export function ChatRoom({
         if (reply.isQuote && fallbackText) return fallbackText;
         if (repliedMessage?.chessInvite) {
             return repliedMessage.chessInvite.shared ? '♟️ بازی شطرنج' : '♟️ دعوت به بازی شطرنج';
+        }
+        if (repliedMessage?.ticTacToe) {
+            return '⭕ بازی دوز';
         }
         if (!repliedMessage?.file) return fallbackText;
         const prefix = filePreviewLabel(repliedMessage.file.mimeType);
@@ -1680,6 +1690,7 @@ export function ChatRoom({
     }, [selectedMessageIds]);
 
     const isMessageForwardable = (msg: Message): boolean => {
+        if (msg.ticTacToe) return false;
         if (!msg.chessInvite) return true;
         if (msg.chessInvite.shared) return true;
         return getCachedChessGame(msg.chessInvite.gameId)?.status === 'finished';
@@ -1693,7 +1704,7 @@ export function ChatRoom({
 
         const textLines = selectedMsgs
             .map((m) => {
-                if (m.chessInvite) return '';
+                if (m.chessInvite || m.ticTacToe) return '';
                 const raw = m.text ?? '';
                 if (raw.trim()) return raw.trim();
                 if (m.file?.fileName) return `[فایل: ${m.file.fileName}]`;
@@ -1730,7 +1741,7 @@ export function ChatRoom({
     const canDeleteAnySelected = selectedMessageIds.length > 0 && deletableSelectedIds.length === selectedMessageIds.length;
     const canCopySelected = selectedMessageIds.some((id) => {
         const msg = messagesById.get(id);
-        return Boolean(msg && !msg.chessInvite && ((msg.text || '').trim() || msg.file?.fileName));
+        return Boolean(msg && !msg.chessInvite && !msg.ticTacToe && ((msg.text || '').trim() || msg.file?.fileName));
     });
     const canForwardSelected = selectedMessageIds.length > 0 && selectedMessageIds.every((id) => {
         const msg = messagesById.get(id);
@@ -2798,6 +2809,32 @@ export function ChatRoom({
         return true;
     }, [isContactBlocked, canSendInOfficialChannel, pendingForwardDraft, editingId, onSendMessage, handleForwardDraft, chatId]);
 
+    const sendingTicTacToeRef = useRef(false);
+    const handleSendTicTacToe = useCallback(async () => {
+        if (sendingTicTacToeRef.current) return;
+        if (isOfficialChannel || isSavedMessages || isContactBlocked || !canSendInOfficialChannel) return;
+        sendingTicTacToeRef.current = true;
+        try {
+            const targetChatId = chatId === 'pending' ? await onEnsureChat?.() : chatId;
+            if (!targetChatId || targetChatId === 'pending') return;
+            const res = await apiFetch('/tictactoe/games', {
+                method: 'POST',
+                body: JSON.stringify({ chatId: targetChatId }),
+            });
+            if (res?.message) {
+                onTicTacToeSent?.(res.chatId || targetChatId, res.message);
+            }
+            userHasScrolledRef.current = false;
+            userReadingOlderRef.current = false;
+            smoothBottomUntilRef.current = performance.now() + 1200;
+            requestAnimationFrame(() => scrollToBottom(true));
+        } catch {
+            notify({ message: 'ارسال بازی دوز با خطا مواجه شد', type: 'error' });
+        } finally {
+            sendingTicTacToeRef.current = false;
+        }
+    }, [isOfficialChannel, isSavedMessages, isContactBlocked, canSendInOfficialChannel, chatId, onEnsureChat, onTicTacToeSent]);
+
     const handleInputFocus = useCallback(() => {
         window.setTimeout(() => {
             if (computeNearBottom()) scrollToBottom(false);
@@ -3000,6 +3037,7 @@ export function ChatRoom({
         toggleReasoning,
         openMention,
         openGroupInvite,
+        onTicTacToeUpdated,
     });
     messageHandlerStateRef.current = {
         openMessageMenu,
@@ -3018,6 +3056,7 @@ export function ChatRoom({
         toggleReasoning,
         openMention,
         openGroupInvite,
+        onTicTacToeUpdated,
     };
 
     const messageActions = useMemo(() => ({
@@ -3048,6 +3087,9 @@ export function ChatRoom({
         },
         openGroupInvite: (inviteCode: string, messageId?: string) => {
             void messageHandlerStateRef.current.openGroupInvite(inviteCode, messageId);
+        },
+        updateTicTacToe: (targetChatId: string, messageId: string, ticTacToe: TicTacToeData) => {
+            messageHandlerStateRef.current.onTicTacToeUpdated?.(targetChatId, messageId, ticTacToe);
         },
         registerEl: (messageId: string, el: HTMLDivElement | null) => {
             if (!el) {
@@ -3639,6 +3681,9 @@ export function ChatRoom({
                                 if (pinnedFull?.chessInvite) {
                                     return pinnedFull.chessInvite.shared ? '♟️ بازی شطرنج' : '♟️ دعوت به بازی شطرنج';
                                 }
+                                if (pinnedFull?.ticTacToe) {
+                                    return '⭕ بازی دوز';
+                                }
                                 return pinnedMessage.text || (pinnedMessage.file ? `[فایل: ${pinnedMessage.file.fileName || 'پیوست'}]` : 'پیام');
                             })()}
                         </div>
@@ -3729,8 +3774,8 @@ export function ChatRoom({
                 const showSeenByAction = isGroupChat && activeMsgIsMine && !isOfficialChannel;
                 const canReplyInMessageMenu = !(isOfficialChannel && !isAdminUser);
                 const hasCaption = Boolean((activeMsg.text || '').trim());
-                const isChessMsg = Boolean(activeMsg.chessInvite);
-                const showCopyAction = !isChessMsg && (!activeMsg.file || hasCaption);
+                const isSpecialGameMsg = Boolean(activeMsg.chessInvite || activeMsg.ticTacToe);
+                const showCopyAction = !isSpecialGameMsg && (!activeMsg.file || hasCaption);
                 const showDownloadAction = Boolean(activeMsg.file?.fileId && msgMenu.isFileDownloaded);
                 const canTogglePin = pinnedMessage?.id === activeMsg.id
                     || (isOfficialChannel ? isVerifiedUser : !isGroupChat || canManageGroup);
@@ -3850,7 +3895,7 @@ export function ChatRoom({
                                 <TelegramIcon name="select" size={16} />
                                 انتخاب
                             </button>
-                            {activeMsg.senderId === currentUserId && !activeMsg.forwardedFrom && !isChessMsg && (
+                            {activeMsg.senderId === currentUserId && !activeMsg.forwardedFrom && !isSpecialGameMsg && (
                                 <button className="popover__item" onClick={() => beginEdit(activeMsg)} type="button"><TelegramIcon name="edit" size={16} />ویرایش</button>
                             )}
                             {showCopyAction && (<button className="popover__item" onClick={() => doCopyMessage(activeMsg)} type="button"><TelegramIcon name="copy" size={16} />کپی</button>)}
@@ -4154,6 +4199,7 @@ export function ChatRoom({
                     onInputFocus={handleInputFocus}
                     notificationsMuted={notifyMode === 'muted'}
                     onToggleNotifications={isOfficialChannel && !isAdminUser ? () => void setChatNotifyMode(chatId, notifyMode === 'muted' ? 'all' : 'muted') : undefined}
+                    onStartTicTacToe={!isOfficialChannel && !isSavedMessages && !isContactBlocked && canSendInOfficialChannel ? () => { void handleSendTicTacToe(); } : undefined}
                 />
             </div>
 

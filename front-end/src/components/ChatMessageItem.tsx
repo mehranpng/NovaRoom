@@ -4,10 +4,11 @@ import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
-import type { AISearchSource, FileMetadata, Message } from '../types';
+import type { AISearchSource, FileMetadata, Message, TicTacToeData } from '../types';
 import { Avatar } from './Avatar';
 import { FileMessage } from './FileMessage';
 import { ChessInviteCard } from './chess/ChessInviteCard';
+import { TicTacToeMessage } from './TicTacToeMessage';
 import { isLtrText, toPersianDigits } from '../utils/format';
 import { isImageFile } from '../utils/fileUtils';
 import { triggerHaptic } from '../utils/haptics';
@@ -47,6 +48,7 @@ type ChatMessageActions = {
     registerEl: (messageId: string, el: HTMLDivElement | null) => void;
     openMention: (username: string, messageId: string) => void;
     openGroupInvite: (inviteCode: string, messageId?: string) => void;
+    updateTicTacToe?: (chatId: string, messageId: string, ticTacToe: TicTacToeData) => void;
 };
 
 export type ChatMessageItemProps = {
@@ -668,7 +670,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     const showSearchBlock = Boolean(message.searchEnabled && (searchSources.length > 0 || message.searchStatus === 'searching'));
     const mimeType = message.file?.mimeType || '';
     const isVisualMedia = Boolean(message.file && (isImageFile(mimeType) || mimeType.startsWith('video/')));
-    const hasTextCaption = Boolean((displayText || '').trim()) && !message.chessInvite;
+    const hasTextCaption = Boolean((displayText || '').trim()) && !message.chessInvite && !message.ticTacToe;
     const hasReactions = sortedReactions.length > 0;
     const hasTopHeader = Boolean(
         (isGroupChat && !isMine && !isBigEmojiOnly && (shape === 'msg-shape--single' || shape === 'msg-shape--first'))
@@ -679,6 +681,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     const hasAuxiliaryContent = Boolean(
         (message.reasoningEnabled && message.reasoningContent)
         || message.chessInvite
+        || message.ticTacToe
         || (message.searchEnabled && searchSources.length > 0)
     );
     const isMediaWithoutBottomContent = isVisualMedia && !hasTextCaption && !hasReactions && !hasAuxiliaryContent;
@@ -1109,7 +1112,18 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                             {message.chessInvite && (
                                 <ChessInviteCard invite={message.chessInvite} isMine={isMine} />
                             )}
-                            {message.text && !message.chessInvite && !(message.reasoningEnabled && message.reasoningContent) && (
+                            {message.ticTacToe && (
+                                <TicTacToeMessage
+                                    messageId={message.id}
+                                    chatId={chatId}
+                                    game={message.ticTacToe}
+                                    currentUserId={currentUserId}
+                                    isMine={isMine}
+                                    isSelectionModeActive={isSelectionModeActive}
+                                    onGameUpdated={actions.updateTicTacToe}
+                                />
+                            )}
+                            {message.text && !message.chessInvite && !message.ticTacToe && !(message.reasoningEnabled && message.reasoningContent) && (
                                 <MemoMessageTextContent
                                     rawText={displayText}
                                     isBigEmojiOnly={isBigEmojiOnly}
@@ -1119,7 +1133,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                     onGroupInviteClick={handleGroupInviteClick}
                                 />
                             )}
-                            {message.text && !message.chessInvite && message.reasoningEnabled && message.reasoningContent && (
+                            {message.text && !message.chessInvite && !message.ticTacToe && message.reasoningEnabled && message.reasoningContent && (
                                 <div className="ai-reasoning-answer" style={{ marginTop: 0 }}>
                                     <MemoMessageTextContent
                                         rawText={displayText}

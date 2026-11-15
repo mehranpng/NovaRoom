@@ -1,7 +1,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { API_BASE_URL, API_WS_URL } from '../config/api';
-import type { FileMetadata } from '../types';
+import type { FileMetadata, TicTacToeData } from '../types';
 import { decryptMessageClientSide, encryptChatTextClientSide, extractMentionedUsernames, syncGroupE2EEKeys } from '../utils/e2ee';
 import { setGlobalChessChampion } from '../contexts/ChessChampionContext';
 
@@ -32,6 +32,7 @@ interface UseWebSocketProps {
     onAISearchStatus?: (payload: any) => void;
     onAISearchResults?: (payload: any) => void;
     onAIMemoriesUpdated?: () => void;
+    onTicTacToeUpdated?: (chatId: string, messageId: string, ticTacToe: TicTacToeData) => void;
 }
 
 type OutgoingEvent =
@@ -94,6 +95,7 @@ export function useWebSocket({
     onAISearchStatus,
     onAISearchResults,
     onAIMemoriesUpdated,
+    onTicTacToeUpdated,
 }: UseWebSocketProps) {
     const socketRef = useRef<WebSocket | null>(null);
     const isConnectedRef = useRef(false);
@@ -139,6 +141,7 @@ export function useWebSocket({
     const onAISearchStatusRef = useRef(onAISearchStatus);
     const onAISearchResultsRef = useRef(onAISearchResults);
     const onAIMemoriesUpdatedRef = useRef(onAIMemoriesUpdated);
+    const onTicTacToeUpdatedRef = useRef(onTicTacToeUpdated);
 
     useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
     useEffect(() => { onMessageEditedRef.current = onMessageEdited; }, [onMessageEdited]);
@@ -164,6 +167,7 @@ export function useWebSocket({
     useEffect(() => { onAISearchStatusRef.current = onAISearchStatus; }, [onAISearchStatus]);
     useEffect(() => { onAISearchResultsRef.current = onAISearchResults; }, [onAISearchResults]);
     useEffect(() => { onAIMemoriesUpdatedRef.current = onAIMemoriesUpdated; }, [onAIMemoriesUpdated]);
+    useEffect(() => { onTicTacToeUpdatedRef.current = onTicTacToeUpdated; }, [onTicTacToeUpdated]);
 
     const rejectAllPendingRequests = useCallback((reason: string) => {
         for (const [, pending] of pendingRequestsRef.current) {
@@ -372,6 +376,12 @@ export function useWebSocket({
                     }
                 } else if (dataType === 'chess_champion_updated') {
                     setGlobalChessChampion(data.champion || null);
+                } else if (dataType === 'tictactoe_updated') {
+                    const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
+                    const resolvedMessageId = String(data?.messageId || '').trim();
+                    if (resolvedChatId && resolvedMessageId && data?.ticTacToe) {
+                        onTicTacToeUpdatedRef.current?.(resolvedChatId, resolvedMessageId, data.ticTacToe);
+                    }
                 } else if (data.type === 'ai_response') {
                     onAINewMessageRef.current?.(data.message);
                 } else if (data.type === 'ai_response_start') {
