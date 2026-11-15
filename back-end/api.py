@@ -190,6 +190,9 @@ active_ai_stream_tasks: Dict[str, asyncio.Task] = {}
 chess_rooms: Dict[str, Dict[str, List[WebSocket]]] = {}
 chess_latency: Dict[str, Dict[str, int]] = {}
 chess_locks: Dict[str, asyncio.Lock] = {}
+chess_matchmaking_lock = asyncio.Lock()
+MATCHMAKING_NOTIFY_COOLDOWN_SEC = 15.0
+_matchmaking_notify_last_ts: Dict[str, float] = {}
 chess_timers: Dict[str, asyncio.TimerHandle] = {}
 chess_warn_timers: Dict[str, asyncio.TimerHandle] = {}
 chess_abandon_tasks: Dict[str, asyncio.Task] = {}
@@ -2549,6 +2552,7 @@ async def startup_db():
             cl_chess_games.create_index([("players.white", 1), ("status", 1)]),
             cl_chess_games.create_index([("players.black", 1), ("status", 1)]),
             cl_chess_games.create_index([("status", 1), ("rated", 1), ("finishedAt", -1)]),
+            cl_chess_games.create_index([("status", 1), ("matchmaking", 1), ("createdAt", 1)]),
             cl_chess_games.create_index("inviteToken", unique=True, sparse=True),
             cl_users.create_index([("chessStats.gamesPlayed", -1), ("chessStats.uniqueOpponents", -1), ("chessStats.elo", -1)]),
             cl_users.create_index([("chessStats.elo", -1)]),
@@ -2598,6 +2602,7 @@ class PushUnsubscribeRequest(BaseModel):
 class NotificationSettingsUpdate(BaseModel):
     enabled: Optional[bool] = None
     chess: Optional[bool] = None
+    chessOnline: Optional[bool] = None
     sound: Optional[bool] = None
     smart: Optional[bool] = None
 
@@ -2710,6 +2715,8 @@ async def update_notification_settings(
         updates["settings.notifications.enabled"] = bool(body.enabled)
     if body.chess is not None:
         updates["settings.notifications.chess"] = bool(body.chess)
+    if body.chessOnline is not None:
+        updates["settings.notifications.chessOnline"] = bool(body.chessOnline)
     if body.sound is not None:
         updates["settings.notifications.sound"] = bool(body.sound)
     if body.smart is not None:
@@ -7239,6 +7246,7 @@ def _notif_settings(user_doc) -> dict:
     return {
         "enabled": bool(raw.get("enabled", True)),
         "chess": bool(raw.get("chess", True)),
+        "chessOnline": bool(raw.get("chessOnline", True)),
         "sound": bool(raw.get("sound", True)),
         "smart": bool(raw.get("smart", True)),
     }
@@ -7256,6 +7264,7 @@ def _notification_prefs(user_doc) -> dict:
     return {
         "enabled": settings["enabled"],
         "chess": settings["chess"],
+        "chessOnline": settings["chessOnline"],
         "sound": settings["sound"],
         "smart": settings["smart"],
         "chatModes": _chat_notify_modes(user_doc),
@@ -7350,9 +7359,17 @@ async def push_to_users(user_ids: Iterable[str], payload_for_user) -> None:
             if payload is None:
                 continue
             is_chess = payload.get("kind") == "chess"
-            if is_chess and not settings["chess"]:
-                continue
-            if not is_chess and not settings["enabled"]:
+            if is_chess:
+                chess_event = payload.get("event")
+                if chess_event == "matchmaking_searching":
+                    if not settings["chessOnline"]:
+                        continue
+                elif chess_event == "matchmaking_matched":
+                    if not (settings["chessOnline"] or settings["chess"]):
+                        continue
+                elif not settings["chess"]:
+                    continue
+            elif not settings["enabled"]:
                 continue
             payload = dict(payload)
             valid_hashes = {
@@ -7470,7 +7487,8 @@ async def notify_chess_joined(game: dict, joiner_id: str) -> None:
     creator = game.get("creatorId")
     if not creator or chess_service.is_guest_id(creator):
         return
-    if _is_in_chess_room(game["_id"], creator):
+    is_matchmaking = bool(game.get("matchmaking"))
+    if not is_matchmaking and _is_in_chess_room(game["_id"], creator):
         return
     if chess_service.is_guest_id(joiner_id):
         joiner_name = "مهمان"
@@ -7482,15 +7500,86 @@ async def notify_chess_joined(game: dict, joiner_id: str) -> None:
         joiner_name = str(
             joiner_profile.get("name") or joiner_profile.get("username") or "کاربر"
         )
+    if is_matchmaking:
+        await safe_send(
+            creator,
+            {
+                "type": "chess_match_found",
+                "gameId": game["_id"],
+                "opponentName": joiner_name,
+            },
+        )
     payload = {
         "kind": "chess",
-        "event": "joined",
+        "event": "matchmaking_matched" if is_matchmaking else "joined",
         "gameId": game["_id"],
         "senderName": joiner_name,
         "url": f"/chess/game/{game['_id']}",
         "icon": "/logo/icon-192.png",
     }
     await push_to_users([creator], lambda user_doc: dict(payload))
+
+
+async def notify_chess_matchmaking_searching(game: dict, creator_user: dict) -> None:
+    creator_id = str(creator_user.get("chatId") or game.get("creatorId") or "").strip()
+    if not creator_id or chess_service.is_guest_id(creator_id):
+        return
+    now_mono = time.monotonic()
+    if now_mono - _matchmaking_notify_last_ts.get(creator_id, 0.0) < MATCHMAKING_NOTIFY_COOLDOWN_SEC:
+        return
+    if len(_matchmaking_notify_last_ts) > 5000:
+        cutoff = now_mono - MATCHMAKING_NOTIFY_COOLDOWN_SEC
+        stale = [k for k, ts in _matchmaking_notify_last_ts.items() if ts < cutoff]
+        for k in stale:
+            _matchmaking_notify_last_ts.pop(k, None)
+    _matchmaking_notify_last_ts[creator_id] = now_mono
+    creator_profile = creator_user.get("profile") or {}
+    creator_name = str(
+        creator_profile.get("name") or creator_profile.get("username") or "کاربر"
+    )
+    sub_user_ids = await cl_push_subscriptions.distinct(
+        "userId", {"userId": {"$ne": creator_id}}
+    )
+    if not sub_user_ids:
+        return
+    busy_ids = {creator_id}
+    busy_ids.update(_get_blocked_from_user_doc(creator_user))
+    active_or_waiting_games = await cl_chess_games.find(
+        {
+            "$or": [
+                {"status": "active"},
+                {"status": "waiting", "createdAt": {"$gt": now_ms() - chess_service.WAITING_TTL_MS}},
+            ]
+        },
+        {"players": 1, "creatorId": 1},
+    ).to_list(None)
+    for g in active_or_waiting_games:
+        players = g.get("players") or {}
+        for uid in (players.get("white"), players.get("black"), g.get("creatorId")):
+            if uid:
+                busy_ids.add(str(uid))
+    recipients = [
+        str(uid)
+        for uid in sub_user_ids
+        if uid and str(uid) not in busy_ids and not chess_service.is_guest_id(str(uid))
+    ]
+    if not recipients:
+        return
+    base_payload = {
+        "kind": "chess",
+        "event": "matchmaking_searching",
+        "gameId": game["_id"],
+        "senderName": creator_name,
+        "url": "/chess?online=1",
+        "icon": "/logo/icon-192.png",
+    }
+
+    def payload_for_user(user_doc) -> Optional[dict]:
+        if creator_id in _get_blocked_from_user_doc(user_doc):
+            return None
+        return dict(base_payload)
+
+    await push_to_users(recipients, payload_for_user)
 
 
 async def chess_on_warn(game_id: str, expected_key: str) -> None:
@@ -10358,6 +10447,77 @@ async def create_chess_game(
     await cl_chess_games.insert_one(game)
     chess_schedule(game)
     return {"game": await chess_response(game)}
+
+
+@app.post("/chess/matchmaking")
+@limiter.limit("30/minute")
+async def start_chess_matchmaking(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    me = current_user["chatId"]
+    joiner_ip = extract_client_ip(request)
+    joiner_device = extract_device_id(request)
+    async with chess_matchmaking_lock:
+        now = now_ms()
+        blocking = await chess_find_blocking_game(me, now)
+        if blocking:
+            if blocking.get("status") == "active":
+                return {"game": await chess_response(blocking), "matched": True}
+            if blocking.get("status") == "waiting" and blocking.get("matchmaking"):
+                return {"game": await chess_response(blocking), "matched": False}
+            if blocking.get("status") == "waiting":
+                await _drop_chess_game(blocking["_id"])
+
+        candidates = (
+            await cl_chess_games.find(
+                {
+                    "status": "waiting",
+                    "matchmaking": True,
+                    "creatorId": {"$ne": me},
+                    "createdAt": {"$gt": now - chess_service.WAITING_TTL_MS},
+                }
+            )
+            .sort("createdAt", 1)
+            .to_list(20)
+        )
+        for cand in candidates:
+            creator_id = cand.get("creatorId")
+            if not creator_id or await _is_direct_blocked_between(me, creator_id):
+                continue
+            if await chess_find_blocking_game(creator_id, now, only_active=True):
+                continue
+            pair_count = await chess_count_pair_rated_games_24h(
+                creator_id,
+                me,
+                now - chess_service.PAIR_RATED_WINDOW_MS,
+            )
+            pair_limit_reached = pair_count >= chess_service.PAIR_RATED_LIMIT_24H
+
+            def _match_join_action(g, n):
+                ev = chess_service.join_matchmaking(g, me, n)
+                chess_apply_join_policies(g, me, joiner_ip, joiner_device, pair_limit_reached)
+                return ev
+
+            try:
+                game, _ = await chess_run(cand["_id"], _match_join_action)
+            except ChessError:
+                continue
+            schedule_push(notify_chess_joined(game, me))
+            return {"game": await chess_response(game), "matched": True}
+
+        game = chess_service.new_game(me, "random", "10+0", now, matchmaking=True)
+        game["_id"] = uuid.uuid4().hex
+        chess_service.record_client_meta(
+            game,
+            me,
+            ip=joiner_ip,
+            device_id=joiner_device,
+        )
+        await cl_chess_games.insert_one(game)
+        chess_schedule(game)
+    schedule_push(notify_chess_matchmaking_searching(game, current_user))
+    return {"game": await chess_response(game), "matched": False}
 
 
 @app.get("/chess/games/current")

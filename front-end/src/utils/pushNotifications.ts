@@ -7,19 +7,21 @@ export type PushSupport = 'supported' | 'unsupported' | 'needs-install';
 export type NotificationPrefs = {
     enabled: boolean;
     chess: boolean;
+    chessOnline: boolean;
     sound: boolean;
     smart: boolean;
     chatModes: Record<string, ChatNotifyMode>;
 };
 
 const STORAGE_KEY = 'nr_notify_prefs';
-const DEFAULT_PREFS: NotificationPrefs = { enabled: true, chess: true, sound: true, smart: true, chatModes: {} };
+const DEFAULT_PREFS: NotificationPrefs = { enabled: true, chess: true, chessOnline: true, sound: true, smart: true, chatModes: {} };
 
 const normalizePrefs = (value: unknown): NotificationPrefs => {
     const record = (value && typeof value === 'object' ? value : {}) as Partial<NotificationPrefs>;
     return {
         enabled: record.enabled !== false,
         chess: record.chess !== false,
+        chessOnline: record.chessOnline !== false,
         sound: record.sound !== false,
         smart: record.smart !== false,
         chatModes: record.chatModes && typeof record.chatModes === 'object' ? record.chatModes : {},
@@ -174,7 +176,7 @@ export function getChatNotifyMode(current: NotificationPrefs, chatId: string): C
 }
 
 export async function updateNotificationPrefs(
-    patch: Partial<Pick<NotificationPrefs, 'enabled' | 'chess' | 'sound' | 'smart'>>
+    patch: Partial<Pick<NotificationPrefs, 'enabled' | 'chess' | 'chessOnline' | 'sound' | 'smart'>>
 ): Promise<void> {
     const previous = prefs;
     setPrefs({ ...prefs, ...patch });
@@ -222,12 +224,27 @@ export async function closeChatNotifications(chatId: string): Promise<void> {
     }
 }
 
+export async function closeChessOnlineNotifications(): Promise<void> {
+    if (getPushSupport() !== 'supported') return;
+    try {
+        const registration = await navigator.serviceWorker.getRegistration();
+        const list = await registration?.getNotifications({ tag: 'chess:online-search' });
+        list?.forEach((notification) => notification.close());
+    } catch {
+        void 0;
+    }
+}
+
 export async function closeChessNotifications(gameId: string): Promise<void> {
     if (getPushSupport() !== 'supported') return;
     try {
         const registration = await navigator.serviceWorker.getRegistration();
-        const list = await registration?.getNotifications({ tag: 'chess:' + gameId });
-        list?.forEach((notification) => notification.close());
+        const [gameList, onlineList] = await Promise.all([
+            registration?.getNotifications({ tag: 'chess:' + gameId }),
+            registration?.getNotifications({ tag: 'chess:online-search' }),
+        ]);
+        gameList?.forEach((notification) => notification.close());
+        onlineList?.forEach((notification) => notification.close());
     } catch {
         void 0;
     }

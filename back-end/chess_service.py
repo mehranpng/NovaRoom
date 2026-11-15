@@ -93,7 +93,7 @@ def compute_elo_changes(white_elo, white_games, black_elo, black_games, result):
     }
 
 
-def new_game(creator_id, color, time_control, now):
+def new_game(creator_id, color, time_control, now, matchmaking=False):
     if time_control not in TIME_CONTROLS:
         raise ChessError("invalid_time_control")
     if color not in ("white", "black", "random"):
@@ -108,6 +108,7 @@ def new_game(creator_id, color, time_control, now):
         "creatorId": creator_id,
         "invitedChatId": None,
         "invitedGroupId": None,
+        "matchmaking": bool(matchmaking),
         "players": players,
         "timeControl": time_control,
         "baseMs": tc["baseMs"],
@@ -290,6 +291,8 @@ def set_connected(game, user_id, connected, now):
 def set_invitee(game, user_id, target_id):
     if game["status"] != "waiting":
         raise ChessError("not_joinable")
+    if game.get("matchmaking"):
+        raise ChessError("forbidden")
     if user_id != game["creatorId"]:
         raise ChessError("forbidden")
     if not target_id or target_id == user_id:
@@ -303,6 +306,8 @@ def set_invitee(game, user_id, target_id):
 def set_group_invitee(game, user_id, group_id):
     if game["status"] != "waiting":
         raise ChessError("not_joinable")
+    if game.get("matchmaking"):
+        raise ChessError("forbidden")
     if user_id != game["creatorId"]:
         raise ChessError("forbidden")
     if not group_id:
@@ -338,9 +343,19 @@ def join(game, user_id, now):
     return _seat_opponent(game, user_id, now, rated, None if rated else "guest")
 
 
+def join_matchmaking(game, user_id, now):
+    if game["status"] != "waiting" or not game.get("matchmaking"):
+        raise ChessError("not_joinable")
+    if not user_id or user_id == game["creatorId"] or is_guest_id(user_id):
+        raise ChessError("forbidden")
+    return _seat_opponent(game, user_id, now, True, None)
+
+
 def join_by_link(game, user_id, now, guest_token=None):
     if game["status"] != "waiting":
         raise ChessError("not_joinable")
+    if game.get("matchmaking"):
+        raise ChessError("forbidden")
     if not user_id or user_id == game["creatorId"]:
         raise ChessError("forbidden")
     if game.get("invitedChatId") and game["invitedChatId"] != user_id:
@@ -583,6 +598,7 @@ def public_view(game, now, online):
         "creatorId": game["creatorId"],
         "invitedChatId": game["invitedChatId"],
         "invitedGroupId": game.get("invitedGroupId"),
+        "matchmaking": bool(game.get("matchmaking")),
         "players": game["players"],
         "timeControl": game["timeControl"],
         "baseMs": game["baseMs"],
@@ -605,7 +621,7 @@ def public_view(game, now, online):
         "online": online,
         "createdAt": game["createdAt"],
         "finishedAt": game.get("finishedAt"),
-        "inviteToken": game.get("inviteToken"),
+        "inviteToken": None if game.get("matchmaking") else game.get("inviteToken"),
         "rated": bool(game.get("rated")),
         "ratingChanges": game.get("ratingChanges"),
     }

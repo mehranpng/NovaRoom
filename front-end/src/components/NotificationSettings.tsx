@@ -69,7 +69,7 @@ export function NotificationSettings({ onBack }: Props) {
         setPermission(result);
     };
 
-    const anyEnabled = prefs.enabled || prefs.chess;
+    const anyEnabled = prefs.enabled || prefs.chess || prefs.chessOnline;
 
     const toggleEnabled = async () => {
         const next = !prefs.enabled;
@@ -87,6 +87,15 @@ export function NotificationSettings({ onBack }: Props) {
             setPermission(result);
         }
         await updateNotificationPrefs({ chess: next });
+    };
+
+    const toggleChessOnline = async () => {
+        const next = !prefs.chessOnline;
+        if (next && getPermission() === 'default') {
+            const result = await requestPermissionAndSubscribe();
+            setPermission(result);
+        }
+        await updateNotificationPrefs({ chessOnline: next });
     };
 
     const toggleSound = async () => {
@@ -228,6 +237,16 @@ export function NotificationSettings({ onBack }: Props) {
                             <span className="tg-list-item__subtitle">دریافت اعلان شروع بازی و هشدار تایمر شطرنج</span>
                         </div>
                         <Switch enabled={prefs.chess} onToggle={() => void toggleChess()} />
+                    </div>
+
+                    <div className="tg-island__divider tg-island__divider--plain" aria-hidden="true" />
+
+                    <div className="tg-row">
+                        <div className="tg-list-item__copy">
+                            <span className="tg-list-item__title">اعلان شطرنج آنلاین</span>
+                            <span className="tg-list-item__subtitle">اطلاع‌رسانی وقتی بازیکنی در شطرنج آنلاین منتظر حریف است</span>
+                        </div>
+                        <Switch enabled={prefs.chessOnline} onToggle={() => void toggleChessOnline()} />
                     </div>
                 </div>
 

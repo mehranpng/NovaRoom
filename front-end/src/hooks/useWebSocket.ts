@@ -376,6 +376,15 @@ export function useWebSocket({
                     }
                 } else if (dataType === 'chess_champion_updated') {
                     setGlobalChessChampion(data.champion || null);
+                } else if (dataType === 'chess_match_found' && data.gameId) {
+                    window.dispatchEvent(
+                        new CustomEvent('novaroom:chess_match_found', {
+                            detail: {
+                                gameId: String(data.gameId),
+                                opponentName: String(data.opponentName || ''),
+                            },
+                        }),
+                    );
                 } else if (dataType === 'tictactoe_updated') {
                     const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
                     const resolvedMessageId = String(data?.messageId || '').trim();

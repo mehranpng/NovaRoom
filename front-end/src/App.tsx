@@ -489,6 +489,23 @@ export function App() {
     }, []);
 
     useEffect(() => {
+        if (!isAuthenticated) return;
+        const handler = (event: Event) => {
+            const detail = (event as CustomEvent<{ gameId?: string; opponentName?: string }>).detail;
+            const gameId = detail?.gameId;
+            if (!gameId) return;
+            if (viewRef.current === 'chess' && location.pathname === '/chess') {
+                navigate(`/chess/game/${gameId}`);
+            } else {
+                const opponentLabel = detail?.opponentName ? ` (${detail.opponentName})` : '';
+                notify({ message: `حریف شطرنج آنلاین پیدا شد${opponentLabel}`, type: 'success' });
+            }
+        };
+        window.addEventListener('novaroom:chess_match_found', handler);
+        return () => window.removeEventListener('novaroom:chess_match_found', handler);
+    }, [isAuthenticated, location.pathname, navigate]);
+
+    useEffect(() => {
         if (desktopSidebarWidth == null) return;
         try {
             localStorage.setItem(DESKTOP_SIDEBAR_KEY, String(Math.round(desktopSidebarWidth)));
@@ -3644,6 +3661,14 @@ export function App() {
         }
     }, [aiResponding, aiRespondingChatId, navigate]);
 
+    const handleOpenChessGame = useCallback((id: string) => {
+        navigate(`/chess/game/${id}`);
+    }, [navigate]);
+
+    const handleConsumeAutoStartOnline = useCallback(() => {
+        navigate('/chess', { replace: true });
+    }, [navigate]);
+
     const handleSelectNavTab = useCallback((tab: 'ai' | 'chess' | 'chats' | 'settings' | 'profile') => {
         wasCompactOnNavRef.current = chatListCompactNavRef.current;
         setChatListCompactNav(false);
@@ -4187,6 +4212,8 @@ export function App() {
                                         currentUser={currentUser}
                                         gameId={location.pathname.match(/^\/chess\/game\/([A-Za-z0-9]+)$/)?.[1] ?? null}
                                         aiMode={isChessAIRoute}
+                                        autoStartOnline={currentSearchParams.get('online') === '1'}
+                                        onConsumeAutoStartOnline={handleConsumeAutoStartOnline}
                                         authToken={authToken}
                                         chats={chats}
                                         interactiveOnlineUsers={interactiveOnlineUsers}
@@ -4195,7 +4222,7 @@ export function App() {
                                         onOpenDirectChat={(user) => handleUserSelectedFromModal(user)}
                                         onOpenProfile={handleOpenProfile}
                                         onContactOpenChange={setChessContactOpen}
-                                        onOpenGame={(id) => navigate(`/chess/game/${id}`)}
+                                        onOpenGame={handleOpenChessGame}
                                         onOpenAiGame={() => navigate('/chess/ai')}
                                         onExitGame={() => navigate('/chess')}
                                     />

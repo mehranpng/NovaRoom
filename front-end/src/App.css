@@ -9799,6 +9799,42 @@ html.no-blur-effect .chat-list__header,
     font-size: 15px;
 }
 
+.chess-friendly-card {
+    gap: 12px;
+    padding: 14px 16px;
+}
+
+.chess-friendly-card .chess-section {
+    gap: 6px;
+}
+
+.chess-friendly-card .chess-section__label {
+    font-size: 13px;
+}
+
+.chess-friendly-card .chess-tc-groups {
+    gap: 6px;
+}
+
+.chess-friendly-card .chess-tc-group {
+    gap: 8px;
+}
+
+.chess-friendly-card .chess-tc-group__title {
+    font-size: 12.5px;
+    min-width: 56px;
+}
+
+.chess-friendly-card .chess-chips {
+    gap: 6px;
+}
+
+.chess-friendly-card .chess-chip {
+    min-height: 32px;
+    padding: 4px 13px;
+    font-size: 13px;
+}
+
 .chess__body {
     flex: 1;
     overflow-y: auto;

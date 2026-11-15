@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Chat, ChessLeaderboardEntry, User } from '../../types';
 import { ContactInfo } from '../ContactInfo';
 import { ChessAIGame } from './ai/ChessAIGame';
@@ -10,6 +10,8 @@ interface ChessScreenProps {
     currentUser: User;
     gameId: string | null;
     aiMode?: boolean;
+    autoStartOnline?: boolean;
+    onConsumeAutoStartOnline?: () => void;
     authToken: string | null;
     chats: Chat[];
     interactiveOnlineUsers?: Record<string, number>;
@@ -27,6 +29,8 @@ export function ChessScreen({
     currentUser,
     gameId,
     aiMode,
+    autoStartOnline,
+    onConsumeAutoStartOnline,
     authToken,
     chats,
     interactiveOnlineUsers,
@@ -43,6 +47,12 @@ export function ChessScreen({
     const [contactInfoOpen, setContactInfoOpen] = useState(false);
 
     useEffect(() => () => resetChessLobbyScroll(), []);
+
+    const handleConsumeAutoStart = useCallback(() => {
+        setContactInfoOpen(false);
+        setSelectedEntry(null);
+        onConsumeAutoStartOnline?.();
+    }, [onConsumeAutoStartOnline]);
 
     useEffect(() => {
         onContactOpenChange?.(Boolean(selectedEntry));
@@ -67,7 +77,7 @@ export function ChessScreen({
         );
     }
 
-    if (selectedEntry && contactInfoOpen) {
+    if (!autoStartOnline && selectedEntry && contactInfoOpen) {
         const contactUser = selectedEntry.user;
         const blocked = Boolean(isUserBlocked?.(contactUser));
         return (
@@ -98,7 +108,7 @@ export function ChessScreen({
         );
     }
 
-    if (selectedEntry) {
+    if (!autoStartOnline && selectedEntry) {
         return (
             <ChessUserProfile
                 key={`chess-user-${selectedEntry.user.chatId}`}
@@ -125,6 +135,8 @@ export function ChessScreen({
             key="lobby"
             currentUser={currentUser}
             chats={chats}
+            autoStartOnline={autoStartOnline}
+            onConsumeAutoStartOnline={handleConsumeAutoStart}
             onOpenGame={onOpenGame}
             onOpenAiGame={onOpenAiGame}
             onSelectLeaderboardEntry={(entry) => {

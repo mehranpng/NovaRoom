@@ -17,7 +17,10 @@ self.addEventListener('message', (event) => {
 });
 
 const pathFor = (data) => {
-    if (data.kind === 'chess') return '/chess/game/' + data.gameId;
+    if (data.kind === 'chess') {
+        if (data.event === 'matchmaking_searching') return '/chess';
+        return '/chess/game/' + data.gameId;
+    }
     if (data.chatId === 'official-channel') return '/official-channel';
     return '/chat/' + encodeURIComponent(data.chatId);
 };
@@ -30,6 +33,9 @@ const isViewingTarget = (windows, data, path) =>
         }
         try {
             const pathname = new URL(client.url).pathname;
+            if (data.kind === 'chess' && data.event === 'matchmaking_searching') {
+                return pathname.startsWith('/chess/game/');
+            }
             if (pathname === path) return true;
             if (data.kind !== 'chess' && data.chatId) {
                 return decodeURIComponent(pathname) === '/chat/' + String(data.chatId);
@@ -48,7 +54,11 @@ async function handlePush(event) {
     if (isViewingTarget(windows, data, path)) return;
 
     const tag =
-        data.kind === 'chess' ? 'chess:' + data.gameId : 'chat:' + data.chatId;
+        data.kind === 'chess'
+            ? data.event === 'matchmaking_searching'
+                ? 'chess:online-search'
+                : 'chess:' + data.gameId
+            : 'chat:' + data.chatId;
     const previous = (await self.registration.getNotifications({ tag }))[0];
     const count = ((previous && previous.data && previous.data.count) || 0) + 1;
     const countText = toPersianNumber(count);
@@ -56,14 +66,21 @@ async function handlePush(event) {
     let title = '';
     let body = '';
     if (data.kind === 'chess') {
-        title = 'شطرنج';
-        if (data.event === 'timer_warning') {
+        if (data.event === 'matchmaking_searching') {
+            title = 'شطرنج آنلاین';
+            body = `${data.senderName} آماده رقابت در شطرنج آنلاین است • برای شروع ضربه بزنید`;
+        } else if (data.event === 'matchmaking_matched') {
+            title = 'شطرنج آنلاین';
+            body = `حریف پیدا شد! بازی شما با ${data.senderName} آغاز شد`;
+        } else if (data.event === 'timer_warning') {
+            title = 'شطرنج';
             const secText = toPersianNumber(data.remainingSeconds || 10);
             body =
                 data.reason === 'double_disconnect'
                     ? `اتصال قطع شده است! تا ${secText} ثانیه دیگر به بازی برگردید`
                     : `نوبت شماست! اگر تا ${secText} ثانیه دیگر برنگردید بازی را واگذار می‌کنید`;
         } else {
+            title = 'شطرنج';
             body = `${data.senderName} به بازی شما پیوست`;
         }
     } else if (data.chatType === 'group') {

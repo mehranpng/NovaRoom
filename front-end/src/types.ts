@@ -244,6 +244,7 @@ export interface ChessGameView {
     invitedChatId: string | null;
     invitedGroupId?: string | null;
     inviteToken?: string | null;
+    matchmaking?: boolean;
     rated?: boolean;
     ratingChanges?: {
         white: ChessRatingChange;

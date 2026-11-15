@@ -24,6 +24,8 @@ import { closeChessNotifications } from '../../utils/pushNotifications';
 import { screenVariants } from '../../utils/screenMotion';
 import { Avatar } from '../Avatar';
 import { ForwardModal } from '../ForwardModal';
+import { AnimatedHourglass } from './AnimatedHourglass';
+import { AnimatedSearchIcon } from './AnimatedSearchIcon';
 
 interface ChessGameProps {
     currentUser: User;
@@ -738,7 +740,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                     </button>
                 </div>
                 <h1 className="profile__header-title">
-                    شطرنج • {formatTimeControl(game.timeControl)}
+                    {game.matchmaking ? 'شطرنج آنلاین' : 'شطرنج'} • {formatTimeControl(game.timeControl)}
                 </h1>
             </div>
 
@@ -1094,33 +1096,48 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
 
                     {game.status === 'waiting' && isParticipant && (
                         <div className="chess__panel">
-                            <span className="chess__panel-icon"><Hourglass size={26} /></span>
-                            <div className="chess__panel-title">منتظر حریف…</div>
-                            <div className="chess__result-sub">بازی را برای دوستت بفرست تا شروع شود</div>
+                            <span className="chess__panel-icon">
+                                {game.matchmaking ? <AnimatedSearchIcon size={28} /> : <AnimatedHourglass size={28} />}
+                            </span>
+                            <div className="chess__panel-title">
+                                {game.matchmaking ? 'در جستجوی حریف آنلاین…' : 'منتظر حریف…'}
+                            </div>
+                            {game.matchmaking ? (
+                                <>
+                                    <div className="chess__result-sub">رپید ۱۰ دقیقه • مهره تصادفی</div>
+                                    <div className="chess__result-sub">به‌محض پیوستن حریف، بازی خودکار شروع می‌شود</div>
+                                </>
+                            ) : (
+                                <div className="chess__result-sub">بازی را برای دوستت بفرست تا شروع شود</div>
+                            )}
                             <div className="chess__actions">
-                                <button
-                                    type="button"
-                                    className="chess-primary-btn"
-                                    onClick={() => setInviteOpen(true)}
-                                >
-                                    ارسال به چت
-                                </button>
-                                {game.inviteToken && (
-                                    <button
-                                        type="button"
-                                        className="chess-secondary-btn chess-secondary-btn--icon"
-                                        onClick={handleCopyGameLink}
-                                    >
-                                        {linkCopied ? <Check size={16} /> : <Link2 size={16} />}
-                                        <span>{linkCopied ? 'کپی شد' : 'کپی لینک بازی'}</span>
-                                    </button>
+                                {!game.matchmaking && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            className="chess-primary-btn"
+                                            onClick={() => setInviteOpen(true)}
+                                        >
+                                            ارسال به چت
+                                        </button>
+                                        {game.inviteToken && (
+                                            <button
+                                                type="button"
+                                                className="chess-secondary-btn chess-secondary-btn--icon"
+                                                onClick={handleCopyGameLink}
+                                            >
+                                                {linkCopied ? <Check size={16} /> : <Link2 size={16} />}
+                                                <span>{linkCopied ? 'کپی شد' : 'کپی لینک بازی'}</span>
+                                            </button>
+                                        )}
+                                    </>
                                 )}
                                 <button
                                     type="button"
                                     className="chess-secondary-btn chess-secondary-btn--danger"
                                     onClick={handleCancelWaiting}
                                 >
-                                    لغو بازی
+                                    {game.matchmaking ? 'لغو جستجو' : 'لغو بازی'}
                                 </button>
                             </div>
                         </div>
