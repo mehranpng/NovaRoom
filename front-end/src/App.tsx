@@ -3169,6 +3169,9 @@ export function App() {
                 file: sourceMessage.file,
                 upload: sourceMessage.file ? { phase: 'encrypting', progress: 100 } : undefined,
                 forwarding: sourceMessage.file ? true : undefined,
+                chessInvite: sourceMessage.chessInvite
+                    ? { ...sourceMessage.chessInvite, shared: true }
+                    : undefined,
                 replyTo: optimisticReplyTo,
                 forwardedFrom: sourceMessage.forwardedFrom || fallbackForwardedFrom,
                 reasoningContent: sourceMessage.reasoningContent,

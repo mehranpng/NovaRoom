@@ -20,6 +20,7 @@ import { decryptFileBytesClientSide } from '../utils/e2ee';
 import { screenVariants } from '../utils/screenMotion';
 import { deleteCachedBlob, getCachedBlob, getOrCacheBlob } from '../utils/mediaCache';
 import { pendingUploadedFileByChat } from '../utils/pendingUploads';
+import { getCachedChessGame } from '../utils/chessCache';
 import {
     clearChatDraft,
     getChatDraft,
@@ -1678,6 +1679,12 @@ export function ChatRoom({
         ));
     }, [selectedMessageIds]);
 
+    const isMessageForwardable = (msg: Message): boolean => {
+        if (!msg.chessInvite) return true;
+        if (msg.chessInvite.shared) return true;
+        return getCachedChessGame(msg.chessInvite.gameId)?.status === 'finished';
+    };
+
     const handleCopySelected = async () => {
         if (selectedMessageIds.length === 0) return;
         const selectedMsgs = messages
@@ -1686,6 +1693,7 @@ export function ChatRoom({
 
         const textLines = selectedMsgs
             .map((m) => {
+                if (m.chessInvite) return '';
                 const raw = m.text ?? '';
                 if (raw.trim()) return raw.trim();
                 if (m.file?.fileName) return `[فایل: ${m.file.fileName}]`;
@@ -1720,6 +1728,14 @@ export function ChatRoom({
     }, [selectedMessageIds, messages, currentUserId, canDeleteOthersMessages]);
 
     const canDeleteAnySelected = selectedMessageIds.length > 0 && deletableSelectedIds.length === selectedMessageIds.length;
+    const canCopySelected = selectedMessageIds.some((id) => {
+        const msg = messagesById.get(id);
+        return Boolean(msg && !msg.chessInvite && ((msg.text || '').trim() || msg.file?.fileName));
+    });
+    const canForwardSelected = selectedMessageIds.length > 0 && selectedMessageIds.every((id) => {
+        const msg = messagesById.get(id);
+        return Boolean(msg && isMessageForwardable(msg));
+    });
 
     const selectionHistoryPushedRef = useRef(false);
     const ignoreNextPopRef = useRef(false);
@@ -3359,24 +3375,28 @@ export function ChatRoom({
                     </div>
 
                     <div className="chat-room__selection-actions">
-                        <button
-                            type="button"
-                            className="icon-btn"
-                            onClick={handleCopySelected}
-                            title="کپی متن پیام‌ها"
-                            aria-label="Copy selected messages"
-                        >
-                            <TelegramIcon name="copy" size={19} />
-                        </button>
-                        <button
-                            type="button"
-                            className="icon-btn"
-                            onClick={handleOpenForwardSelected}
-                            title="فوروارد پیام‌های انتخاب‌شده"
-                            aria-label="Forward selected messages"
-                        >
-                            <TelegramIcon name="forward" size={19} />
-                        </button>
+                        {canCopySelected && (
+                            <button
+                                type="button"
+                                className="icon-btn"
+                                onClick={handleCopySelected}
+                                title="کپی متن پیام‌ها"
+                                aria-label="Copy selected messages"
+                            >
+                                <TelegramIcon name="copy" size={19} />
+                            </button>
+                        )}
+                        {canForwardSelected && (
+                            <button
+                                type="button"
+                                className="icon-btn"
+                                onClick={handleOpenForwardSelected}
+                                title="فوروارد پیام‌های انتخاب‌شده"
+                                aria-label="Forward selected messages"
+                            >
+                                <TelegramIcon name="forward" size={19} />
+                            </button>
+                        )}
                         {canDeleteAnySelected && (
                             <button
                                 type="button"
@@ -3815,7 +3835,9 @@ export function ChatRoom({
                                     {pinnedMessage?.id === activeMsg.id ? 'برداشتن سنجاق' : 'سنجاق کردن'}
                                 </button>
                             )}
-                            <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><TelegramIcon name="forward" size={16} />فوروارد</button>
+                            {isMessageForwardable(activeMsg) && (
+                                <button className="popover__item" onClick={() => openForwardModal(activeMsg.id)} type="button"><TelegramIcon name="forward" size={16} />فوروارد</button>
+                            )}
                             <button
                                 className="popover__item"
                                 onClick={() => {

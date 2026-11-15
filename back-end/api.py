@@ -5632,6 +5632,7 @@ async def get_messages(
                 "reactions": aggregate_reactions(m.get("reactions", [])),
                 "forwardedFrom": m.get("forwardedFrom"),
                 "file": m.get("file"),
+                "chessInvite": m.get("chessInvite"),
                 "reasoningContent": decrypt_with_fallback(
                     m.get("reasoningContent", ""), session_token, chat_scope
                 ),
@@ -7036,6 +7037,13 @@ async def forward_message(
             if item.replyIsQuote or orig_reply.get("isQuote"):
                 reply_to_doc["isQuote"] = True
 
+        original_chess = entry["original_msg"].get("chessInvite")
+        forwarded_chess = (
+            {**original_chess, "shared": True}
+            if isinstance(original_chess, dict)
+            else None
+        )
+
         forwarded_msg = {
             "_id": entry["new_oid"],
             "chatId": target_chat_id,
@@ -7069,6 +7077,8 @@ async def forward_message(
             ),
             "clientId": str(item.clientId or "").strip() or None,
         }
+        if forwarded_chess:
+            forwarded_msg["chessInvite"] = forwarded_chess
 
         file_data = entry["file_data"]
         if file_data:
@@ -7099,6 +7109,7 @@ async def forward_message(
         "senderId": user_id,
         "timestamp": last_doc["timestamp"],
         "file": last_doc.get("file"),
+        **({"chessInvite": last_doc["chessInvite"]} if last_doc.get("chessInvite") else {}),
     }
 
     if not is_target_saved and not is_target_official:
@@ -7144,6 +7155,7 @@ async def forward_message(
                 "reactions": [],
                 "forwardedFrom": entry["forwarded_from_info"],
                 "file": forwarded_msg.get("file"),
+                **({"chessInvite": forwarded_msg["chessInvite"]} if forwarded_msg.get("chessInvite") else {}),
                 "reasoningContent": forwarded_msg["reasoningContent"],
                 "reasoningEnabled": entry["reasoning_enabled"],
                 "reasoningDurationSec": entry["reasoning_duration_sec"],
