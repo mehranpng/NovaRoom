@@ -10,7 +10,7 @@ agents.md
 agent.md
 [aA][gG][eE][nN][tT]*.md
 Page
-DB Backup/
+db-backup/
 .env*
 !.env.example
 !deploy/.env.example
@@ -21,6 +21,6 @@ node_modules/
 deploy/output/
 uploads/
 pyrightconfig.json
-telegram-tt/
+telegram/
 .agents/
 showreel
