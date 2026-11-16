@@ -8,6 +8,7 @@ import { useChessSocket } from '../../hooks/useChessSocket';
 import { useChessboardTouchGuard } from '../../hooks/useChessboardTouchGuard';
 import type { Chat, ChessColor, ChessEmote, ChessEvent, ChessGameView, User } from '../../types';
 import {
+    cancelChessGameOptimistic,
     fetchChessGameCached,
     getCachedChessGame,
     isChessGameUnavailable,
@@ -58,6 +59,7 @@ const REASON_LABELS: Record<string, string> = {
 const ERROR_MESSAGES: Record<string, string> = {
     too_early: 'هنوز برای پیشنهاد مساوی زود است',
     already_offered: 'پیشنهاد مساوی قبلاً ارسال شده است',
+    draw_cooldown: 'لطفاً تا پایان زمان انتظار برای پیشنهاد مساوی صبر کنید',
     cannot_abort: 'امکان لغو بازی وجود ندارد',
 };
 
@@ -171,6 +173,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
     const emoteTimersRef = useRef<Partial<Record<ChessColor, number>>>({});
     const emoteAnchorRef = useRef<HTMLDivElement | null>(null);
     const emoteSeqRef = useRef(0);
+    const expireCheckSentRef = useRef(false);
 
     const fetchDetails = useCallback((id: string, force = false) => {
         fetchChessGameCached(id, { force })
@@ -236,11 +239,13 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
     }, [game?.moves]);
 
     const isFinished = game?.status === 'finished';
+    const canReviewMoves = game?.status === 'active' || isFinished;
     const maxPly = snapshots.length - 1;
-    const effectivePly = isFinished && viewPly !== null ? Math.min(Math.max(0, viewPly), maxPly) : maxPly;
+    const effectivePly = canReviewMoves && viewPly !== null ? Math.min(Math.max(0, viewPly), maxPly) : maxPly;
+    const isReviewingHistory = canReviewMoves && viewPly !== null && effectivePly < maxPly;
     const viewedSnapshot = snapshots[effectivePly];
-    const displayedFen = pendingFen ?? (isFinished && viewPly !== null ? viewedSnapshot?.fen : game?.fen) ?? START_FEN;
-    const displayedLastMove = isFinished && viewPly !== null ? viewedSnapshot?.lastMove ?? null : game?.lastMove ?? null;
+    const displayedFen = pendingFen ?? (canReviewMoves && viewPly !== null ? viewedSnapshot?.fen : game?.fen) ?? START_FEN;
+    const displayedLastMove = canReviewMoves && viewPly !== null ? viewedSnapshot?.lastMove ?? null : game?.lastMove ?? null;
 
     const captured = useMemo(
         () => (game ? capturedPieces(game.moves.slice(0, effectivePly)) : null),
@@ -255,8 +260,9 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
 
     const handleSelectPly = useCallback(
         (targetPly: number) => {
-            if (!game || game.status !== 'finished') return;
+            if (!game || (game.status !== 'active' && game.status !== 'finished')) return;
             const clamped = Math.min(Math.max(0, targetPly), snapshots.length - 1);
+            setSelected(null);
             setViewPly(clamped === snapshots.length - 1 ? null : clamped);
             if (clamped > 0 && snapshots[clamped]) {
                 try {
@@ -303,7 +309,9 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
         });
         setPendingFen(null);
         setSelected(null);
-        setViewPly(null);
+        if (!event || event.kind === 'move' || event.kind === 'game_over' || event.kind === 'opponent_joined') {
+            setViewPly(null);
+        }
         const clientNow = Date.now();
         setNow(clientNow);
         setSkew((nextGame.serverNow || clientNow) - clientNow);
@@ -335,13 +343,21 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
             playChessSound('illegal');
             return;
         }
+        if (code === 'search_expired' || code === 'waiting_expired') {
+            markChessGameUnavailable(gameId);
+            if (code === 'search_expired') {
+                notify({ message: 'در مهلت ۱۵ دقیقه حریفی پیدا نشد و جستجو لغو شد', type: 'info' });
+            }
+            onExitGame();
+            return;
+        }
         if (code === 'forbidden') {
             onExitGame();
             return;
         }
         const msg = ERROR_MESSAGES[code];
         if (msg) notify({ message: msg, type: 'info' });
-    }, [onExitGame]);
+    }, [gameId, onExitGame]);
 
     const socketGameId = game && game.status !== 'finished' && isParticipant ? gameId : null;
 
@@ -396,12 +412,46 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
     }, [send]);
 
     useEffect(() => {
-        if (game?.status !== 'active') return;
+        const isWaitingMatchmaking = game?.status === 'waiting' && game.matchmaking;
+        if (game?.status !== 'active' && !isWaitingMatchmaking) return;
+        const intervalMs = game?.status === 'active' ? 100 : 500;
         const id = window.setInterval(() => {
             setNow(Date.now());
-        }, 100);
+        }, intervalMs);
         return () => window.clearInterval(id);
-    }, [game?.status]);
+    }, [game?.status, game?.matchmaking]);
+
+    useEffect(() => {
+        if (game?.status !== 'waiting' || !game.matchmaking) {
+            expireCheckSentRef.current = false;
+            return;
+        }
+        const deadline =
+            typeof game.waitingDeadline === 'number'
+                ? game.waitingDeadline
+                : typeof game.createdAt === 'number'
+                ? game.createdAt + 15 * 60 * 1000
+                : null;
+        if (deadline === null) return;
+        const left = deadline - (now + skew);
+        if (left > 0 || expireCheckSentRef.current) return;
+        expireCheckSentRef.current = true;
+        const timer = window.setTimeout(() => {
+            fetchChessGameCached(gameId, { force: true })
+                .then((res) => {
+                    setGame(res);
+                    const clientNow = Date.now();
+                    setNow(clientNow);
+                    setSkew((res.serverNow || clientNow) - clientNow);
+                })
+                .catch(() => {
+                    markChessGameUnavailable(gameId);
+                    notify({ message: 'در مهلت ۱۵ دقیقه حریفی پیدا نشد و جستجو لغو شد', type: 'info' });
+                    onExitGame();
+                });
+        }, 350);
+        return () => window.clearTimeout(timer);
+    }, [game?.status, game?.matchmaking, game?.waitingDeadline, game?.createdAt, gameId, now, skew, onExitGame]);
 
     useEffect(() => {
         movesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'end' });
@@ -482,7 +532,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                     }
                 }
             }
-            if (selected && isParticipant && game.status === 'active' && game.turn === myColor) {
+            if (selected && isParticipant && game.status === 'active' && game.turn === myColor && !isReviewingHistory) {
                 styles[selected] = { backgroundColor: 'rgba(66, 153, 225, 0.42)' };
                 const legal = chess.moves({ square: selected as Square, verbose: true });
                 for (const m of legal) {
@@ -499,9 +549,13 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
             return styles;
         }
         return styles;
-    }, [game, displayedFen, displayedLastMove, selected, isParticipant, myColor]);
+    }, [game, displayedFen, displayedLastMove, selected, isParticipant, myColor, isReviewingHistory]);
 
     const handleSquareClick = useCallback(({ square }: { square: string }) => {
+        if (isReviewingHistory && game?.status === 'active') {
+            setViewPly(null);
+            return;
+        }
         if (!game || !isParticipant || game.status !== 'active' || game.turn !== myColor) return;
         try {
             const chess = new Chess(game.fen);
@@ -526,7 +580,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
         } catch {
             setSelected(null);
         }
-    }, [game, isParticipant, myColor, selected, tryMove]);
+    }, [game, isParticipant, myColor, selected, tryMove, isReviewingHistory]);
 
     const inviteChats = useMemo(
         () =>
@@ -603,13 +657,8 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
         }
     };
 
-    const handleCancelWaiting = async () => {
-        try {
-            await apiFetch(`/chess/games/${encodeURIComponent(gameId)}`, { method: 'DELETE' });
-        } catch {
-            void 0;
-        }
-        markChessGameUnavailable(gameId);
+    const handleCancelWaiting = () => {
+        void cancelChessGameOptimistic(gameId);
         onExitGame();
     };
 
@@ -699,6 +748,31 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
             ? Math.max(0, game.firstMoveDeadline - serverEstimate)
             : null;
 
+    const waitingDeadline =
+        game.status === 'waiting' && game.matchmaking
+            ? typeof game.waitingDeadline === 'number'
+                ? game.waitingDeadline
+                : typeof game.createdAt === 'number'
+                ? game.createdAt + 15 * 60 * 1000
+                : null
+            : null;
+
+    const waitingLeftMs =
+        waitingDeadline !== null ? Math.max(0, waitingDeadline - serverEstimate) : null;
+
+    const myDrawCooldownUntil = game.drawCooldownUntil?.[myColor] ?? null;
+    const myDrawCooldownLeftMs =
+        game.status === 'active' && typeof myDrawCooldownUntil === 'number'
+            ? Math.max(0, myDrawCooldownUntil - serverEstimate)
+            : 0;
+
+    const drawOfferLeftSec =
+        game.status === 'active' &&
+        game.drawOfferedBy === oppColor &&
+        typeof game.drawOfferExpiresAt === 'number'
+            ? Math.max(0, Math.ceil((game.drawOfferExpiresAt - serverEstimate) / 1000))
+            : null;
+
     const movePairs: { num: number; white?: string; whitePly: number; black?: string; blackPly: number }[] = [];
     for (let i = 0; i < game.moves.length; i += 2) {
         movePairs.push({
@@ -710,7 +784,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
         });
     }
 
-    const canPlay = isParticipant && game.status === 'active' && game.turn === myColor;
+    const canPlay = isParticipant && game.status === 'active' && game.turn === myColor && !isReviewingHistory;
 
     const isAborted = game.reason === 'aborted' || game.reason === 'first_move_timeout' || game.result === '*';
 
@@ -743,6 +817,38 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                     {game.matchmaking ? 'شطرنج آنلاین' : 'شطرنج'} • {formatTimeControl(game.timeControl)}
                 </h1>
             </div>
+
+            <AnimatePresence>
+                {game.status === 'active' && isParticipant && game.drawOfferedBy === oppColor && (
+                    <motion.div
+                        className="chess__draw-top"
+                        initial={{ opacity: 0, y: -12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -12 }}
+                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                    >
+                        <div className="chess__draw-banner chess__draw-banner--top" role="status" aria-live="polite">
+                            <span className="chess__draw-text">پیشنهاد مساوی از طرف حریف</span>
+                            <div className="chess__draw-actions">
+                                <button
+                                    type="button"
+                                    className="chess-chip chess-chip--active"
+                                    onClick={() => send({ type: 'draw_accept' })}
+                                >
+                                    قبول
+                                </button>
+                                <button
+                                    type="button"
+                                    className="chess-chip"
+                                    onClick={() => send({ type: 'draw_decline' })}
+                                >
+                                    {drawOfferLeftSec !== null ? `رد (${toPersianDigits(drawOfferLeftSec)})` : 'رد'}
+                                </button>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <div className="chess__body" onScroll={handleScroll}>
                 <div className="chess__stage">
@@ -1027,7 +1133,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
 
                     {movePairs.length > 0 && (
                         <div className="chess__moves">
-                            {isFinished && (
+                            {canReviewMoves && (
                                 <button
                                     type="button"
                                     className="chess__move-nav"
@@ -1049,10 +1155,10 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                                                 <button
                                                     ref={whiteActive ? activeMoveRef : null}
                                                     type="button"
-                                                    disabled={!isFinished}
+                                                    disabled={!canReviewMoves}
                                                     className={cx(
                                                         'chess__move-btn',
-                                                        isFinished && 'chess__move-btn--interactive',
+                                                        canReviewMoves && 'chess__move-btn--interactive',
                                                         whiteActive && 'chess__move-btn--active',
                                                     )}
                                                     onClick={() => handleSelectPly(pair.whitePly)}
@@ -1064,10 +1170,10 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                                                 <button
                                                     ref={blackActive ? activeMoveRef : null}
                                                     type="button"
-                                                    disabled={!isFinished}
+                                                    disabled={!canReviewMoves}
                                                     className={cx(
                                                         'chess__move-btn',
-                                                        isFinished && 'chess__move-btn--interactive',
+                                                        canReviewMoves && 'chess__move-btn--interactive',
                                                         blackActive && 'chess__move-btn--active',
                                                     )}
                                                     onClick={() => handleSelectPly(pair.blackPly)}
@@ -1080,7 +1186,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                                 })}
                                 <div ref={movesEndRef} />
                             </div>
-                            {isFinished && (
+                            {canReviewMoves && (
                                 <button
                                     type="button"
                                     className="chess__move-nav"
@@ -1106,6 +1212,12 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                                 <>
                                     <div className="chess__result-sub">رپید ۱۰ دقیقه • مهره تصادفی</div>
                                     <div className="chess__result-sub">به‌محض پیوستن حریف، بازی خودکار شروع می‌شود</div>
+                                    {waitingLeftMs !== null && (
+                                        <div className="chess__timer-banner">
+                                            <span>زمان باقی‌مانده جستجو</span>
+                                            <span className="chess__timer-pill">{formatClock(waitingLeftMs)}</span>
+                                        </div>
+                                    )}
                                 </>
                             ) : (
                                 <div className="chess__result-sub">بازی را برای دوستت بفرست تا شروع شود</div>
@@ -1153,57 +1265,35 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                     )}
 
                     {game.status === 'active' && isParticipant && (
-                        <>
-                            {game.drawOfferedBy === oppColor && (
-                                <div className="chess__draw-banner">
-                                    <span>پیشنهاد مساوی از طرف حریف</span>
-                                    <div className="chess__draw-actions">
-                                        <button
-                                            type="button"
-                                            className="chess-chip chess-chip--active"
-                                            onClick={() => send({ type: 'draw_accept' })}
-                                        >
-                                            قبول
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="chess-chip"
-                                            onClick={() => send({ type: 'draw_decline' })}
-                                        >
-                                            رد
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="chess__controls">
-                                {game.ply < 2 ? (
-                                    <button
-                                        type="button"
-                                        className="chess-secondary-btn"
-                                        onClick={() => send({ type: 'abort' })}
-                                    >
-                                        لغو بازی
-                                    </button>
-                                ) : (
-                                    <button
-                                        type="button"
-                                        className="chess-secondary-btn"
-                                        disabled={game.drawOfferedBy === myColor}
-                                        onClick={() => send({ type: 'draw_offer' })}
-                                    >
-                                        {game.drawOfferedBy === myColor ? 'پیشنهاد مساوی ارسال شد' : 'پیشنهاد مساوی'}
-                                    </button>
-                                )}
+                        <div className="chess__controls">
+                            {game.ply < 2 ? (
                                 <button
                                     type="button"
-                                    className="chess-secondary-btn chess-secondary-btn--danger"
-                                    onClick={() => setConfirmResign(true)}
+                                    className="chess-secondary-btn"
+                                    onClick={() => send({ type: 'abort' })}
                                 >
-                                    تسلیم
+                                    لغو بازی
                                 </button>
-                            </div>
-                        </>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="chess-secondary-btn"
+                                    disabled={game.drawOfferedBy === myColor || myDrawCooldownLeftMs > 0}
+                                    onClick={() => send({ type: 'draw_offer' })}
+                                >
+                                    {myDrawCooldownLeftMs > 0
+                                        ? `پیشنهاد مساوی (${formatClock(myDrawCooldownLeftMs)})`
+                                        : 'پیشنهاد مساوی'}
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                className="chess-secondary-btn chess-secondary-btn--danger"
+                                onClick={() => setConfirmResign(true)}
+                            >
+                                تسلیم
+                            </button>
+                        </div>
                     )}
 
                     {game.status === 'finished' && (

@@ -260,6 +260,7 @@ export interface ChessGameView {
     turn: ChessColor;
     clocks: { white: number; black: number } | null;
     lastMoveAt: number;
+    waitingDeadline?: number | null;
     firstMoveDeadline?: number | null;
     disconnectDeadline?: number | null;
     disconnectTarget?: ChessColor | 'double' | null;
@@ -269,6 +270,8 @@ export interface ChessGameView {
     result: string | null;
     reason: string | null;
     drawOfferedBy: ChessColor | null;
+    drawOfferExpiresAt?: number | null;
+    drawCooldownUntil?: { white: number | null; black: number | null } | null;
     inCheck: boolean;
     online: { white: boolean; black: boolean };
     createdAt?: number;

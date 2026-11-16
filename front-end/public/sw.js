@@ -4,9 +4,84 @@ self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim(
 
 const toPersianNumber = (value) => Number(value).toLocaleString('fa-IR');
 
+const formatRemaining = (sec) => {
+    const total = Math.max(1, Math.round(Number(sec) || 10));
+    if (total < 60) return `${toPersianNumber(total)} ثانیه`;
+    const mins = Math.floor(total / 60);
+    const rem = total % 60;
+    return rem === 0
+        ? `${toPersianNumber(mins)} دقیقه`
+        : `${toPersianNumber(mins)} دقیقه و ${toPersianNumber(rem)} ثانیه`;
+};
+
 const activeChatByClient = new Map();
+const SW_CONFIG_CACHE = 'nr-sw-meta';
+const SW_API_BASE_KEY = '/__nr_api_base__';
+let configuredApiBase = null;
+
+async function saveApiBase(apiBase) {
+    if (typeof apiBase !== 'string' || !apiBase.trim()) return;
+    configuredApiBase = apiBase.trim().replace(/\/+$/, '');
+    try {
+        const cache = await caches.open(SW_CONFIG_CACHE);
+        await cache.put(SW_API_BASE_KEY, new Response(configuredApiBase));
+    } catch {
+        void 0;
+    }
+}
+
+async function getApiBase() {
+    if (configuredApiBase) return configuredApiBase;
+    try {
+        const cache = await caches.open(SW_CONFIG_CACHE);
+        const res = await cache.match(SW_API_BASE_KEY);
+        if (res) {
+            const text = (await res.text()).trim().replace(/\/+$/, '');
+            if (text) {
+                configuredApiBase = text;
+                return text;
+            }
+        }
+    } catch {
+        void 0;
+    }
+    return '/api';
+}
+
+async function verifyChessPush(data) {
+    if (!data || data.kind !== 'chess' || !data.gameId) return true;
+    try {
+        const apiBase = await getApiBase();
+        const params = new URLSearchParams();
+        if (data.event) params.set('event', String(data.event));
+        if (data.warnKey) params.set('warnKey', String(data.warnKey));
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = controller ? setTimeout(() => controller.abort(), 4500) : null;
+        try {
+            const res = await fetch(
+                `${apiBase}/chess/games/${encodeURIComponent(String(data.gameId))}/push-status?${params.toString()}`,
+                { cache: 'no-store', signal: controller ? controller.signal : undefined }
+            );
+            if (res.status === 404 || res.status === 410) return false;
+            if (res.ok) {
+                const json = await res.json();
+                if (json && json.valid === false) return false;
+            }
+            return true;
+        } finally {
+            if (timer) clearTimeout(timer);
+        }
+    } catch {
+        if (data.expiresAt && Date.now() > Number(data.expiresAt)) return false;
+        return true;
+    }
+}
 
 self.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'nr-config' && typeof event.data.apiBase === 'string') {
+        event.waitUntil(saveApiBase(event.data.apiBase));
+        return;
+    }
     if (event.data && event.data.type === 'nr-active-chat' && event.source && event.source.id) {
         if (event.data.chatId) {
             activeChatByClient.set(event.source.id, String(event.data.chatId));
@@ -53,6 +128,19 @@ async function handlePush(event) {
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     if (isViewingTarget(windows, data, path)) return;
 
+    if (data.kind === 'chess') {
+        const stillValid = await verifyChessPush(data);
+        if (!stillValid) {
+            if (data.event === 'matchmaking_searching' && data.gameId) {
+                const existing = await self.registration.getNotifications({ tag: 'chess:online-search' });
+                existing.forEach((n) => {
+                    if (n.data && n.data.gameId === data.gameId) n.close();
+                });
+            }
+            return;
+        }
+    }
+
     const tag =
         data.kind === 'chess'
             ? data.event === 'matchmaking_searching'
@@ -74,11 +162,11 @@ async function handlePush(event) {
             body = `حریف پیدا شد! بازی شما با ${data.senderName} آغاز شد`;
         } else if (data.event === 'timer_warning') {
             title = 'شطرنج';
-            const secText = toPersianNumber(data.remainingSeconds || 10);
+            const remText = formatRemaining(data.remainingSeconds);
             body =
                 data.reason === 'double_disconnect'
-                    ? `اتصال قطع شده است! تا ${secText} ثانیه دیگر به بازی برگردید`
-                    : `نوبت شماست! اگر تا ${secText} ثانیه دیگر برنگردید بازی را واگذار می‌کنید`;
+                    ? `اتصال قطع شده است! تا ${remText} دیگر به بازی برگردید`
+                    : `نوبت شماست! اگر تا ${remText} دیگر برنگردید بازی را واگذار می‌کنید`;
         } else {
             title = 'شطرنج';
             body = `${data.senderName} به بازی شما پیوست`;
@@ -109,7 +197,7 @@ async function handlePush(event) {
         dir: 'rtl',
         lang: 'fa',
         silent: isSilent || hasTab,
-        data: { url: data.url, count },
+        data: { url: data.url, count, gameId: data.gameId || null },
     });
 
     if (!isSilent && hasTab) {

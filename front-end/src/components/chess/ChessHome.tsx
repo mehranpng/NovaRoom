@@ -11,14 +11,19 @@ import type {
     User,
 } from '../../types';
 import {
+    cancelChessGameOptimistic,
+    getCachedCurrentChessGame,
     getChessLeaderboardSnapshot,
     getChessLobbySnapshot,
+    isChessGameCancelled,
     isChessLeaderboardFresh,
     isChessLobbyFresh,
+    markChessGameUnavailable,
     seedChessGames,
     setCachedChessGame,
     setChessLeaderboardSnapshot,
     setChessLobbySnapshot,
+    waitForPendingChessCancels,
 } from '../../utils/chessCache';
 import { cx } from '../../utils/cx';
 import { useScrollFade } from '../../hooks/useScrollFade';
@@ -53,7 +58,6 @@ const EMPTY_LEADERBOARD_STATS: ChessLeaderboardStats = {
 };
 
 const TIME_CONTROL_GROUPS = [
-    { label: 'بدون زمان', items: [{ value: 'unlimited', label: 'بدون زمان' }] },
     { label: 'بولت', items: [{ value: '1+0', label: '۱+۰' }] },
     {
         label: 'بلیتز',
@@ -97,6 +101,13 @@ const REASON_LABELS: Record<string, string> = {
 
 const formatTimeControl = (tc: string) => (tc === 'unlimited' ? 'بدون زمان' : toPersianDigits(tc));
 
+const formatTimer = (ms: number): string => {
+    const clamped = Math.max(0, Math.ceil(ms / 1000));
+    const minutes = Math.floor(clamped / 60);
+    const seconds = clamped % 60;
+    return `${toPersianDigits(String(minutes).padStart(2, '0'))}:${toPersianDigits(String(seconds).padStart(2, '0'))}`;
+};
+
 let lobbyScrollTop: number | null = null;
 let lobbyTab: 'play' | 'leaderboard' = 'play';
 
@@ -116,7 +127,8 @@ export function ChessHome({
 }: ChessHomeProps) {
     const { scrolled, handleScroll } = useScrollFade();
     const initialSnapshot = getChessLobbySnapshot();
-    const [currentGame, setCurrentGame] = useState<ChessGameView | null>(() => initialSnapshot?.currentGame ?? null);
+    const initialCurrentGame = getCachedCurrentChessGame();
+    const [currentGame, setCurrentGame] = useState<ChessGameView | null>(() => initialCurrentGame);
     const [history, setHistory] = useState<ChessGameView[]>(() => initialSnapshot?.history ?? []);
     const [hasMore, setHasMore] = useState<boolean>(() => initialSnapshot?.hasMore ?? false);
     const [tab, setTab] = useState<'play' | 'leaderboard'>(lobbyTab);
@@ -126,6 +138,10 @@ export function ChessHome({
     } | null>(() => getChessLeaderboardSnapshot());
     const [loadingMore, setLoadingMore] = useState(false);
     const [loading, setLoading] = useState<boolean>(() => !initialSnapshot);
+    const [now, setNow] = useState(() => Date.now());
+    const [skew, setSkew] = useState(() =>
+        initialCurrentGame?.serverNow ? initialCurrentGame.serverNow - Date.now() : 0,
+    );
     const [timeControl, setTimeControl] = useState<string>('10+0');
     const [color, setColor] = useState<'white' | 'black' | 'random'>('random');
     const [creating, setCreating] = useState(false);
@@ -137,6 +153,8 @@ export function ChessHome({
     const startingOnlineRef = useRef(false);
     const autoStartedOnlineRef = useRef(false);
     const leaderboardRequestedRef = useRef(false);
+    const loadSeqRef = useRef(0);
+    const expireRefreshSentRef = useRef(false);
     const contentRef = useRef<HTMLDivElement | null>(null);
 
     useLayoutEffect(() => {
@@ -163,31 +181,56 @@ export function ChessHome({
     };
 
     const loadData = useCallback(async (force = false) => {
-        if (!force && isChessLobbyFresh()) {
-            setLoading(false);
-            return;
-        }
+        const seq = ++loadSeqRef.current;
+        await waitForPendingChessCancels();
+        if (seq !== loadSeqRef.current) return;
         try {
             const snap = getChessLobbySnapshot();
-            if (snap && !force && snap.currentGame?.status === 'waiting') {
-                const curRes = await apiFetch('/chess/games/current').catch(() => null);
-                const nextCurrent: ChessGameView | null = curRes?.game || null;
-                setCurrentGame(nextCurrent);
-                setChessLobbySnapshot({
-                    currentGame: nextCurrent,
-                    history: snap.history,
-                    hasMore: snap.hasMore,
-                });
+            if (!force && isChessLobbyFresh() && snap) {
+                const curRes = await apiFetch('/chess/games/current').catch(() => undefined);
+                if (seq !== loadSeqRef.current) return;
+                if (curRes !== undefined) {
+                    const rawCurrent: ChessGameView | null = curRes?.game || null;
+                    const nextCurrent =
+                        rawCurrent && isChessGameCancelled(rawCurrent.id) && rawCurrent.status === 'waiting'
+                            ? null
+                            : rawCurrent;
+                    setCurrentGame(nextCurrent);
+                    if (nextCurrent?.serverNow) {
+                        const clientNow = Date.now();
+                        setNow(clientNow);
+                        setSkew(nextCurrent.serverNow - clientNow);
+                    }
+                    setChessLobbySnapshot({
+                        currentGame: nextCurrent,
+                        history: snap.history,
+                        hasMore: snap.hasMore,
+                    });
+                }
                 return;
             }
             const [curRes, histRes] = await Promise.all([
-                apiFetch('/chess/games/current').catch(() => null),
+                apiFetch('/chess/games/current').catch(() => undefined),
                 apiFetch(`/chess/games/history?skip=0&limit=${HISTORY_PAGE_SIZE}`).catch(() => null),
             ]);
-            const nextCurrent: ChessGameView | null = curRes?.game || null;
-            const nextHistory: ChessGameView[] = Array.isArray(histRes?.games) ? histRes.games : [];
-            const nextHasMore = Boolean(histRes?.hasMore);
+            if (seq !== loadSeqRef.current) return;
+            const fallbackCurrent = getCachedCurrentChessGame();
+            const rawCurrent: ChessGameView | null =
+                curRes !== undefined ? curRes?.game || null : fallbackCurrent;
+            const nextCurrent =
+                rawCurrent && isChessGameCancelled(rawCurrent.id) && rawCurrent.status === 'waiting'
+                    ? null
+                    : rawCurrent;
+            const nextHistory: ChessGameView[] = Array.isArray(histRes?.games)
+                ? histRes.games
+                : snap?.history ?? [];
+            const nextHasMore = histRes ? Boolean(histRes.hasMore) : snap?.hasMore ?? false;
             setCurrentGame(nextCurrent);
+            if (nextCurrent?.serverNow) {
+                const clientNow = Date.now();
+                setNow(clientNow);
+                setSkew(nextCurrent.serverNow - clientNow);
+            }
             setHistory(nextHistory);
             setHasMore(nextHasMore);
             setChessLobbySnapshot({
@@ -196,7 +239,9 @@ export function ChessHome({
                 hasMore: nextHasMore,
             });
         } finally {
-            setLoading(false);
+            if (seq === loadSeqRef.current) {
+                setLoading(false);
+            }
         }
     }, []);
 
@@ -204,15 +249,70 @@ export function ChessHome({
         void loadData();
     }, [loadData]);
 
+    useEffect(() => {
+        if (currentGame?.status !== 'waiting' || !currentGame.matchmaking) return;
+        const id = window.setInterval(() => {
+            setNow(Date.now());
+        }, 500);
+        return () => window.clearInterval(id);
+    }, [currentGame?.status, currentGame?.matchmaking]);
+
+    useEffect(() => {
+        if (currentGame?.status !== 'waiting' || !currentGame.matchmaking) {
+            expireRefreshSentRef.current = false;
+            return;
+        }
+        const deadline =
+            typeof currentGame.waitingDeadline === 'number'
+                ? currentGame.waitingDeadline
+                : typeof currentGame.createdAt === 'number'
+                ? currentGame.createdAt + 15 * 60 * 1000
+                : null;
+        if (deadline === null) return;
+        if (deadline - (now + skew) > 0 || expireRefreshSentRef.current) return;
+        expireRefreshSentRef.current = true;
+        const timer = window.setTimeout(() => {
+            markChessGameUnavailable(currentGame.id);
+            setCurrentGame(null);
+            void loadData(true);
+        }, 350);
+        return () => window.clearTimeout(timer);
+    }, [
+        currentGame?.id,
+        currentGame?.status,
+        currentGame?.matchmaking,
+        currentGame?.waitingDeadline,
+        currentGame?.createdAt,
+        now,
+        skew,
+        loadData,
+    ]);
+
+    useEffect(() => {
+        const onSearchExpired = (event: Event) => {
+            const detail = (event as CustomEvent<{ gameId?: string }>).detail;
+            if (!detail?.gameId) return;
+            if (currentGame?.id === detail.gameId) {
+                setCurrentGame(null);
+                void loadData(true);
+            }
+        };
+        window.addEventListener('novaroom:chess_search_expired', onSearchExpired);
+        return () => window.removeEventListener('novaroom:chess_search_expired', onSearchExpired);
+    }, [currentGame?.id, loadData]);
+
     const handleStartOnline = useCallback(async () => {
         if (startingOnlineRef.current) return;
         startingOnlineRef.current = true;
         setStartingOnline(true);
+        loadSeqRef.current += 1;
         void closeChessOnlineNotifications();
         try {
+            await waitForPendingChessCancels();
             const res = await apiFetch('/chess/matchmaking', { method: 'POST' });
             if (res?.game?.id) {
                 setCachedChessGame(res.game);
+                setCurrentGame(res.game);
                 openGame(res.game.id);
             }
         } catch (err: unknown) {
@@ -228,6 +328,14 @@ export function ChessHome({
             setStartingOnline(false);
         }
     }, [openGame, loadData]);
+
+    const handleCancelSearch = useCallback(() => {
+        if (!currentGame) return;
+        const gameId = currentGame.id;
+        loadSeqRef.current += 1;
+        setCurrentGame(null);
+        void cancelChessGameOptimistic(gameId);
+    }, [currentGame]);
 
     useEffect(() => {
         if (!autoStartOnline) {
@@ -317,13 +425,16 @@ export function ChessHome({
     const handleCreate = async () => {
         if (creating) return;
         setCreating(true);
+        loadSeqRef.current += 1;
         try {
+            await waitForPendingChessCancels();
             const res = await apiFetch('/chess/games', {
                 method: 'POST',
                 body: JSON.stringify({ timeControl, color }),
             });
             if (res?.game?.id) {
                 setCachedChessGame(res.game);
+                setCurrentGame(res.game);
                 openGame(res.game.id);
             }
         } catch (err: unknown) {
@@ -366,6 +477,18 @@ export function ChessHome({
         return { label: 'باخت', cls: 'chess-history__badge--loss' };
     };
 
+    const waitingLeftMs = useMemo(() => {
+        if (currentGame?.status !== 'waiting' || !currentGame.matchmaking) return null;
+        const deadline =
+            typeof currentGame.waitingDeadline === 'number'
+                ? currentGame.waitingDeadline
+                : typeof currentGame.createdAt === 'number'
+                ? currentGame.createdAt + 15 * 60 * 1000
+                : null;
+        if (deadline === null) return null;
+        return Math.max(0, deadline - (now + skew));
+    }, [currentGame, now, skew]);
+
     return (
         <motion.div className="profile chess-lobby" variants={screenVariants} initial="hidden" animate="visible" exit="exit">
             <div className={cx('header-fade', 'header-fade--screen', scrolled && 'header-fade--visible')} aria-hidden="true" />
@@ -375,13 +498,24 @@ export function ChessHome({
 
             <div className="profile__content" ref={contentRef} onScroll={handleScroll}>
                 <div className="chess-lobby__inner">
-                    {currentGame ? (
+                    {loading && !currentGame ? (
+                        <div className="chess-card">
+                            <div className="chess-card__header">
+                                <span className="skeleton" style={{ width: 44, height: 44, borderRadius: 14, flexShrink: 0 }} />
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+                                    <span className="skeleton" style={{ height: 16, width: 110, borderRadius: 6 }} />
+                                    <span className="skeleton" style={{ height: 13, width: 170, borderRadius: 6 }} />
+                                </div>
+                            </div>
+                            <span className="skeleton" style={{ height: 50, width: '100%', borderRadius: 9999 }} />
+                        </div>
+                    ) : currentGame ? (
                         <div className="chess-card">
                             <div className="chess-card__header">
                                 <span className="chess-card__icon">
                                     <PlumpyChessIcon size={24} />
                                 </span>
-                                <div>
+                                <div className="chess-card__header-text">
                                     <div className="chess-card__title">
                                         {currentGame.matchmaking ? 'بازی آنلاین' : 'ادامه بازی'}
                                     </div>
@@ -394,14 +528,36 @@ export function ChessHome({
                                             : 'در حال بازی'}
                                     </div>
                                 </div>
+                                {waitingLeftMs !== null && (
+                                    <span className="chess__timer-pill">{formatTimer(waitingLeftMs)}</span>
+                                )}
                             </div>
-                            <button
-                                type="button"
-                                className="chess-primary-btn"
-                                onClick={() => openGame(currentGame.id)}
-                            >
-                                ادامه بازی
-                            </button>
+                            {currentGame.status === 'waiting' && currentGame.matchmaking ? (
+                                <div className="chess__actions">
+                                    <button
+                                        type="button"
+                                        className="chess-primary-btn"
+                                        onClick={() => openGame(currentGame.id)}
+                                    >
+                                        ادامه جستجو
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="chess-secondary-btn chess-secondary-btn--danger"
+                                        onClick={handleCancelSearch}
+                                    >
+                                        لغو جستجو
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="chess-primary-btn"
+                                    onClick={() => openGame(currentGame.id)}
+                                >
+                                    ادامه بازی
+                                </button>
+                            )}
                         </div>
                     ) : (
                         <>

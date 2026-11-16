@@ -31,13 +31,18 @@ UCI_RE = re.compile(r"^[a-h][1-8][a-h][1-8][qrbn]?$")
 FIRST_MOVE_BULLET_MS = 15 * 1000
 FIRST_MOVE_BLITZ_MS = 20 * 1000
 FIRST_MOVE_RAPID_MS = 60 * 1000
+FIRST_MOVE_OFFLINE_MS = 3 * 60 * 1000
 FIRST_MOVE_WINDOW_MS = FIRST_MOVE_RAPID_MS
 LONG_MOVE_MAX_PLY = 20
 DISCONNECT_MIN_MS = 30 * 1000
 DISCONNECT_MAX_MS = 180 * 1000
 DISCONNECT_GRACE_MS = 60 * 1000
 DOUBLE_DISCONNECT_MS = 60 * 1000
-WAITING_TTL_MS = 10 * 60 * 1000
+WAITING_TTL_MS = 15 * 60 * 1000
+DRAW_COOLDOWN_MIN_MS = 15 * 1000
+DRAW_COOLDOWN_MAX_MS = 180 * 1000
+DRAW_COOLDOWN_UNLIMITED_MS = 60 * 1000
+DRAW_OFFER_TTL_MS = 10 * 1000
 UNRATED_REASONS = {"aborted", "first_move_timeout", "double_disconnect_draw"}
 ABORTED_REASONS = {"aborted", "first_move_timeout"}
 EARLY_END_REASONS = {"resign", "disconnect_abandonment", "long_move_abandonment", "agreement"}
@@ -120,6 +125,8 @@ def new_game(creator_id, color, time_control, now, matchmaking=False):
         "disconnectedAt": {"white": None, "black": None},
         "disconnectUsedMs": {"white": 0, "black": 0},
         "drawOfferedBy": None,
+        "drawOfferExpiresAt": None,
+        "drawCooldownUntil": {"white": None, "black": None},
         "result": None,
         "reason": None,
         "createdAt": now,
@@ -166,10 +173,16 @@ def is_timed(game):
 def first_move_window_ms(game):
     base_ms = game.get("baseMs") or 0
     if 0 < base_ms < 180_000:
-        return FIRST_MOVE_BULLET_MS
-    if 180_000 <= base_ms < 600_000:
-        return FIRST_MOVE_BLITZ_MS
-    return FIRST_MOVE_RAPID_MS
+        window_ms = FIRST_MOVE_BULLET_MS
+    elif 180_000 <= base_ms < 600_000:
+        window_ms = FIRST_MOVE_BLITZ_MS
+    else:
+        window_ms = FIRST_MOVE_RAPID_MS
+    if game.get("creatorOfflineAtMatch") and len(game.get("moves") or []) < 2:
+        creator_color = color_of(game, game.get("creatorId"))
+        if creator_color and turn_by_ply(game) == creator_color:
+            return max(window_ms, FIRST_MOVE_OFFLINE_MS)
+    return window_ms
 
 
 def long_move_limit_ms(game):
@@ -183,6 +196,16 @@ def disconnect_timeout_ms(game):
     inc_s = (game.get("incMs") or 0) / 1000.0
     raw_ms = int(round((base_s + 40.0 * inc_s) * 0.10 * 1000))
     return max(DISCONNECT_MIN_MS, min(DISCONNECT_MAX_MS, raw_ms))
+
+
+def draw_offer_cooldown_ms(game):
+    base_ms = game.get("baseMs") or 0
+    inc_ms = game.get("incMs") or 0
+    if base_ms <= 0:
+        return DRAW_COOLDOWN_UNLIMITED_MS
+    total_ms = base_ms + 40 * inc_ms
+    raw_ms = int(round(total_ms * 0.10))
+    return max(DRAW_COOLDOWN_MIN_MS, min(DRAW_COOLDOWN_MAX_MS, raw_ms))
 
 
 def _active_color(game, user_id):
@@ -261,6 +284,7 @@ def _finish(game, result, reason, now):
     game["endedAt"] = now
     game["finishedAt"] = now
     game["drawOfferedBy"] = None
+    game["drawOfferExpiresAt"] = None
     return {"kind": "game_over", "result": result, "reason": reason}
 
 
@@ -318,7 +342,7 @@ def set_group_invitee(game, user_id, group_id):
     game["invitedGroupId"] = group_id
 
 
-def _seat_opponent(game, user_id, now, rated, unrated_reason=None):
+def _seat_opponent(game, user_id, now, rated, unrated_reason=None, creator_offline=False):
     seat = "black" if game["players"]["white"] else "white"
     game["players"][seat] = user_id
     if not is_timed(game) or game.get("timeControl") == "unlimited":
@@ -326,6 +350,7 @@ def _seat_opponent(game, user_id, now, rated, unrated_reason=None):
         unrated_reason = unrated_reason or "unlimited"
     game["rated"] = bool(rated)
     game["unratedReason"] = None if rated else unrated_reason
+    game["creatorOfflineAtMatch"] = bool(creator_offline)
     game["status"] = "active"
     game["startedAt"] = now
     game["lastMoveAt"] = now
@@ -343,12 +368,12 @@ def join(game, user_id, now):
     return _seat_opponent(game, user_id, now, rated, None if rated else "guest")
 
 
-def join_matchmaking(game, user_id, now):
+def join_matchmaking(game, user_id, now, creator_offline=False):
     if game["status"] != "waiting" or not game.get("matchmaking"):
         raise ChessError("not_joinable")
     if not user_id or user_id == game["creatorId"] or is_guest_id(user_id):
         raise ChessError("forbidden")
-    return _seat_opponent(game, user_id, now, True, None)
+    return _seat_opponent(game, user_id, now, True, None, creator_offline=creator_offline)
 
 
 def join_by_link(game, user_id, now, guest_token=None):
@@ -420,6 +445,7 @@ def apply_move(game, user_id, uci, now):
         game["clocks"][color] = remaining + (game["incMs"] if ply >= 2 else 0)
     game["lastMoveAt"] = now
     game["drawOfferedBy"] = None
+    game["drawOfferExpiresAt"] = None
     game.setdefault("disconnectedAt", {"white": None, "black": None})[color] = None
     game.setdefault("disconnectUsedMs", {"white": 0, "black": 0})[color] = 0
     outcome = board.outcome(claim_draw=True)
@@ -454,7 +480,13 @@ def offer_draw(game, user_id, now):
         return accept_draw(game, user_id, now)
     if game["drawOfferedBy"] == color:
         raise ChessError("already_offered")
+    cooldowns = game.setdefault("drawCooldownUntil", {"white": None, "black": None})
+    until = cooldowns.get(color)
+    if isinstance(until, (int, float)) and now < until:
+        raise ChessError("draw_cooldown")
+    cooldowns[color] = now + draw_offer_cooldown_ms(game)
     game["drawOfferedBy"] = color
+    game["drawOfferExpiresAt"] = now + DRAW_OFFER_TTL_MS
     return {"kind": "draw_offered", "by": color}
 
 
@@ -470,6 +502,7 @@ def decline_draw(game, user_id, now):
     if game["drawOfferedBy"] != OTHER[color]:
         raise ChessError("no_offer")
     game["drawOfferedBy"] = None
+    game["drawOfferExpiresAt"] = None
     return {"kind": "draw_declined", "by": color}
 
 
@@ -495,6 +528,9 @@ def _candidates(game):
     elif disc.get(turn) is not None:
         rem = max(0, disconnect_timeout_ms(game) - used.get(turn, 0))
         items.append((max(disc[turn], last) + rem, "disconnect"))
+    draw_exp = game.get("drawOfferExpiresAt")
+    if game.get("drawOfferedBy") is not None and isinstance(draw_exp, (int, float)):
+        items.append((int(draw_exp), "draw_offer_expired"))
     return items
 
 
@@ -504,7 +540,7 @@ def deadline_ms(game):
 
 
 def warning_spec(game):
-    items = _candidates(game)
+    items = [(d, k) for d, k in _candidates(game) if k != "draw_offer_expired"]
     if not items:
         return None
     deadline, kind = min(items, key=lambda x: x[0])
@@ -550,6 +586,11 @@ def check_deadline(game, now):
         return None
     _, kind = min(items, key=lambda x: x[0])
     turn = turn_by_ply(game)
+    if kind == "draw_offer_expired":
+        by_color = game.get("drawOfferedBy")
+        game["drawOfferedBy"] = None
+        game["drawOfferExpiresAt"] = None
+        return {"kind": "draw_declined", "by": OTHER[by_color]} if by_color in OTHER else None
     if kind == "first_move":
         return _finish(game, "*", "first_move_timeout", now)
     if kind == "long_move":
@@ -590,6 +631,11 @@ def public_view(game, now, online):
     ply = len(game["moves"])
     last = game["moves"][-1]["uci"] if ply else None
     active = game["status"] == "active"
+    waiting_deadline = (
+        game["createdAt"] + WAITING_TTL_MS
+        if game.get("status") == "waiting" and game.get("createdAt")
+        else None
+    )
     first_deadline = game["lastMoveAt"] + first_move_window_ms(game) if active and ply < 2 else None
     disc_deadline, disc_target = _disconnect_view(game)
     return {
@@ -608,6 +654,7 @@ def public_view(game, now, online):
         "turn": turn_by_ply(game),
         "clocks": game["clocks"],
         "lastMoveAt": game["lastMoveAt"],
+        "waitingDeadline": waiting_deadline,
         "firstMoveDeadline": first_deadline,
         "disconnectDeadline": disc_deadline,
         "disconnectTarget": disc_target,
@@ -617,6 +664,8 @@ def public_view(game, now, online):
         "result": game["result"],
         "reason": game["reason"],
         "drawOfferedBy": game["drawOfferedBy"],
+        "drawOfferExpiresAt": game.get("drawOfferExpiresAt") if game.get("drawOfferedBy") else None,
+        "drawCooldownUntil": game.get("drawCooldownUntil") or {"white": None, "black": None},
         "inCheck": bool(in_check),
         "online": online,
         "createdAt": game["createdAt"],

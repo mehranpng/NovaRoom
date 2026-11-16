@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { apiFetch } from '../config/api';
+import { API_BASE_URL, apiFetch } from '../config/api';
 import { notify } from './notificationBus';
 
 export type ChatNotifyMode = 'all' | 'muted' | 'mentions';
@@ -80,7 +80,10 @@ export function getPermission(): NotificationPermission | 'unsupported' {
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
     if (getPushSupport() !== 'supported') return null;
     try {
-        return await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        const sw = registration.active || registration.waiting || registration.installing || navigator.serviceWorker.controller;
+        sw?.postMessage({ type: 'nr-config', apiBase: API_BASE_URL });
+        return registration;
     } catch {
         return null;
     }
@@ -111,6 +114,7 @@ export async function ensurePushSubscription(): Promise<boolean> {
     if (getPermission() !== 'granted') return false;
     try {
         const registration = await navigator.serviceWorker.ready;
+        registration.active?.postMessage({ type: 'nr-config', apiBase: API_BASE_URL });
         const response = await apiFetch('/push/vapid-public-key');
         const publicKey = String(response?.publicKey || '');
         if (!publicKey) return false;

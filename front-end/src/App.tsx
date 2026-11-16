@@ -24,7 +24,7 @@ import { PwaInstallModal } from './components/PwaInstallModal';
 import { notify } from './utils/notificationBus';
 import { clearLocalE2EEIdentity, decryptBioClientSide, decryptClientText, decryptMessageClientSide, encryptChatTextClientSide, loadLocalE2EEIdentity, registerPeerPublicKey } from './utils/e2ee';
 import { clearCachedTextValues, clearChatSnapshots, getChatSnapshot, saveChatSnapshot } from './utils/mediaCache';
-import { clearChessCache } from './utils/chessCache';
+import { clearChessCache, markChessGameUnavailable } from './utils/chessCache';
 import {
     clearAllChatDrafts,
     clearChatDraft,
@@ -38,6 +38,7 @@ import { ChessScreen } from './components/chess/ChessScreen';
 import { ChessJoinPage } from './components/chess/ChessJoinPage';
 import {
     closeChatNotifications,
+    closeChessOnlineNotifications,
     ensurePushSubscription,
     getPermission,
     loadNotificationPrefs,
@@ -490,10 +491,14 @@ export function App() {
 
     useEffect(() => {
         if (!isAuthenticated) return;
-        const handler = (event: Event) => {
+        const onMatchFound = (event: Event) => {
             const detail = (event as CustomEvent<{ gameId?: string; opponentName?: string }>).detail;
             const gameId = detail?.gameId;
             if (!gameId) return;
+            void closeChessOnlineNotifications();
+            if (location.pathname === `/chess/game/${gameId}`) {
+                return;
+            }
             if (viewRef.current === 'chess' && location.pathname === '/chess') {
                 navigate(`/chess/game/${gameId}`);
             } else {
@@ -501,8 +506,32 @@ export function App() {
                 notify({ message: `حریف شطرنج آنلاین پیدا شد${opponentLabel}`, type: 'success' });
             }
         };
-        window.addEventListener('novaroom:chess_match_found', handler);
-        return () => window.removeEventListener('novaroom:chess_match_found', handler);
+        const onSearchExpired = (event: Event) => {
+            const detail = (event as CustomEvent<{ gameId?: string }>).detail;
+            const gameId = detail?.gameId;
+            if (!gameId) return;
+            markChessGameUnavailable(gameId);
+            void closeChessOnlineNotifications();
+            if (location.pathname === `/chess/game/${gameId}`) {
+                notify({ message: 'در مهلت ۱۵ دقیقه حریفی پیدا نشد و جستجو لغو شد', type: 'info' });
+                navigate('/chess');
+            }
+        };
+        const onCancelConflict = (event: Event) => {
+            const detail = (event as CustomEvent<{ gameId?: string }>).detail;
+            const gameId = detail?.gameId;
+            if (!gameId) return;
+            notify({ message: 'حریف به بازی پیوست', type: 'info' });
+            navigate(`/chess/game/${gameId}`);
+        };
+        window.addEventListener('novaroom:chess_match_found', onMatchFound);
+        window.addEventListener('novaroom:chess_search_expired', onSearchExpired);
+        window.addEventListener('novaroom:chess_cancel_conflict', onCancelConflict);
+        return () => {
+            window.removeEventListener('novaroom:chess_match_found', onMatchFound);
+            window.removeEventListener('novaroom:chess_search_expired', onSearchExpired);
+            window.removeEventListener('novaroom:chess_cancel_conflict', onCancelConflict);
+        };
     }, [isAuthenticated, location.pathname, navigate]);
 
     useEffect(() => {

@@ -7292,14 +7292,14 @@ def _should_silence_smart_notification(user_id: str, chat_id: str) -> bool:
     return False
 
 
-def _send_webpush_sync(sub: dict, payload: dict) -> Optional[int]:
+def _send_webpush_sync(sub: dict, payload: dict, ttl: int = 86400) -> Optional[int]:
     try:
         webpush(
             subscription_info={"endpoint": sub["endpoint"], "keys": sub["keys"]},
             data=json.dumps(payload, ensure_ascii=False),
             vapid_private_key=VAPID_PRIVATE_KEY,
             vapid_claims={"sub": VAPID_SUBJECT},
-            ttl=86400,
+            ttl=max(1, min(86400, int(ttl))),
             headers={"Urgency": "high"},
         )
         return None
@@ -7320,9 +7320,9 @@ def schedule_push(coro) -> None:
     task.add_done_callback(_push_tasks.discard)
 
 
-async def _send_webpush_bounded(sub: dict, payload: dict) -> Optional[int]:
+async def _send_webpush_bounded(sub: dict, payload: dict, ttl: int = 86400) -> Optional[int]:
     async with _push_semaphore:
-        return await asyncio.to_thread(_send_webpush_sync, sub, payload)
+        return await asyncio.to_thread(_send_webpush_sync, sub, payload, ttl)
 
 
 async def push_to_users(user_ids: Iterable[str], payload_for_user) -> None:
@@ -7347,7 +7347,7 @@ async def push_to_users(user_ids: Iterable[str], payload_for_user) -> None:
         for sub in all_subs:
             subs_by_user.setdefault(str(sub.get("userId") or ""), []).append(sub)
 
-        jobs: List[Tuple[dict, dict]] = []
+        jobs: List[Tuple[dict, dict, int]] = []
         stale_ids: List[Any] = []
         for user in users:
             uid = str(user.get("chatId") or "")
@@ -7372,6 +7372,7 @@ async def push_to_users(user_ids: Iterable[str], payload_for_user) -> None:
             elif not settings["enabled"]:
                 continue
             payload = dict(payload)
+            ttl = int(payload.pop("_ttl", 86400) or 86400)
             valid_hashes = {
                 session.get("tokenHash") for session in _normalize_session_list(user)
             }
@@ -7409,15 +7410,15 @@ async def push_to_users(user_ids: Iterable[str], payload_for_user) -> None:
                 if _should_silence_smart_notification(uid, chat_key):
                     payload["silent"] = True
             for sub in user_subs:
-                jobs.append((sub, payload))
+                jobs.append((sub, payload, ttl))
 
         if jobs:
             statuses = await asyncio.gather(
-                *(_send_webpush_bounded(sub, payload) for sub, payload in jobs)
+                *(_send_webpush_bounded(sub, payload, ttl) for sub, payload, ttl in jobs)
             )
             stale_ids.extend(
                 sub["_id"]
-                for (sub, _), status in zip(jobs, statuses)
+                for (sub, _, _), status in zip(jobs, statuses)
                 if status in (404, 410)
             )
         if stale_ids:
@@ -7483,13 +7484,26 @@ def _is_in_chess_room(game_id: str, user_id: str) -> bool:
     )
 
 
+def _is_user_online_for_chess(user_id: str, game_id: Optional[str] = None) -> bool:
+    if not user_id:
+        return False
+    if any(
+        ws.client_state == WebSocketState.CONNECTED
+        for ws in active_connections.get(user_id, [])
+    ):
+        return True
+    if game_id and _is_in_chess_room(game_id, user_id):
+        return True
+    return False
+
+
 async def notify_chess_joined(game: dict, joiner_id: str) -> None:
     creator = game.get("creatorId")
     if not creator or chess_service.is_guest_id(creator):
         return
-    is_matchmaking = bool(game.get("matchmaking"))
-    if not is_matchmaking and _is_in_chess_room(game["_id"], creator):
+    if _is_in_chess_room(game["_id"], creator):
         return
+    is_matchmaking = bool(game.get("matchmaking"))
     if chess_service.is_guest_id(joiner_id):
         joiner_name = "مهمان"
     else:
@@ -7509,13 +7523,18 @@ async def notify_chess_joined(game: dict, joiner_id: str) -> None:
                 "opponentName": joiner_name,
             },
         )
+    now = now_ms()
+    first_dl = game.get("lastMoveAt", now) + chess_service.first_move_window_ms(game)
+    ttl_sec = max(60, min(1800, int((first_dl - now) / 1000) + 60))
     payload = {
         "kind": "chess",
         "event": "matchmaking_matched" if is_matchmaking else "joined",
         "gameId": game["_id"],
         "senderName": joiner_name,
+        "sentAt": now,
         "url": f"/chess/game/{game['_id']}",
         "icon": "/logo/icon-192.png",
+        "_ttl": ttl_sec,
     }
     await push_to_users([creator], lambda user_doc: dict(payload))
 
@@ -7565,13 +7584,27 @@ async def notify_chess_matchmaking_searching(game: dict, creator_user: dict) -> 
     ]
     if not recipients:
         return
+    fresh_game = await cl_chess_games.find_one(
+        {"_id": game["_id"], "status": "waiting", "matchmaking": True},
+        {"_id": 1, "createdAt": 1},
+    )
+    if not fresh_game:
+        return
+    now = now_ms()
+    expires_at = int(fresh_game.get("createdAt") or game.get("createdAt") or now) + chess_service.WAITING_TTL_MS
+    rem_sec = max(0, int((expires_at - now) / 1000))
+    if rem_sec <= 0:
+        return
     base_payload = {
         "kind": "chess",
         "event": "matchmaking_searching",
         "gameId": game["_id"],
         "senderName": creator_name,
+        "sentAt": now,
+        "expiresAt": expires_at,
         "url": "/chess?online=1",
         "icon": "/logo/icon-192.png",
+        "_ttl": rem_sec,
     }
 
     def payload_for_user(user_doc) -> Optional[dict]:
@@ -7587,6 +7620,7 @@ async def chess_on_warn(game_id: str, expected_key: str) -> None:
     recipients: List[str] = []
     rem_sec = 0
     reason_kind = ""
+    deadline = 0
     async with lock:
         chess_warn_timers.pop(game_id, None)
         game = await cl_chess_games.find_one({"_id": game_id})
@@ -7608,16 +7642,21 @@ async def chess_on_warn(game_id: str, expected_key: str) -> None:
             {"_id": game_id}, {"$set": {"lastWarnKey": expected_key}}
         )
         recipients = away
-        rem_sec = max(1, int(round((spec["deadline"] - now) / 1000.0)))
+        deadline = spec["deadline"]
+        rem_sec = max(1, int(round((deadline - now) / 1000.0)))
         reason_kind = spec["kind"]
     payload = {
         "kind": "chess",
         "event": "timer_warning",
         "reason": reason_kind,
         "remainingSeconds": rem_sec,
+        "warnKey": expected_key,
+        "sentAt": now_ms(),
+        "expiresAt": deadline,
         "gameId": game_id,
         "url": f"/chess/game/{game_id}",
         "icon": "/logo/icon-192.png",
+        "_ttl": max(1, min(300, rem_sec + 5)),
     }
     await push_to_users(recipients, lambda user_doc: dict(payload))
 
@@ -7698,6 +7737,8 @@ def chess_schedule(game: dict):
 async def chess_expire_waiting(game_id: str):
     lock = chess_locks.setdefault(game_id, asyncio.Lock())
     sockets = []
+    creator_id = None
+    is_matchmaking = False
     async with lock:
         game = await cl_chess_games.find_one({"_id": game_id})
         if not game or game.get("status") != "waiting":
@@ -7705,19 +7746,28 @@ async def chess_expire_waiting(game_id: str):
         if now_ms() - game.get("createdAt", 0) < chess_service.WAITING_TTL_MS:
             chess_schedule(game)
             return
+        creator_id = game.get("creatorId")
+        is_matchmaking = bool(game.get("matchmaking"))
         await cl_chess_games.delete_one({"_id": game_id})
         handle = chess_timers.pop(game_id, None)
         if handle:
             handle.cancel()
         room = chess_rooms.pop(game_id, {})
+        chess_latency.pop(game_id, None)
         sockets = [ws for conns in room.values() for ws in conns]
     chess_locks.pop(game_id, None)
+    error_code = "search_expired" if is_matchmaking else "waiting_expired"
     for ws in sockets:
         try:
-            await ws.send_json({"type": "error", "code": "forbidden"})
+            await ws.send_json({"type": "error", "code": error_code})
             await ws.close()
         except Exception:
             pass
+    if is_matchmaking and creator_id and not chess_service.is_guest_id(creator_id):
+        await safe_send(
+            creator_id,
+            {"type": "chess_search_expired", "gameId": game_id},
+        )
 
 
 async def chess_count_pair_rated_games_24h(
@@ -7936,20 +7986,24 @@ async def chess_backfill_stats():
 
 async def chess_run(game_id: str, action):
     lock = chess_locks.setdefault(game_id, asyncio.Lock())
-    async with lock:
-        game = await cl_chess_games.find_one({"_id": game_id})
-        if not game:
-            raise ChessError("not_found")
-        now = now_ms()
-        event = chess_service.check_deadline(game, now)
-        if event is None:
-            event = action(game, now)
-        if game.get("status") == "finished" and not game.get("eloProcessed"):
-            await chess_apply_elo_if_needed(game)
-        await cl_chess_games.replace_one({"_id": game_id}, game)
-        chess_schedule(game)
-    if game.get("status") == "finished" and not lock.locked():
-        chess_locks.pop(game_id, None)
+    game = None
+    event = None
+    try:
+        async with lock:
+            game = await cl_chess_games.find_one({"_id": game_id})
+            if not game:
+                raise ChessError("not_found")
+            now = now_ms()
+            event = chess_service.check_deadline(game, now)
+            if event is None:
+                event = action(game, now)
+            if game.get("status") == "finished" and not game.get("eloProcessed"):
+                await chess_apply_elo_if_needed(game)
+            await cl_chess_games.replace_one({"_id": game_id}, game)
+            chess_schedule(game)
+    finally:
+        if (game is None or game.get("status") == "finished") and not lock.locked():
+            chess_locks.pop(game_id, None)
     await chess_send_all(game_id, game, event)
     return game, event
 
@@ -10493,9 +10547,10 @@ async def start_chess_matchmaking(
                 now - chess_service.PAIR_RATED_WINDOW_MS,
             )
             pair_limit_reached = pair_count >= chess_service.PAIR_RATED_LIMIT_24H
+            creator_offline = not _is_user_online_for_chess(creator_id, cand["_id"])
 
-            def _match_join_action(g, n):
-                ev = chess_service.join_matchmaking(g, me, n)
+            def _match_join_action(g, n, offline=creator_offline):
+                ev = chess_service.join_matchmaking(g, me, n, creator_offline=offline)
                 chess_apply_join_policies(g, me, joiner_ip, joiner_device, pair_limit_reached)
                 return ev
 
@@ -10575,6 +10630,44 @@ async def get_chess_history(
     page = docs[:limit]
     games = [await chess_response(g) for g in page]
     return {"games": games, "hasMore": has_more}
+
+
+@app.get("/chess/games/{game_id}/push-status")
+@limiter.limit("120/minute")
+async def get_chess_push_status(
+    request: Request,
+    game_id: str,
+    event: str = Query(""),
+    warnKey: str = Query(""),
+):
+    game = await cl_chess_games.find_one({"_id": game_id})
+    if not game:
+        return {"valid": False}
+    now = now_ms()
+    status = game.get("status")
+    if event == "matchmaking_searching":
+        if status != "waiting" or not game.get("matchmaking"):
+            return {"valid": False}
+        if now - int(game.get("createdAt") or 0) >= chess_service.WAITING_TTL_MS:
+            return {"valid": False}
+        return {"valid": True}
+    if event in ("matchmaking_matched", "joined"):
+        if status != "active":
+            return {"valid": False}
+        dl = chess_service.deadline_ms(game)
+        if dl is not None and now >= dl:
+            return {"valid": False}
+        return {"valid": True}
+    if event == "timer_warning":
+        if status != "active":
+            return {"valid": False}
+        spec = chess_service.warning_spec(game)
+        if not spec or now >= spec["deadline"] - 1000:
+            return {"valid": False}
+        if warnKey and spec["key"] != warnKey:
+            return {"valid": False}
+        return {"valid": True}
+    return {"valid": status in ("waiting", "active")}
 
 
 @app.get("/chess/games/{game_id}")
@@ -11163,6 +11256,7 @@ async def delete_chess_game(
 ):
     me = current_user["chatId"]
     lock = chess_locks.setdefault(game_id, asyncio.Lock())
+    sockets = []
     async with lock:
         game = await cl_chess_games.find_one({"_id": game_id})
         if not game:
@@ -11176,7 +11270,15 @@ async def delete_chess_game(
         warn_handle = chess_warn_timers.pop(game_id, None)
         if warn_handle:
             warn_handle.cancel()
+        room = chess_rooms.pop(game_id, {})
+        chess_latency.pop(game_id, None)
+        sockets = [ws for conns in room.values() for ws in conns]
     chess_locks.pop(game_id, None)
+    for ws in sockets:
+        try:
+            await ws.close(code=1000)
+        except Exception:
+            pass
     return {"ok": True}
 
 

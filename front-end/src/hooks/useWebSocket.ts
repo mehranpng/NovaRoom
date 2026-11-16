@@ -385,6 +385,14 @@ export function useWebSocket({
                             },
                         }),
                     );
+                } else if (dataType === 'chess_search_expired' && data.gameId) {
+                    window.dispatchEvent(
+                        new CustomEvent('novaroom:chess_search_expired', {
+                            detail: {
+                                gameId: String(data.gameId),
+                            },
+                        }),
+                    );
                 } else if (dataType === 'tictactoe_updated') {
                     const resolvedChatId = String(resolvedChatIdFromPayload || '').trim();
                     const resolvedMessageId = String(data?.messageId || '').trim();

@@ -9661,6 +9661,11 @@ html.no-blur-effect .chat-list__header,
     gap: 12px;
 }
 
+.chess-card__header-text {
+    flex: 1;
+    min-width: 0;
+}
+
 .chess-card__icon {
     width: 44px;
     height: 44px;
@@ -10238,6 +10243,40 @@ html.no-blur-effect .chat-list__header,
 .chess__draw-actions {
     display: inline-flex;
     gap: 6px;
+    flex-shrink: 0;
+}
+
+.chess__draw-top {
+    position: absolute;
+    top: calc(env(safe-area-inset-top, 0px) + 60px);
+    left: 14px;
+    right: 14px;
+    z-index: 30;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.chess__draw-banner--top {
+    pointer-events: auto;
+    width: 100%;
+    max-width: 480px;
+    padding: 8px 12px 8px 8px;
+    background: var(--glass-surface);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+
+.chess__draw-text {
+    font-weight: 600;
+    min-width: 0;
+}
+
+.chess__draw-banner--top .chess-chip {
+    min-height: 34px;
+    padding: 4px 14px;
+    font-size: 13px;
 }
 
 .chess__empty {
@@ -10540,6 +10579,11 @@ html.no-blur-effect .chat-list__header,
 .chess__actions > button,
 .chess__controls > button {
     flex: 1 1 140px;
+}
+
+.chess__actions > .chess-primary-btn {
+    width: auto;
+    min-height: 46px;
 }
 
 .chess__move-pair {
@@ -10958,9 +11002,20 @@ html.no-blur-effect .chat-list__header,
     transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease;
 }
 
-.chess__move-nav:hover:not(:disabled) {
-    background: var(--hover-bg);
-    color: var(--text-primary);
+@media (hover: hover) and (pointer: fine) {
+    .chess__move-nav:hover:not(:disabled) {
+        background: var(--hover-bg);
+        color: var(--text-primary);
+    }
+
+    .chess__move-btn--interactive:hover {
+        background: var(--hover-bg);
+    }
+
+    .chess__move-btn--active:hover {
+        background: var(--accent-primary);
+        color: #ffffff;
+    }
 }
 
 .chess__move-nav:active:not(:disabled) {
@@ -10973,11 +11028,6 @@ html.no-blur-effect .chat-list__header,
 }
 
 @media (hover: none) and (pointer: coarse) {
-    .chess__move-nav:hover:not(:disabled) {
-        background: transparent;
-        color: var(--text-secondary);
-    }
-
     .chess__move-nav:active:not(:disabled) {
         background: var(--hover-bg);
     }
@@ -11004,10 +11054,6 @@ html.no-blur-effect .chat-list__header,
     cursor: pointer;
 }
 
-.chess__move-btn--interactive:hover {
-    background: var(--hover-bg);
-}
-
 .chess__move-btn--interactive:active {
     transform: scale(0.96);
 }
@@ -11016,11 +11062,6 @@ html.no-blur-effect .chat-list__header,
     background: var(--accent-primary);
     color: #ffffff;
     font-weight: 700;
-}
-
-.chess__move-btn--active:hover {
-    background: var(--accent-primary);
-    color: #ffffff;
 }
 
 .chess-user-profile__card {

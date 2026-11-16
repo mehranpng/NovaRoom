@@ -65,7 +65,10 @@ export const findGuestChessSessionByInvite = (inviteToken: string): GuestChessSe
 
 const gamesById = new Map<string, CachedChessGame>();
 const unavailableIds = new Set<string>();
+const cancelledIds = new Set<string>();
+const pendingCancels = new Map<string, Promise<void>>();
 const inflightGameReqs = new Map<string, Promise<CachedChessGame>>();
+let latestCurrentGame: ChessGameView | null = null;
 let lobbySnapshot: ChessLobbySnapshot | null = null;
 let leaderboardSnapshot: ChessLeaderboardSnapshot | null = null;
 let hydrated = false;
@@ -124,6 +127,16 @@ export const isChessGameUnavailable = (gameId: string): boolean => {
     return unavailableIds.has(gameId);
 };
 
+export const isChessGameCancelled = (gameId: string): boolean => cancelledIds.has(gameId);
+
+export const getCachedCurrentChessGame = (): ChessGameView | null =>
+    lobbySnapshot?.currentGame ?? latestCurrentGame;
+
+export const waitForPendingChessCancels = async (): Promise<void> => {
+    if (pendingCancels.size === 0) return;
+    await Promise.allSettled(Array.from(pendingCancels.values()));
+};
+
 export const markChessGameUnavailable = (gameId: string) => {
     hydrateOnce();
     unavailableIds.add(gameId);
@@ -131,15 +144,61 @@ export const markChessGameUnavailable = (gameId: string) => {
     if (existing && existing.status !== 'finished') {
         gamesById.delete(gameId);
     }
+    if (latestCurrentGame?.id === gameId) {
+        latestCurrentGame = null;
+    }
     if (lobbySnapshot?.currentGame?.id === gameId) {
-        lobbySnapshot = { ...lobbySnapshot, currentGame: null, updatedAt: 0 };
+        lobbySnapshot = { ...lobbySnapshot, currentGame: null };
     }
     persistFinished();
+};
+
+export const cancelChessGameOptimistic = (gameId: string): Promise<void> => {
+    hydrateOnce();
+    cancelledIds.add(gameId);
+    unavailableIds.add(gameId);
+    const existing = gamesById.get(gameId);
+    if (existing && existing.status !== 'finished') {
+        gamesById.delete(gameId);
+    }
+    if (latestCurrentGame?.id === gameId) {
+        latestCurrentGame = null;
+    }
+    if (lobbySnapshot?.currentGame?.id === gameId) {
+        lobbySnapshot = { ...lobbySnapshot, currentGame: null, updatedAt: Date.now() };
+    }
+    persistFinished();
+
+    const activePending = pendingCancels.get(gameId);
+    if (activePending) return activePending;
+
+    const req = apiFetch(`/chess/games/${encodeURIComponent(gameId)}`, { method: 'DELETE' })
+        .then(() => undefined)
+        .catch((err: { status?: number }) => {
+            if (err?.status === 403) {
+                cancelledIds.delete(gameId);
+                unavailableIds.delete(gameId);
+                window.dispatchEvent(
+                    new CustomEvent('novaroom:chess_cancel_conflict', {
+                        detail: { gameId },
+                    }),
+                );
+            }
+        })
+        .finally(() => {
+            pendingCancels.delete(gameId);
+        });
+
+    pendingCancels.set(gameId, req);
+    return req;
 };
 
 export const setCachedChessGame = (game: CachedChessGame | null | undefined) => {
     if (!game?.id) return;
     hydrateOnce();
+    if (cancelledIds.has(game.id) && game.status === 'waiting') {
+        return;
+    }
     const prev = gamesById.get(game.id);
     const merged: CachedChessGame = {
         ...prev,
@@ -149,6 +208,12 @@ export const setCachedChessGame = (game: CachedChessGame | null | undefined) => 
     };
     gamesById.set(game.id, merged);
     unavailableIds.delete(game.id);
+    if (merged.status !== 'finished') {
+        cancelledIds.delete(merged.id);
+        latestCurrentGame = merged;
+    } else if (latestCurrentGame?.id === merged.id) {
+        latestCurrentGame = null;
+    }
 
     if (lobbySnapshot) {
         if (merged.status === 'finished') {
@@ -162,7 +227,7 @@ export const setCachedChessGame = (game: CachedChessGame | null | undefined) => 
                 currentGame: nextCurrent,
                 history: nextHistory,
             };
-        } else if (lobbySnapshot.currentGame?.id === merged.id || !lobbySnapshot.currentGame) {
+        } else {
             lobbySnapshot = {
                 ...lobbySnapshot,
                 currentGame: merged,
@@ -239,10 +304,15 @@ export const setChessLobbySnapshot = (next: {
     history: ChessGameView[];
     hasMore: boolean;
 }) => {
-    if (next.currentGame) setCachedChessGame(next.currentGame);
+    const filteredCurrent =
+        next.currentGame && cancelledIds.has(next.currentGame.id) && next.currentGame.status === 'waiting'
+            ? null
+            : next.currentGame;
+    latestCurrentGame = filteredCurrent;
+    if (filteredCurrent) setCachedChessGame(filteredCurrent);
     seedChessGames(next.history);
     lobbySnapshot = {
-        currentGame: next.currentGame,
+        currentGame: filteredCurrent,
         history: next.history,
         hasMore: next.hasMore,
         updatedAt: Date.now(),
@@ -267,7 +337,10 @@ export const setChessLeaderboardSnapshot = (
 export const clearChessCache = () => {
     gamesById.clear();
     unavailableIds.clear();
+    cancelledIds.clear();
+    pendingCancels.clear();
     inflightGameReqs.clear();
+    latestCurrentGame = null;
     lobbySnapshot = null;
     leaderboardSnapshot = null;
     if (typeof window !== 'undefined') {
