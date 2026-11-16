@@ -96,7 +96,8 @@ export const ChatComposer = memo(function ChatComposer({
     onStartTicTacToe,
 }: ChatComposerProps) {
     const [text, setText] = useState(() => (editingId ? editDraft : (getChatDraft(chatId)?.text ?? '')));
-    const [caretPos, setCaretPos] = useState(0);
+    const [caretPos, setCaretPos] = useState(() => (editingId ? editDraft : (getChatDraft(chatId)?.text ?? '')).length);
+    const needsDraftCaretEndRef = useRef(Boolean(!editingId && (getChatDraft(chatId)?.text ?? '').length > 0));
     const [activeMentionIndex, setActiveMentionIndex] = useState(-1);
     const [attachment, setAttachment] = useState<PendingAttachment | null>(() => pendingUploadedFileByChat[chatId] ?? null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -150,6 +151,14 @@ export const ChatComposer = memo(function ChatComposer({
             if (onTypingChange && typingActiveRef.current) onTypingChange(chatId, false);
         };
     }, [chatId, onTypingChange]);
+
+    useEffect(() => {
+        if (editingId) {
+            needsDraftCaretEndRef.current = false;
+            return;
+        }
+        needsDraftCaretEndRef.current = Boolean((getChatDraft(chatId)?.text ?? '').length > 0);
+    }, [chatId, editingId]);
 
     useEffect(() => {
         if (!editingId) return;
@@ -415,7 +424,20 @@ export const ChatComposer = memo(function ChatComposer({
                                 setCaretPos(e.target.selectionStart ?? nextValue.length);
                                 refreshTyping(nextValue);
                             }}
-                            onFocus={onInputFocus}
+                            onFocus={(e) => {
+                                if (needsDraftCaretEndRef.current) {
+                                    needsDraftCaretEndRef.current = false;
+                                    const target = e.currentTarget;
+                                    const end = target.value.length;
+                                    target.setSelectionRange(end, end);
+                                    setCaretPos(end);
+                                    requestAnimationFrame(() => {
+                                        const len = target.value.length;
+                                        target.setSelectionRange(len, len);
+                                    });
+                                }
+                                onInputFocus?.();
+                            }}
                             onClick={(e) => {
                                 setCaretPos(e.currentTarget.selectionStart ?? text.length);
                             }}

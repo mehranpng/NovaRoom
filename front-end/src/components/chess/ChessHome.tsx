@@ -262,12 +262,7 @@ export function ChessHome({
             expireRefreshSentRef.current = false;
             return;
         }
-        const deadline =
-            typeof currentGame.waitingDeadline === 'number'
-                ? currentGame.waitingDeadline
-                : typeof currentGame.createdAt === 'number'
-                ? currentGame.createdAt + 15 * 60 * 1000
-                : null;
+        const deadline = typeof currentGame.waitingDeadline === 'number' ? currentGame.waitingDeadline : null;
         if (deadline === null) return;
         if (deadline - (now + skew) > 0 || expireRefreshSentRef.current) return;
         expireRefreshSentRef.current = true;
@@ -282,7 +277,6 @@ export function ChessHome({
         currentGame?.status,
         currentGame?.matchmaking,
         currentGame?.waitingDeadline,
-        currentGame?.createdAt,
         now,
         skew,
         loadData,
@@ -479,12 +473,7 @@ export function ChessHome({
 
     const waitingLeftMs = useMemo(() => {
         if (currentGame?.status !== 'waiting' || !currentGame.matchmaking) return null;
-        const deadline =
-            typeof currentGame.waitingDeadline === 'number'
-                ? currentGame.waitingDeadline
-                : typeof currentGame.createdAt === 'number'
-                ? currentGame.createdAt + 15 * 60 * 1000
-                : null;
+        const deadline = typeof currentGame.waitingDeadline === 'number' ? currentGame.waitingDeadline : null;
         if (deadline === null) return null;
         return Math.max(0, deadline - (now + skew));
     }, [currentGame, now, skew]);

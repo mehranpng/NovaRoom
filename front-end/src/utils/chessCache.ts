@@ -90,11 +90,6 @@ const hydrateOnce = () => {
                 }
             }
         }
-        if (Array.isArray(parsed?.unavailable)) {
-            for (const id of parsed.unavailable) {
-                if (typeof id === 'string') unavailableIds.add(id);
-            }
-        }
     } catch {
         return;
     }
@@ -110,8 +105,7 @@ const persistFinished = () => {
         const trimmed = finishedEntries.slice(-MAX_STORED_GAMES);
         const games: Record<string, CachedChessGame> = {};
         for (const [id, g] of trimmed) games[id] = g;
-        const unavailable = Array.from(unavailableIds).slice(-MAX_STORED_GAMES);
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ games, unavailable }));
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ games }));
     } catch {
         return;
     }

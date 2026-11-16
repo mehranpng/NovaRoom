@@ -326,6 +326,7 @@ export interface TicTacToeData {
     status: TicTacToeStatus;
     winner: 'X' | 'O' | 'draw' | null;
     winLine: number[] | null;
+    moveCount?: number;
 }
 
 export type View = 'chatList' | 'chatRoom' | 'newChat' | 'profile' | 'profileEdit' | 'settings' | 'settingsDevices' | 'settingsTheme' | 'settingsLogs' | 'settingsDataStorage' | 'settingsPrivacy' | 'settingsNotifications' | 'settingsAdmin' | 'settingsAdminPanel' | 'settingsAdminLinks' | 'chess';

@@ -1543,21 +1543,31 @@ body,
 }
 
 .chat-list__item--active {
-    background: var(--accent-primary) !important;
-    --verified-fill: #ffffff;
-    --verified-check: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary) 12%, transparent) !important;
+    --verified-fill: var(--accent-primary);
+    --verified-check: #ffffff;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .chat-list__item--active:hover {
+        background: color-mix(in srgb, var(--accent-primary) 16%, transparent) !important;
+    }
+
+    .dark-mode .chat-list__item--active:hover {
+        background: color-mix(in srgb, var(--accent-primary) 21%, transparent) !important;
+    }
 }
 
 .chat-list__item--active:active {
-    background: var(--accent-primary) !important;
+    background: color-mix(in srgb, var(--accent-primary) 18%, transparent) !important;
 }
 
 .chat-list__item--active .avatar--md-lg .avatar__status {
-    border-color: var(--accent-primary) !important;
+    border-color: var(--bg-primary) !important;
 }
 
 .chat-list__item--active .avatar--md-lg .avatar__status--online {
-    background-color: #ffffff;
+    background-color: var(--accent-primary);
 }
 
 .chat-list__item--menu-open {
@@ -1580,7 +1590,7 @@ body,
 .chat-list--menu-open .chat-list__item--active,
 .chat-list--menu-open .chat-list__item--active:hover,
 .chat-list--menu-open .chat-list__item--active:active {
-    background-color: var(--accent-primary) !important;
+    background-color: color-mix(in srgb, var(--accent-primary) 14%, transparent) !important;
 }
 
 .chat-list--menu-open .chat-list__item--menu-open,
@@ -1594,7 +1604,7 @@ body,
 }
 
 .dark-mode .chat-list__item--active {
-    background: var(--accent-primary) !important;
+    background: color-mix(in srgb, var(--accent-primary) 16%, transparent) !important;
 }
 
 @media (max-width: 768px) {
@@ -2674,45 +2684,6 @@ body,
     box-shadow: none;
 }
 
-@media (min-width: 769px) {
-    .chat-list__item--active .chat-list__item-name,
-    .chat-list__item--active .chat-list__item-text,
-    .chat-list__item--active .chat-list__item-text-prefix,
-    .chat-list__item--active .chat-list__item-draft-prefix,
-    .chat-list__item--active .chat-list__item-draft-text,
-    .chat-list__item--active .chat-list__type-icon,
-    .chat-list__item--active .chat-list__mute-icon,
-    .chat-list__item--active .chat-list__pin-badge,
-    .chat-list__item--active .chat-list__pin-icon,
-    .chat-list__item--active .chat-list__outgoing-status,
-    .chat-list__item--active .chat-list__outgoing-status--sending,
-    .chat-list__item--active .chat-list__group-online,
-    .chat-list__item--active .chat-list__group-total,
-    .chat-list__item--active .chat-list__group-sep {
-        color: #ffffff;
-        opacity: 1;
-    }
-
-    .chat-list__item--active .chat-list__item-time {
-        color: rgba(255, 255, 255, 0.88);
-    }
-
-    .chat-list__item--active .chat-list__unread-badge {
-        background: #ffffff;
-        color: var(--accent-primary);
-    }
-
-    .chat-list__item--active .chat-list__unread-badge--muted {
-        background: rgba(255, 255, 255, 0.28);
-        color: #ffffff;
-    }
-
-    .chat-list__item--active .chat-list__mention-badge {
-        background: #ffffff;
-        color: var(--accent-primary);
-    }
-}
-
 .chat-room {
     --date-sticky-top: 64px;
     --chat-room-bg:
@@ -3521,13 +3492,13 @@ html.no-blur-effect .chat-room__date-label {
 }
 
 .message-row--arrive {
-    animation: message-row-arrive 240ms cubic-bezier(0.22, 1, 0.36, 1);
+    animation: message-row-arrive 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @keyframes message-row-arrive {
     from {
         opacity: 0;
-        transform: translateY(8px) scale(0.98);
+        transform: translateY(10px) scale(0.985);
     }
 
     to {

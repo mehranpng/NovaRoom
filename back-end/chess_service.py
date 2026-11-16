@@ -513,21 +513,8 @@ def _candidates(game):
     turn = turn_by_ply(game)
     last = game["lastMoveAt"]
     items = []
-    if ply < 2:
-        items.append((last + first_move_window_ms(game), "first_move"))
-    elif is_timed(game):
+    if ply >= 2 and is_timed(game):
         items.append((last + game["clocks"][turn], "clock"))
-        if ply < LONG_MOVE_MAX_PLY:
-            items.append((last + long_move_limit_ms(game) + 1, "long_move"))
-    disc = game.get("disconnectedAt") or {}
-    used = game.get("disconnectUsedMs") or {}
-    w_disc = disc.get("white")
-    b_disc = disc.get("black")
-    if w_disc is not None and b_disc is not None:
-        items.append((max(w_disc, b_disc) + DOUBLE_DISCONNECT_MS, "double_disconnect"))
-    elif disc.get(turn) is not None:
-        rem = max(0, disconnect_timeout_ms(game) - used.get(turn, 0))
-        items.append((max(disc[turn], last) + rem, "disconnect"))
     draw_exp = game.get("drawOfferExpiresAt")
     if game.get("drawOfferedBy") is not None and isinstance(draw_exp, (int, float)):
         items.append((int(draw_exp), "draw_offer_expired"))
@@ -545,21 +532,9 @@ def warning_spec(game):
         return None
     deadline, kind = min(items, key=lambda x: x[0])
     turn = turn_by_ply(game)
-    disc = game.get("disconnectedAt") or {}
-    w_disc = disc.get("white")
-    b_disc = disc.get("black")
-    if kind == "double_disconnect" and w_disc is not None and b_disc is not None:
-        start_ms = max(w_disc, b_disc)
-        targets = [
-            uid
-            for uid in (game["players"].get("white"), game["players"].get("black"))
-            if uid and not is_guest_id(uid)
-        ]
-    else:
-        t_disc = disc.get(turn)
-        start_ms = max(t_disc, game["lastMoveAt"]) if t_disc is not None else game["lastMoveAt"]
-        turn_uid = game["players"].get(turn)
-        targets = [turn_uid] if turn_uid and not is_guest_id(turn_uid) else []
+    start_ms = game["lastMoveAt"]
+    turn_uid = game["players"].get(turn)
+    targets = [turn_uid] if turn_uid and not is_guest_id(turn_uid) else []
     if not targets:
         return None
     window_ms = max(1, deadline - start_ms)
@@ -591,33 +566,10 @@ def check_deadline(game, now):
         game["drawOfferedBy"] = None
         game["drawOfferExpiresAt"] = None
         return {"kind": "draw_declined", "by": OTHER[by_color]} if by_color in OTHER else None
-    if kind == "first_move":
-        return _finish(game, "*", "first_move_timeout", now)
-    if kind == "long_move":
-        return _finish(game, WIN[OTHER[turn]], "long_move_abandonment", now)
-    if kind == "double_disconnect":
-        return _finish(game, "1/2-1/2", "double_disconnect_draw", now)
-    if kind == "disconnect":
-        return _finish(game, WIN[OTHER[turn]], "disconnect_abandonment", now)
     return _flag(game, turn, board_of(game), now)
 
 
 def _disconnect_view(game):
-    if game.get("status") != "active":
-        return None, None
-    disc = game.get("disconnectedAt") or {}
-    used = game.get("disconnectUsedMs") or {}
-    w_disc = disc.get("white")
-    b_disc = disc.get("black")
-    turn = turn_by_ply(game)
-    if w_disc is not None and b_disc is not None:
-        return max(w_disc, b_disc) + DOUBLE_DISCONNECT_MS, "double"
-    if disc.get(turn) is not None:
-        rem = max(0, disconnect_timeout_ms(game) - used.get(turn, 0))
-        return max(disc[turn], game["lastMoveAt"]) + rem, turn
-    other = OTHER[turn]
-    if disc.get(other) is not None:
-        return None, other
     return None, None
 
 
@@ -630,13 +582,8 @@ def public_view(game, now, online):
         in_check = board.is_check()
     ply = len(game["moves"])
     last = game["moves"][-1]["uci"] if ply else None
-    active = game["status"] == "active"
-    waiting_deadline = (
-        game["createdAt"] + WAITING_TTL_MS
-        if game.get("status") == "waiting" and game.get("createdAt")
-        else None
-    )
-    first_deadline = game["lastMoveAt"] + first_move_window_ms(game) if active and ply < 2 else None
+    waiting_deadline = None
+    first_deadline = None
     disc_deadline, disc_target = _disconnect_view(game)
     return {
         "id": game["_id"],

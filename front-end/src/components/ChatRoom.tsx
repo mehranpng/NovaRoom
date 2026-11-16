@@ -415,6 +415,9 @@ export function ChatRoom({
 
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+    const messagesInnerRef = useRef<HTMLDivElement | null>(null);
+    const scrollAnimRafRef = useRef<number | null>(null);
+    const prevInnerHeightRef = useRef<number>(0);
     const roomRef = useRef<HTMLDivElement | null>(null);
     const topSentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -673,11 +676,48 @@ export function ChatRoom({
         onReaderStateChangeRef.current?.({ atBottom });
     };
 
+    const cancelScrollAnim = () => {
+        if (scrollAnimRafRef.current !== null) {
+            cancelAnimationFrame(scrollAnimRafRef.current);
+            scrollAnimRafRef.current = null;
+        }
+    };
+
     const scrollToBottom = (smooth = false) => {
         const container = messagesContainerRef.current;
         if (container) {
+            cancelScrollAnim();
             markProgrammaticScroll();
-            container.scrollTo({ top: Math.max(0, container.scrollHeight - container.clientHeight), behavior: smooth ? 'smooth' : 'auto' });
+            isAtBottomRef.current = true;
+            notifyReaderState(true);
+            const targetTop = Math.max(0, container.scrollHeight - container.clientHeight);
+            if (!smooth) {
+                container.scrollTop = targetTop;
+                return;
+            }
+            const startTop = container.scrollTop;
+            const distance = targetTop - startTop;
+            if (Math.abs(distance) < 2) {
+                container.scrollTop = targetTop;
+                return;
+            }
+            const startTime = performance.now();
+            const duration = 180;
+            const step = (now: number) => {
+                const elapsed = now - startTime;
+                const progress = Math.min(1, elapsed / duration);
+                const eased = 1 - Math.pow(1 - progress, 3);
+                const liveTarget = Math.max(0, container.scrollHeight - container.clientHeight);
+                markProgrammaticScroll();
+                container.scrollTop = startTop + (liveTarget - startTop) * eased;
+                if (progress < 1) {
+                    scrollAnimRafRef.current = requestAnimationFrame(step);
+                } else {
+                    container.scrollTop = liveTarget;
+                    scrollAnimRafRef.current = null;
+                }
+            };
+            scrollAnimRafRef.current = requestAnimationFrame(step);
             return;
         }
         markProgrammaticScroll();
@@ -690,6 +730,7 @@ export function ChatRoom({
             scrollToBottom(false);
             return;
         }
+        cancelScrollAnim();
         markProgrammaticScroll();
         container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
         isAtBottomRef.current = true;
@@ -699,7 +740,7 @@ export function ChatRoom({
     const computeNearBottom = () => {
         const container = messagesContainerRef.current;
         if (!container) return true;
-        return container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+        return container.scrollHeight - container.scrollTop - container.clientHeight < 260;
     };
 
     useLayoutEffect(() => {
@@ -1958,12 +1999,14 @@ export function ChatRoom({
         if (loading) return;
         if (!chatContentReady) return;
         if (messages.length === 0) return;
+        if (initialScrollDoneRef.current && prevLenRef.current > 0) return;
         settleToBottomIfNeeded();
         
     }, [chatId, loading, messages.length, displayUnreadCount, chatContentReady]);
 
     useEffect(() => {
         if (!chatContentReady || loading || messages.length === 0) return;
+        if (initialScrollDoneRef.current && prevLenRef.current > 0) return;
         if (userHasScrolledRef.current) return;
         if (displayUnreadCount > 0 || unreadAnchorId || autoJumpedToUnreadRef.current) return;
         if (performance.now() < smoothBottomUntilRef.current) return;
@@ -2186,20 +2229,25 @@ export function ChatRoom({
             return;
         }
 
-        const nearBottom = computeNearBottom();
-        isAtBottomRef.current = nearBottom;
+        const wasNearBottom = isAtBottomRef.current || computeNearBottom();
 
         if (added > 0 && nextLastId !== prevLastId) {
             if (pendingRangeLoadTypeRef.current || loadingNewerMessages || localLoadingNewer) {
+                if (messagesInnerRef.current) {
+                    prevInnerHeightRef.current = messagesInnerRef.current.getBoundingClientRect().height;
+                }
                 prevLenRef.current = messages.length;
                 prevFirstMessageIdRef.current = nextFirstId;
                 prevLastMessageIdRef.current = nextLastId;
                 return;
             }
-            if (autoJumpedToUnreadRef.current && !userScrolledAfterAutoJumpRef.current && !userHasScrolledRef.current) {
+            if (autoJumpedToUnreadRef.current && !userScrolledAfterAutoJumpRef.current && !userHasScrolledRef.current && !wasNearBottom) {
                 const anchor = resolveUnreadAnchor();
                 if (anchor) {
                     scrollToUnreadAnchor(anchor);
+                }
+                if (messagesInnerRef.current) {
+                    prevInnerHeightRef.current = messagesInnerRef.current.getBoundingClientRect().height;
                 }
                 prevLenRef.current = messages.length;
                 prevFirstMessageIdRef.current = nextFirstId;
@@ -2213,14 +2261,33 @@ export function ChatRoom({
                 if (arrivedAnimationTimerRef.current) window.clearTimeout(arrivedAnimationTimerRef.current);
                 arrivedAnimationTimerRef.current = window.setTimeout(() => setArrivedMessageIds([]), 400);
             }
-            if ((nearBottom || isMyOwnNewMessage) && (!autoJumpedToUnreadRef.current || userScrolledAfterAutoJumpRef.current || isMyOwnNewMessage)) {
-                const openedRecently = Date.now() - openedAtRef.current < 1600;
-                const shouldAnimate = isMyOwnNewMessage || (!openedRecently && added <= 2);
-                const raf = requestAnimationFrame(() => scrollToBottom(shouldAnimate));
+            const inner = messagesInnerRef.current;
+            const prevInnerH = prevInnerHeightRef.current;
+            const nextInnerH = inner ? inner.getBoundingClientRect().height : 0;
+            if (inner) prevInnerHeightRef.current = nextInnerH;
+
+            if (wasNearBottom || isMyOwnNewMessage) {
+                const openedRecently = Date.now() - openedAtRef.current < 1200;
+                const shouldAnimate = isMyOwnNewMessage || (!openedRecently && added <= 5);
+                const container = messagesContainerRef.current;
+                const targetTop = container ? Math.max(0, container.scrollHeight - container.clientHeight) : 0;
+                const scrollDistance = container ? targetTop - container.scrollTop : 0;
+                const willScrollAnimate = Boolean(shouldAnimate && container && Math.abs(scrollDistance) >= 2);
+                if (shouldAnimate && inner && !willScrollAnimate && prevInnerH > 0 && nextInnerH > prevInnerH) {
+                    const delta = Math.min(120, nextInnerH - prevInnerH);
+                    inner.style.transition = 'none';
+                    inner.style.transform = `translateY(${delta}px)`;
+                    void inner.offsetHeight;
+                    inner.style.transition = 'transform 180ms cubic-bezier(0.22, 1, 0.36, 1)';
+                    inner.style.transform = 'translateY(0)';
+                }
+                userReadingOlderRef.current = false;
+                isAtBottomRef.current = true;
+                scrollToBottom(shouldAnimate);
                 prevLenRef.current = messages.length;
                 prevFirstMessageIdRef.current = nextFirstId;
                 prevLastMessageIdRef.current = nextLastId;
-                return () => cancelAnimationFrame(raf);
+                return;
             }
             if (!hasNewerMessages) {
                 const prevLastIndex = prevLastId ? messages.findIndex((msg) => msg.id === prevLastId) : -1;
@@ -2231,6 +2298,11 @@ export function ChatRoom({
                 }
             }
         }
+
+        if (messagesInnerRef.current) {
+            prevInnerHeightRef.current = messagesInnerRef.current.getBoundingClientRect().height;
+        }
+        isAtBottomRef.current = computeNearBottom();
 
         prevLenRef.current = messages.length;
         prevFirstMessageIdRef.current = nextFirstId;
@@ -2459,7 +2531,7 @@ export function ChatRoom({
 
         if (nearBottom || distanceToBottom <= 24) {
             userReadingOlderRef.current = false;
-        } else if (!scrollingDown && distanceToBottom > 140) {
+        } else if (!scrollingDown && distanceToBottom > 260) {
             userReadingOlderRef.current = true;
         }
 
@@ -3723,7 +3795,7 @@ export function ChatRoom({
                         paddingBottom: composerHeight + 26,
                     }}
                 >
-                    <div className="chat-room__messages-inner">
+                    <div className="chat-room__messages-inner" ref={messagesInnerRef}>
                         <div ref={topSentinelRef} />
                         {!loading && (
                             <div className="messages-list-visible-wrap" style={{ display: 'contents', visibility: chatContentReady ? 'visible' : 'hidden' }}>

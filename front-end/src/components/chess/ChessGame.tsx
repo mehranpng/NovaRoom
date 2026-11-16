@@ -426,12 +426,7 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
             expireCheckSentRef.current = false;
             return;
         }
-        const deadline =
-            typeof game.waitingDeadline === 'number'
-                ? game.waitingDeadline
-                : typeof game.createdAt === 'number'
-                ? game.createdAt + 15 * 60 * 1000
-                : null;
+        const deadline = typeof game.waitingDeadline === 'number' ? game.waitingDeadline : null;
         if (deadline === null) return;
         const left = deadline - (now + skew);
         if (left > 0 || expireCheckSentRef.current) return;
@@ -446,12 +441,11 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
                 })
                 .catch(() => {
                     markChessGameUnavailable(gameId);
-                    notify({ message: 'در مهلت ۱۵ دقیقه حریفی پیدا نشد و جستجو لغو شد', type: 'info' });
                     onExitGame();
                 });
         }, 350);
         return () => window.clearTimeout(timer);
-    }, [game?.status, game?.matchmaking, game?.waitingDeadline, game?.createdAt, gameId, now, skew, onExitGame]);
+    }, [game?.status, game?.matchmaking, game?.waitingDeadline, gameId, now, skew, onExitGame]);
 
     useEffect(() => {
         movesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'end' });
@@ -749,12 +743,8 @@ export function ChessGame({ currentUser, gameId, authToken, guestToken, isGuestM
             : null;
 
     const waitingDeadline =
-        game.status === 'waiting' && game.matchmaking
-            ? typeof game.waitingDeadline === 'number'
-                ? game.waitingDeadline
-                : typeof game.createdAt === 'number'
-                ? game.createdAt + 15 * 60 * 1000
-                : null
+        game.status === 'waiting' && game.matchmaking && typeof game.waitingDeadline === 'number'
+            ? game.waitingDeadline
             : null;
 
     const waitingLeftMs =

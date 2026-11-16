@@ -7524,8 +7524,6 @@ async def notify_chess_joined(game: dict, joiner_id: str) -> None:
             },
         )
     now = now_ms()
-    first_dl = game.get("lastMoveAt", now) + chess_service.first_move_window_ms(game)
-    ttl_sec = max(60, min(1800, int((first_dl - now) / 1000) + 60))
     payload = {
         "kind": "chess",
         "event": "matchmaking_matched" if is_matchmaking else "joined",
@@ -7534,7 +7532,7 @@ async def notify_chess_joined(game: dict, joiner_id: str) -> None:
         "sentAt": now,
         "url": f"/chess/game/{game['_id']}",
         "icon": "/logo/icon-192.png",
-        "_ttl": ttl_sec,
+        "_ttl": 3600,
     }
     await push_to_users([creator], lambda user_doc: dict(payload))
 
@@ -7565,10 +7563,7 @@ async def notify_chess_matchmaking_searching(game: dict, creator_user: dict) -> 
     busy_ids.update(_get_blocked_from_user_doc(creator_user))
     active_or_waiting_games = await cl_chess_games.find(
         {
-            "$or": [
-                {"status": "active"},
-                {"status": "waiting", "createdAt": {"$gt": now_ms() - chess_service.WAITING_TTL_MS}},
-            ]
+            "status": {"$in": ["active", "waiting"]},
         },
         {"players": 1, "creatorId": 1},
     ).to_list(None)
@@ -7591,20 +7586,15 @@ async def notify_chess_matchmaking_searching(game: dict, creator_user: dict) -> 
     if not fresh_game:
         return
     now = now_ms()
-    expires_at = int(fresh_game.get("createdAt") or game.get("createdAt") or now) + chess_service.WAITING_TTL_MS
-    rem_sec = max(0, int((expires_at - now) / 1000))
-    if rem_sec <= 0:
-        return
     base_payload = {
         "kind": "chess",
         "event": "matchmaking_searching",
         "gameId": game["_id"],
         "senderName": creator_name,
         "sentAt": now,
-        "expiresAt": expires_at,
         "url": "/chess?online=1",
         "icon": "/logo/icon-192.png",
-        "_ttl": rem_sec,
+        "_ttl": 3600,
     }
 
     def payload_for_user(user_doc) -> Optional[dict]:
@@ -7705,11 +7695,6 @@ def chess_schedule(game: dict):
     if warn_handle:
         warn_handle.cancel()
     if game["status"] == "waiting":
-        deadline = game["createdAt"] + chess_service.WAITING_TTL_MS
-        delay = max(0.0, (deadline - now_ms()) / 1000) + 0.05
-        chess_timers[game_id] = asyncio.get_running_loop().call_later(
-            delay, lambda: asyncio.create_task(chess_expire_waiting(game_id))
-        )
         return
     now = now_ms()
     deadline = chess_service.deadline_ms(game)
@@ -8029,21 +8014,19 @@ async def chess_abandon_after(game_id: str, user_id: str):
 
 
 async def chess_find_blocking_game(user_id: str, now: int, only_active: bool = False):
-    await cl_chess_games.delete_many(
-        {"status": "waiting", "createdAt": {"$lte": now - chess_service.WAITING_TTL_MS}}
-    )
-    statuses = ["active"] if only_active else ["active", "waiting"]
-    query = {
-        "status": {"$in": statuses},
-        "$or": [{"players.white": user_id}, {"players.black": user_id}, {"creatorId": user_id}],
-    }
-    async for g in cl_chess_games.find(query):
-        if g.get("status") == "active":
-            dl = chess_service.deadline_ms(g)
-            if dl is not None and now >= dl:
-                await chess_on_deadline(g["_id"])
-                continue
+    user_filter = {"$or": [{"players.white": user_id}, {"players.black": user_id}, {"creatorId": user_id}]}
+    async for g in cl_chess_games.find({"status": "active", **user_filter}):
+        dl = chess_service.deadline_ms(g)
+        if dl is not None and now >= dl:
+            await chess_on_deadline(g["_id"])
+            continue
         return g
+    if not only_active:
+        waiting_match = await cl_chess_games.find_one(
+            {"status": "waiting", "matchmaking": True, **user_filter}
+        )
+        if waiting_match:
+            return waiting_match
     return None
 
 
@@ -10484,7 +10467,7 @@ async def create_chess_game(
 ):
     me = current_user["chatId"]
     now = now_ms()
-    blocking = await chess_find_blocking_game(me, now)
+    blocking = await chess_find_blocking_game(me, now, only_active=True)
     if blocking:
         raise HTTPException(status_code=409, detail="already_in_game")
     try:
@@ -10520,8 +10503,6 @@ async def start_chess_matchmaking(
                 return {"game": await chess_response(blocking), "matched": True}
             if blocking.get("status") == "waiting" and blocking.get("matchmaking"):
                 return {"game": await chess_response(blocking), "matched": False}
-            if blocking.get("status") == "waiting":
-                await _drop_chess_game(blocking["_id"])
 
         candidates = (
             await cl_chess_games.find(
@@ -10529,7 +10510,6 @@ async def start_chess_matchmaking(
                     "status": "waiting",
                     "matchmaking": True,
                     "creatorId": {"$ne": me},
-                    "createdAt": {"$gt": now - chess_service.WAITING_TTL_MS},
                 }
             )
             .sort("createdAt", 1)
@@ -10648,8 +10628,6 @@ async def get_chess_push_status(
     if event == "matchmaking_searching":
         if status != "waiting" or not game.get("matchmaking"):
             return {"valid": False}
-        if now - int(game.get("createdAt") or 0) >= chess_service.WAITING_TTL_MS:
-            return {"valid": False}
         return {"valid": True}
     if event in ("matchmaking_matched", "joined"):
         if status != "active":
@@ -10680,9 +10658,6 @@ async def get_chess_game(
 ):
     game = await cl_chess_games.find_one({"_id": game_id})
     if not game:
-        raise HTTPException(status_code=404, detail="not_found")
-    if game.get("status") == "waiting" and now_ms() - game.get("createdAt", 0) >= chess_service.WAITING_TTL_MS:
-        await chess_expire_waiting(game_id)
         raise HTTPException(status_code=404, detail="not_found")
     me = current_user["chatId"] if current_user else None
     if not me and guestToken and game.get("guestToken") and game.get("guestToken") == guestToken:
@@ -11000,9 +10975,6 @@ async def accept_chess_game(
     game = await cl_chess_games.find_one({"_id": game_id})
     if not game:
         raise HTTPException(status_code=404, detail="not_found")
-    if game.get("status") == "waiting" and now_ms() - game.get("createdAt", 0) >= chess_service.WAITING_TTL_MS:
-        await chess_expire_waiting(game_id)
-        raise HTTPException(status_code=404, detail="not_found")
     invited_group_id = str(game.get("invitedGroupId") or "").strip()
     if game.get("invitedChatId") != me:
         if not invited_group_id:
@@ -11051,8 +11023,6 @@ async def inspect_chess_invite(request: Request, invite_token: str):
     game = await cl_chess_games.find_one({"inviteToken": invite_token})
     if not game:
         raise HTTPException(status_code=404, detail="not_found")
-    if game.get("status") == "waiting" and now_ms() - game.get("createdAt", 0) >= chess_service.WAITING_TTL_MS:
-        raise HTTPException(status_code=404, detail="not_found")
     return {"game": await chess_response(game)}
 
 
@@ -11068,8 +11038,6 @@ async def join_chess_by_link(
     if not game:
         raise HTTPException(status_code=404, detail="not_found")
     game_id = game["_id"]
-    if game.get("status") == "waiting" and now_ms() - game.get("createdAt", 0) >= chess_service.WAITING_TTL_MS:
-        raise HTTPException(status_code=404, detail="not_found")
     now = now_ms()
 
     if not current_user and request.headers.get("authorization"):
@@ -11485,16 +11453,18 @@ async def create_tictactoe_game(
 
     _, participants, is_group = await _validate_tictactoe_chat(chat_id, me)
     now_dt = utc_now()
+    first_turn = secrets.choice(("X", "O"))
     tic_tac_toe = {
         "board": ["", "", "", "", "", "", "", "", ""],
         "playerX": me,
         "playerXName": _resolve_tictactoe_player_name(current_user),
         "playerO": None,
         "playerOName": None,
-        "turn": "X",
-        "status": "waiting",
+        "turn": first_turn,
+        "status": "playing",
         "winner": None,
         "winLine": None,
+        "moveCount": 0,
     }
     message_doc = {
         "chatId": chat_id,
@@ -11567,6 +11537,7 @@ async def join_tictactoe_game(
     chat_id = msg["chatId"]
     _, participants, _ = await _validate_tictactoe_chat(chat_id, me)
     player_o_name = _resolve_tictactoe_player_name(current_user)
+    first_turn = secrets.choice(("X", "O"))
     updated = await cl_messages.find_one_and_update(
         {
             "_id": oid,
@@ -11580,7 +11551,8 @@ async def join_tictactoe_game(
                 "ticTacToe.playerO": me,
                 "ticTacToe.playerOName": player_o_name,
                 "ticTacToe.status": "playing",
-                "ticTacToe.turn": "X",
+                "ticTacToe.turn": first_turn,
+                "ticTacToe.moveCount": 1,
             }
         },
         return_document=ReturnDocument.AFTER,
@@ -11631,56 +11603,14 @@ async def move_tictactoe_game(
     chat_id = msg["chatId"]
     _, participants, _ = await _validate_tictactoe_chat(chat_id, me)
     ttt = msg["ticTacToe"]
-    if ttt.get("status") == "waiting" and ttt.get("playerO") is None:
-        if ttt.get("playerX") == me:
-            return JSONResponse(
-                status_code=400,
-                content={"detail": "waiting_for_opponent", "ticTacToe": ttt},
-            )
-        player_o_name = _resolve_tictactoe_player_name(current_user)
-        updated = await cl_messages.find_one_and_update(
-            {
-                "_id": oid,
-                "chatId": chat_id,
-                "ticTacToe.status": "waiting",
-                "ticTacToe.playerO": None,
-                "ticTacToe.playerX": {"$ne": me},
-                f"ticTacToe.board.{cell}": "",
-            },
-            {
-                "$set": {
-                    "ticTacToe.playerO": me,
-                    "ticTacToe.playerOName": player_o_name,
-                    f"ticTacToe.board.{cell}": "O",
-                    "ticTacToe.status": "playing",
-                    "ticTacToe.turn": "X",
-                }
-            },
-            return_document=ReturnDocument.AFTER,
-        )
-        if not updated:
-            latest = await cl_messages.find_one({"_id": oid}, {"ticTacToe": 1})
-            latest_ttt = latest.get("ticTacToe") if latest else None
-            return JSONResponse(
-                status_code=409,
-                content={"detail": "already_joined", "ticTacToe": latest_ttt},
-            )
-        next_ttt = updated["ticTacToe"]
-        await broadcast(
-            participants,
-            {
-                "type": "tictactoe_updated",
-                "chatId": chat_id,
-                "messageId": message_id,
-                "ticTacToe": next_ttt,
-            },
-        )
-        return {"ticTacToe": next_ttt}
-
+    joining_as_o = False
     if ttt.get("playerX") == me:
         my_symbol = "X"
     elif ttt.get("playerO") == me:
         my_symbol = "O"
+    elif ttt.get("playerO") is None:
+        my_symbol = "O"
+        joining_as_o = True
     else:
         raise HTTPException(status_code=403, detail="not_a_player")
 
@@ -11717,24 +11647,33 @@ async def move_tictactoe_game(
         next_status = "playing"
         next_turn = "O" if my_symbol == "X" else "X"
 
+    next_move_count = int(ttt.get("moveCount") or 0) + 1
+    filter_query: Dict[str, Any] = {
+        "_id": oid,
+        "chatId": chat_id,
+        "ticTacToe.status": "playing",
+        "ticTacToe.turn": my_symbol,
+        f"ticTacToe.board.{cell}": "",
+    }
+    set_fields: Dict[str, Any] = {
+        f"ticTacToe.board.{cell}": my_symbol,
+        "ticTacToe.turn": next_turn,
+        "ticTacToe.status": next_status,
+        "ticTacToe.winner": winner,
+        "ticTacToe.winLine": win_line,
+        "ticTacToe.moveCount": next_move_count,
+    }
+    if joining_as_o:
+        filter_query["ticTacToe.playerO"] = None
+        filter_query["ticTacToe.playerX"] = {"$ne": me}
+        set_fields["ticTacToe.playerO"] = me
+        set_fields["ticTacToe.playerOName"] = _resolve_tictactoe_player_name(current_user)
+    else:
+        filter_query[f"ticTacToe.player{my_symbol}"] = me
+
     updated = await cl_messages.find_one_and_update(
-        {
-            "_id": oid,
-            "chatId": chat_id,
-            "ticTacToe.status": "playing",
-            "ticTacToe.turn": my_symbol,
-            f"ticTacToe.player{my_symbol}": me,
-            f"ticTacToe.board.{cell}": "",
-        },
-        {
-            "$set": {
-                f"ticTacToe.board.{cell}": my_symbol,
-                "ticTacToe.turn": next_turn,
-                "ticTacToe.status": next_status,
-                "ticTacToe.winner": winner,
-                "ticTacToe.winLine": win_line,
-            }
-        },
+        filter_query,
+        {"$set": set_fields},
         return_document=ReturnDocument.AFTER,
     )
     if not updated:

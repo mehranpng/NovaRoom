@@ -134,13 +134,21 @@
     min-width: 0;
 }
 
+.ttt-board-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
 .ttt-board {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     grid-template-rows: repeat(3, 1fr);
     gap: 4px;
     width: 100%;
-    aspect-ratio: 1;
+    height: 100%;
     padding: 4px;
     border-radius: 12px;
     background: color-mix(in srgb, currentColor 7%, transparent);

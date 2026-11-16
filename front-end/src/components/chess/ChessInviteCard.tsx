@@ -73,7 +73,7 @@ export function ChessInviteCard({ invite, isMine }: ChessInviteCardProps) {
         setUnavailable(alreadyUnavailable);
 
         if (alreadyUnavailable) return;
-        if (cached && cached.status !== 'waiting') return;
+        if (cached && cached.status === 'finished') return;
 
         let cancelled = false;
         fetchChessGameCached(invite.gameId, { force: Boolean(cached) })
@@ -146,7 +146,7 @@ export function ChessInviteCard({ invite, isMine }: ChessInviteCardProps) {
     const blackWin = game?.result === '0-1';
 
     const statusBadge = (() => {
-        if (unavailable || (game && !canEnter)) return { text: 'منقضی شده', cls: 'chess-invite__badge--muted' };
+        if (unavailable) return { text: 'لغو شده', cls: 'chess-invite__badge--muted' };
         if (!game) return { text: '…', cls: 'chess-invite__badge--muted' };
         if (game.status === 'waiting') return { text: 'در انتظار حریف', cls: 'chess-invite__badge--waiting' };
         if (game.status === 'active') return { text: 'در حال انجام', cls: 'chess-invite__badge--live' };
@@ -230,8 +230,10 @@ export function ChessInviteCard({ invite, isMine }: ChessInviteCardProps) {
                 </div>
             )}
 
-            {unavailable || (game && !canEnter) ? (
-                <div className="chess-invite__unavailable">این بازی دیگر در دسترس نیست</div>
+            {unavailable ? (
+                <div className="chess-invite__unavailable">این بازی لغو شده است</div>
+            ) : game && !canEnter ? (
+                <div className="chess-invite__unavailable">این بازی بین دو بازیکن در حال انجام است</div>
             ) : game ? (
                 <button
                     type="button"

@@ -18,8 +18,10 @@ interface TicTacToeMessageProps {
 }
 
 function gameProgressScore(g: TicTacToeData): number {
-    const statusWeight = g.status === 'finished' ? 200 : g.status === 'playing' ? 100 : 0;
-    const movesCount = Array.isArray(g.board) ? g.board.filter(Boolean).length : 0;
+    const statusWeight = g.status === 'finished' ? 1_000_000 : g.status === 'playing' ? 10_000 : 0;
+    const movesCount = typeof g.moveCount === 'number'
+        ? g.moveCount
+        : (Array.isArray(g.board) ? g.board.filter(Boolean).length : 0);
     return statusWeight + movesCount;
 }
 
@@ -70,8 +72,8 @@ export const TicTacToeMessage = memo(function TicTacToeMessage({
     const isPlayerX = activeGame.playerX === currentUserId;
     const isPlayerO = activeGame.playerO === currentUserId;
     const mySymbol = isPlayerX ? 'X' : isPlayerO ? 'O' : null;
-    const canStartAsO = activeGame.status === 'waiting' && !activeGame.playerO && !isPlayerX;
-    const isMyTurn = canStartAsO || (activeGame.status === 'playing' && mySymbol === activeGame.turn);
+    const canJoinAsO = activeGame.status === 'playing' && !activeGame.playerO && !isPlayerX && activeGame.turn === 'O';
+    const isMyTurn = activeGame.status === 'playing' && (mySymbol === activeGame.turn || canJoinAsO);
 
     const handleCellClick = async (cellIndex: number) => {
         if (busy || isSelectionModeActive) return;
@@ -111,9 +113,6 @@ export const TicTacToeMessage = memo(function TicTacToeMessage({
             : '';
 
     const statusText = (() => {
-        if (activeGame.status === 'waiting') {
-            return canStartAsO ? 'نوبت شما' : 'در انتظار حریف';
-        }
         if (activeGame.status === 'finished') {
             if (activeGame.winner === 'draw') return 'مساوی';
             return `برد ${winnerName}`;
@@ -165,7 +164,7 @@ export const TicTacToeMessage = memo(function TicTacToeMessage({
                     className={cx(
                         'ttt-player',
                         !activeGame.playerOName && 'ttt-player--waiting',
-                        ((activeGame.status === 'playing' && activeGame.turn === 'O') || activeGame.status === 'waiting') && 'ttt-player--active',
+                        activeGame.status === 'playing' && activeGame.turn === 'O' && 'ttt-player--active',
                         activeGame.winner === 'O' && 'ttt-player--winner',
                     )}
                 >
@@ -173,55 +172,57 @@ export const TicTacToeMessage = memo(function TicTacToeMessage({
                         <MarkO size={11} />
                     </span>
                     <span className="ttt-player__name">{activeGame.playerOName || 'در انتظار...'}</span>
-                    {((activeGame.status === 'playing' && activeGame.turn === 'O') || activeGame.status === 'waiting') && (
+                    {activeGame.status === 'playing' && activeGame.turn === 'O' && (
                         <span className="ttt-turn-dot" aria-hidden="true" />
                     )}
                 </div>
             </div>
 
-            <div className="ttt-board" data-no-message-gesture={noGestureAttr}>
-                {activeGame.board.map((cell, index) => {
-                    const playable = !busy && !isSelectionModeActive && isMyTurn && cell === '';
-                    const isWinCell = Boolean(winSet?.has(index));
-                    const isDimCell = Boolean(winSet && !isWinCell);
-                    return (
-                        <button
-                            key={index}
-                            type="button"
-                            className={cx(
-                                'ttt-cell',
-                                playable && 'ttt-cell--playable',
-                                isWinCell && 'ttt-cell--win',
-                                isDimCell && 'ttt-cell--dim',
-                            )}
-                            disabled={!playable}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                void handleCellClick(index);
-                            }}
-                            aria-label={`خانه ${index + 1}`}
-                        >
-                            {cell === 'X' && (
-                                <motion.span
-                                    initial={{ scale: 0.45, opacity: 0 }}
-                                    animate={{ scale: 1, opacity: 1 }}
-                                    transition={{ type: 'spring', stiffness: 460, damping: 24 }}
-                                >
-                                    <MarkX size={22} />
-                                </motion.span>
-                            )}
-                            {cell === 'O' && (
-                                <motion.span
-                                    initial={{ scale: 0.45, opacity: 0 }}
-                                    animate={{ scale: 1, opacity: 1 }}
-                                    transition={{ type: 'spring', stiffness: 460, damping: 24 }}
-                                >
-                                    <MarkO size={22} />
-                                </motion.span>
-                            )}
-                        </button>
-                    );
-                })}
+            <div className="ttt-board-wrap" data-no-message-gesture={noGestureAttr}>
+                <div className="ttt-board">
+                    {activeGame.board.map((cell, index) => {
+                        const playable = !busy && !isSelectionModeActive && isMyTurn && cell === '';
+                        const isWinCell = Boolean(winSet?.has(index));
+                        const isDimCell = Boolean(winSet && !isWinCell);
+                        return (
+                            <button
+                                key={index}
+                                type="button"
+                                className={cx(
+                                    'ttt-cell',
+                                    playable && 'ttt-cell--playable',
+                                    isWinCell && 'ttt-cell--win',
+                                    isDimCell && 'ttt-cell--dim',
+                                )}
+                                disabled={!playable}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleCellClick(index);
+                                }}
+                                aria-label={`خانه ${index + 1}`}
+                            >
+                                {cell === 'X' && (
+                                    <motion.span
+                                        initial={{ scale: 0.45, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        transition={{ type: 'spring', stiffness: 460, damping: 24 }}
+                                    >
+                                        <MarkX size={22} />
+                                    </motion.span>
+                                )}
+                                {cell === 'O' && (
+                                    <motion.span
+                                        initial={{ scale: 0.45, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        transition={{ type: 'spring', stiffness: 460, damping: 24 }}
+                                    >
+                                        <MarkO size={22} />
+                                    </motion.span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
         </div>
     );

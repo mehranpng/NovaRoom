@@ -114,6 +114,9 @@ const isSameMessageRecord = (prev: Message, next: Message): boolean => {
         prev.replyTo?.text === next.replyTo?.text &&
         Boolean(prev.replyTo?.isQuote) === Boolean(next.replyTo?.isQuote) &&
         prev.forwardedFrom?.originalSenderId === next.forwardedFrom?.originalSenderId &&
+        prev.chessInvite?.gameId === next.chessInvite?.gameId &&
+        Boolean(prev.chessInvite?.shared) === Boolean(next.chessInvite?.shared) &&
+        JSON.stringify(prev.ticTacToe ?? null) === JSON.stringify(next.ticTacToe ?? null) &&
         areReactionsEqual(prev.reactions, next.reactions)
     );
 };
