@@ -416,7 +416,6 @@ export function ChatRoom({
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const messagesContainerRef = useRef<HTMLDivElement | null>(null);
     const messagesInnerRef = useRef<HTMLDivElement | null>(null);
-    const scrollAnimRafRef = useRef<number | null>(null);
     const prevInnerHeightRef = useRef<number>(0);
     const roomRef = useRef<HTMLDivElement | null>(null);
     const topSentinelRef = useRef<HTMLDivElement | null>(null);
@@ -676,48 +675,11 @@ export function ChatRoom({
         onReaderStateChangeRef.current?.({ atBottom });
     };
 
-    const cancelScrollAnim = () => {
-        if (scrollAnimRafRef.current !== null) {
-            cancelAnimationFrame(scrollAnimRafRef.current);
-            scrollAnimRafRef.current = null;
-        }
-    };
-
     const scrollToBottom = (smooth = false) => {
         const container = messagesContainerRef.current;
         if (container) {
-            cancelScrollAnim();
             markProgrammaticScroll();
-            isAtBottomRef.current = true;
-            notifyReaderState(true);
-            const targetTop = Math.max(0, container.scrollHeight - container.clientHeight);
-            if (!smooth) {
-                container.scrollTop = targetTop;
-                return;
-            }
-            const startTop = container.scrollTop;
-            const distance = targetTop - startTop;
-            if (Math.abs(distance) < 2) {
-                container.scrollTop = targetTop;
-                return;
-            }
-            const startTime = performance.now();
-            const duration = 180;
-            const step = (now: number) => {
-                const elapsed = now - startTime;
-                const progress = Math.min(1, elapsed / duration);
-                const eased = 1 - Math.pow(1 - progress, 3);
-                const liveTarget = Math.max(0, container.scrollHeight - container.clientHeight);
-                markProgrammaticScroll();
-                container.scrollTop = startTop + (liveTarget - startTop) * eased;
-                if (progress < 1) {
-                    scrollAnimRafRef.current = requestAnimationFrame(step);
-                } else {
-                    container.scrollTop = liveTarget;
-                    scrollAnimRafRef.current = null;
-                }
-            };
-            scrollAnimRafRef.current = requestAnimationFrame(step);
+            container.scrollTo({ top: Math.max(0, container.scrollHeight - container.clientHeight), behavior: smooth ? 'smooth' : 'auto' });
             return;
         }
         markProgrammaticScroll();
@@ -730,7 +692,6 @@ export function ChatRoom({
             scrollToBottom(false);
             return;
         }
-        cancelScrollAnim();
         markProgrammaticScroll();
         container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
         isAtBottomRef.current = true;
@@ -963,6 +924,23 @@ export function ChatRoom({
         if (!repliedMessage?.file) return fallbackText;
         const prefix = filePreviewLabel(repliedMessage.file.mimeType);
         return fallbackText ? `${prefix} • ${fallbackText}` : prefix;
+    };
+
+    const getPinnedPreviewText = (pinned: PinnedMessage) => {
+        const pinnedFull = messagesById.get(pinned.id);
+        if (pinnedFull?.chessInvite) {
+            return pinnedFull.chessInvite.shared ? '♟️ بازی شطرنج' : '♟️ دعوت به بازی شطرنج';
+        }
+        if (pinnedFull?.ticTacToe) {
+            return '⭕ بازی دوز';
+        }
+        const text = (pinned.text || '').trim();
+        const pinnedFile = pinned.file || pinnedFull?.file;
+        if (pinnedFile) {
+            const prefix = filePreviewLabel(pinnedFile.mimeType);
+            return text ? `${prefix} • ${text}` : prefix;
+        }
+        return text || 'پیام';
     };
 
     const getForwardPreviewText = (draft: { previewText?: string; previewFile?: FileMetadata | null } | null | undefined) => {
@@ -3748,16 +3726,7 @@ export function ChatRoom({
                             پیام سنجاق شده{pinnedMessage.senderName ? ` • ${pinnedMessage.senderName}` : ''}
                         </div>
                         <div className="chat-room__pinned-bar__text">
-                            {(() => {
-                                const pinnedFull = messagesById.get(pinnedMessage.id);
-                                if (pinnedFull?.chessInvite) {
-                                    return pinnedFull.chessInvite.shared ? '♟️ بازی شطرنج' : '♟️ دعوت به بازی شطرنج';
-                                }
-                                if (pinnedFull?.ticTacToe) {
-                                    return '⭕ بازی دوز';
-                                }
-                                return pinnedMessage.text || (pinnedMessage.file ? `[فایل: ${pinnedMessage.file.fileName || 'پیوست'}]` : 'پیام');
-                            })()}
+                            {getPinnedPreviewText(pinnedMessage)}
                         </div>
                     </div>
                     <button
