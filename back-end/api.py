@@ -197,7 +197,7 @@ cl_app_settings = db["app_settings"]
 cl_push_subscriptions = db["push_subscriptions"]
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "").strip()
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "").strip()
-VAPID_SUBJECT = os.getenv("VAPID_SUBJECT", "mailto:admin@novaroom.org").strip()
+VAPID_SUBJECT = os.getenv("VAPID_SUBJECT", "mailto:admin@novaroom.co").strip()
 
 active_connections: Dict[str, List[WebSocket]] = {}
 ws_session_meta: Dict[WebSocket, Dict[str, Optional[str]]] = {}

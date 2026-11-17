@@ -13,8 +13,8 @@ export default defineConfig({
         port: 5173,
         host: true,
         allowedHosts: [
-            'novaroom.org',
-            'api.novaroom.org',
+            'novaroom.co',
+            'api.novaroom.co',
             'test.pngwr.shop',
             'localhost'
         ],

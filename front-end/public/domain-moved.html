@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>نواروم — آدرس تغییر کرد</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#1b1d21" />
+    <link rel="icon" href="/logo/logo-icon.svg" type="image/svg+xml" />
+    <style>
+        @font-face {
+            font-family: 'Vazir';
+            src: url('/fonts/Vazir-Regular.woff2') format('woff2');
+            font-weight: 500;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Vazir';
+            src: url('/fonts/Vazir-Bold.woff2') format('woff2');
+            font-weight: 700;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Nunito';
+            src: url('/fonts/Nunito-Latin.woff2') format('woff2');
+            font-weight: 200 1000;
+            font-display: swap;
+        }
+
+        :root {
+            --bg: #1b1d21;
+            --surface: #22252b;
+            --border: #313741;
+            --text: #f9fafb;
+            --muted: #9ca3af;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+        }
+
+        @media (prefers-color-scheme: light) {
+            :root {
+                --bg: #ffffff;
+                --surface: #f9fafb;
+                --border: #e5e7eb;
+                --text: #111827;
+                --muted: #6b7280;
+            }
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            min-height: 100dvh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Vazir', 'Nunito', system-ui, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        main {
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            animation: rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        @keyframes rise {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logo {
+            width: 64px;
+            height: 64px;
+            object-fit: contain;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 22px;
+            font-weight: 700;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+
+        .lead {
+            font-size: 14.5px;
+            line-height: 2;
+            color: var(--muted);
+            margin-bottom: 28px;
+        }
+
+        .route {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            direction: ltr;
+            font-family: 'Nunito', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 28px;
+        }
+
+        .route span {
+            width: 100%;
+            padding: 14px 10px;
+            border-radius: 9999px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+        }
+
+        .route .old {
+            color: var(--muted);
+            text-decoration: line-through;
+        }
+
+        .route .new {
+            border-color: var(--accent);
+        }
+
+        .route svg {
+            width: 20px;
+            height: 20px;
+            flex: none;
+            color: var(--muted);
+        }
+
+        .note {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 20px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            font-size: 13.5px;
+            line-height: 2;
+            color: var(--muted);
+            text-align: right;
+            margin-top: 16px;
+        }
+
+        .note b {
+            color: var(--text);
+            font-weight: 700;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border-radius: 9999px;
+            background: var(--accent);
+            color: #ffffff;
+            font-family: inherit;
+            font-size: 15px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: background-color 0.18s ease, transform 0.14s ease;
+        }
+
+        .btn:active {
+            transform: scale(0.97);
+            background: var(--accent-hover);
+        }
+
+        @media (hover: hover) and (pointer: fine) {
+            .btn:hover {
+                background: var(--accent-hover);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            main {
+                animation: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main>
+        <img class="logo" src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj4KICA8dGl0bGU+Tm92YVJvb208L3RpdGxlPgogIDxyZWN0IHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiByeD0iMTEyIiBmaWxsPSIjMWIxZDIxIiAvPgogIDxzdmcgeD0iMTA2IiB5PSIxNDEiIHdpZHRoPSIzMDAiIGhlaWdodD0iMjMwIiB2aWV3Qm94PSIwIDAgNDEyLjIyMyAzMTYuMTc3IiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJ4TWlkWU1pZCBtZWV0Ij4KICAgIDxnIGZpbGw9IiNmZmZmZmYiPgogICAgICA8cGF0aCBkPSJNMTU2Ljg4OSA1Ny4xNTcgTDI4NC4zMjIgNTguMDk0IEwyOTAuODgxIDU5LjAzMSBMMjk5LjMxNCA2MS44NDIgTDMwOS42MjEgNjcuNDY0IEwzMTguNTIyIDc2LjM2NiBMMzIzLjIwNyA4Mi45MjUgTDMyNi4wMTggODkuNDg0IEwzMjguODI5IDk5Ljc5MSBMMzI4LjgyOSAxMTQuNzgzIEwzMjcuODkyIDEyMC40MDUgTDMyNi4wMTggMTI2Ljk2NCBMMzIxLjMzMyAxMzYuMzM0IEwzMTYuNjQ4IDE0Mi44OTMgTDMxMi40MzIgMTQ3LjEwOSBMMzA0LjkzNiAxNTIuNzMxIEwyOTkuMzE0IDE1NS41NDIgTDI4NC4zMjIgMTU5LjI5IEwyNDkuNjUzIDE2MC4yMjcgTDI0Mi4xNTcgMTYzLjAzOCBMMjMzLjI1NSAxNzEuMDAzIEwyMzEuMzgxIDE3NC43NTEgQzIyOSAxODEuODk1IDIyOS41MDcgMTgyLjc1MSAyMjkuNTA3IDE5MC42OCBMMjMwLjQ0NCAxOTMuNDkxIEwyNTcuNjE3IDIzNS42NTYgTDI3NC40ODMgMjU5LjA4MSBMMjkyLjc1NSAyNzkuMjI3IEwyOTQuNjI5IDI4MC4xNjQgTDMwMi4xMjUgMjg3LjY2IEwzMTUuMjQzIDI5Ny4wMyBMMzM0LjkyIDMwNy4zMzcgTDM0Ni4xNjQgMzExLjA4NSBMMzU5LjI4MiAzMTMuODk2IEwzODMuNjQ0IDMxMy44OTYgTDM4OS4yNjYgMzEyLjk1OSBMNDAyLjM4NCAzMDkuMjExIEw0MTEuMjg2IDMwNC45OTQgTDQxMi4yMjMgMzAzLjEyIEw0MTIuMjIzIDMwMC4zMDkgTDQwOS44OCAyOTcuMDMgTDM5MS4xNCAyODkuNTM0IEwzNzIuNCAyNzkuMjI3IEwzNTkuMjgyIDI2OS44NTcgTDM0NS4yMjcgMjU3LjY3NiBMMzI0LjE0NCAyMzMuNzgyIEwzMDguMjE1IDIxMC4zNTcgTDMwOC42ODQgMjA4Ljk1MiBMMzI0LjYxMyAyMDMuMzMgTDMzNS44NTcgMTk3LjcwOCBMMzQ4LjAzOCAxODkuMjc1IEwzNTcuODc2IDE4MC4zNzMgTDM2OC4xODMgMTY4LjE5MiBMMzc2LjYxNyAxNTQuMTM3IEwzODAuMzY1IDE0NS43MDQgTDM4NS45ODcgMTI2Ljk2NCBMMzg3Ljg2MSAxMTEuOTcyIEwzODcuODYxIDk5Ljc5MSBMMzg1LjA1IDgxLjA1MSBMMzgxLjMwMiA2Ny45MzMgTDM3NS42NzkgNTUuNzUyIEwzNjYuMzA5IDQwLjc2IEwzNTEuNzg2IDI1LjI5OSBMMzQwLjU0MiAxNi44NjYgTDMyNC42MTMgOC40MzMgTDMwMy45OTkgMS44NzQgTDI4OS45NDQgMCBMMTQzLjc3MSAwIEwxMzYuMjc1IDIuODExIEwxMzAuMTg1IDcuOTY1IEwxMjcuMzc0IDE0LjUyNCBDMTI3LjM3NCAzMi44NTQgMTQwLjc5NSA1MC4wMDQgMTU2Ljg4OSA1Ny4xNTcgWiIgLz4KICAgICAgPHBhdGggZD0iTTc2LjExNCA5Ny44NTUgTDc5LjcxIDEwMC4wMDUgTDgzLjU5OCAxMDQuNTI3IEwxNjIuOTMyIDI0OC42NDQgTDE3My44OCAyNjUuNDQ0IEwxODQuNjA4IDI3OC45MzkgTDE5NS4xMTUgMjg5LjEyOCBDMjAzLjU1IDI5NS43MTkgMjA5LjEzMiAyOTkuNDY0IDIxOC4zNTEgMzA0Ljk3NyBMMjI5LjI4MSAzMDkuNTYgTDIzOS40MTggMzEyLjIwNCBDMjU5LjczMSAzMTMuNzM3IDI2NC4zMDQgMzE0LjgzOSAyODMuODYxIDMwOC41MSBDMjg1LjYwNiAyOTYuNjg5IDI4MS40MDQgMjk5LjE1MSAyNzAuMDc0IDI5MS45NjUgTDI1NS4wMzcgMjc5LjU1NCBMMjQxLjU3NiAyNjQuOTE0IEwyMjguODMgMjQ3LjAzOCBMMTYxLjAyNSAxMjQuNDY0IEwxMjkuNzUgNjUuNzI0IEwxMTguOTUyIDUzLjE2NCBMMTEyLjc2NCA0Ny45OTkgTDEwMy43NzMgNDIuNjIyIEw4OC4yNDEgMzYuNzUyIEw3My4zNjIgMzQuNjkgTDU5LjIwNiAzNS41MDEgTDQ2Ljc3OCAzOC4zMjIgTDM5LjAyMSA0MS40OTUgTDMwLjE4OSA0Ni40NjcgTDE2LjYyNCA1OC4xMjkgTDEyLjQ2MyA2My40NTMgTDYuMDExIDc0LjI0MiBMMS4yODcgODcuMDQxIEwwIDkxLjY0MiBMMCAyODMuNjEgQzUuNjU0IDMwNi4wODcgNDAuMzU1IDMzMC4zNTUgNTguNDkyIDMwNi4xNjUgQzU4LjcwOCAzMDUuODc4IDU3LjA5NSAxMjguNDI0IDU2Ljk0MyAxMDkuMDk0IEw1OC4yMjkgMTA0LjQ5MyBMNjAuMzggMTAwLjg5NiBMNjIuODkyIDk4LjczNyBMNjYuNzcxIDk3LjE1IFoiIC8+CiAgICA8L2c+CiAgPC9zdmc+Cjwvc3ZnPgo=" alt="نواروم" />
+        <h1>آدرس نواروم تغییر کرد</h1>
+        <p class="lead">آدرس قبلی نواروم به‌زودی از دسترس خارج می‌شود.<br>لطفاً از این پس با آدرس جدید وارد شوید.</p>
+
+        <div class="route">
+            <span class="old">novaroom.org</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6" /></svg>
+            <span class="new">novaroom.co</span>
+        </div>
+
+        <a id="move-link" class="btn" href="https://novaroom.co">رفتن به آدرس جدید</a>
+
+        <p class="note"><b>اپلیکیشن را نصب کرده‌اید؟</b><br>ابتدا آن را حذف کنید، سپس از آدرس جدید دوباره نصب کنید.</p>
+    </main>
+
+    <script>
+        var path = location.pathname === '/domain-moved.html' ? '' : location.pathname;
+        document.getElementById('move-link').href = 'https://novaroom.co' + path + location.search + location.hash;
+    </script>
+</body>
+
+</html>
