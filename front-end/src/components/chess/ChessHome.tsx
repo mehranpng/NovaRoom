@@ -511,7 +511,7 @@ export function ChessHome({
                                     <div className="chess-card__header-text">
                                         <div className="chess-card__title">بازی آنلاین</div>
                                         <div className="chess-card__sub">
-                                            {onlineActive
+                                            {onlineActive && currentGame
                                                 ? `رپید • ${formatTimeControl(currentGame.timeControl)} • ${currentGame.status === 'waiting' ? 'در جستجوی حریف…' : 'در حال بازی'}`
                                                 : 'رپید • ۱۰ دقیقه • مهره تصادفی'}
                                         </div>
@@ -520,7 +520,7 @@ export function ChessHome({
                                         <span className="chess__timer-pill">{formatTimer(waitingLeftMs)}</span>
                                     )}
                                 </div>
-                                {onlineActive ? (
+                                {onlineActive && currentGame ? (
                                     currentGame.status === 'waiting' ? (
                                         <div className="chess__actions">
                                             <button type="button" className="chess-primary-btn" onClick={() => openGame(currentGame.id)}>
@@ -553,7 +553,7 @@ export function ChessHome({
 
                             <div className={cx('chess-card chess-friendly-card', friendlyActive && 'chess-card--active')}>
                                 <div className="chess-card__title">بازی دوستانه</div>
-                                {friendlyActive ? (
+                                {friendlyActive && currentGame ? (
                                     <>
                                         <div className="chess-card__sub">
                                             {formatTimeControl(currentGame.timeControl)} •{' '}

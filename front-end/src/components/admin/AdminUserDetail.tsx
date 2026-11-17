@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { createPortal } from 'react-dom';
 import { Bot, Check, ChevronDown, Clock, Copy, KeyRound, Loader2, RotateCcw, Save, ShieldCheck, Trash2, UserCheck, X } from 'lucide-react';
 import { apiFetch } from '../../config/api';
 import { cx } from '../../utils/cx';
