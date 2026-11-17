@@ -8106,6 +8106,11 @@ def chess_schedule(game: dict):
     if warn_handle:
         warn_handle.cancel()
     if game["status"] == "waiting":
+        remaining = (game.get("createdAt", 0) + chess_service.WAITING_TTL_MS - now_ms()) / 1000
+        chess_timers[game_id] = asyncio.get_running_loop().call_later(
+            max(0.0, remaining) + 0.05,
+            lambda: asyncio.create_task(chess_expire_waiting(game_id)),
+        )
         return
     now = now_ms()
     deadline = chess_service.deadline_ms(game)
@@ -11002,6 +11007,11 @@ async def get_current_chess_game(
     me = current_user["chatId"]
     now = now_ms()
     game = await chess_find_blocking_game(me, now)
+    if not game:
+        game = await cl_chess_games.find_one(
+            {"status": "waiting", "creatorId": me, "createdAt": {"$gt": now - chess_service.WAITING_TTL_MS}},
+            sort=[("createdAt", -1)],
+        )
     if not game:
         return {"game": None}
     return {"game": await chess_response(game)}

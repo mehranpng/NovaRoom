@@ -108,7 +108,7 @@ export function ResetPasswordLink({ token }: ResetPasswordLinkProps) {
                 <div className="login-header">
                     <ShieldCheck size={48} strokeWidth={1.5} className="login-header-icon" />
                     <h1>تغییر رمز عبور</h1>
-                    <p>
+                    <p dir="rtl">
                         {linkState === 'valid' && username ? `تغییر رمز عبور برای @${username}` : 'رمز عبور جدید خود را تعیین کنید'}
                     </p>
                 </div>

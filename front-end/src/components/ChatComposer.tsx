@@ -132,7 +132,7 @@ export const ChatComposer = memo(function ChatComposer({
             stopTyping();
             return;
         }
-        if (!typingActiveRef.current || Date.now() - lastTypingEmitRef.current > 700) {
+        if (!typingActiveRef.current || Date.now() - lastTypingEmitRef.current > 2000) {
             typingActiveRef.current = true;
             lastTypingEmitRef.current = Date.now();
             emitTyping(true);
@@ -142,7 +142,7 @@ export const ChatComposer = memo(function ChatComposer({
             typingActiveRef.current = false;
             emitTyping(false);
             typingTimeoutRef.current = null;
-        }, 1000);
+        }, 3000);
     };
 
     useEffect(() => {

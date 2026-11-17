@@ -11532,3 +11532,7 @@ html.no-blur-effect .chat-list__header,
 .animate-spin {
     animation: spin 0.8s linear infinite;
 }
+
+.chess-card--active {
+    border-color: var(--accent-primary);
+}

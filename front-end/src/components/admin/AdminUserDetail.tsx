@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { createPortal } from 'react-dom';
 import { Bot, Check, ChevronDown, Clock, Copy, KeyRound, Loader2, RotateCcw, Save, ShieldCheck, Trash2, UserCheck, X } from 'lucide-react';
 import { apiFetch } from '../../config/api';
 import { cx } from '../../utils/cx';
@@ -37,6 +38,7 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
     const [actionLoading, setActionLoading] = useState(false);
     const [confirmModal, setConfirmModal] = useState<ConfirmModalKind>(null);
     const [copiedChatId, setCopiedChatId] = useState(false);
+    const [copiedUsername, setCopiedUsername] = useState(false);
     const [passwordModalOpen, setPasswordModalOpen] = useState(false);
     const [passwordLoading, setPasswordLoading] = useState(false);
     const [expiresInMinutes, setExpiresInMinutes] = useState(30);
@@ -181,7 +183,20 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
         }
     };
 
-    const copyChatId = async () => {        if (!detail) return;
+    const copyUsername = async () => {
+        if (!detail) return;
+        try {
+            await copyText(detail.username);
+            setCopiedUsername(true);
+            notify({ type: 'success', message: 'یوزرنیم کپی شد' });
+            window.setTimeout(() => setCopiedUsername(false), 1500);
+        } catch {
+            notify({ type: 'error', message: 'کپی یوزرنیم ممکن نشد' });
+        }
+    };
+
+    const copyChatId = async () => {
+        if (!detail) return;
         try {
             await copyText(detail.chatId);
             setCopiedChatId(true);
@@ -362,6 +377,20 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
                                         aria-label="کپی آیدی چت"
                                     >
                                         {copiedChatId ? <Check size={14} /> : <Copy size={14} />}
+                                    </button>
+                                </span>
+                            </div>
+                            <div className="adm-kv__row">
+                                <span className="adm-kv__label">یوزرنیم</span>
+                                <span className="adm-kv__value adm-kv__value--ltr">
+                                    <span>{detail.username}</span>
+                                    <button
+                                        type="button"
+                                        className="adm-copy-btn adm-tap"
+                                        onClick={copyUsername}
+                                        aria-label="کپی یوزرنیم"
+                                    >
+                                        {copiedUsername ? <Check size={14} /> : <Copy size={14} />}
                                     </button>
                                 </span>
                             </div>
@@ -605,7 +634,7 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
                 {confirmMeta && (
                     <motion.div
                         className="chat-room-modal-overlay"
-                        style={{ zIndex: 120 }}
+                        style={{ position: 'fixed', zIndex: 120 }}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
@@ -650,7 +679,7 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
                 {passwordModalOpen && detail && (
                     <motion.div
                         className="chat-room-modal-overlay"
-                        style={{ zIndex: 120 }}
+                        style={{ position: 'fixed', zIndex: 120 }}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
@@ -735,7 +764,7 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
                 {deleteModalOpen && detail && (
                     <motion.div
                         className="chat-room-modal-overlay"
-                        style={{ zIndex: 120 }}
+                        style={{ position: 'fixed', zIndex: 120 }}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
@@ -767,7 +796,7 @@ export function AdminUserDetail({ chatId, onUpdated }: AdminUserDetailProps) {
                             </div>
 
                             <p className="chat-room-confirm-modal__text adm-modal__text">
-                                برای تایید، نام کاربری <span dir="ltr">@{detail.username}</span> را دقیقاً تایپ کنید.
+                                برای تایید، نام کاربری <span dir="ltr">{detail.username}</span> را دقیقاً تایپ کنید.
                             </p>
 
                             <input

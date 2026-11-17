@@ -471,6 +471,9 @@ export function ChessHome({
         return { label: 'باخت', cls: 'chess-history__badge--loss' };
     };
 
+    const onlineActive = Boolean(currentGame?.matchmaking);
+    const friendlyActive = Boolean(currentGame) && !onlineActive;
+
     const waitingLeftMs = useMemo(() => {
         if (currentGame?.status !== 'waiting' || !currentGame.matchmaking) return null;
         const deadline = typeof currentGame.waitingDeadline === 'number' ? currentGame.waitingDeadline : null;
@@ -498,132 +501,124 @@ export function ChessHome({
                             </div>
                             <span className="skeleton" style={{ height: 50, width: '100%', borderRadius: 9999 }} />
                         </div>
-                    ) : currentGame ? (
-                        <div className="chess-card">
-                            <div className="chess-card__header">
-                                <span className="chess-card__icon">
-                                    <PlumpyChessIcon size={24} />
-                                </span>
-                                <div className="chess-card__header-text">
-                                    <div className="chess-card__title">
-                                        {currentGame.matchmaking ? 'بازی آنلاین' : 'ادامه بازی'}
-                                    </div>
-                                    <div className="chess-card__sub">
-                                        {currentGame.matchmaking ? 'رپید' : 'کلاسیک'} • {formatTimeControl(currentGame.timeControl)} •{' '}
-                                        {currentGame.status === 'waiting'
-                                            ? currentGame.matchmaking
-                                                ? 'در جستجوی حریف…'
-                                                : 'منتظر حریف…'
-                                            : 'در حال بازی'}
-                                    </div>
-                                </div>
-                                {waitingLeftMs !== null && (
-                                    <span className="chess__timer-pill">{formatTimer(waitingLeftMs)}</span>
-                                )}
-                            </div>
-                            {currentGame.status === 'waiting' && currentGame.matchmaking ? (
-                                <div className="chess__actions">
-                                    <button
-                                        type="button"
-                                        className="chess-primary-btn"
-                                        onClick={() => openGame(currentGame.id)}
-                                    >
-                                        ادامه جستجو
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="chess-secondary-btn chess-secondary-btn--danger"
-                                        onClick={handleCancelSearch}
-                                    >
-                                        لغو جستجو
-                                    </button>
-                                </div>
-                            ) : (
-                                <button
-                                    type="button"
-                                    className="chess-primary-btn"
-                                    onClick={() => openGame(currentGame.id)}
-                                >
-                                    ادامه بازی
-                                </button>
-                            )}
-                        </div>
                     ) : (
                         <>
-                            <div className="chess-card">
+                            <div className={cx('chess-card', onlineActive && 'chess-card--active')}>
                                 <div className="chess-card__header">
                                     <span className="chess-card__icon">
                                         <PlumpyChessIcon size={24} />
                                     </span>
-                                    <div>
+                                    <div className="chess-card__header-text">
                                         <div className="chess-card__title">بازی آنلاین</div>
-                                        <div className="chess-card__sub">رپید • ۱۰ دقیقه • مهره تصادفی</div>
+                                        <div className="chess-card__sub">
+                                            {onlineActive
+                                                ? `رپید • ${formatTimeControl(currentGame.timeControl)} • ${currentGame.status === 'waiting' ? 'در جستجوی حریف…' : 'در حال بازی'}`
+                                                : 'رپید • ۱۰ دقیقه • مهره تصادفی'}
+                                        </div>
                                     </div>
+                                    {onlineActive && waitingLeftMs !== null && (
+                                        <span className="chess__timer-pill">{formatTimer(waitingLeftMs)}</span>
+                                    )}
                                 </div>
-                                <button
-                                    type="button"
-                                    className="chess-primary-btn"
-                                    onClick={() => void handleStartOnline()}
-                                    disabled={startingOnline || creating}
-                                >
-                                    {startingOnline ? 'در حال جستجوی حریف…' : 'شروع بازی آنلاین'}
-                                </button>
+                                {onlineActive ? (
+                                    currentGame.status === 'waiting' ? (
+                                        <div className="chess__actions">
+                                            <button type="button" className="chess-primary-btn" onClick={() => openGame(currentGame.id)}>
+                                                ادامه جستجو
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="chess-secondary-btn chess-secondary-btn--danger"
+                                                onClick={handleCancelSearch}
+                                            >
+                                                لغو جستجو
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <button type="button" className="chess-primary-btn" onClick={() => openGame(currentGame.id)}>
+                                            ادامه بازی
+                                        </button>
+                                    )
+                                ) : (
+                                    <button
+                                        type="button"
+                                        className="chess-primary-btn"
+                                        onClick={() => void handleStartOnline()}
+                                        disabled={startingOnline || creating || Boolean(currentGame)}
+                                    >
+                                        {startingOnline ? 'در حال جستجوی حریف…' : 'شروع بازی آنلاین'}
+                                    </button>
+                                )}
                             </div>
 
-                            <div className="chess-card chess-friendly-card">
+                            <div className={cx('chess-card chess-friendly-card', friendlyActive && 'chess-card--active')}>
                                 <div className="chess-card__title">بازی دوستانه</div>
-                                <div className="chess-section">
-                                    <div className="chess-section__label">زمان بازی</div>
-                                    <div className="chess-tc-groups">
-                                        {TIME_CONTROL_GROUPS.map((group) => (
-                                            <div key={group.label} className="chess-tc-group">
-                                                <span className="chess-tc-group__title">{group.label}</span>
-                                                <div className="chess-chips">
-                                                    {group.items.map((item) => (
-                                                        <button
-                                                            key={item.value}
-                                                            type="button"
-                                                            className={cx('chess-chip', timeControl === item.value && 'chess-chip--active')}
-                                                            onClick={() => setTimeControl(item.value)}
-                                                        >
-                                                            {item.label}
-                                                        </button>
-                                                    ))}
-                                                </div>
+                                {friendlyActive ? (
+                                    <>
+                                        <div className="chess-card__sub">
+                                            {formatTimeControl(currentGame.timeControl)} •{' '}
+                                            {currentGame.status === 'waiting' ? 'منتظر حریف…' : 'در حال بازی'}
+                                        </div>
+                                        <button type="button" className="chess-primary-btn" onClick={() => openGame(currentGame.id)}>
+                                            ادامه بازی
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="chess-section">
+                                            <div className="chess-section__label">زمان بازی</div>
+                                            <div className="chess-tc-groups">
+                                                {TIME_CONTROL_GROUPS.map((group) => (
+                                                    <div key={group.label} className="chess-tc-group">
+                                                        <span className="chess-tc-group__title">{group.label}</span>
+                                                        <div className="chess-chips">
+                                                            {group.items.map((item) => (
+                                                                <button
+                                                                    key={item.value}
+                                                                    type="button"
+                                                                    className={cx('chess-chip', timeControl === item.value && 'chess-chip--active')}
+                                                                    onClick={() => setTimeControl(item.value)}
+                                                                >
+                                                                    {item.label}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
+                                        </div>
 
-                                <div className="chess-section">
-                                    <div className="chess-section__label">رنگ مهره</div>
-                                    <div className="chess-chips">
-                                        {COLOR_OPTIONS.map((opt) => (
-                                            <button
-                                                key={opt.value}
-                                                type="button"
-                                                className={cx('chess-chip', color === opt.value && 'chess-chip--active')}
-                                                onClick={() => setColor(opt.value)}
-                                            >
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
+                                        <div className="chess-section">
+                                            <div className="chess-section__label">رنگ مهره</div>
+                                            <div className="chess-chips">
+                                                {COLOR_OPTIONS.map((opt) => (
+                                                    <button
+                                                        key={opt.value}
+                                                        type="button"
+                                                        className={cx('chess-chip', color === opt.value && 'chess-chip--active')}
+                                                        onClick={() => setColor(opt.value)}
+                                                    >
+                                                        {opt.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
 
-                                <button
-                                    type="button"
-                                    className="chess-primary-btn"
-                                    onClick={handleCreate}
-                                    disabled={creating || startingOnline}
-                                >
-                                    ساخت بازی
-                                </button>
+                                        <button
+                                            type="button"
+                                            className="chess-primary-btn"
+                                            onClick={handleCreate}
+                                            disabled={creating || startingOnline || Boolean(currentGame)}
+                                        >
+                                            ساخت بازی
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         </>
                     )}
 
-                    <div className="chess-card chess-bot-card">
+                    <div className={cx('chess-card chess-bot-card', hasAiGame && 'chess-card--active')}>
                         <div className="chess-card__header">
                             <Avatar
                                 name="استاک‌فیش"

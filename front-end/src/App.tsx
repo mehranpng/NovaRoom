@@ -53,7 +53,7 @@ import './App.css';
 
 const EMPTY_IDS: string[] = [];
 
-const TYPING_SAFETY_TIMEOUT_MS = 2500;
+const TYPING_SAFETY_TIMEOUT_MS = 6000;
 
 const normalizeTimestamp = (ts: unknown): number => {
     if (typeof ts === 'number' && Number.isFinite(ts)) return ts;
