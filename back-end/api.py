@@ -12,7 +12,7 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import Response, FileResponse, StreamingResponse, JSONResponse
+from fastapi.responses import Response, FileResponse, StreamingResponse, JSONResponse, RedirectResponse
 from starlette.websockets import WebSocketState
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta, timezone
@@ -41,6 +41,7 @@ from bson import ObjectId
 import re
 import uuid
 import urllib.parse
+import mimetypes
 import jdatetime
 from ai_service import (
     extract_urls_from_text,
@@ -68,6 +69,20 @@ from file_service import (
     save_ai_temp_file,
     read_ai_temp_file,
     delete_ai_temp_file,
+    is_s3_enabled,
+    is_allowed_file,
+    generate_unique_filename,
+    sanitize_filename,
+    has_local_file,
+    head_s3_object,
+    head_s3_upload_object,
+    inspect_s3_upload_object,
+    create_presigned_upload_url,
+    create_presigned_download_url,
+    get_s3_upload_key,
+    get_s3_font_key,
+    get_s3_stockfish_key,
+    list_s3_ai_temp_files,
 )
 
 _root_env = Path(__file__).resolve().parent.parent / ".env"
@@ -175,6 +190,7 @@ cl_ai_memories = db["ai_memories"]
 cl_ai_temp_files = db["ai_temp_files"]
 cl_chess_games = db["chess_games"]
 cl_pending_file_deletions = db["pending_file_deletions"]
+cl_pending_uploads = db["pending_uploads"]
 cl_register_links = db["register_links"]
 cl_password_links = db["password_links"]
 cl_app_settings = db["app_settings"]
@@ -1075,6 +1091,16 @@ def _file_id_from_url(value: Any) -> str:
     return candidate if _is_valid_file_id(candidate) else ""
 
 
+def _extract_file_id(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    from_url = _file_id_from_url(text)
+    if from_url:
+        return from_url
+    return text if _is_valid_file_id(text) else ""
+
+
 def collect_file_ids(message_doc: Dict[str, Any]) -> set:
     ids: set = set()
     file_data = message_doc.get("file") or {}
@@ -1095,24 +1121,31 @@ async def _file_still_referenced(
     file_id: str, excluded_message_ids: Optional[set] = None
 ) -> bool:
     excluded = list(excluded_message_ids or [])
+    url_val = f"/files/{file_id}"
     message_query: Dict[str, Any] = {
         "$or": [
             {"file.fileId": file_id},
             {"file.previewFileId": file_id},
             {"file.coverArtFileId": file_id},
-            {"file.previewUrl": f"/files/{file_id}"},
-            {"file.thumbUrl": f"/files/{file_id}"},
-            {"file.imagePreviewUrl": f"/files/{file_id}"},
-            {"file.coverArtUrl": f"/files/{file_id}"},
+            {"file.previewUrl": url_val},
+            {"file.thumbUrl": url_val},
+            {"file.imagePreviewUrl": url_val},
+            {"file.coverArtUrl": url_val},
         ]
     }
     if excluded:
         message_query["_id"] = {"$nin": excluded}
     if await cl_messages.find_one(message_query, {"_id": 1}):
         return True
-    if await cl_users.find_one({"profile.avatar": file_id}, {"_id": 1}):
+    if await cl_users.find_one(
+        {"$or": [{"profile.avatar": file_id}, {"profile.avatar": url_val}]},
+        {"_id": 1},
+    ):
         return True
-    if await cl_chats.find_one({"groupAvatar": file_id}, {"_id": 1}):
+    if await cl_chats.find_one(
+        {"$or": [{"groupAvatar": file_id}, {"groupAvatar": url_val}]},
+        {"_id": 1},
+    ):
         return True
     return False
 
@@ -1134,6 +1167,9 @@ async def release_files(
                 continue
             if await delete_file(file_id):
                 await cl_pending_file_deletions.delete_one({"fileId": file_id})
+                await cl_pending_uploads.delete_many(
+                    {"$or": [{"fileId": file_id}, {"previewFileId": file_id}]}
+                )
             else:
                 await record_pending_file_deletion(file_id)
         except Exception as e:
@@ -1152,6 +1188,9 @@ async def retry_pending_file_deletions() -> None:
                 continue
             if await delete_file(file_id):
                 await cl_pending_file_deletions.delete_one({"_id": record["_id"]})
+                await cl_pending_uploads.delete_many(
+                    {"$or": [{"fileId": file_id}, {"previewFileId": file_id}]}
+                )
                 continue
         except Exception as e:
             print(f"Pending file deletion retry warning for {file_id}: {e}")
@@ -1175,12 +1214,38 @@ async def retry_pending_file_deletions_task() -> None:
         await asyncio.sleep(300)
 
 
+async def sweep_pending_uploads() -> None:
+    unconfirmed_ttl = int(os.getenv("PENDING_UNCONFIRMED_TTL_SEC", "1200"))
+    confirmed_ttl = int(os.getenv("PENDING_UPLOAD_TTL_SEC", "7200"))
+    now = utc_now()
+    unconfirmed_cutoff = now - timedelta(seconds=unconfirmed_ttl)
+    confirmed_cutoff = now - timedelta(seconds=confirmed_ttl)
+    stale_rows = await cl_pending_uploads.find(
+        {
+            "$or": [
+                {"confirmed": False, "createdAt": {"$lt": unconfirmed_cutoff}},
+                {"createdAt": {"$lt": confirmed_cutoff}},
+            ]
+        }
+    ).to_list(1000)
+    for row in stale_rows:
+        file_id = str(row.get("fileId") or "")
+        preview_id = str(row.get("previewFileId") or "")
+        ids_to_release = {fid for fid in (file_id, preview_id) if _is_valid_file_id(fid)}
+        if ids_to_release:
+            try:
+                await release_files(ids_to_release)
+            except Exception as e:
+                print(f"Pending upload sweep warning for {file_id}: {e}")
+        await cl_pending_uploads.delete_one({"_id": row["_id"]})
+
+
 async def sweep_orphaned_uploads() -> None:
-    grace_hours = float(os.getenv("ORPHAN_GRACE_HOURS", "24"))
-    dry_run = os.getenv("FILE_SWEEP_DRY_RUN", "true").lower().strip() not in (
-        "false",
-        "0",
-        "no",
+    grace_hours = float(os.getenv("ORPHAN_GRACE_HOURS", "6"))
+    dry_run = os.getenv("FILE_SWEEP_DRY_RUN", "false").lower().strip() in (
+        "true",
+        "1",
+        "yes",
     )
     stored = await list_stored_files()
     cutoff = time.time() - grace_hours * 3600
@@ -1197,6 +1262,7 @@ async def sweep_orphaned_uploads() -> None:
                 continue
             referenced: set = set()
             url_values = [f"/files/{file_id}" for file_id in batch]
+            combined_values = batch + url_values
             async for row in cl_messages.find(
                 {
                     "$or": [
@@ -1212,18 +1278,27 @@ async def sweep_orphaned_uploads() -> None:
                 {"file": 1},
             ):
                 referenced |= collect_file_ids(row) & set(batch)
-            referenced |= set(
-                await cl_users.distinct(
-                    "profile.avatar", {"profile.avatar": {"$in": batch}}
-                )
+            for value in await cl_users.distinct(
+                "profile.avatar", {"profile.avatar": {"$in": combined_values}}
+            ):
+                extracted = _extract_file_id(value)
+                if extracted:
+                    referenced.add(extracted)
+            for value in await cl_chats.distinct(
+                "groupAvatar", {"groupAvatar": {"$in": combined_values}}
+            ):
+                extracted = _extract_file_id(value)
+                if extracted:
+                    referenced.add(extracted)
+            pending_cutoff = utc_now() - timedelta(
+                seconds=int(os.getenv("PENDING_UPLOAD_TTL_SEC", "7200"))
             )
-            referenced |= {
-                value
-                for value in await cl_chats.distinct(
-                    "groupAvatar", {"groupAvatar": {"$in": batch}}
-                )
-                if value
-            }
+            for value in await cl_pending_uploads.distinct(
+                "fileId",
+                {"fileId": {"$in": batch}, "createdAt": {"$gte": pending_cutoff}},
+            ):
+                if _is_valid_file_id(str(value or "")):
+                    referenced.add(str(value))
             orphans.extend(
                 file_id for file_id in batch if file_id not in referenced
             )
@@ -1245,12 +1320,13 @@ async def sweep_orphaned_uploads() -> None:
 
 
 async def sweep_orphaned_uploads_task() -> None:
+    interval = max(300, int(os.getenv("ORPHAN_SWEEP_INTERVAL_SECONDS", "3600")))
     while True:
         try:
             await sweep_orphaned_uploads()
         except Exception as e:
             print(f"Orphan file sweep warning: {e}")
-        await asyncio.sleep(86400)
+        await asyncio.sleep(interval)
 
 
 async def jwt_encode_async(payload: dict) -> str:
@@ -2430,7 +2506,10 @@ async def run_account_purge(user_id: str) -> None:
             ]
             if not remaining:
                 await _purge_messages({"chatId": group_id}, user_id)
+                group_avatar_id = _extract_file_id(group.get("groupAvatar"))
                 await cl_chats.delete_one({"_id": group_id})
+                if group_avatar_id:
+                    await release_files({group_avatar_id})
                 continue
             update: Dict[str, Any] = {
                 "$pull": {"participants": user_id},
@@ -2461,6 +2540,16 @@ async def run_account_purge(user_id: str) -> None:
             except Exception as e:
                 print(f"AI temp file purge warning: {e}")
         await cl_ai_temp_files.delete_many({"userId": user_id})
+        pending_user_files = await cl_pending_uploads.find({"userId": user_id}, {"fileId": 1, "previewFileId": 1}).to_list(1000)
+        pending_ids = set()
+        for row in pending_user_files:
+            for key in ("fileId", "previewFileId"):
+                fid = str(row.get(key) or "")
+                if _is_valid_file_id(fid):
+                    pending_ids.add(fid)
+        if pending_ids:
+            await release_files(pending_ids)
+        await cl_pending_uploads.delete_many({"userId": user_id})
         await cl_push_subscriptions.delete_many({"userId": user_id})
 
         await cl_register_links.delete_many({"createdBy": user_id})
@@ -2540,6 +2629,9 @@ async def startup_db():
             cl_users.create_index("profile.avatar"),
             cl_chats.create_index("groupAvatar"),
             cl_pending_file_deletions.create_index("fileId", unique=True),
+            cl_pending_uploads.create_index("fileId", unique=True),
+            cl_pending_uploads.create_index("createdAt"),
+            cl_pending_uploads.create_index("userId"),
             cl_ai_messages.create_index("userId"),
             cl_ai_messages.create_index(
                 [("userId", 1), ("aiChatId", 1), ("timestamp", -1)]
@@ -4076,14 +4168,22 @@ async def update_profile(
         update_data["profile.bio"] = str(updates.bio)
         update_data["profile.bioEncrypted"] = False
 
+    old_avatar_id = _extract_file_id((current_user.get("profile") or {}).get("avatar"))
+    new_avatar_id = ""
     if updates.avatar is not None:
         avatar_value = str(updates.avatar).strip()
         update_data["profile.avatar"] = avatar_value
+        new_avatar_id = _extract_file_id(avatar_value)
 
     if update_data:
         await cl_users.update_one(
             {"chatId": current_user["chatId"]}, {"$set": update_data}
         )
+    if updates.avatar is not None:
+        if new_avatar_id:
+            await cl_pending_uploads.delete_many({"fileId": new_avatar_id})
+        if old_avatar_id and old_avatar_id != new_avatar_id:
+            await release_files({old_avatar_id})
     return {"message": "Profile updated"}
 
 
@@ -4699,6 +4799,9 @@ async def leave_group(
     remaining = (updated or {}).get("participants", []) or []
     if not remaining:
         file_ids: set = set()
+        group_avatar_id = _extract_file_id(chat.get("groupAvatar"))
+        if group_avatar_id:
+            file_ids.add(group_avatar_id)
         async for msg in cl_messages.find({"chatId": chat_id}, {"file": 1}):
             file_ids |= collect_file_ids(msg)
         await cl_messages.delete_many({"chatId": chat_id})
@@ -4754,8 +4857,11 @@ async def update_group(
             raise HTTPException(status_code=400, detail="Group name is too long")
         update_data["groupName"] = name
 
+    old_avatar_id = _extract_file_id(chat.get("groupAvatar"))
+    new_avatar_id = ""
     if req.avatar is not None:
         update_data["groupAvatar"] = str(req.avatar).strip()
+        new_avatar_id = _extract_file_id(update_data["groupAvatar"])
 
     if req.membershipClosed is not None:
         update_data["membershipClosed"] = bool(req.membershipClosed)
@@ -4766,6 +4872,11 @@ async def update_group(
     update_data["updatedAt"] = utc_now()
 
     await cl_chats.update_one({"_id": chat_id}, {"$set": update_data})
+    if req.avatar is not None:
+        if new_avatar_id:
+            await cl_pending_uploads.delete_many({"fileId": new_avatar_id})
+        if old_avatar_id and old_avatar_id != new_avatar_id:
+            await release_files({old_avatar_id})
 
     updated = await cl_chats.find_one({"_id": chat_id}) or chat
     return {
@@ -5492,6 +5603,9 @@ async def delete_chat(
         raise HTTPException(status_code=403, detail="Not allowed")
 
     file_ids: set = set()
+    group_avatar_id = _extract_file_id(chat.get("groupAvatar"))
+    if group_avatar_id:
+        file_ids.add(group_avatar_id)
     async for msg in cl_messages.find({"chatId": chat_id}, {"file": 1}):
         file_ids |= collect_file_ids(msg)
 
@@ -5964,6 +6078,200 @@ async def _user_can_access_file(user_id: str, file_id: str) -> bool:
     return bool(chat)
 
 
+class PresignFileItem(BaseModel):
+    fileName: str = Field(..., min_length=1, max_length=255)
+    fileSize: int = Field(..., ge=1)
+    mimeType: Optional[str] = Field(None, max_length=120)
+
+
+class PresignUploadRequest(BaseModel):
+    fileName: str = Field(..., min_length=1, max_length=255)
+    fileSize: int = Field(..., ge=1)
+    mimeType: Optional[str] = Field(None, max_length=120)
+    preview: Optional[PresignFileItem] = None
+
+
+class ConfirmUploadRequest(BaseModel):
+    fileId: str = Field(..., min_length=1, max_length=300)
+    fileName: Optional[str] = Field(None, max_length=255)
+    previewFileId: Optional[str] = Field(None, max_length=300)
+    duration: Optional[float] = None
+
+
+def _normalize_upload_mime_type(raw_mime: Optional[str], sanitized_name: str) -> str:
+    candidate = str(raw_mime or "").split(";", 1)[0].strip().lower()
+    if candidate and re.fullmatch(r"[a-z0-9.+_-]+/[a-z0-9.+_-]+", candidate):
+        return candidate
+    guessed, _ = mimetypes.guess_type(sanitized_name)
+    return guessed or "application/octet-stream"
+
+
+@app.post("/files/presign-upload")
+@limiter.limit("10/minute;60/hour")
+async def presign_file_upload(
+    request: Request,
+    req: PresignUploadRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    if req.fileSize > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"حجم فایل نباید بیشتر از {MAX_FILE_SIZE // (1024 * 1024)} مگابایت باشد.",
+        )
+    if not is_allowed_file(req.fileName):
+        raise HTTPException(status_code=400, detail="File type not allowed")
+    if req.preview is not None:
+        if req.preview.fileSize > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"حجم پیش‌نمایش نباید بیشتر از {MAX_FILE_SIZE // (1024 * 1024)} مگابایت باشد.",
+            )
+        if not is_allowed_file(req.preview.fileName):
+            raise HTTPException(status_code=400, detail="Preview file type not allowed")
+
+    if not is_s3_enabled():
+        return {"direct": False}
+
+    user_id = current_user["chatId"]
+    file_id, sanitized_name = generate_unique_filename(req.fileName or "unnamed")
+    content_type = _normalize_upload_mime_type(req.mimeType, sanitized_name)
+    guessed_mime, _ = mimetypes.guess_type(sanitized_name)
+    display_mime = guessed_mime or content_type
+    upload_url = await create_presigned_upload_url(file_id, content_type, req.fileSize)
+
+    now = utc_now()
+    preview_payload = None
+    preview_file_id = ""
+    if req.preview is not None:
+        preview_file_id, preview_sanitized = generate_unique_filename(
+            req.preview.fileName or f"preview-{sanitized_name}.jpg"
+        )
+        preview_ct = _normalize_upload_mime_type(req.preview.mimeType, preview_sanitized)
+        preview_url = await create_presigned_upload_url(
+            preview_file_id, preview_ct, req.preview.fileSize
+        )
+        await cl_pending_uploads.insert_one(
+            {
+                "fileId": preview_file_id,
+                "parentFileId": file_id,
+                "userId": user_id,
+                "fileName": preview_sanitized,
+                "fileSize": int(req.preview.fileSize),
+                "mimeType": preview_ct,
+                "confirmed": False,
+                "createdAt": now,
+            }
+        )
+        preview_payload = {
+            "fileId": preview_file_id,
+            "fileName": preview_sanitized,
+            "fileSize": int(req.preview.fileSize),
+            "contentType": preview_ct,
+            "uploadUrl": preview_url,
+        }
+
+    await cl_pending_uploads.insert_one(
+        {
+            "fileId": file_id,
+            "previewFileId": preview_file_id or None,
+            "userId": user_id,
+            "fileName": sanitized_name,
+            "fileSize": int(req.fileSize),
+            "mimeType": display_mime,
+            "confirmed": False,
+            "createdAt": now,
+        }
+    )
+
+    return {
+        "direct": True,
+        "file": {
+            "fileId": file_id,
+            "fileName": sanitized_name,
+            "fileSize": int(req.fileSize),
+            "mimeType": display_mime,
+            "contentType": content_type,
+            "uploadUrl": upload_url,
+        },
+        "preview": preview_payload,
+    }
+
+
+@app.post("/files/confirm-upload")
+@limiter.limit("20/minute;120/hour")
+async def confirm_file_upload(
+    request: Request,
+    req: ConfirmUploadRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    if not is_s3_enabled():
+        raise HTTPException(status_code=400, detail="Direct upload is not enabled")
+    if not _is_valid_file_id(req.fileId):
+        raise HTTPException(status_code=400, detail="Invalid file ID")
+
+    user_id = current_user["chatId"]
+    pending = await cl_pending_uploads.find_one({"fileId": req.fileId})
+    if not pending:
+        raise HTTPException(status_code=404, detail="Pending upload not found")
+    if pending.get("userId") != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    head = await head_s3_upload_object(req.fileId)
+    if head is None:
+        raise HTTPException(status_code=400, detail="Uploaded file not found in storage")
+
+    actual_size = int(head.get("size") or 0)
+    expected_size = int(pending.get("fileSize") or 0)
+    if actual_size <= 0 or actual_size > MAX_FILE_SIZE or (expected_size > 0 and actual_size != expected_size):
+        await delete_file(req.fileId)
+        await cl_pending_uploads.delete_one({"_id": pending["_id"]})
+        raise HTTPException(status_code=400, detail="Uploaded file size mismatch")
+
+    now = utc_now()
+    file_metadata: Dict[str, Any] = {
+        "fileId": req.fileId,
+        "fileName": str(pending.get("fileName") or sanitize_filename(req.fileName or "unnamed")),
+        "fileSize": actual_size,
+        "mimeType": str(pending.get("mimeType") or "application/octet-stream"),
+        "uploadedAt": now.isoformat(),
+        "uploadedBy": user_id,
+    }
+    if req.duration is not None and req.duration > 0:
+        file_metadata["duration"] = float(req.duration)
+
+    await cl_pending_uploads.update_one(
+        {"_id": pending["_id"]},
+        {"$set": {"confirmed": True, "confirmedAt": now}},
+    )
+
+    if req.previewFileId:
+        if not _is_valid_file_id(req.previewFileId):
+            raise HTTPException(status_code=400, detail="Invalid preview file ID")
+        preview_pending = await cl_pending_uploads.find_one(
+            {"fileId": req.previewFileId, "userId": user_id}
+        )
+        if preview_pending:
+            preview_head = await head_s3_upload_object(req.previewFileId)
+            preview_size = int((preview_head or {}).get("size") or 0)
+            expected_preview_size = int(preview_pending.get("fileSize") or 0)
+            if (
+                preview_head is not None
+                and 0 < preview_size <= MAX_FILE_SIZE
+                and (expected_preview_size <= 0 or preview_size == expected_preview_size)
+            ):
+                await cl_pending_uploads.update_one(
+                    {"_id": preview_pending["_id"]},
+                    {"$set": {"confirmed": True, "confirmedAt": now}},
+                )
+                file_metadata["previewFileId"] = req.previewFileId
+                file_metadata["previewUrl"] = f"/files/{req.previewFileId}"
+            else:
+                await delete_file(req.previewFileId)
+                await cl_pending_uploads.delete_one({"_id": preview_pending["_id"]})
+
+    return {"success": True, "file": file_metadata}
+
+
 @app.post("/files/upload")
 @limiter.limit("10/minute;60/hour")
 async def upload_file(
@@ -5982,6 +6290,8 @@ async def upload_file(
         file_metadata["uploadedBy"] = current_user["chatId"]
         if duration is not None and duration > 0:
             file_metadata["duration"] = float(duration)
+        now = utc_now()
+        preview_file_id = None
         if preview is not None:
             preview_content = await _read_upload_bounded(preview, MAX_FILE_SIZE)
             if preview_content:
@@ -5989,9 +6299,46 @@ async def upload_file(
                     preview_content,
                     preview.filename or f"preview-{file.filename or 'image'}.jpg",
                 )
-                file_metadata["previewFileId"] = preview_meta.get("fileId")
-                if preview_meta.get("fileId"):
-                    file_metadata["previewUrl"] = f"/files/{preview_meta.get('fileId')}"
+                preview_file_id = preview_meta.get("fileId")
+                file_metadata["previewFileId"] = preview_file_id
+                if preview_file_id:
+                    file_metadata["previewUrl"] = f"/files/{preview_file_id}"
+                    await cl_pending_uploads.update_one(
+                        {"fileId": preview_file_id},
+                        {
+                            "$setOnInsert": {
+                                "fileId": preview_file_id,
+                                "parentFileId": file_metadata.get("fileId"),
+                                "userId": current_user["chatId"],
+                                "fileName": preview_meta.get("fileName"),
+                                "fileSize": preview_meta.get("fileSize"),
+                                "mimeType": preview_meta.get("mimeType"),
+                                "confirmed": True,
+                                "createdAt": now,
+                                "confirmedAt": now,
+                            }
+                        },
+                        upsert=True,
+                    )
+
+        if file_metadata.get("fileId"):
+            await cl_pending_uploads.update_one(
+                {"fileId": file_metadata["fileId"]},
+                {
+                    "$setOnInsert": {
+                        "fileId": file_metadata["fileId"],
+                        "previewFileId": preview_file_id,
+                        "userId": current_user["chatId"],
+                        "fileName": file_metadata.get("fileName"),
+                        "fileSize": file_metadata.get("fileSize"),
+                        "mimeType": file_metadata.get("mimeType"),
+                        "confirmed": True,
+                        "createdAt": now,
+                        "confirmedAt": now,
+                    }
+                },
+                upsert=True,
+            )
 
         return {"success": True, "file": file_metadata}
     except HTTPException:
@@ -6008,12 +6355,41 @@ async def upload_file(
 async def download_file(
     file_id: str,
     request: Request,
+    resolve: int = 0,
+    proxy: int = 0,
     current_user: dict = Depends(get_current_user),
 ):
     if not validate_file_access(file_id):
         raise HTTPException(status_code=404, detail="File not found")
     if not await _user_can_access_file(current_user["chatId"], file_id):
         raise HTTPException(status_code=403, detail="Forbidden")
+
+    if is_s3_enabled() and not proxy:
+        s3_info = await inspect_s3_upload_object(file_id)
+        if s3_info is not None and not s3_info.get("legacy_encrypted"):
+            presigned_url = await create_presigned_download_url(
+                get_s3_upload_key(file_id), expires_in=900
+            )
+            if resolve:
+                return JSONResponse(
+                    content={"direct": True, "url": presigned_url},
+                    headers={"Cache-Control": "no-store"},
+                )
+            return RedirectResponse(
+                url=presigned_url,
+                status_code=307,
+                headers={"Cache-Control": "no-store", "Vary": "Authorization"},
+            )
+        if s3_info is None and not has_local_file(file_id):
+            raise HTTPException(status_code=404, detail="File not found")
+
+    if resolve:
+        if not is_s3_enabled() and not has_local_file(file_id):
+            raise HTTPException(status_code=404, detail="File not found")
+        return JSONResponse(
+            content={"direct": False, "url": f"/files/{urllib.parse.quote(file_id, safe='')}?proxy=1"},
+            headers={"Cache-Control": "no-store"},
+        )
 
     etag = hashlib.sha256(file_id.encode("utf-8")).hexdigest()
     incoming_etag = request.headers.get("if-none-match", "").strip('"')
@@ -6065,6 +6441,11 @@ async def remove_uploaded_file(
 ):
     if not _is_valid_file_id(file_id):
         raise HTTPException(status_code=400, detail="Invalid file ID")
+    pending = await cl_pending_uploads.find_one(
+        {"$or": [{"fileId": file_id}, {"previewFileId": file_id}]}
+    )
+    if pending and pending.get("userId") != current_user["chatId"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
     if await _file_still_referenced(file_id):
         raise HTTPException(
             status_code=409, detail="File is already attached or in use"
@@ -6073,7 +6454,13 @@ async def remove_uploaded_file(
     if not validate_file_access(file_id):
         raise HTTPException(status_code=404, detail="File not found")
 
-    await release_files({file_id})
+    to_release = {file_id}
+    if pending and pending.get("fileId") == file_id and pending.get("previewFileId"):
+        preview_id = str(pending["previewFileId"])
+        if _is_valid_file_id(preview_id):
+            to_release.add(preview_id)
+
+    await release_files(to_release)
     return {"success": True}
 
 
@@ -6087,6 +6474,18 @@ async def get_static_font(filename: str, request: Request):
         if safe_name.endswith(".ttf")
         else ("font/woff2" if safe_name.endswith(".woff2") else "application/octet-stream")
     )
+    if is_s3_enabled():
+        font_key = get_s3_font_key(safe_name)
+        if await head_s3_object(font_key) is not None:
+            presigned_url = await create_presigned_download_url(font_key, expires_in=3600)
+            return RedirectResponse(
+                url=presigned_url,
+                status_code=307,
+                headers={
+                    "Cache-Control": "public, max-age=3600",
+                    "Access-Control-Allow-Origin": "*",
+                },
+            )
     s3_font = await read_static_font(safe_name)
     if s3_font is not None:
         return Response(
@@ -6140,6 +6539,18 @@ async def get_static_stockfish(filename: str, request: Request):
         "Cache-Control": "public, max-age=31536000, immutable",
         "Access-Control-Allow-Origin": "*",
     }
+    if is_s3_enabled():
+        engine_key = get_s3_stockfish_key(safe_name)
+        if await head_s3_object(engine_key) is not None:
+            presigned_url = await create_presigned_download_url(engine_key, expires_in=3600)
+            return RedirectResponse(
+                url=presigned_url,
+                status_code=307,
+                headers={
+                    "Cache-Control": "public, max-age=3600",
+                    "Access-Control-Allow-Origin": "*",
+                },
+            )
     s3_engine = await read_static_stockfish(safe_name)
     if s3_engine is not None:
         return Response(content=s3_engine, media_type=media_type, headers=headers)
@@ -8261,7 +8672,9 @@ def _extract_pdf_text(file_path: Path) -> str:
 
 async def _cleanup_ai_temp_attachment(prepared: Dict[str, Any]) -> None:
     try:
-        await asyncio.to_thread(prepared["file_path"].unlink, True)
+        file_path = prepared.get("file_path")
+        if file_path is not None:
+            await delete_ai_temp_file(Path(file_path).name)
     except Exception:
         pass
     try:
@@ -9121,6 +9534,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 result = await cl_messages.insert_one(message_doc)
                 msg_id = str(result.inserted_id)
+                if file_data:
+                    used_file_ids = collect_file_ids({"file": file_data})
+                    if used_file_ids:
+                        await cl_pending_uploads.delete_many(
+                            {"fileId": {"$in": list(used_file_ids)}}
+                        )
 
                 last_msg = {
                     "id": msg_id,
@@ -9953,6 +10372,21 @@ async def sweep_ai_temp_files(max_age_sec: int = AI_TEMP_FILE_TTL_SEC) -> None:
         except Exception:
             pass
     await cl_ai_temp_files.delete_many({"createdAt": {"$lt": cutoff_dt}})
+    if is_s3_enabled():
+        active_names = {
+            Path(str(row.get("filePath") or "")).name
+            for row in await cl_ai_temp_files.find({}, {"filePath": 1}).to_list(None)
+            if row.get("filePath")
+        }
+        s3_temp_files = await list_s3_ai_temp_files()
+        for name, mtime in s3_temp_files.items():
+            if name in active_names:
+                continue
+            if mtime == 0.0 or mtime < cutoff:
+                try:
+                    await delete_ai_temp_file(name)
+                except Exception:
+                    pass
     await cl_ai_usage.delete_many({"dateKey": {"$ne": tehran_day_key()}})
 
 
@@ -9962,6 +10396,10 @@ async def sweep_ai_temp_files_task() -> None:
             await sweep_ai_temp_files()
         except Exception as e:
             print(f"AI temp sweep warning: {e}")
+        try:
+            await sweep_pending_uploads()
+        except Exception as e:
+            print(f"Pending upload sweep warning: {e}")
         await asyncio.sleep(600)
 
 

@@ -1,9 +1,9 @@
 import type { FileMetadata } from '../types';
 import { formatFileSize, isImageFile } from '../utils/fileUtils';
-import { API_BASE_URL } from '../config/api';
 import { useEffect, useRef, useState } from 'react';
 import { useMusicPlayer } from '../contexts/MusicPlayerContext';
 import { decryptFileBytesClientSide } from '../utils/e2ee';
+import { fetchProtectedFileBytes } from '../utils/fileStorage';
 import { getCachedBlob, getOrCacheBlob, deleteCachedBlob } from '../utils/mediaCache';
 import { autoDownloadCookieKeys, isAutoDownloadEnabled } from '../utils/autoDownloadPrefs';
 import { isLocalBlobUrl, localBlobUrls } from '../utils/chatFileUploader';
@@ -144,10 +144,9 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
     ? (scrubPercent / 100) * musicPlayer.duration
     : musicPlayer.currentTime;
 
-  const decodeResponseBlob = async (response: Response): Promise<Blob> => {
-    const encryptedBytes = new Uint8Array(await response.arrayBuffer());
+  const decodeResponseBlob = async (encryptedBytes: Uint8Array, contentType: string): Promise<Blob> => {
     const plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, chatId, file.encryptedFileKey);
-    return new Blob([plainBytes as BlobPart], { type: file.mimeType || response.headers.get('content-type') || 'application/octet-stream' });
+    return new Blob([plainBytes as BlobPart], { type: file.mimeType || contentType || 'application/octet-stream' });
   };
 
   const ensureObjectUrl = async () => {
@@ -183,27 +182,29 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
       task.state = 'downloading'; task.progress = 6; notify(task);
       task.promise = (async () => {
         await acquireDownloadSlot();
-        const progressTimer = window.setInterval(() => {
-          task!.progress = Math.min(92, task!.progress + 4); notify(task!);
-        }, 180);
         try {
           if (task!.abortController?.signal.aborted) throw new Error('aborted');
-          const res = await fetch(`${API_BASE_URL}/files/${file.fileId}`, { headers: { Authorization: `Bearer ${token}` }, signal: task!.abortController?.signal });
-          if (!res.ok) throw new Error('download failed');
-          window.clearInterval(progressTimer);
+          const { bytes, contentType } = await fetchProtectedFileBytes(
+            file.fileId,
+            token,
+            task!.abortController?.signal,
+            (progress) => {
+              task!.progress = Math.max(task!.progress, progress);
+              notify(task!);
+            }
+          );
           if (!isAudio) {
             task!.progress = 100; task!.state = 'decrypting'; notify(task!);
           }
           const blob = isAudio
-            ? new Blob([new Uint8Array(await res.arrayBuffer()) as BlobPart], { type: file.mimeType || res.headers.get('content-type') || 'application/octet-stream' })
-            : await decodeResponseBlob(res);
+            ? new Blob([bytes as BlobPart], { type: file.mimeType || contentType || 'application/octet-stream' })
+            : await decodeResponseBlob(bytes, contentType);
           task!.blob = blob;
           await getOrCacheBlob({ cacheKey, loadBlob: async () => blob });
           
           void deleteCachedBlob(`chat:${chatId}:preview:${file.fileId}`);
           task!.state = 'done'; notify(task!);
         } catch {
-          window.clearInterval(progressTimer);
           task!.state = task!.abortController?.signal.aborted ? 'idle' : 'error'; notify(task!);
         } finally {
           releaseDownloadSlot();
@@ -282,13 +283,11 @@ export function FileMessage({ file, token, chatId, uploading = false, uploadId =
     if (!nearViewport) return;
     if (!(isImage || isVideo) || !previewDirectUrl) return;
     let cancelled = false;
-    const absolutePreviewUrl = previewDirectUrl.startsWith('http') ? previewDirectUrl : `${API_BASE_URL}${previewDirectUrl}`;
     getOrCacheBlob({
       cacheKey: `chat:${chatId}:preview:${file.fileId}`,
       loadBlob: async () => {
-        const res = await fetch(absolutePreviewUrl, { headers: { Authorization: `Bearer ${token}` } });
-        if (!res.ok) throw new Error('preview load failed');
-        return await res.blob();
+        const { bytes, contentType } = await fetchProtectedFileBytes(previewDirectUrl, token);
+        return new Blob([bytes as BlobPart], { type: contentType || 'image/jpeg' });
       },
     }).then((blob) => {
       if (cancelled) return;

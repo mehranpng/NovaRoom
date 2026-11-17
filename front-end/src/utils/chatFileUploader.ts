@@ -1,8 +1,8 @@
 import type { FileMetadata, PendingAttachment } from '../types';
-import { API_BASE_URL } from '../config/api';
 import { encryptFileWithRandomKey } from './e2ee';
 import { saveBlobToCache } from './mediaCache';
 import { createCoverDataUrl, readAudioTags } from './audioMetadata';
+import { uploadBlobDirectOrLegacy } from './fileStorage';
 
 export type UploadPhase = 'uploading' | 'encrypting';
 
@@ -166,70 +166,26 @@ export async function uploadChatFile(args: {
 
         await yieldToMain();
         onPhase('uploading', 0);
-        const formData = new FormData();
-        if (isAudio) {
-            formData.append('file', file, file.name);
-        } else if (fileBytes) {
-            formData.append('file', new Blob([fileBytes as BlobPart], { type: 'application/octet-stream' }), file.name);
-        }
-        if (attachment.duration > 0) formData.append('duration', String(attachment.duration));
-        if (imagePreviewBlob) {
-            formData.append('preview', new window.File([imagePreviewBlob], `preview-${file.name}.jpg`, { type: 'image/jpeg' }));
-        }
+        const uploadBlob = isAudio
+            ? file
+            : new Blob([(fileBytes || new Uint8Array()) as BlobPart], { type: 'application/octet-stream' });
 
-        const response = await new Promise<{ success?: boolean; file?: FileMetadata }>((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            let lastReportTime = 0;
-            const onAbort = () => xhr.abort();
-            const detach = () => signal.removeEventListener('abort', onAbort);
-
-            xhr.upload.addEventListener('progress', (e) => {
-                if (!e.lengthComputable) return;
-                const progress = (e.loaded / e.total) * 100;
-                const now = performance.now();
-                if (progress === 100 || progress >= reported + 2 || now - lastReportTime > 200) {
-                    lastReportTime = now;
-                    report(progress);
-                }
-            });
-            xhr.addEventListener('load', () => {
-                detach();
-                if (xhr.status !== 200) {
-                    reject(new Error(`upload failed ${xhr.status}`));
-                    return;
-                }
-                try {
-                    resolve(JSON.parse(xhr.responseText));
-                } catch (error) {
-                    reject(error);
-                }
-            });
-            xhr.addEventListener('error', () => {
-                detach();
-                reject(new Error('upload failed'));
-            });
-            xhr.addEventListener('abort', () => {
-                detach();
-                reject(new Error('aborted'));
-            });
-
-            if (signal.aborted) {
-                reject(new Error('aborted'));
-                return;
-            }
-            signal.addEventListener('abort', onAbort);
-            xhr.open('POST', `${API_BASE_URL}/files/upload`);
-            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-            xhr.send(formData);
+        const uploadedFile = await uploadBlobDirectOrLegacy({
+            blob: uploadBlob,
+            fileName: file.name,
+            token,
+            signal,
+            previewBlob: imagePreviewBlob,
+            previewFileName: `preview-${file.name}.jpg`,
+            duration: attachment.duration,
+            onProgress: (progress) => report(progress),
         });
 
-        if (!response.success || !response.file) throw new Error('invalid upload response');
-
         const result: FileMetadata = {
-            ...response.file,
+            ...uploadedFile,
             fileName: file.name,
             fileSize: file.size,
-            mimeType: type || response.file.mimeType,
+            mimeType: type || uploadedFile.mimeType,
             width: attachment.width,
             height: attachment.height,
             duration: attachment.duration,

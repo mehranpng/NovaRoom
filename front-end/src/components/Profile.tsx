@@ -11,6 +11,7 @@ import { apiFetch } from '../config/api';
 import { ImageMediaViewer } from './ImageMediaViewer';
 import { ImageEditorModal } from './ImageEditorModal';
 import { encryptAvatarBytesClientSide } from '../utils/e2ee';
+import { deleteUploadedFileQuietly, uploadBlobDirectOrLegacy } from '../utils/fileStorage';
 import { screenVariants } from '../utils/screenMotion';
 import { useScrollFade } from '../hooks/useScrollFade';
 import { copyText } from '../utils/clipboard';
@@ -172,24 +173,27 @@ export function Profile({ user, mode, onUpdateProfile, onEdit, onFinishEdit, onL
             const token = localStorage.getItem('token') || '';
             const plainBytes = new Uint8Array(await file.arrayBuffer());
             const encryptedBytes = await encryptAvatarBytesClientSide(plainBytes, token);
-            const encryptedFile = new window.File([encryptedBytes as BlobPart], file.name, {
+            const encryptedBlob = new Blob([encryptedBytes as BlobPart], {
                 type: 'application/octet-stream',
-                lastModified: file.lastModified || Date.now(),
-            });
-            const formData = new FormData();
-            formData.append('file', encryptedFile);
-
-            const upload = await apiFetch('/files/upload', {
-                method: 'POST',
-                body: formData,
             });
 
-            if (!upload?.file?.fileId) {
+            const uploaded = await uploadBlobDirectOrLegacy({
+                blob: encryptedBlob,
+                fileName: file.name,
+                token,
+            });
+
+            if (!uploaded?.fileId) {
                 alert('آپلود تصویر پروفایل موفق نبود');
                 return;
             }
 
-            await updateAvatar(upload.file.fileId);
+            try {
+                await updateAvatar(uploaded.fileId);
+            } catch (err) {
+                void deleteUploadedFileQuietly(uploaded.fileId, token);
+                throw err;
+            }
         } catch (error) {
             console.error(error);
             alert('خطا در آپلود تصویر پروفایل');

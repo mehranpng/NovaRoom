@@ -2,7 +2,7 @@ import os
 import uuid
 import aiofiles
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from datetime import datetime, timezone
 import mimetypes
 import hashlib
@@ -36,6 +36,7 @@ if S3_ENDPOINT_URL and not S3_ENDPOINT_URL.startswith("http://") and not S3_ENDP
 S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY", "").strip()
 S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "").strip()
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "").strip()
+S3_REGION = os.getenv("S3_REGION", "").strip()
 
 S3_UPLOAD_PREFIX = "upload"
 S3_AI_TEMP_PREFIX = "upload/ai_temp"
@@ -48,13 +49,18 @@ _s3_client = None
 def get_s3_client():
     global _s3_client
     if _s3_client is None:
-        _s3_client = boto3.client(
-            "s3",
-            endpoint_url=S3_ENDPOINT_URL,
-            aws_access_key_id=S3_ACCESS_KEY,
-            aws_secret_access_key=S3_SECRET_KEY,
-            config=Config(s3={"addressing_style": "path"}),
-        )
+        kwargs = {
+            "endpoint_url": S3_ENDPOINT_URL,
+            "aws_access_key_id": S3_ACCESS_KEY,
+            "aws_secret_access_key": S3_SECRET_KEY,
+            "config": Config(
+                signature_version="s3v4",
+                s3={"addressing_style": "path"},
+            ),
+        }
+        if S3_REGION:
+            kwargs["region_name"] = S3_REGION
+        _s3_client = boto3.client("s3", **kwargs)
     return _s3_client
 
 
@@ -282,9 +288,12 @@ async def list_stored_files() -> Dict[str, float]:
     def _scan_local() -> Dict[str, float]:
         result: Dict[str, float] = {}
         try:
-            for entry in UPLOAD_DIR.iterdir():
-                if entry.is_file():
-                    result[entry.name] = entry.stat().st_mtime
+            for directory in (UPLOAD_DIR, UPLOAD_DIR / S3_UPLOAD_PREFIX):
+                if not directory.exists() or not directory.is_dir():
+                    continue
+                for entry in directory.iterdir():
+                    if entry.is_file():
+                        result[entry.name] = max(result.get(entry.name, 0.0), entry.stat().st_mtime)
         except Exception as e:
             print(f"Error listing local uploads: {e}")
         return result
@@ -325,14 +334,133 @@ async def list_stored_files() -> Dict[str, float]:
     return found
 
 
+def has_local_file(file_id: str) -> bool:
+    safe_id = Path(file_id).name
+    if not safe_id or safe_id != file_id:
+        return False
+    for path in (get_file_path(safe_id), UPLOAD_DIR / S3_UPLOAD_PREFIX / safe_id):
+        if path.exists() and path.is_file():
+            return True
+    return False
+
+
 def validate_file_access(file_id: str) -> bool:
     safe_id = Path(file_id).name
     if not safe_id or safe_id != file_id:
         return False
     if is_s3_enabled():
         return True
-    file_path = get_file_path(file_id)
-    return file_path.exists() and file_path.is_file()
+    return has_local_file(file_id)
+
+
+def _is_s3_not_found(err: ClientError) -> bool:
+    code = str(err.response.get("Error", {}).get("Code") or "")
+    status = err.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+    return code in ("404", "NoSuchKey", "NotFound") or status == 404
+
+
+async def head_s3_object(key: str) -> Optional[Dict[str, Any]]:
+    if not is_s3_enabled():
+        return None
+    client = get_s3_client()
+    try:
+        resp = await asyncio.to_thread(
+            client.head_object,
+            Bucket=S3_BUCKET_NAME,
+            Key=key,
+        )
+        return {
+            "size": int(resp.get("ContentLength") or 0),
+            "content_type": str(resp.get("ContentType") or ""),
+            "etag": str(resp.get("ETag") or "").strip('"'),
+        }
+    except ClientError as e:
+        if _is_s3_not_found(e):
+            return None
+        print(f"S3 head_object error for {key}: {e}")
+        raise
+
+
+async def head_s3_upload_object(file_id: str) -> Optional[Dict[str, Any]]:
+    return await head_s3_object(get_s3_upload_key(file_id))
+
+
+async def inspect_s3_upload_object(file_id: str) -> Optional[Dict[str, Any]]:
+    if not is_s3_enabled():
+        return None
+    client = get_s3_client()
+    key = get_s3_upload_key(file_id)
+    try:
+        resp = await asyncio.to_thread(
+            client.get_object,
+            Bucket=S3_BUCKET_NAME,
+            Key=key,
+            Range="bytes=0-3",
+        )
+        header = await asyncio.to_thread(resp["Body"].read)
+        legacy_encrypted = header.startswith(FILE_MAGIC) or header.startswith(FILE_MAGIC_V2)
+        total_size = int(resp.get("ContentLength") or len(header))
+        content_range = str(resp.get("ContentRange") or "")
+        if "/" in content_range:
+            tail = content_range.rsplit("/", 1)[-1].strip()
+            if tail.isdigit():
+                total_size = int(tail)
+        return {
+            "exists": True,
+            "legacy_encrypted": legacy_encrypted,
+            "size": total_size,
+            "etag": str(resp.get("ETag") or "").strip('"'),
+        }
+    except ClientError as e:
+        if _is_s3_not_found(e):
+            return None
+        code = str(e.response.get("Error", {}).get("Code") or "")
+        status = e.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        if code == "InvalidRange" or status == 416:
+            head = await head_s3_object(key)
+            if head is None:
+                return None
+            return {
+                "exists": True,
+                "legacy_encrypted": False,
+                "size": head["size"],
+                "etag": head["etag"],
+            }
+        print(f"S3 inspect error for {file_id}: {e}")
+        raise
+
+
+async def create_presigned_upload_url(
+    file_id: str, mime_type: str, file_size: int, expires_in: int = 900
+) -> str:
+    client = get_s3_client()
+    key = get_s3_upload_key(file_id)
+    return await asyncio.to_thread(
+        client.generate_presigned_url,
+        "put_object",
+        Params={
+            "Bucket": S3_BUCKET_NAME,
+            "Key": key,
+            "ContentType": mime_type,
+            "ContentLength": int(file_size),
+        },
+        ExpiresIn=expires_in,
+        HttpMethod="PUT",
+    )
+
+
+async def create_presigned_download_url(key: str, expires_in: int = 900) -> str:
+    client = get_s3_client()
+    return await asyncio.to_thread(
+        client.generate_presigned_url,
+        "get_object",
+        Params={
+            "Bucket": S3_BUCKET_NAME,
+            "Key": key,
+        },
+        ExpiresIn=expires_in,
+        HttpMethod="GET",
+    )
 
 
 async def read_file_content(file_id: str) -> Optional[bytes]:
@@ -418,10 +546,44 @@ async def read_ai_temp_file(filename: str) -> Optional[bytes]:
     return None
 
 
+async def list_s3_ai_temp_files() -> Dict[str, float]:
+    if not is_s3_enabled():
+        return {}
+
+    def _scan() -> Dict[str, float]:
+        result: Dict[str, float] = {}
+        client = get_s3_client()
+        prefix = f"{S3_AI_TEMP_PREFIX}/"
+        try:
+            paginator = client.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=S3_BUCKET_NAME, Prefix=prefix):
+                for obj in page.get("Contents", []) or []:
+                    key = str(obj.get("Key") or "")
+                    if not key.startswith(prefix):
+                        continue
+                    name = key[len(prefix):]
+                    if not name or "/" in name:
+                        continue
+                    modified = obj.get("LastModified")
+                    result[name] = (
+                        modified.timestamp()
+                        if modified is not None
+                        else 0.0
+                    )
+        except Exception as e:
+            print(f"Error listing S3 AI temp files: {e}")
+        return result
+
+    return await asyncio.to_thread(_scan)
+
+
 async def delete_ai_temp_file(filename: str) -> bool:
+    safe_name = Path(str(filename or "")).name
+    if not safe_name or safe_name in (".", ".."):
+        return False
     deleted = False
     if is_s3_enabled():
-        key = get_s3_ai_temp_key(filename)
+        key = get_s3_ai_temp_key(safe_name)
         client = get_s3_client()
         try:
             await asyncio.to_thread(
@@ -431,15 +593,15 @@ async def delete_ai_temp_file(filename: str) -> bool:
             )
             deleted = True
         except Exception as e:
-            print(f"Error deleting AI temp file from S3 {filename}: {e}")
+            print(f"Error deleting AI temp file from S3 {safe_name}: {e}")
     ai_temp_dir = UPLOAD_DIR / "ai_temp"
-    local_path = ai_temp_dir / filename
+    local_path = ai_temp_dir / safe_name
     if local_path.exists():
         try:
             local_path.unlink()
             deleted = True
         except Exception as e:
-            print(f"Error deleting local AI temp file {filename}: {e}")
+            print(f"Error deleting local AI temp file {safe_name}: {e}")
     return deleted
 
 

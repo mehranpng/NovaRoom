@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-
 import type { Message, View, User, Chat, ChatLastMessage, FileMetadata, AIChatSummary, AIModelKey, PendingForwardDraft, AIUsageStatus, AIMemoryItem, AIAttachmentMeta, AISearchSource, PendingAttachment, TicTacToeData } from './types';
 import { apiFetch, getAuthToken } from './config/api';
 import { cancelUpload, enqueueUpload, registerUpload, releaseUpload, uploadChatFile, localBlobUrls, registerLocalBlobUrl } from './utils/chatFileUploader';
+import { deleteUploadedFileQuietly } from './utils/fileStorage';
 import { clearUploadProgress, setUploadProgress } from './utils/uploadProgressStore';
 import { useWebSocket } from './hooks/useWebSocket';
 import { ChatList } from './components/ChatList';
@@ -2964,7 +2965,13 @@ export function App() {
                     });
                     registerLocalBlobUrl(file.fileId, localUrl);
                     const success = await sendViaWS(targetChatId, text, payload.replyToId, file, clientId, payload.replyQuoteText, payload.replyIsQuote);
-                    if (!success) console.warn('WebSocket not connected, message was not sent');
+                    if (!success) {
+                        console.warn('WebSocket not connected, message was not sent');
+                        if (authToken) {
+                            void deleteUploadedFileQuietly(file.fileId, authToken);
+                            if (file.previewFileId) void deleteUploadedFileQuietly(file.previewFileId, authToken);
+                        }
+                    }
                     clearUploadProgress(clientId);
                     window.setTimeout(() => {
                         localBlobUrls.delete(file.fileId);

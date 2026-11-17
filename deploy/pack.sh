@@ -69,14 +69,14 @@ if [ -z "${INCLUDE_ENGINE}" ]; then
     INCLUDE_ENGINE="${INCLUDE_STOCKFISH_ENGINE}"
   elif [ -t 0 ]; then
     echo ""
-    read -r -p "Include Stockfish chess engine (~2MB) in this deployment? [Y/n]: " answer
-    if [[ "$answer" =~ ^[Nn]$ ]]; then
-      INCLUDE_ENGINE="no"
-    else
+    read -r -p "Include Stockfish chess engine (~2MB) in this deployment? [y/N]: " answer
+    if [[ "$answer" =~ ^[Yy]$ ]]; then
       INCLUDE_ENGINE="yes"
+    else
+      INCLUDE_ENGINE="no"
     fi
   else
-    INCLUDE_ENGINE="yes"
+    INCLUDE_ENGINE="no"
   fi
 fi
 

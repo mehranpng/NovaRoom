@@ -6,6 +6,7 @@ import { cx } from '../utils/cx';
 import { API_BASE_URL } from '../config/api';
 import { decryptAvatarBytesClientSide, decryptFileBytesClientSide } from '../utils/e2ee';
 import { getOrCacheBlob, deleteCachedBlob } from '../utils/mediaCache';
+import { fetchProtectedFileBytes } from '../utils/fileStorage';
 
 interface AvatarProps {
   name: string;
@@ -121,19 +122,12 @@ async function fetchAvatar(src: string): Promise<string> {
       const blob = await getOrCacheBlob({
         cacheKey: `avatar:${cacheKey}`,
         loadBlob: async () => {
-          const response = await fetch(fullUrl, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'ngrok-skip-browser-warning': 'true',
-            },
-          });
-          if (!response.ok) throw new Error('Failed to load avatar');
-          const encryptedBytes = new Uint8Array(await response.arrayBuffer());
+          const { bytes: encryptedBytes, contentType } = await fetchProtectedFileBytes(fullUrl, token);
           let plainBytes = await decryptFileBytesClientSide(encryptedBytes, token, 'profile_avatar_shared');
           if (plainBytes === encryptedBytes) {
             plainBytes = await decryptAvatarBytesClientSide(encryptedBytes, token);
           }
-          return new Blob([plainBytes as BlobPart], { type: response.headers.get('content-type') || 'image/*' });
+          return new Blob([plainBytes as BlobPart], { type: contentType || 'image/*' });
         },
       });
       const previewBytes = new Uint8Array(await blob.slice(0, 16).arrayBuffer());

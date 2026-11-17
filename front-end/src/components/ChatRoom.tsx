@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import type { Message, MessageReply as MessageReplyType, User, Chat, FileMetadata, PendingAttachment, PendingForwardDraft, PinnedMessage, GroupPreview, TicTacToeData } from '../types';
 import { Avatar } from './Avatar';
 import { VerifiedBadge } from './VerifiedBadge';
-import { API_BASE_URL, apiFetch, getMessageSeenBy } from '../config/api';
+import { apiFetch, getMessageSeenBy } from '../config/api';
 import { ContactInfo } from './ContactInfo';
 import { GroupJoinSheet } from './GroupJoinSheet';
 import { cx } from '../utils/cx';
@@ -17,6 +17,7 @@ import { ForwardModal } from './ForwardModal';
 import { ImageMediaViewer } from './ImageMediaViewer';
 import { VideoMediaViewer } from './VideoMediaViewer';
 import { decryptFileBytesClientSide } from '../utils/e2ee';
+import { fetchProtectedFileBytes } from '../utils/fileStorage';
 import { screenVariants } from '../utils/screenMotion';
 import { deleteCachedBlob, getCachedBlob, getOrCacheBlob } from '../utils/mediaCache';
 import { pendingUploadedFileByChat } from '../utils/pendingUploads';
@@ -1515,11 +1516,7 @@ export function ChatRoom({
             const blob = await getOrCacheBlob({
                 cacheKey: `chat:${chatId}:file:${m.file.fileId}`,
                 loadBlob: async () => {
-                    const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(m.file!.fileId)}`, {
-                        headers: { Authorization: `Bearer ${token}` },
-                    });
-                    if (!response.ok) throw new Error('Download failed');
-                    const downloadedBytes = new Uint8Array(await response.arrayBuffer());
+                    const { bytes: downloadedBytes } = await fetchProtectedFileBytes(m.file!.fileId, token);
                     const plainBytes = isAudio ? downloadedBytes : await decryptFileBytesClientSide(downloadedBytes, token, chatId, m.file?.encryptedFileKey);
                     return new Blob([plainBytes as BlobPart], { type: m.file?.mimeType || 'application/octet-stream' });
                 },

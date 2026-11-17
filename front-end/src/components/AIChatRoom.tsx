@@ -18,7 +18,7 @@ import { updateSearchPillsFade } from '../utils/searchPillsFade';
 import { triggerHaptic } from '../utils/haptics';
 import { copyText } from '../utils/clipboard';
 import { useCustomTextSelection } from '../utils/customTextSelection';
-import { apiFetch } from '../config/api';
+import { API_BASE_URL, apiFetch, getAuthToken } from '../config/api';
 
 interface AIChatRoomProps {
     messages: Message[];
@@ -248,6 +248,31 @@ export function AIChatRoom({
     const [webSearchEnabled, setWebSearchEnabled] = useState(false);
     const [composerMenuOpen, setComposerMenuOpen] = useState(false);
     const [stagedAttachment, setStagedAttachment] = useState<AIAttachmentMeta | null>(null);
+    const stagedAttachmentRef = useRef<AIAttachmentMeta | null>(null);
+
+    useEffect(() => {
+        stagedAttachmentRef.current = stagedAttachment;
+    }, [stagedAttachment]);
+
+    useEffect(() => {
+        return () => {
+            const pending = stagedAttachmentRef.current;
+            if (!pending) return;
+            if (pending.previewUrl?.startsWith('blob:')) {
+                URL.revokeObjectURL(pending.previewUrl);
+            }
+            if (pending.tempFileId) {
+                const token = getAuthToken();
+                const headers: Record<string, string> = {};
+                if (token) headers.Authorization = `Bearer ${token}`;
+                void fetch(`${API_BASE_URL}/ai/files/${encodeURIComponent(pending.tempFileId)}`, {
+                    method: 'DELETE',
+                    headers,
+                    keepalive: true,
+                }).catch(() => undefined);
+            }
+        };
+    }, []);
     const [attachmentUploading, setAttachmentUploading] = useState(false);
     const [searchPanelsExpanded, setSearchPanelsExpanded] = useState<Record<string, boolean>>({});
     const [memoriesExpanded, setMemoriesExpanded] = useState(false);
@@ -830,7 +855,8 @@ export function AIChatRoom({
     };
 
     const clearStagedAttachment = (deleteOnServer = true) => {
-        const previous = stagedAttachment;
+        const previous = stagedAttachmentRef.current ?? stagedAttachment;
+        stagedAttachmentRef.current = null;
         if (!previous) {
             setStagedAttachment(null);
             return;

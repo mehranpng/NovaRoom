@@ -14,6 +14,7 @@ import { apiFetch } from '../config/api';
 import { ImageMediaViewer } from './ImageMediaViewer';
 import { ImageEditorModal } from './ImageEditorModal';
 import { encryptAvatarBytesClientSide } from '../utils/e2ee';
+import { deleteUploadedFileQuietly, uploadBlobDirectOrLegacy } from '../utils/fileStorage';
 import { copyText } from '../utils/clipboard';
 import { formatLastSeen, toPersianDigits } from '../utils/format';
 
@@ -32,11 +33,6 @@ interface ContactInfoProps {
 }
 
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
-
-function extractUploadedFileId(res: any): string {
-    const file = res?.file || {};
-    return String(file.fileId || file.id || file.file_id || file.path || '').trim();
-}
 
 export function ContactInfo({
     user,
@@ -58,6 +54,18 @@ export function ContactInfo({
     const [groupName, setGroupName] = useState('');
     const [groupAvatar, setGroupAvatar] = useState(''); 
     const [avatarTouched, setAvatarTouched] = useState(false);
+    const pendingAvatarUploadRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        return () => {
+            const pendingId = pendingAvatarUploadRef.current;
+            if (pendingId) {
+                const token = localStorage.getItem('token') || '';
+                void deleteUploadedFileQuietly(pendingId, token);
+                pendingAvatarUploadRef.current = null;
+            }
+        };
+    }, []);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [resolvedRegistrationDate, setResolvedRegistrationDate] = useState<string>(String(user.registrationDate ?? '').trim());
@@ -266,18 +274,23 @@ export function ContactInfo({
             const token = localStorage.getItem('token') || '';
             const plainBytes = new Uint8Array(await file.arrayBuffer());
             const encryptedBytes = await encryptAvatarBytesClientSide(plainBytes, token);
-            const encryptedFile = new window.File([encryptedBytes as BlobPart], file.name, {
+            const encryptedBlob = new Blob([encryptedBytes as BlobPart], {
                 type: 'application/octet-stream',
-                lastModified: file.lastModified || Date.now(),
             });
-            const form = new FormData();
-            form.append('file', encryptedFile);
-            const res = await apiFetch('/files/upload', { method: 'POST', body: form });
+            const uploaded = await uploadBlobDirectOrLegacy({
+                blob: encryptedBlob,
+                fileName: file.name,
+                token,
+            });
 
-            if (res?.success !== true) throw new Error('Upload failed');
-            const fileId = extractUploadedFileId(res);
+            const fileId = String(uploaded?.fileId || '').trim();
             if (!fileId) throw new Error('Invalid upload response');
 
+            const prevPending = pendingAvatarUploadRef.current;
+            if (prevPending && prevPending !== fileId) {
+                void deleteUploadedFileQuietly(prevPending, token);
+            }
+            pendingAvatarUploadRef.current = fileId;
             setGroupAvatar(fileId);
             setAvatarTouched(true);
         } catch (e) {
@@ -327,6 +340,7 @@ export function ContactInfo({
                     avatar: groupAvatar,
                 }),
             });
+            pendingAvatarUploadRef.current = null;
 
             
             window.dispatchEvent(new Event('novaroom:refresh_chats'));
