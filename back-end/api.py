@@ -1348,6 +1348,17 @@ class E2EEKeyBundleRequest(BaseModel):
     encryptedPrivateKey: str = Field(..., min_length=20, max_length=2048)
     pbkdf2Salt: str = Field(..., min_length=16, max_length=128)
     keyVersion: int = Field(default=1, ge=1, le=100)
+    recoveryEncryptedPrivateKey: Optional[str] = Field(default=None, min_length=20, max_length=2048)
+    recoverySalt: Optional[str] = Field(default=None, min_length=16, max_length=128)
+    encryptedRecoveryPhrase: Optional[str] = Field(default=None, min_length=20, max_length=2048)
+    recoveryConfirmed: Optional[bool] = None
+
+
+class E2EERecoverySetupRequest(BaseModel):
+    recoveryEncryptedPrivateKey: str = Field(..., min_length=20, max_length=2048)
+    recoverySalt: str = Field(..., min_length=16, max_length=128)
+    encryptedRecoveryPhrase: str = Field(..., min_length=20, max_length=2048)
+    recoveryConfirmed: bool = False
 
 
 class GroupE2EEKeysUpdateRequest(BaseModel):
@@ -1424,6 +1435,7 @@ class ConsumePasswordLinkRequest(BaseModel):
     token: str
     newPassword: str
     e2ee: Optional[E2EEKeyBundleRequest] = None
+    wipeChats: bool = False
 
 
 class ChangePasswordRequest(BaseModel):
@@ -2344,7 +2356,9 @@ async def _extend_purge_lease(user_id: str) -> None:
     )
 
 
-async def _purge_messages(query: Dict[str, Any], user_id: str) -> None:
+async def _purge_messages(
+    query: Dict[str, Any], user_id: str, extend_lease: bool = True
+) -> None:
     while True:
         rows = (
             await cl_messages.find(query, {"_id": 1, "file": 1})
@@ -2360,7 +2374,8 @@ async def _purge_messages(query: Dict[str, Any], user_id: str) -> None:
             await record_pending_file_deletion(file_id)
         await cl_messages.delete_many({"_id": {"$in": [row["_id"] for row in rows]}})
         await release_files(file_ids)
-        await _extend_purge_lease(user_id)
+        if extend_lease:
+            await _extend_purge_lease(user_id)
 
 
 async def _drop_chess_game(game_id: str) -> None:
@@ -2569,6 +2584,196 @@ async def run_account_purge(user_id: str) -> None:
             await release_files({avatar})
     except Exception as e:
         print(f"Account purge warning for {user_id}: {e}")
+
+
+def _build_e2ee_doc(
+    bundle: E2EEKeyBundleRequest,
+    existing_e2ee: Optional[dict] = None,
+    preserve_recovery: bool = False,
+) -> dict:
+    existing = existing_e2ee or {}
+    doc: Dict[str, Any] = {
+        "publicKey": bundle.publicKey.strip(),
+        "encryptedPrivateKey": bundle.encryptedPrivateKey.strip(),
+        "pbkdf2Salt": bundle.pbkdf2Salt.strip(),
+        "keyVersion": int(bundle.keyVersion),
+        "updatedAt": utc_now(),
+    }
+    if preserve_recovery and existing.get("recoveryEncryptedPrivateKey") and existing.get("recoverySalt"):
+        doc["recoveryEncryptedPrivateKey"] = existing.get("recoveryEncryptedPrivateKey")
+        doc["recoverySalt"] = existing.get("recoverySalt")
+        if existing.get("encryptedRecoveryPhrase"):
+            doc["encryptedRecoveryPhrase"] = existing.get("encryptedRecoveryPhrase")
+        doc["recoveryConfirmed"] = bool(existing.get("recoveryConfirmed", False))
+        if existing.get("recoveryConfirmedAt") is not None:
+            doc["recoveryConfirmedAt"] = existing.get("recoveryConfirmedAt")
+        return doc
+
+    if bundle.recoveryEncryptedPrivateKey and bundle.recoverySalt:
+        doc["recoveryEncryptedPrivateKey"] = bundle.recoveryEncryptedPrivateKey.strip()
+        doc["recoverySalt"] = bundle.recoverySalt.strip()
+        if bundle.encryptedRecoveryPhrase:
+            doc["encryptedRecoveryPhrase"] = bundle.encryptedRecoveryPhrase.strip()
+        doc["recoveryConfirmed"] = bool(bundle.recoveryConfirmed) if bundle.recoveryConfirmed is not None else False
+    return doc
+
+
+async def wipe_user_chats_for_password_reset(user_id: str) -> None:
+    task = active_ai_stream_tasks.pop(user_id, None)
+    if task:
+        task.cancel()
+
+    dm_chats = await cl_chats.find(
+        {"participants": user_id, "chatType": {"$ne": "group"}}, {"_id": 1}
+    ).to_list(None)
+    dm_chat_ids = [
+        str(chat["_id"])
+        for chat in dm_chats
+        if not is_official_channel_chat(str(chat["_id"]))
+    ]
+
+    groups = await cl_chats.find(
+        {"chatType": "group", "$or": [{"participants": user_id}, {"createdBy": user_id}]}
+    ).to_list(None)
+    owned_groups = [
+        g
+        for g in groups
+        if not is_official_channel_chat(str(g["_id"])) and g.get("createdBy") == user_id
+    ]
+    other_groups = [
+        g
+        for g in groups
+        if not is_official_channel_chat(str(g["_id"])) and g.get("createdBy") != user_id
+    ]
+    owned_group_ids = [str(g["_id"]) for g in owned_groups]
+
+    saved_chat_id = get_saved_messages_id(user_id)
+    target_chat_ids = dm_chat_ids + owned_group_ids + [saved_chat_id]
+    message_query: Dict[str, Any] = {
+        "$or": [
+            {"chatId": {"$in": target_chat_ids}},
+            {"senderId": user_id, "chatId": {"$ne": OFFICIAL_CHANNEL_CHAT_ID}},
+        ]
+    }
+    await _purge_messages(message_query, user_id, extend_lease=False)
+
+    non_official_filter = {"chatId": {"$ne": OFFICIAL_CHANNEL_CHAT_ID}}
+    await cl_messages.update_many(
+        {**non_official_filter, "reactions.userId": user_id},
+        {"$pull": {"reactions": {"userId": user_id}}},
+    )
+    await cl_messages.update_many(
+        {**non_official_filter, "seenBy": user_id}, {"$pull": {"seenBy": user_id}}
+    )
+    await cl_messages.update_many(
+        {**non_official_filter, "unreadMentionUserIds": user_id},
+        {"$pull": {"unreadMentionUserIds": user_id}},
+    )
+    await cl_messages.update_many(
+        {**non_official_filter, "unreadReactionUserIds": user_id},
+        {"$pull": {"unreadReactionUserIds": user_id}},
+    )
+    await cl_messages.update_many(
+        {**non_official_filter, "replyTo.senderId": user_id},
+        {"$unset": {"replyTo": ""}},
+    )
+    await cl_messages.update_many(
+        {**non_official_filter, "forwardedFrom.originalSenderId": user_id},
+        {"$unset": {"forwardedFrom": ""}},
+    )
+    await cl_chats.update_many(
+        {"_id": {"$ne": OFFICIAL_CHANNEL_CHAT_ID}, "pinnedMessage.senderId": user_id},
+        {"$unset": {"pinnedMessage": ""}},
+    )
+
+    last_message_chats = await cl_chats.find(
+        {"_id": {"$ne": OFFICIAL_CHANNEL_CHAT_ID}, "lastMessage.senderId": user_id},
+        {"_id": 1},
+    ).to_list(None)
+    for chat in last_message_chats:
+        cid = str(chat["_id"])
+        if cid in dm_chat_ids or cid in owned_group_ids:
+            continue
+        await cl_chats.update_one(
+            {"_id": chat["_id"]},
+            {"$set": {"lastMessage": await build_last_message(cid)}},
+        )
+
+    if dm_chat_ids:
+        await cl_chats.delete_many(
+            {"_id": {"$in": dm_chat_ids}, "chatType": {"$ne": "group"}}
+        )
+
+    for group in owned_groups:
+        group_id = str(group["_id"])
+        group_avatar_id = _extract_file_id(group.get("groupAvatar"))
+        await cl_chats.delete_one({"_id": group_id})
+        if group_avatar_id:
+            await release_files({group_avatar_id})
+
+    deleted_other_group_ids: List[str] = []
+    for group in other_groups:
+        group_id = str(group["_id"])
+        remaining = [p for p in (group.get("participants") or []) if p != user_id]
+        if not remaining:
+            await _purge_messages({"chatId": group_id}, user_id, extend_lease=False)
+            group_avatar_id = _extract_file_id(group.get("groupAvatar"))
+            await cl_chats.delete_one({"_id": group_id})
+            if group_avatar_id:
+                await release_files({group_avatar_id})
+            deleted_other_group_ids.append(group_id)
+            continue
+        await cl_chats.update_one(
+            {"_id": group_id},
+            {
+                "$pull": {"participants": user_id},
+                "$unset": {f"e2ee.encryptedKeys.{user_id}": ""},
+                "$set": {"updatedAt": utc_now()},
+            },
+        )
+
+    removed_chat_ids = dm_chat_ids + owned_group_ids + deleted_other_group_ids
+    if removed_chat_ids:
+        await cl_users.update_many(
+            {"settings.pinnedChatIds": {"$in": removed_chat_ids}},
+            {"$pullAll": {"settings.pinnedChatIds": removed_chat_ids}},
+        )
+
+    user_doc = await cl_users.find_one({"chatId": user_id}, {"settings.pinnedChatIds": 1})
+    current_pinned = ((user_doc or {}).get("settings") or {}).get("pinnedChatIds") or []
+    kept_pinned = [cid for cid in current_pinned if is_official_channel_chat(str(cid))]
+    await cl_users.update_one(
+        {"chatId": user_id},
+        {
+            "$set": {
+                "settings.pinnedChatIds": kept_pinned,
+                "settings.hiddenPinnedMessages": {},
+            }
+        },
+    )
+
+    await cl_ai_messages.delete_many({"userId": user_id})
+    await cl_ai_chats.delete_many({"userId": user_id})
+    await cl_ai_memories.delete_many({"userId": user_id})
+    async for row in cl_ai_temp_files.find({"userId": user_id}):
+        try:
+            await delete_ai_temp_file(Path(str(row.get("filePath") or "")).name)
+        except Exception as e:
+            print(f"AI temp file purge warning: {e}")
+    await cl_ai_temp_files.delete_many({"userId": user_id})
+
+    pending_user_files = await cl_pending_uploads.find(
+        {"userId": user_id}, {"fileId": 1, "previewFileId": 1}
+    ).to_list(1000)
+    pending_ids = set()
+    for row in pending_user_files:
+        for key in ("fileId", "previewFileId"):
+            fid = str(row.get(key) or "")
+            if _is_valid_file_id(fid):
+                pending_ids.add(fid)
+    if pending_ids:
+        await release_files(pending_ids)
+    await cl_pending_uploads.delete_many({"userId": user_id})
 
 
 async def account_deletion_worker() -> None:
@@ -3087,13 +3292,7 @@ async def register_with_link(req: RegisterWithLinkRequest, request: Request):
         "createdAt": utc_now(),
     }
     if req.e2ee is not None:
-        user_doc["e2ee"] = {
-            "publicKey": req.e2ee.publicKey.strip(),
-            "encryptedPrivateKey": req.e2ee.encryptedPrivateKey.strip(),
-            "pbkdf2Salt": req.e2ee.pbkdf2Salt.strip(),
-            "keyVersion": req.e2ee.keyVersion,
-            "updatedAt": utc_now(),
-        }
+        user_doc["e2ee"] = _build_e2ee_doc(req.e2ee)
 
     try:
         await cl_users.insert_one(user_doc)
@@ -3129,6 +3328,7 @@ async def register_with_link(req: RegisterWithLinkRequest, request: Request):
             "verified": False,
             "registrationDate": registration_date,
             "adminLevel": get_admin_level(user_doc),
+            "e2ee": user_doc.get("e2ee") or None,
         },
     }
 
@@ -3146,12 +3346,27 @@ async def validate_password_link(request: Request, token: str):
     if not link:
         return {"valid": False, "username": None}
     user = await cl_users.find_one(
-        {"chatId": link.get("targetChatId")}, {"profile.username": 1}
+        {"chatId": link.get("targetChatId")}, {"profile.username": 1, "e2ee": 1}
+    )
+    e2ee = (user or {}).get("e2ee") or {}
+    has_recovery = bool(
+        e2ee.get("publicKey")
+        and e2ee.get("recoveryEncryptedPrivateKey")
+        and e2ee.get("recoverySalt")
     )
     return {
         "valid": bool(user),
         "username": ((user or {}).get("profile") or {}).get("username"),
         "chatId": link.get("targetChatId"),
+        "hasRecoveryKey": has_recovery,
+        "e2ee": {
+            "publicKey": e2ee.get("publicKey"),
+            "recoveryEncryptedPrivateKey": e2ee.get("recoveryEncryptedPrivateKey"),
+            "recoverySalt": e2ee.get("recoverySalt"),
+            "keyVersion": int(e2ee.get("keyVersion") or 1),
+        }
+        if has_recovery
+        else None,
     }
 
 
@@ -3167,10 +3382,18 @@ async def consume_password_link(req: ConsumePasswordLinkRequest, request: Reques
         raise HTTPException(status_code=400, detail="Invalid or expired link")
 
     chat_id = str(link_doc.get("targetChatId") or "")
-    user = await cl_users.find_one({"chatId": chat_id}, {"chatId": 1})
+    user = await cl_users.find_one({"chatId": chat_id}, {"chatId": 1, "e2ee": 1})
     if not user:
         await release_link(cl_password_links, link_doc)
         raise HTTPException(status_code=404, detail="User not found")
+
+    existing_e2ee = user.get("e2ee") or {}
+    if not req.wipeChats and existing_e2ee.get("publicKey"):
+        if not req.e2ee or req.e2ee.publicKey.strip() != existing_e2ee.get("publicKey"):
+            await release_link(cl_password_links, link_doc)
+            raise HTTPException(
+                status_code=400, detail="Recovery verification required"
+            )
 
     def _hash_password(password: str) -> str:
         return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -3178,16 +3401,18 @@ async def consume_password_link(req: ConsumePasswordLinkRequest, request: Reques
     hashed_password = await asyncio.to_thread(_hash_password, new_password)
     password_update: Dict[str, Any] = {"login.password": hashed_password}
     if req.e2ee is not None:
-        password_update["e2ee"] = {
-            "publicKey": req.e2ee.publicKey.strip(),
-            "encryptedPrivateKey": req.e2ee.encryptedPrivateKey.strip(),
-            "pbkdf2Salt": req.e2ee.pbkdf2Salt.strip(),
-            "keyVersion": req.e2ee.keyVersion,
-            "updatedAt": utc_now(),
-        }
+        password_update["e2ee"] = _build_e2ee_doc(
+            req.e2ee,
+            existing_e2ee=existing_e2ee,
+            preserve_recovery=not req.wipeChats,
+        )
+
+    if req.wipeChats:
+        await wipe_user_chats_for_password_reset(chat_id)
+
     await cl_users.update_one({"chatId": chat_id}, {"$set": password_update})
     await clear_user_sessions(chat_id)
-    return {"message": "ok"}
+    return {"message": "ok", "wiped": bool(req.wipeChats)}
 
 
 @app.post("/auth/change-password")
@@ -3209,19 +3434,24 @@ async def change_password(
     if not await bcrypt_checkpw_async(req.currentPassword, stored_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
+    existing_e2ee = current_user.get("e2ee") or {}
+    if existing_e2ee.get("publicKey"):
+        if not req.e2ee or req.e2ee.publicKey.strip() != existing_e2ee.get("publicKey"):
+            raise HTTPException(
+                status_code=400, detail="Recovery verification required"
+            )
+
     def _hash_password(password: str) -> str:
         return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
     hashed_password = await asyncio.to_thread(_hash_password, new_password)
     password_update: Dict[str, Any] = {"login.password": hashed_password}
     if req.e2ee is not None:
-        password_update["e2ee"] = {
-            "publicKey": req.e2ee.publicKey.strip(),
-            "encryptedPrivateKey": req.e2ee.encryptedPrivateKey.strip(),
-            "pbkdf2Salt": req.e2ee.pbkdf2Salt.strip(),
-            "keyVersion": req.e2ee.keyVersion,
-            "updatedAt": utc_now(),
-        }
+        password_update["e2ee"] = _build_e2ee_doc(
+            req.e2ee,
+            existing_e2ee=existing_e2ee,
+            preserve_recovery=True,
+        )
     await cl_users.update_one(
         {"chatId": current_user["chatId"]},
         {"$set": password_update},
@@ -3816,13 +4046,7 @@ async def login(req: LoginRequest, request: Request):
         raise HTTPException(status_code=403, detail="Account is being deleted")
 
     if not ((user.get("e2ee") or {}).get("publicKey")) and req.e2ee is not None:
-        e2ee_doc = {
-            "publicKey": req.e2ee.publicKey.strip(),
-            "encryptedPrivateKey": req.e2ee.encryptedPrivateKey.strip(),
-            "pbkdf2Salt": req.e2ee.pbkdf2Salt.strip(),
-            "keyVersion": req.e2ee.keyVersion,
-            "updatedAt": utc_now(),
-        }
+        e2ee_doc = _build_e2ee_doc(req.e2ee)
         await cl_users.update_one(
             {"chatId": user["chatId"]}, {"$set": {"e2ee": e2ee_doc}}
         )
@@ -3954,6 +4178,10 @@ async def get_my_e2ee_bundle(
         "encryptedPrivateKey": e2ee.get("encryptedPrivateKey") or None,
         "pbkdf2Salt": e2ee.get("pbkdf2Salt") or None,
         "keyVersion": int(e2ee.get("keyVersion") or 1),
+        "recoveryEncryptedPrivateKey": e2ee.get("recoveryEncryptedPrivateKey") or None,
+        "recoverySalt": e2ee.get("recoverySalt") or None,
+        "encryptedRecoveryPhrase": e2ee.get("encryptedRecoveryPhrase") or None,
+        "recoveryConfirmed": bool(e2ee.get("recoveryConfirmed", False)),
     }
 
 
@@ -3965,15 +4193,71 @@ async def upload_my_e2ee_bundle(
     current_user: dict = Depends(get_current_user),
 ):
     uid = current_user["chatId"]
-    e2ee_doc = {
-        "publicKey": payload.publicKey.strip(),
-        "encryptedPrivateKey": payload.encryptedPrivateKey.strip(),
-        "pbkdf2Salt": payload.pbkdf2Salt.strip(),
-        "keyVersion": int(payload.keyVersion),
-        "updatedAt": utc_now(),
-    }
+    existing = current_user.get("e2ee") or {}
+    e2ee_doc = _build_e2ee_doc(payload, existing_e2ee=existing)
     await cl_users.update_one({"chatId": uid}, {"$set": {"e2ee": e2ee_doc}})
     return {"ok": True, "e2ee": e2ee_doc}
+
+
+@app.put("/e2ee/me/recovery")
+@limiter.limit("30/minute")
+async def setup_my_e2ee_recovery(
+    request: Request,
+    payload: E2EERecoverySetupRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    uid = current_user["chatId"]
+    existing = current_user.get("e2ee") or {}
+    if not existing.get("publicKey") or not existing.get("encryptedPrivateKey"):
+        raise HTTPException(status_code=400, detail="E2EE keys not initialized")
+
+    updated = await cl_users.find_one_and_update(
+        {
+            "chatId": uid,
+            "$or": [
+                {"e2ee.recoveryEncryptedPrivateKey": {"$exists": False}},
+                {"e2ee.recoveryEncryptedPrivateKey": None},
+                {"e2ee.recoveryEncryptedPrivateKey": ""},
+            ],
+        },
+        {
+            "$set": {
+                "e2ee.recoveryEncryptedPrivateKey": payload.recoveryEncryptedPrivateKey.strip(),
+                "e2ee.recoverySalt": payload.recoverySalt.strip(),
+                "e2ee.encryptedRecoveryPhrase": payload.encryptedRecoveryPhrase.strip(),
+                "e2ee.recoveryConfirmed": bool(payload.recoveryConfirmed),
+                "e2ee.updatedAt": utc_now(),
+            }
+        },
+        return_document=ReturnDocument.AFTER,
+    )
+    if updated:
+        return {"ok": True, "e2ee": updated.get("e2ee") or {}}
+    fresh = await cl_users.find_one({"chatId": uid}, {"e2ee": 1})
+    return {"ok": True, "e2ee": (fresh or {}).get("e2ee") or existing}
+
+
+@app.post("/e2ee/me/recovery/confirm")
+@limiter.limit("30/minute")
+async def confirm_my_e2ee_recovery(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    uid = current_user["chatId"]
+    existing = current_user.get("e2ee") or {}
+    if not existing.get("recoveryEncryptedPrivateKey"):
+        raise HTTPException(status_code=400, detail="Recovery phrase not initialized")
+    updated = await cl_users.find_one_and_update(
+        {"chatId": uid},
+        {
+            "$set": {
+                "e2ee.recoveryConfirmed": True,
+                "e2ee.recoveryConfirmedAt": utc_now(),
+            }
+        },
+        return_document=ReturnDocument.AFTER,
+    )
+    return {"ok": True, "e2ee": (updated or {}).get("e2ee") or existing}
 
 
 @app.get("/e2ee/users/{target_chat_id}/public-key")

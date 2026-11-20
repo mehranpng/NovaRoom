@@ -23,7 +23,7 @@ import { cx } from './utils/cx';
 import { NotificationCenter } from './components/NotificationCenter';
 import { PwaInstallModal } from './components/PwaInstallModal';
 import { notify } from './utils/notificationBus';
-import { clearLocalE2EEIdentity, decryptBioClientSide, decryptClientText, decryptMessageClientSide, encryptChatTextClientSide, loadLocalE2EEIdentity, registerPeerPublicKey } from './utils/e2ee';
+import { clearLocalE2EEIdentity, decryptBioClientSide, decryptClientText, decryptMessageClientSide, encryptChatTextClientSide, ensureRecoveryBundleForUser, hasUnconfirmedRecovery, loadLocalE2EEIdentity, registerPeerPublicKey } from './utils/e2ee';
 import { clearCachedTextValues, clearChatSnapshots, getChatSnapshot, saveChatSnapshot } from './utils/mediaCache';
 import { clearChessCache, markChessGameUnavailable } from './utils/chessCache';
 import {
@@ -2115,7 +2115,8 @@ export function App() {
                     document.cookie = `auth_token=${encodeURIComponent(authToken)}; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`;
                 }
                 const decryptedBio = await decryptBioClientSide(String(user?.bio || ''), authToken || '', uid);
-                setCurrentUser({ ...user, bio: decryptedBio });
+                const syncedE2ee = await ensureRecoveryBundleForUser(uid, user?.e2ee, authToken);
+                setCurrentUser({ ...user, bio: decryptedBio, e2ee: syncedE2ee ?? user?.e2ee });
                 setIsAuthenticated(true);
             })
             .catch((error: any) => {
@@ -2140,6 +2141,13 @@ export function App() {
         setCurrentUser(user);
         setIsAuthenticated(true);
         navigate('/', { replace: true });
+        if (user?.chatId) {
+            void ensureRecoveryBundleForUser(user.chatId, user.e2ee, token).then((syncedE2ee) => {
+                if (syncedE2ee) {
+                    setCurrentUser((prev) => (prev && prev.chatId === user.chatId ? { ...prev, e2ee: syncedE2ee } : prev));
+                }
+            });
+        }
     };
 
     const handleRegisterSuccess = (user: User, token: string) => {
@@ -4128,6 +4136,9 @@ export function App() {
     const currentSearchParams = new URLSearchParams(location.search);
     const isInfoRouteActive = currentSearchParams.get('panel') === 'info' && view !== 'profile' && view !== 'profileEdit';
 
+    const needsRecoveryBackup = hasUnconfirmedRecovery(currentUser?.e2ee);
+    const hasUnseenSettingsBadge = unseenLoginCount > 0 || needsRecoveryBackup;
+
     const activeNavTab: 'ai' | 'chess' | 'chats' | 'settings' | 'profile' = showAIChat
         ? 'ai'
         : view === 'chess'
@@ -4170,7 +4181,7 @@ export function App() {
                             activeTab={activeNavTab}
                             onSelectTab={handleSelectNavTab}
                             currentUser={currentUser}
-                            hasUnseenSettings={unseenLoginCount > 0}
+                            hasUnseenSettings={hasUnseenSettingsBadge}
                             deletionScheduledFor={currentUser?.deletionScheduledFor ?? null}
                             compact={chatListCompactNav}
                         />
@@ -4271,7 +4282,7 @@ export function App() {
                                         activeTab={activeNavTab}
                                         onSelectTab={handleSelectNavTab}
                                         currentUser={currentUser}
-                                        hasUnseenSettings={unseenLoginCount > 0}
+                                        hasUnseenSettings={hasUnseenSettingsBadge}
                                         deletionScheduledFor={currentUser?.deletionScheduledFor ?? null}
                                         expandOnMount={wasCompactOnNavRef.current}
                                     />
@@ -4302,7 +4313,7 @@ export function App() {
                                         activeTab={activeNavTab}
                                         onSelectTab={handleSelectNavTab}
                                         currentUser={currentUser}
-                                        hasUnseenSettings={unseenLoginCount > 0}
+                                        hasUnseenSettings={hasUnseenSettingsBadge}
                                         deletionScheduledFor={currentUser?.deletionScheduledFor ?? null}
                                         expandOnMount={wasCompactOnNavRef.current}
                                     />
@@ -4319,6 +4330,7 @@ export function App() {
                                     onBackToMenu={() => navigate('/settings')}
                                     loginEvents={loginEvents}
                                     hasUnseenLoginLogs={unseenLoginCount > 0}
+                                    hasUnconfirmedRecovery={needsRecoveryBackup}
                                     currentUser={currentUser}
                                     onUpdateCurrentUser={(updates) => {
                                         setCurrentUser((prev) => prev ? { ...prev, ...updates } : prev);
@@ -4334,7 +4346,7 @@ export function App() {
                                         activeTab={activeNavTab}
                                         onSelectTab={handleSelectNavTab}
                                         currentUser={currentUser}
-                                        hasUnseenSettings={unseenLoginCount > 0}
+                                        hasUnseenSettings={hasUnseenSettingsBadge}
                                         deletionScheduledFor={currentUser?.deletionScheduledFor ?? null}
                                         expandOnMount={wasCompactOnNavRef.current}
                                     />

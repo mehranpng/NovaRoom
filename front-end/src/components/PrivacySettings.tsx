@@ -1,28 +1,37 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, Check, ChevronDown, ChevronLeft, KeyRound, Trash2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { AlertTriangle, Check, ChevronDown, ChevronLeft, Copy, Download, Eye, EyeOff, KeyRound, ShieldCheck, Trash2 } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import TelegramIcon from './TelegramIcon';
 import { screenVariants } from '../utils/screenMotion';
 import { cx } from '../utils/cx';
 import { useScrollFade } from '../hooks/useScrollFade';
 import { useNow } from '../hooks/useNow';
 import { formatDeletionCountdown } from '../utils/deletionTimer';
-import { apiFetch } from '../config/api';
+import { apiFetch, getAuthToken } from '../config/api';
 import { notify } from '../utils/notificationBus';
 import { PasswordField } from './PasswordField';
-import { generateUserE2EEBundle, rewrapPrivateKeyWithNewPassword } from '../utils/e2ee';
+import { RecoveryPhraseInputs } from './RecoveryPhraseInputs';
+import {
+    decryptRecoveryPhraseWithPrivateKey,
+    ensureRecoveryBundleForUser,
+    rewrapPrivateKeyWithRecoveryPhrase,
+    validateRecoveryPhrase,
+} from '../utils/e2ee';
+import { downloadRecoveryCardImage } from '../utils/recoveryCardImage';
+import { toPersianDigits } from '../utils/format';
 import type { PrivacyVisibility, User } from '../types';
 import './admin/admin.css';
 
 interface PrivacySettingsProps {
     onBack: () => void;
     currentUser: User | null;
+    hasUnconfirmedRecovery?: boolean;
     onUpdateCurrentUser?: (updates: Partial<User>) => void;
     onLogout?: () => void;
 }
 
-type PrivacyView = 'main' | 'password' | 'deleteAccount';
+type PrivacyView = 'main' | 'password' | 'recoveryPhrase' | 'deleteAccount';
 type PrivacyField = 'lastSeenVisibility' | 'avatarVisibility' | 'bioVisibility';
 
 const PRIVACY_POPOVER_WIDTH = 168;
@@ -89,7 +98,7 @@ const VISIBILITY_OPTIONS: Record<PrivacyField, Array<{ value: PrivacyVisibility;
     ],
 };
 
-export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLogout }: PrivacySettingsProps) {
+export function PrivacySettings({ onBack, currentUser, hasUnconfirmedRecovery = false, onUpdateCurrentUser, onLogout }: PrivacySettingsProps) {
     const { scrolled, handleScroll } = useScrollFade();
     const [privacy, setPrivacy] = useState<Record<PrivacyField, PrivacyVisibility>>({
         lastSeenVisibility: currentUser?.lastSeenVisibility ?? (currentUser?.hideOnlineStatus ? 'nobody' : 'everyone'),
@@ -104,8 +113,20 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    const [recoveryInputWords, setRecoveryInputWords] = useState<string[]>(() => Array(12).fill(''));
     const [passwordError, setPasswordError] = useState('');
     const [passwordSaving, setPasswordSaving] = useState(false);
+
+    const [recoveryWords, setRecoveryWords] = useState<string[] | null>(null);
+    const [recoveryLoading, setRecoveryLoading] = useState(false);
+    const [recoveryError, setRecoveryError] = useState('');
+    const [wordsHidden, setWordsHidden] = useState(true);
+    const [copiedWords, setCopiedWords] = useState(false);
+    const [confirmingRecovery, setConfirmingRecovery] = useState(false);
+    const [verifyModalOpen, setVerifyModalOpen] = useState(false);
+    const [verifyIndices, setVerifyIndices] = useState<number[]>([]);
+    const [verifyInputs, setVerifyInputs] = useState<string[]>(['', '', '']);
+    const [verifyInvalidIndices, setVerifyInvalidIndices] = useState<number[]>([]);
 
     const [deletePassword, setDeletePassword] = useState('');
     const [deleteError, setDeleteError] = useState('');
@@ -115,6 +136,9 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
     const scheduledFor = currentUser?.deletionScheduledFor ?? null;
     const now = useNow(Boolean(scheduledFor), 1000);
     const countdown = scheduledFor ? formatDeletionCountdown(scheduledFor, now) : '';
+    const currentE2ee = currentUser?.e2ee ?? null;
+    const onUpdateCurrentUserRef = useRef(onUpdateCurrentUser);
+    onUpdateCurrentUserRef.current = onUpdateCurrentUser;
 
     const closePrivacyPopover = () => {
         setExpandedField(null);
@@ -273,6 +297,140 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
         );
     };
 
+    useEffect(() => {
+        if (view !== 'recoveryPhrase' && view !== 'password') return;
+        const uid = currentUser?.chatId || '';
+        const token = getAuthToken() || '';
+        if (!uid || !token) return;
+        let cancelled = false;
+
+        const loadRecovery = async () => {
+            if (view === 'recoveryPhrase') {
+                setWordsHidden(true);
+                setRecoveryLoading(true);
+                setRecoveryError('');
+            }
+            try {
+                let e2ee = currentE2ee;
+                if (!e2ee?.recoveryEncryptedPrivateKey || !e2ee?.encryptedRecoveryPhrase) {
+                    const synced = await ensureRecoveryBundleForUser(uid, e2ee, token);
+                    if (cancelled) return;
+                    if (synced && synced !== e2ee) {
+                        e2ee = synced;
+                        onUpdateCurrentUserRef.current?.({ e2ee: synced });
+                    }
+                }
+                if (view === 'recoveryPhrase') {
+                    const words = await decryptRecoveryPhraseWithPrivateKey(e2ee?.encryptedRecoveryPhrase, uid);
+                    if (cancelled) return;
+                    if (words) {
+                        setRecoveryWords(words);
+                    } else {
+                        setRecoveryError('دریافت کلمات بازیابی از کلید این دستگاه ممکن نشد');
+                    }
+                }
+            } catch {
+                if (!cancelled && view === 'recoveryPhrase') {
+                    setRecoveryError('خطا در بارگذاری کلمات بازیابی');
+                }
+            } finally {
+                if (!cancelled && view === 'recoveryPhrase') {
+                    setRecoveryLoading(false);
+                }
+            }
+        };
+
+        void loadRecovery();
+        return () => {
+            cancelled = true;
+        };
+    }, [view, currentUser?.chatId, currentE2ee]);
+
+    const confirmRecoverySaved = async (showToast = false): Promise<boolean> => {
+        if (confirmingRecovery || currentUser?.e2ee?.recoveryConfirmed) return true;
+        setConfirmingRecovery(true);
+        try {
+            const res = await apiFetch('/e2ee/me/recovery/confirm', { method: 'POST' });
+            if (res?.e2ee) {
+                onUpdateCurrentUser?.({ e2ee: res.e2ee });
+            } else if (currentUser?.e2ee) {
+                onUpdateCurrentUser?.({ e2ee: { ...currentUser.e2ee, recoveryConfirmed: true } });
+            }
+            if (showToast) {
+                notify({ type: 'success', message: 'ذخیره کلمات بازیابی تایید شد' });
+            }
+            return true;
+        } catch {
+            if (showToast) {
+                notify({ type: 'error', message: 'ثبت تاییدیه ممکن نشد' });
+            }
+            return false;
+        } finally {
+            setConfirmingRecovery(false);
+        }
+    };
+
+    const openVerifyRecoveryModal = () => {
+        if (!recoveryWords || recoveryWords.length !== 12 || confirmingRecovery) return;
+        setWordsHidden(true);
+        const pool = Array.from({ length: 12 }, (_, i) => i);
+        for (let i = pool.length - 1; i > 0; i -= 1) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const temp = pool[i];
+            pool[i] = pool[j];
+            pool[j] = temp;
+        }
+        const picked = pool.slice(0, 3).sort((a, b) => a - b);
+        setVerifyIndices(picked);
+        setVerifyInputs(['', '', '']);
+        setVerifyInvalidIndices([]);
+        setVerifyModalOpen(true);
+    };
+
+    const submitVerifyRecovery = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!recoveryWords || verifyIndices.length !== 3 || confirmingRecovery) return;
+        const mismatched: number[] = [];
+        for (let i = 0; i < 3; i += 1) {
+            const wordIndex = verifyIndices[i];
+            const entered = (verifyInputs[i] || '').trim().toLowerCase();
+            const expected = (recoveryWords[wordIndex] || '').trim().toLowerCase();
+            if (!entered || entered !== expected) {
+                mismatched.push(i);
+            }
+        }
+        if (mismatched.length > 0) {
+            setVerifyInvalidIndices(mismatched);
+            return;
+        }
+        const ok = await confirmRecoverySaved(true);
+        if (ok) {
+            setVerifyModalOpen(false);
+        }
+    };
+
+    const handleCopyRecoveryWords = async () => {
+        if (!recoveryWords || recoveryWords.length !== 12) return;
+        try {
+            await navigator.clipboard.writeText(recoveryWords.join(' '));
+            setCopiedWords(true);
+            notify({ type: 'success', message: '۱۲ کلمه بازیابی کپی شدند' });
+            window.setTimeout(() => setCopiedWords(false), 2000);
+        } catch {
+            notify({ type: 'error', message: 'کپی کردن کلمات ممکن نشد' });
+        }
+    };
+
+    const handleDownloadRecoveryImage = () => {
+        if (!recoveryWords || recoveryWords.length !== 12) return;
+        const ok = downloadRecoveryCardImage(recoveryWords, currentUser?.username);
+        if (ok) {
+            notify({ type: 'success', message: 'تصویر کلمات بازیابی ذخیره شد' });
+        } else {
+            notify({ type: 'error', message: 'ساخت تصویر کلمات ممکن نشد' });
+        }
+    };
+
     const submitPasswordChange = async (event: React.FormEvent) => {
         event.preventDefault();
         setPasswordError('');
@@ -289,14 +447,28 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
             setPasswordError('رمز عبور جدید باید با رمز فعلی متفاوت باشد');
             return;
         }
+        if (!validateRecoveryPhrase(recoveryInputWords)) {
+            setPasswordError('لطفاً هر ۱۲ کلمه بازیابی را به ترتیب و با املای صحیح وارد کنید');
+            return;
+        }
 
         setPasswordSaving(true);
         try {
-            const rewrapped = await rewrapPrivateKeyWithNewPassword(newPassword, undefined, undefined, currentUser?.chatId || '');
-            const e2ee = rewrapped || (await generateUserE2EEBundle(newPassword)).bundle;
+            const uid = currentUser?.chatId || '';
+            const token = getAuthToken() || '';
+            let activeE2ee = currentUser?.e2ee || null;
+            if (!activeE2ee?.recoveryEncryptedPrivateKey && uid && token) {
+                activeE2ee = await ensureRecoveryBundleForUser(uid, activeE2ee, token);
+                if (activeE2ee) onUpdateCurrentUser?.({ e2ee: activeE2ee });
+            }
+            const rewrapped = await rewrapPrivateKeyWithRecoveryPhrase(recoveryInputWords, newPassword, activeE2ee || {});
+            if (!rewrapped) {
+                setPasswordError('۱۲ کلمه بازیابی اشتباه است یا ترتیب آن‌ها درست نیست');
+                return;
+            }
             await apiFetch('/auth/change-password', {
                 method: 'POST',
-                body: JSON.stringify({ currentPassword, newPassword, e2ee }),
+                body: JSON.stringify({ currentPassword, newPassword, e2ee: rewrapped }),
             });
             notify({ type: 'success', message: 'رمز عبور تغییر کرد. دوباره وارد شوید.' });
             onLogout?.();
@@ -304,6 +476,8 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
             const message = String((error as Error)?.message || '');
             if (message.includes('Current password is incorrect')) {
                 setPasswordError('رمز عبور فعلی اشتباه است');
+            } else if (message.includes('Recovery verification')) {
+                setPasswordError('تایید ۱۲ کلمه بازیابی انجام نشد');
             } else if (message.includes('at least')) {
                 setPasswordError('رمز عبور جدید باید حداقل ۸ کاراکتر باشد');
             } else {
@@ -364,12 +538,16 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
     const titles: Record<PrivacyView, string> = {
         main: 'حریم خصوصی و امنیت',
         password: 'تغییر رمز عبور',
+        recoveryPhrase: 'عبارت بازیابی ۱۲ کلمه‌ای',
         deleteAccount: 'حذف حساب',
     };
 
     const scheduledDate = scheduledFor
         ? new Date(scheduledFor).toLocaleString('fa-IR', { dateStyle: 'medium', timeStyle: 'short' })
         : '';
+
+    const recoveryConfirmed = Boolean(currentUser?.e2ee?.recoveryConfirmed);
+    const allRecoveryWordsEntered = recoveryInputWords.every((w) => w.trim().length > 0);
 
     return (
         <motion.div key={view} className="profile" variants={screenVariants} initial="hidden" animate="visible" exit="exit">
@@ -390,6 +568,24 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
 
             {view === 'password' ? (
                 <div className="adm-content" onScroll={handleScroll}>
+                    {!recoveryConfirmed && (
+                        <div className="adm-card nr-recovery-notice">
+                            <div className="adm-card__title">
+                                <KeyRound size={17} />
+                                ابتدا ۱۲ کلمه بازیابی خود را ذخیره کنید
+                            </div>
+                            <p className="adm-card__text">
+                                برای تغییر رمز عبور باید ۱۲ کلمه بازیابی حساب را به ترتیب وارد کنید. اگر هنوز آن‌ها را ندیده‌اید، از بخش عبارت بازیابی مشاهده کنید.
+                            </p>
+                            <button
+                                type="button"
+                                className="adm-btn nr-recovery-notice__btn"
+                                onClick={() => setView('recoveryPhrase')}
+                            >
+                                مشاهده ۱۲ کلمه بازیابی
+                            </button>
+                        </div>
+                    )}
                     <form className="adm-card adm-form" onSubmit={submitPasswordChange}>
                         <PasswordField
                             label="رمز عبور فعلی"
@@ -424,15 +620,120 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
                             placeholder="تکرار رمز عبور جدید"
                             autoComplete="new-password"
                         />
+                        <div className="nr-recovery-section">
+                            <div className="nr-recovery-section__head">
+                                <span className="nr-recovery-section__title">۱۲ کلمه بازیابی (به ترتیب)</span>
+                                <span className="nr-recovery-section__hint">همه ۱۲ کلمه را از ۱ تا ۱۲ وارد کنید</span>
+                            </div>
+                            <RecoveryPhraseInputs
+                                words={recoveryInputWords}
+                                onChange={(next) => {
+                                    setRecoveryInputWords(next);
+                                    setPasswordError('');
+                                }}
+                                disabled={passwordSaving}
+                                compact
+                            />
+                        </div>
                         {passwordError && <div className="adm-field-error">{passwordError}</div>}
                         <button
                             type="submit"
-                            className="adm-btn adm-btn--primary adm-btn--block adm-tap"
-                            disabled={passwordSaving || !currentPassword || !newPassword || !confirmPassword}
+                            className="adm-btn adm-btn--primary adm-btn--block nr-primary-btn"
+                            disabled={passwordSaving || !currentPassword || !newPassword || !confirmPassword || !allRecoveryWordsEntered}
                         >
                             {passwordSaving ? 'در حال ذخیره...' : 'ذخیره رمز عبور'}
                         </button>
                     </form>
+                </div>
+            ) : view === 'recoveryPhrase' ? (
+                <div className="adm-content" onScroll={handleScroll}>
+                    <div className="adm-card">
+                        <div className="adm-card__title">
+                            <ShieldCheck size={18} />
+                            کلید بازیابی چت‌های رمزنگاری‌شده
+                        </div>
+                        <p className="adm-card__text">
+                            این ۱۲ کلمه برای تغییر رمز عبور و بازیابی پیام‌های رمزنگاری‌شده هنگام فراموشی رمز ضروری است. آن را در جای امن نگهداری کنید و با هیچ‌کس به اشتراک نگذارید.
+                        </p>
+                    </div>
+
+                    <div className="adm-card nr-mnemonic-card">
+                        <div className="nr-mnemonic-card__header">
+                            <span className="nr-mnemonic-card__title">عبارت ۱۲ کلمه‌ای شما</span>
+                            <button
+                                type="button"
+                                className="nr-recovery-chip-btn"
+                                onClick={() => setWordsHidden((prev) => !prev)}
+                                disabled={recoveryLoading || !recoveryWords}
+                            >
+                                {wordsHidden ? <Eye size={14} /> : <EyeOff size={14} />}
+                                <span>{wordsHidden ? 'نمایش' : 'مخفی'}</span>
+                            </button>
+                        </div>
+
+                        {recoveryLoading ? (
+                            <div className="adm-empty">در حال بارگذاری کلمات بازیابی...</div>
+                        ) : recoveryError ? (
+                            <div className="adm-field-error">{recoveryError}</div>
+                        ) : recoveryWords ? (
+                            <div
+                                className={cx('nr-mnemonic-grid', wordsHidden && 'nr-mnemonic-grid--hidden')}
+                                dir="ltr"
+                                onClick={() => {
+                                    if (wordsHidden) setWordsHidden(false);
+                                }}
+                            >
+                                {recoveryWords.map((word, index) => (
+                                    <div key={index} className="nr-mnemonic-item">
+                                        <span className="nr-mnemonic-item__num">{index + 1}.</span>
+                                        <span className="nr-mnemonic-item__word">
+                                            {wordsHidden ? '••••••' : word}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : null}
+                    </div>
+
+                    {recoveryWords && (
+                        <div className="nr-mnemonic-actions">
+                            <button
+                                type="button"
+                                className="adm-btn nr-mnemonic-action-btn"
+                                onClick={() => void handleCopyRecoveryWords()}
+                            >
+                                {copiedWords ? <Check size={16} /> : <Copy size={16} />}
+                                <span>{copiedWords ? 'کپی شد' : 'کپی کلمات'}</span>
+                            </button>
+                            <button
+                                type="button"
+                                className="adm-btn nr-mnemonic-action-btn"
+                                onClick={handleDownloadRecoveryImage}
+                            >
+                                <Download size={16} />
+                                <span>ذخیره به عنوان تصویر</span>
+                            </button>
+                        </div>
+                    )}
+
+                    {recoveryWords && (
+                        recoveryConfirmed ? (
+                            <div className="nr-recovery-confirmed">
+                                <Check size={16} />
+                                <span>ذخیره‌سازی کلمات بازیابی تایید شده است</span>
+                            </div>
+                        ) : (
+                            <button
+                                type="button"
+                                className="adm-btn adm-btn--primary adm-btn--block nr-primary-btn"
+                                onClick={openVerifyRecoveryModal}
+                                disabled={confirmingRecovery}
+                            >
+                                <Check size={18} />
+                                <span>کلمات را یادداشت و ذخیره کردم</span>
+                            </button>
+                        )
+                    )}
                 </div>
             ) : view === 'deleteAccount' ? (
                 <div className="adm-content" onScroll={handleScroll}>
@@ -509,9 +810,32 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
                             </span>
                             <span className="tg-list-item__copy">
                                 <span className="tg-list-item__title">تغییر رمز عبور</span>
-                                <span className="tg-list-item__subtitle">به‌روزرسانی رمز عبور و کلید رمزنگاری</span>
+                                <span className="tg-list-item__subtitle">به‌روزرسانی رمز عبور با ۱۲ کلمه بازیابی</span>
                             </span>
                             <span className="tg-list-item__end">
+                                <ChevronLeft size={18} />
+                            </span>
+                        </button>
+
+                        <div className="tg-island__divider" aria-hidden="true" />
+
+                        <button
+                            type="button"
+                            className="tg-list-item"
+                            onClick={() => {
+                                setWordsHidden(true);
+                                setView('recoveryPhrase');
+                            }}
+                        >
+                            <span className="tg-icon-backdrop tg-icon-backdrop--orange" aria-hidden="true">
+                                <TelegramIcon name="key-filled" size={20} />
+                            </span>
+                            <span className="tg-list-item__copy">
+                                <span className="tg-list-item__title">عبارت بازیابی ۱۲ کلمه‌ای</span>
+                                <span className="tg-list-item__subtitle">مشاهده، کپی و ذخیره تصویر کلمات بازیابی</span>
+                            </span>
+                            <span className="tg-list-item__end">
+                                {hasUnconfirmedRecovery && <span className="tg-list-item__dot" aria-hidden="true" />}
                                 <ChevronLeft size={18} />
                             </span>
                         </button>
@@ -548,6 +872,99 @@ export function PrivacySettings({ onBack, currentUser, onUpdateCurrentUser, onLo
                 </div>
             )}
             {renderPrivacyPopover()}
+            {typeof document !== 'undefined' && createPortal(
+                <AnimatePresence>
+                    {verifyModalOpen && (
+                        <motion.div
+                            className="nr-verify-modal-backdrop"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.18, ease: 'easeOut' }}
+                            onClick={() => {
+                                if (!confirmingRecovery) setVerifyModalOpen(false);
+                            }}
+                        >
+                            <motion.div
+                                className="nr-verify-modal"
+                                role="dialog"
+                                aria-modal="true"
+                                aria-labelledby="nr-verify-title"
+                                dir="rtl"
+                                initial={{ opacity: 0, y: 12, scale: 0.97 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: 8, scale: 0.97 }}
+                                transition={{ duration: 0.2, ease: 'easeOut' }}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <h2 id="nr-verify-title" className="nr-verify-modal__title">
+                                    تایید ذخیره کلمات بازیابی
+                                </h2>
+                                <p className="nr-verify-modal__desc">
+                                    برای اطمینان از ذخیره صحیح کلمات، کلمه شماره{' '}
+                                    {verifyIndices.map((idx, pos) => (
+                                        <span key={idx}>
+                                            <strong>{toPersianDigits(idx + 1)}</strong>
+                                            {pos === 0 ? '، ' : pos === 1 ? ' و ' : ''}
+                                        </span>
+                                    ))}{' '}
+                                    را وارد کنید:
+                                </p>
+                                <form className="nr-verify-fields" onSubmit={submitVerifyRecovery}>
+                                    {verifyIndices.map((wordIndex, i) => (
+                                        <label
+                                            key={wordIndex}
+                                            className={cx('nr-verify-pill', verifyInvalidIndices.includes(i) && 'nr-verify-pill--invalid')}
+                                            dir="ltr"
+                                        >
+                                            <span className="nr-verify-pill__num">
+                                                {toPersianDigits(wordIndex + 1)}.
+                                            </span>
+                                            <input
+                                                type="text"
+                                                className="nr-verify-pill__input"
+                                                value={verifyInputs[i] || ''}
+                                                onChange={(e) => {
+                                                    const next = [...verifyInputs];
+                                                    next[i] = e.target.value.toLowerCase();
+                                                    setVerifyInputs(next);
+                                                    setVerifyInvalidIndices((prev) => prev.filter((item) => item !== i));
+                                                }}
+                                                placeholder="..."
+                                                dir="ltr"
+                                                autoComplete="off"
+                                                autoCorrect="off"
+                                                autoCapitalize="none"
+                                                spellCheck={false}
+                                                autoFocus={i === 0}
+                                                disabled={confirmingRecovery}
+                                            />
+                                        </label>
+                                    ))}
+                                    <div className="nr-verify-modal__actions">
+                                        <button
+                                            type="button"
+                                            className="adm-btn nr-mnemonic-action-btn"
+                                            onClick={() => setVerifyModalOpen(false)}
+                                            disabled={confirmingRecovery}
+                                        >
+                                            انصراف
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            className="adm-btn adm-btn--primary nr-primary-btn"
+                                            disabled={confirmingRecovery || verifyInputs.some((v) => !v.trim())}
+                                        >
+                                            {confirmingRecovery ? 'در حال ثبت...' : 'تایید و ثبت'}
+                                        </button>
+                                    </div>
+                                </form>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>,
+                document.body
+            )}
         </motion.div>
     );
 }

@@ -27,12 +27,13 @@ interface SettingsProps {
     onBackToMenu: () => void;
     loginEvents: any[];
     hasUnseenLoginLogs?: boolean;
+    hasUnconfirmedRecovery?: boolean;
     currentUser: User | null;
     onUpdateCurrentUser?: (updates: Partial<User>) => void;
     onLogout?: () => void;
 }
 
-export function Settings({ section, adminSection, onAdminSectionChange, onOpenSection, onBackToMenu, loginEvents, hasUnseenLoginLogs, currentUser, onUpdateCurrentUser, onLogout }: SettingsProps) {
+export function Settings({ section, adminSection, onAdminSectionChange, onOpenSection, onBackToMenu, loginEvents, hasUnseenLoginLogs, hasUnconfirmedRecovery, currentUser, onUpdateCurrentUser, onLogout }: SettingsProps) {
     const { scrolled, handleScroll } = useScrollFade();
     const notifyPrefs = useNotificationPrefs();
     const pwa = usePwaInstall();
@@ -44,7 +45,7 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
         return <LoginLogs onBack={() => onOpenSection('devices')} events={loginEvents} />;
     }
     if (section === 'privacy') {
-        return <PrivacySettings onBack={onBackToMenu} currentUser={currentUser} onUpdateCurrentUser={onUpdateCurrentUser} onLogout={onLogout} />;
+        return <PrivacySettings onBack={onBackToMenu} currentUser={currentUser} hasUnconfirmedRecovery={hasUnconfirmedRecovery} onUpdateCurrentUser={onUpdateCurrentUser} onLogout={onLogout} />;
     }
     if (section === 'notifications') {
         return <NotificationSettings onBack={onBackToMenu} />;
@@ -163,10 +164,10 @@ export function Settings({ section, adminSection, onAdminSectionChange, onOpenSe
         {
             section: 'privacy',
             title: 'حریم خصوصی و امنیت',
-            subtitle: 'تغییر رمز عبور و مدیریت حساب',
+            subtitle: 'تغییر رمز عبور، کلمات بازیابی و مدیریت حساب',
             icon: 'lock-filled',
             iconBg: 'gray',
-            dot: currentUser?.deletionScheduledFor ? 'danger' : undefined,
+            dot: currentUser?.deletionScheduledFor ? 'danger' : (hasUnconfirmedRecovery ? 'accent' : undefined),
         },
         {
             section: 'dataStorage',

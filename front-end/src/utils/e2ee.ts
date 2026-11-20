@@ -1,5 +1,8 @@
 import { gcm } from '@noble/ciphers/aes';
+import { generateMnemonic, validateMnemonic } from '@scure/bip39';
+import { wordlist as englishWordlist } from '@scure/bip39/wordlists/english.js';
 import { API_BASE_URL } from '../config/api';
+import type { UserE2EEInfo } from '../types';
 
 const ENC_PREFIX = 'enc:v1:';
 const ENC_PREFIX_V2 = 'enc:v2:';
@@ -264,7 +267,96 @@ export interface E2EEBundle {
     encryptedPrivateKey: string;
     pbkdf2Salt: string;
     keyVersion: number;
+    recoveryEncryptedPrivateKey?: string;
+    recoverySalt?: string;
+    encryptedRecoveryPhrase?: string;
+    recoveryConfirmed?: boolean;
 }
+
+const ENGLISH_WORD_SET = new Set(englishWordlist);
+const RECOVERY_PHRASE_KEY_PREFIX = toUtf8('novaroom-recovery-phrase-v1:');
+
+export const normalizeRecoveryWords = (words: string[]): string =>
+    words.map((word) => word.trim().toLowerCase()).join(' ');
+
+export const parseRecoveryPasteText = (rawText: string): string[] =>
+    rawText
+        .trim()
+        .replace(/^\d+[.):\-\s]+/gm, ' ')
+        .replace(/[,;\n\r\t]+/g, ' ')
+        .split(/\s+/)
+        .map((part) => part.replace(/^\d+[.):-]+/, '').trim().toLowerCase())
+        .filter(Boolean);
+
+export const isValidRecoveryWord = (word: string): boolean => {
+    const normalized = word.trim().toLowerCase();
+    return Boolean(normalized) && ENGLISH_WORD_SET.has(normalized);
+};
+
+export const suggestRecoveryWords = (prefix: string, limit = 4): string[] => {
+    const q = prefix.trim().toLowerCase();
+    if (q.length < 2) return [];
+    const matches: string[] = [];
+    for (let i = 0; i < englishWordlist.length; i += 1) {
+        if (englishWordlist[i].startsWith(q)) {
+            matches.push(englishWordlist[i]);
+            if (matches.length >= limit) break;
+        }
+    }
+    return matches;
+};
+
+export const validateRecoveryPhrase = (words: string[]): boolean => {
+    if (words.length !== 12) return false;
+    const normalized = normalizeRecoveryWords(words);
+    if (normalized.split(' ').some((w) => !w || !ENGLISH_WORD_SET.has(w))) return false;
+    return validateMnemonic(normalized, englishWordlist);
+};
+
+const deriveRecoveryPhraseAesKey = async (pkcs8: Uint8Array): Promise<CryptoKey> => {
+    const material = new Uint8Array(RECOVERY_PHRASE_KEY_PREFIX.length + pkcs8.length);
+    material.set(RECOVERY_PHRASE_KEY_PREFIX, 0);
+    material.set(pkcs8, RECOVERY_PHRASE_KEY_PREFIX.length);
+    const keyBytes = await sha256(material);
+    return crypto.subtle.importKey('raw', asBufferSource(keyBytes), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+};
+
+const encryptRecoveryPhraseWithPrivateKey = async (mnemonic: string, pkcs8: Uint8Array): Promise<string> => {
+    const aesKey = await deriveRecoveryPhraseAesKey(pkcs8);
+    const iv = randomBytes(E2EE_GCM_IV_SIZE);
+    const cipher = new Uint8Array(
+        await crypto.subtle.encrypt({ name: 'AES-GCM', iv: asBufferSource(iv) }, aesKey, asBufferSource(toUtf8(mnemonic))),
+    );
+    const packed = new Uint8Array(iv.length + cipher.length);
+    packed.set(iv, 0);
+    packed.set(cipher, iv.length);
+    return toBase64Url(packed);
+};
+
+export const decryptRecoveryPhraseWithPrivateKey = async (
+    encryptedPhraseB64?: string | null,
+    userChatId?: string,
+): Promise<string[] | null> => {
+    if (!encryptedPhraseB64 || !hasWebCrypto()) return null;
+    if (!activePrivateKeyPkcs8 && userChatId) {
+        loadLocalE2EEIdentity(userChatId);
+    }
+    if (!activePrivateKeyPkcs8) return null;
+    try {
+        const packed = fromBase64Url(encryptedPhraseB64);
+        if (packed.length <= E2EE_GCM_IV_SIZE) return null;
+        const iv = packed.subarray(0, E2EE_GCM_IV_SIZE);
+        const cipher = packed.subarray(E2EE_GCM_IV_SIZE);
+        const aesKey = await deriveRecoveryPhraseAesKey(activePrivateKeyPkcs8);
+        const plain = new Uint8Array(
+            await crypto.subtle.decrypt({ name: 'AES-GCM', iv: asBufferSource(iv) }, aesKey, asBufferSource(cipher)),
+        );
+        const words = textDecoder.decode(plain).trim().split(/\s+/).filter(Boolean);
+        return words.length === 12 ? words : null;
+    } catch {
+        return null;
+    }
+};
 
 const derivePasswordWrappingKey = async (password: string, saltBytes: Uint8Array): Promise<CryptoKey> => {
     const baseKey = await crypto.subtle.importKey('raw', asBufferSource(toUtf8(password)), 'PBKDF2', false, ['deriveKey']);
@@ -293,21 +385,49 @@ const packWrappedPrivateKey = async (
     return { encryptedPrivateKey: toBase64Url(packed), pbkdf2Salt: toBase64Url(salt) };
 };
 
+const createRecoveryFieldsForPrivateKey = async (
+    pkcs8: Uint8Array,
+    confirmed = false,
+): Promise<{
+    mnemonic: string;
+    recoveryEncryptedPrivateKey: string;
+    recoverySalt: string;
+    encryptedRecoveryPhrase: string;
+    recoveryConfirmed: boolean;
+}> => {
+    const mnemonic = generateMnemonic(englishWordlist, 128);
+    const wrapped = await packWrappedPrivateKey(mnemonic, pkcs8);
+    const encryptedRecoveryPhrase = await encryptRecoveryPhraseWithPrivateKey(mnemonic, pkcs8);
+    return {
+        mnemonic,
+        recoveryEncryptedPrivateKey: wrapped.encryptedPrivateKey,
+        recoverySalt: wrapped.pbkdf2Salt,
+        encryptedRecoveryPhrase,
+        recoveryConfirmed: confirmed,
+    };
+};
+
 export const generateUserE2EEBundle = async (
     password: string,
-): Promise<{ bundle: E2EEBundle; privateKeyPkcs8Base64: string }> => {
+): Promise<{ bundle: E2EEBundle; privateKeyPkcs8Base64: string; recoveryWords: string[] }> => {
     const keyPair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
     const spki = new Uint8Array(await crypto.subtle.exportKey('spki', keyPair.publicKey));
     const pkcs8 = new Uint8Array(await crypto.subtle.exportKey('pkcs8', keyPair.privateKey));
     const wrapped = await packWrappedPrivateKey(password, pkcs8);
+    const recovery = await createRecoveryFieldsForPrivateKey(pkcs8, false);
     return {
         bundle: {
             publicKey: toBase64Url(spki),
             encryptedPrivateKey: wrapped.encryptedPrivateKey,
             pbkdf2Salt: wrapped.pbkdf2Salt,
             keyVersion: 1,
+            recoveryEncryptedPrivateKey: recovery.recoveryEncryptedPrivateKey,
+            recoverySalt: recovery.recoverySalt,
+            encryptedRecoveryPhrase: recovery.encryptedRecoveryPhrase,
+            recoveryConfirmed: false,
         },
         privateKeyPkcs8Base64: toBase64Url(pkcs8),
+        recoveryWords: recovery.mnemonic.split(' '),
     };
 };
 
@@ -316,6 +436,7 @@ export const rewrapPrivateKeyWithNewPassword = async (
     publicKeySpkiBase64?: string,
     privateKeyPkcs8Base64?: string,
     userChatId?: string,
+    includeRecoveryIfMissing = false,
 ): Promise<E2EEBundle | null> => {
     if (!activePrivateKeyPkcs8 && userChatId) {
         loadLocalE2EEIdentity(userChatId);
@@ -325,14 +446,113 @@ export const rewrapPrivateKeyWithNewPassword = async (
     if (!privB64 || !pubB64 || !hasWebCrypto()) {
         return null;
     }
-    const wrapped = await packWrappedPrivateKey(newPassword, fromBase64Url(privB64));
-    return {
+    const pkcs8 = fromBase64Url(privB64);
+    const wrapped = await packWrappedPrivateKey(newPassword, pkcs8);
+    const bundle: E2EEBundle = {
         publicKey: pubB64,
         encryptedPrivateKey: wrapped.encryptedPrivateKey,
         pbkdf2Salt: wrapped.pbkdf2Salt,
         keyVersion: 1,
     };
+    if (includeRecoveryIfMissing) {
+        const recovery = await createRecoveryFieldsForPrivateKey(pkcs8, false);
+        bundle.recoveryEncryptedPrivateKey = recovery.recoveryEncryptedPrivateKey;
+        bundle.recoverySalt = recovery.recoverySalt;
+        bundle.encryptedRecoveryPhrase = recovery.encryptedRecoveryPhrase;
+        bundle.recoveryConfirmed = false;
+    }
+    return bundle;
 };
+
+export const unlockPrivateKeyWithRecoveryPhrase = async (
+    words: string[],
+    recoveryEncryptedPrivateKey?: string | null,
+    recoverySalt?: string | null,
+): Promise<Uint8Array | null> => {
+    if (!recoveryEncryptedPrivateKey || !recoverySalt || !hasWebCrypto()) return null;
+    if (!validateRecoveryPhrase(words)) return null;
+    try {
+        const mnemonic = normalizeRecoveryWords(words);
+        const salt = fromBase64Url(recoverySalt);
+        const packed = fromBase64Url(recoveryEncryptedPrivateKey);
+        if (packed.length <= E2EE_GCM_IV_SIZE) return null;
+        const iv = packed.subarray(0, E2EE_GCM_IV_SIZE);
+        const cipher = packed.subarray(E2EE_GCM_IV_SIZE);
+        const wrappingKey = await derivePasswordWrappingKey(mnemonic, salt);
+        const plain = new Uint8Array(
+            await crypto.subtle.decrypt({ name: 'AES-GCM', iv: asBufferSource(iv) }, wrappingKey, asBufferSource(cipher)),
+        );
+        return plain;
+    } catch {
+        return null;
+    }
+};
+
+export const rewrapPrivateKeyWithRecoveryPhrase = async (
+    words: string[],
+    newPassword: string,
+    bundle: {
+        publicKey?: string | null;
+        recoveryEncryptedPrivateKey?: string | null;
+        recoverySalt?: string | null;
+    },
+): Promise<E2EEBundle | null> => {
+    if (!bundle?.publicKey || !bundle?.recoveryEncryptedPrivateKey || !bundle?.recoverySalt) return null;
+    const pkcs8 = await unlockPrivateKeyWithRecoveryPhrase(
+        words,
+        bundle.recoveryEncryptedPrivateKey,
+        bundle.recoverySalt,
+    );
+    if (!pkcs8) return null;
+    const wrapped = await packWrappedPrivateKey(newPassword, pkcs8);
+    return {
+        publicKey: bundle.publicKey,
+        encryptedPrivateKey: wrapped.encryptedPrivateKey,
+        pbkdf2Salt: wrapped.pbkdf2Salt,
+        keyVersion: 1,
+    };
+};
+
+export const ensureRecoveryBundleForUser = async (
+    userChatId: string,
+    existingE2ee: UserE2EEInfo | null | undefined,
+    token: string,
+): Promise<UserE2EEInfo | null> => {
+    if (!userChatId || !token || !hasWebCrypto()) return existingE2ee || null;
+    if (!existingE2ee?.publicKey || !existingE2ee?.encryptedPrivateKey) return existingE2ee || null;
+    if (existingE2ee.recoveryEncryptedPrivateKey && existingE2ee.recoverySalt && existingE2ee.encryptedRecoveryPhrase) {
+        return existingE2ee;
+    }
+    if (!activePrivateKeyPkcs8) {
+        loadLocalE2EEIdentity(userChatId);
+    }
+    if (!activePrivateKeyPkcs8) return existingE2ee;
+    try {
+        const recovery = await createRecoveryFieldsForPrivateKey(activePrivateKeyPkcs8, false);
+        const res = await fetch(`${API_BASE_URL}/e2ee/me/recovery`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+                'ngrok-skip-browser-warning': 'true',
+            },
+            body: JSON.stringify({
+                recoveryEncryptedPrivateKey: recovery.recoveryEncryptedPrivateKey,
+                recoverySalt: recovery.recoverySalt,
+                encryptedRecoveryPhrase: recovery.encryptedRecoveryPhrase,
+                recoveryConfirmed: false,
+            }),
+        });
+        if (!res.ok) return existingE2ee;
+        const data = await res.json();
+        return (data?.e2ee as UserE2EEInfo) || existingE2ee;
+    } catch {
+        return existingE2ee;
+    }
+};
+
+export const hasUnconfirmedRecovery = (e2ee?: UserE2EEInfo | null): boolean =>
+    Boolean(e2ee?.recoveryEncryptedPrivateKey && !e2ee?.recoveryConfirmed);
 
 export const unlockE2EEBundleWithPassword = async (
     userChatId: string,

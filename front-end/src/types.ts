@@ -1,5 +1,16 @@
 export type PrivacyVisibility = 'everyone' | 'friends' | 'nobody';
 
+export interface UserE2EEInfo {
+    publicKey?: string | null;
+    encryptedPrivateKey?: string | null;
+    pbkdf2Salt?: string | null;
+    keyVersion?: number;
+    recoveryEncryptedPrivateKey?: string | null;
+    recoverySalt?: string | null;
+    encryptedRecoveryPhrase?: string | null;
+    recoveryConfirmed?: boolean;
+}
+
 export interface User {
     chatId: string;
     username: string;
@@ -19,6 +30,7 @@ export interface User {
     adminLevel?: 'admin0' | 'admin1' | null;
     createdBy?: string;
     deletionScheduledFor?: number | null;
+    e2ee?: UserE2EEInfo | null;
 }
 
 export interface ChessChampionInfo {
