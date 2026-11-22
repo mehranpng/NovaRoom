@@ -8218,6 +8218,15 @@ async def notify_chess_joined(game: dict, joiner_id: str) -> None:
                 "opponentName": joiner_name,
             },
         )
+    else:
+        await safe_send(
+            creator,
+            {
+                "type": "chess_joined",
+                "gameId": game["_id"],
+                "opponentName": joiner_name,
+            },
+        )
     now = now_ms()
     payload = {
         "kind": "chess",
@@ -8252,8 +8261,6 @@ async def notify_chess_matchmaking_searching(game: dict, creator_user: dict) -> 
     sub_user_ids = await cl_push_subscriptions.distinct(
         "userId", {"userId": {"$ne": creator_id}}
     )
-    if not sub_user_ids:
-        return
     busy_ids = {creator_id}
     busy_ids.update(_get_blocked_from_user_doc(creator_user))
     active_or_waiting_games = await cl_chess_games.find(
@@ -8272,13 +8279,41 @@ async def notify_chess_matchmaking_searching(game: dict, creator_user: dict) -> 
         for uid in sub_user_ids
         if uid and str(uid) not in busy_ids and not chess_service.is_guest_id(str(uid))
     ]
-    if not recipients:
+    ws_candidates = [
+        str(uid)
+        for uid in list(active_connections.keys())
+        if uid and str(uid) not in busy_ids and not chess_service.is_guest_id(str(uid))
+    ]
+    if not recipients and not ws_candidates:
         return
     fresh_game = await cl_chess_games.find_one(
         {"_id": game["_id"], "status": "waiting", "matchmaking": True},
         {"_id": 1, "createdAt": 1},
     )
     if not fresh_game:
+        return
+    if ws_candidates:
+        ws_users = await cl_users.find(
+            {"chatId": {"$in": ws_candidates}},
+            {"chatId": 1, "blockedUsers": 1, "notificationSettings": 1},
+        ).to_list(None)
+        ws_recipients = [
+            str(u["chatId"])
+            for u in ws_users
+            if creator_id not in _get_blocked_from_user_doc(u)
+            and _notif_settings(u).get("chessOnline", True)
+        ]
+        if ws_recipients:
+            await broadcast(
+                ws_recipients,
+                {
+                    "type": "chess_online_searching",
+                    "gameId": game["_id"],
+                    "senderName": creator_name,
+                    "creatorId": creator_id,
+                },
+            )
+    if not recipients:
         return
     now = now_ms()
     base_payload = {
@@ -8344,6 +8379,15 @@ async def chess_on_warn(game_id: str, expected_key: str) -> None:
         "_ttl": max(1, min(300, rem_sec + 5)),
     }
     await push_to_users(recipients, lambda user_doc: dict(payload))
+    await broadcast(
+        recipients,
+        {
+            "type": "chess_timer_warning",
+            "gameId": game_id,
+            "reason": reason_kind,
+            "remainingSeconds": rem_sec,
+        },
+    )
 
 
 def chess_online(game_id: str, game: dict) -> dict:
@@ -10187,16 +10231,15 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         user_ids = await cl_users.distinct(
                             "chatId", {"chatId": {"$ne": chat_id}}
                         )
+                        seen_evt = {
+                            "type": "messages_seen",
+                            "chatId": chat_id_target,
+                            "byUserId": chat_id,
+                            "maxMessageId": max_id,
+                        }
                         if user_ids:
-                            await broadcast(
-                                user_ids,
-                                {
-                                    "type": "messages_seen",
-                                    "chatId": chat_id_target,
-                                    "byUserId": chat_id,
-                                    "maxMessageId": max_id,
-                                },
-                            )
+                            await broadcast(user_ids, seen_evt)
+                        await broadcast([chat_id], seen_evt)
                     continue
 
                 chat_doc = await cl_chats.find_one(
@@ -10212,15 +10255,17 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 if result.modified_count > 0:
                     participants = chat_doc.get("participants", [])
+                    seen_evt = {
+                        "type": "messages_seen",
+                        "chatId": chat_id_target,
+                        "byUserId": chat_id,
+                        "maxMessageId": max_id,
+                    }
                     await broadcast(
                         [p for p in participants if p != chat_id],
-                        {
-                            "type": "messages_seen",
-                            "chatId": chat_id_target,
-                            "byUserId": chat_id,
-                            "maxMessageId": max_id,
-                        },
+                        seen_evt,
                     )
+                    await broadcast([chat_id], seen_evt)
 
             elif data.get("type") == "typing":
                 chat_id_target = data.get("chatId")
