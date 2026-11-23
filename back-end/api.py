@@ -5801,6 +5801,7 @@ async def get_chat_members(
                     "online": presence["online"],
                     "lastSeen": presence.get("lastSeen"),
                     "lastSeenCategory": presence.get("lastSeenCategory"),
+                    "registrationDate": u.get("registrationDate"),
                 }
             )
         return result
@@ -5857,6 +5858,7 @@ async def get_chat_members(
                 "online": presence["online"],
                 "lastSeen": presence.get("lastSeen"),
                 "lastSeenCategory": presence.get("lastSeenCategory"),
+                "registrationDate": u.get("registrationDate"),
                 "isMember": uid in participants_set,
                 "isBanned": uid in banned_set,
             }
