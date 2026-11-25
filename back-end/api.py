@@ -5317,6 +5317,14 @@ async def get_chat_list(
     )
 
     saved_chat_id = get_saved_messages_id(my_id)
+    chats = [
+        c
+        for c in chats
+        if c.get("chatType") == "group"
+        or is_official_channel_chat(c["_id"])
+        or c["_id"] == saved_chat_id
+        or c.get("lastMessage") is not None
+    ]
     saved_count = await cl_messages.count_documents({"chatId": saved_chat_id})
     champ = await get_current_chess_champion()
     champ_id = champ.get("chatId") if champ else None
